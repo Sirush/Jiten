@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Jiten.Api.Dtos;
 
 public class KanjiDto
@@ -73,6 +75,9 @@ public class WordSummaryDto
     public string? MainDefinition { get; set; }
     public int? FrequencyRank { get; set; }
     public string? MatchSurface { get; set; }
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsGrammatical { get; set; }
 }
 
 public class KanjiListDto

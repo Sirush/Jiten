@@ -1,4 +1,5 @@
 using Jiten.Core;
+using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Cli;
@@ -6,7 +7,7 @@ namespace Jiten.Cli;
 /// <summary>
 /// Removes the three garbage classes from jmdict."WordCompositions":
 ///   1. parent is a proper noun (name-type POS) — "Composed of" for names is noise;
-///   2. any component is a particle / auxiliary (the composition is really a phrase / expression);
+///   2. any unflagged component is purely a particle / auxiliary (the composition is really a phrase);
 ///   3. every component is a single character — redundant with the kanji breakdown (赤本 -> 赤+本).
 ///
 /// All three are predicate-based DELETEs, so this command is idempotent / rerunnable.
@@ -23,9 +24,10 @@ public static class CompositionCleaner
         "obj", "ev", "dei", "myth", "fict", "leg", "serv", "relig", "unclass"
     };
 
-    private static readonly string[] ParticlePos =
+    private static readonly string[] ContentPos =
     {
-        "prt", "aux", "aux-v", "aux-adj", "cop", "conj"
+        "n", "pn", "num", "ctr", "adv", "adv-to", "int", "suf", "pref", "n-suf", "n-pref",
+        "adj-i", "adj-ix", "adj-na", "adj-no", "adj-pn", "adj-t", "adj-f", "adj-ku", "adj-shiku", "adj-nari", "adj-kari"
     };
 
     public static async Task Cleanup(IDbContextFactory<JitenDbContext> contextFactory, bool dryRun)
@@ -44,14 +46,18 @@ USING jmdict.""Words"" w
 WHERE w.""WordId"" = wc.""WordId""
   AND w.""PartsOfSpeech"" && {ArrayLiteral(NamePos)};";
 
-        // 2. The (WordId, ReadingIndex) group contains a particle / auxiliary component (= a phrase).
+        // 2. The (WordId, ReadingIndex) group contains an unflagged particle / auxiliary component (= a phrase).
         var particleSql = $@"
 DELETE FROM jmdict.""WordCompositions"" wc
 WHERE (wc.""WordId"", wc.""ReadingIndex"") IN (
     SELECT DISTINCT x.""WordId"", x.""ReadingIndex""
     FROM jmdict.""WordCompositions"" x
     JOIN jmdict.""Words"" cw ON cw.""WordId"" = x.""ComponentWordId""
-    WHERE cw.""PartsOfSpeech"" && {ArrayLiteral(ParticlePos)}
+    WHERE NOT x.""IsGrammatical""
+      AND cw.""PartsOfSpeech"" && {ArrayLiteral(CompositionRules.GrammaticalTags)}
+      -- 回す, 合う, 結果 also carry aux-v/prt/conj but are real compound heads; only a component with no content sense marks a phrase.
+      AND NOT EXISTS (SELECT 1 FROM unnest(cw.""PartsOfSpeech"") p
+                      WHERE p = ANY({ArrayLiteral(ContentPos)}) OR p ~ '^v([0-9]|[kszrn]|-)')
 );";
 
         // 3. Every component in the group is a single character (redundant with the kanji breakdown).

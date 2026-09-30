@@ -911,6 +911,7 @@ export interface WordSummary {
   mainDefinition: string | null;
   frequencyRank: number | null;
   matchSurface?: string | null;
+  isGrammatical?: boolean;
 }
 
 export interface DeckVocabularyPreviewWord {

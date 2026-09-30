@@ -1944,7 +1944,7 @@ public class SrsController(
             var knownWordIds = known.Select(k => k.WordId).Distinct().ToList();
             var raw = await context.WordCompositions
                 .AsNoTracking()
-                .Where(c => knownWordIds.Contains(c.WordId))
+                .Where(c => knownWordIds.Contains(c.WordId) && !c.IsGrammatical)
                 .Select(c => new { c.WordId, c.ReadingIndex, c.ComponentWordId, c.ComponentReadingIndex })
                 .ToListAsync();
 
@@ -1963,7 +1963,7 @@ public class SrsController(
 
             var candidatePairs = await context.WordCompositions
                 .AsNoTracking()
-                .Where(c => knownComponentIds.Contains(c.ComponentWordId))
+                .Where(c => knownComponentIds.Contains(c.ComponentWordId) && !c.IsGrammatical)
                 .Select(c => new { c.WordId, c.ReadingIndex })
                 .Distinct()
                 .ToListAsync();
@@ -1976,7 +1976,7 @@ public class SrsController(
 
             var allRows = await context.WordCompositions
                 .AsNoTracking()
-                .Where(c => candidateWordIds.Contains(c.WordId))
+                .Where(c => candidateWordIds.Contains(c.WordId) && !c.IsGrammatical)
                 .Select(c => new { c.WordId, c.ReadingIndex, c.ComponentWordId, c.ComponentReadingIndex })
                 .ToListAsync();
 

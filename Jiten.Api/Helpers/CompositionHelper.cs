@@ -20,13 +20,14 @@ public static class CompositionHelper
                 c.Position,
                 c.ComponentWordId,
                 c.ComponentReadingIndex,
-                c.ComponentSurface
+                c.ComponentSurface,
+                c.IsGrammatical
             })
             .ToListAsync();
 
         if (rows.Count == 0) return null;
 
-        var componentIds = rows.Select(r => r.ComponentWordId).Distinct().ToList();
+        var componentIds = rows.Where(r => !r.IsGrammatical).Select(r => r.ComponentWordId).Distinct().ToList();
 
         var definitions = await ctx.Definitions
             .AsNoTracking()
@@ -48,6 +49,17 @@ public static class CompositionHelper
 
         return rows.Select(r =>
         {
+            // The surface keeps the particle's in-phrase form; the dictionary form would misspell the expression.
+            if (r.IsGrammatical)
+                return new WordSummaryDto
+                {
+                    WordId = r.ComponentWordId,
+                    ReadingIndex = (byte)r.ComponentReadingIndex,
+                    Reading = r.ComponentSurface,
+                    ReadingFurigana = r.ComponentSurface,
+                    IsGrammatical = true
+                };
+
             var form = forms.GetValueOrDefault((r.ComponentWordId, r.ComponentReadingIndex));
             var freq = freqs.GetValueOrDefault((r.ComponentWordId, r.ComponentReadingIndex));
             return new WordSummaryDto
@@ -70,7 +82,8 @@ public static class CompositionHelper
 
         var distinctParents = ctx.WordCompositions
             .AsNoTracking()
-            .Where(c => c.ComponentWordId == componentWordId && c.ComponentReadingIndex == componentReadingIndex)
+            .Where(c => c.ComponentWordId == componentWordId && c.ComponentReadingIndex == componentReadingIndex
+                        && !c.IsGrammatical)
             .Select(c => new { c.WordId, c.ReadingIndex })
             .Distinct();
 
@@ -115,6 +128,7 @@ public static class CompositionHelper
             .AsNoTracking()
             .Where(c => c.ComponentWordId == componentWordId
                         && c.ComponentReadingIndex == componentReadingIndex
+                        && !c.IsGrammatical
                         && parentIds.Contains(c.WordId))
             .OrderBy(c => c.WordId).ThenBy(c => c.ReadingIndex).ThenBy(c => c.Position)
             .Select(c => new { c.WordId, c.ReadingIndex, c.ComponentSurface })
