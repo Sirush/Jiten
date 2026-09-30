@@ -164,6 +164,10 @@ ruby {
   ruby-align: center;
 }
 
+ruby rt {
+  ruby-align: space-around;
+}
+
 ruby rt,
 ruby rp {
   user-select: none;
