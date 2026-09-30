@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using ImageMagick;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Parser.Tests.Integration.Infrastructure;
@@ -172,7 +173,8 @@ public class SiteUpdateTests(JitenWebApplicationFactory factory)
             new HttpRequestMessage(HttpMethod.Put, $"/api/admin/updates/{id}")
                 .WithJsonContent(new { title = "Nope", bodyMarkdown = "Nope" }),
             new HttpRequestMessage(HttpMethod.Post, $"/api/admin/updates/{id}/publish"),
-            new HttpRequestMessage(HttpMethod.Delete, $"/api/admin/updates/{id}")
+            new HttpRequestMessage(HttpMethod.Delete, $"/api/admin/updates/{id}"),
+            new HttpRequestMessage(HttpMethod.Post, "/api/admin/updates/images") { Content = ImageBody(Png(32, 32)) }
         };
 
         foreach (var call in calls)
@@ -196,5 +198,64 @@ public class SiteUpdateTests(JitenWebApplicationFactory factory)
             .WithAdmin()
             .WithJsonContent(new { title = "Title", bodyMarkdown = "" });
         (await _client.SendAsync(noBody)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    private static byte[] Png(int w, int h)
+    {
+        using var image = new MagickImage(MagickColors.CornflowerBlue, (uint)w, (uint)h);
+        image.Format = MagickFormat.Png;
+        return image.ToByteArray();
+    }
+
+    private static MultipartFormDataContent ImageBody(byte[] bytes, string fileName = "shot.png") =>
+        new() { { new ByteArrayContent(bytes), "file", fileName } };
+
+    private Task<HttpResponseMessage> UploadImage(byte[] bytes, string fileName = "shot.png") =>
+        _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/admin/updates/images") { Content = ImageBody(bytes, fileName) }
+                              .WithAdmin());
+
+    [Fact]
+    public async Task UploadImage_StoresNormalisedWebpOnPublicZone()
+    {
+        var cdn = factory.Services.GetRequiredService<StubCdnService>();
+        cdn.Uploads.Clear();
+
+        var response = await UploadImage(Png(2400, 1200));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var url = (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("url").GetString();
+        url.Should().StartWith("https://cdn.test/site-updates/").And.EndWith(".webp");
+
+        cdn.Uploads.Should().ContainSingle();
+        var (file, fileName) = cdn.Uploads[0];
+        fileName.Should().StartWith("site-updates/");
+        using var stored = new MagickImage(file);
+        stored.Format.Should().Be(MagickFormat.WebP);
+        Math.Max(stored.Width, stored.Height).Should().Be(1600);
+    }
+
+    [Fact]
+    public async Task UploadImage_RejectsNonImagesEmptyAndOversizedFiles()
+    {
+        var cdn = factory.Services.GetRequiredService<StubCdnService>();
+        cdn.Uploads.Clear();
+
+        (await UploadImage("definitely not a png, just text"u8.ToArray(), "fake.png")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await UploadImage([], "empty.png")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var oversized = new byte[10 * 1024 * 1024 + 1];
+        Png(8, 8).CopyTo(oversized, 0);
+        (await UploadImage(oversized)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        cdn.Uploads.Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task UploadImage_AnonymousIsUnauthorized()
+    {
+        var response = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Post, "/api/admin/updates/images") { Content = ImageBody(Png(32, 32)) });
+
+        response.StatusCode.Should().Be(HttpStatusCode.Unauthorized);
     }
 }
