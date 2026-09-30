@@ -90,5 +90,9 @@
     "YearlyPriceId": "price_yearly_placeholder",
     "LifetimePriceId": "price_lifetime_placeholder",
     "LifetimeWindowEnd": "2026-08-18T00:00:00Z"
+  },
+  "Discourse": {
+    "Url": "https://community.jiten.moe",
+    "SsoSecret": ""
   }
 }

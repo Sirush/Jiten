@@ -9,12 +9,10 @@ public class StringArrayConverter : JsonConverter<string[]>
     {
         if (reader.TokenType == JsonTokenType.String)
         {
-            // Single string, wrap it into a string array
             return new string[] { reader.GetString()! };
         }
         else if (reader.TokenType == JsonTokenType.StartArray)
         {
-            // Array of strings, deserialize normally
             List<string> stringList = new List<string>();
             while (reader.Read())
             {

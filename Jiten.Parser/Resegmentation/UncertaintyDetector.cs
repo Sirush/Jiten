@@ -36,9 +36,7 @@ internal static class UncertaintyDetector
             if (protectedSurfaces != null && protectedSurfaces.Contains(word.Text))
                 continue;
 
-            // Multi-character kanji numerals (五十七, 六十一) are OOV in Sudachi and often
-            // only match name entries in JMDict. Flag them for resegmentation so the scorer
-            // can evaluate splits like 五十+七 which resolve to real numeral entries.
+            // Compound numerals (五十七) are Sudachi OOV and often match only JMDict names, so always flag them.
             bool nameOnly = false;
             bool isCompoundNumeral = word.PartOfSpeechSection1 == PartOfSpeechSection.Numeral && word.Text.Length > 1;
             if (!isCompoundNumeral)
@@ -48,11 +46,7 @@ internal static class UncertaintyDetector
                                  HasMatch(word.DictionaryForm, lookups);
                 if (textMatch || dictMatch)
                 {
-                    // Resolved by lookup → normally skip. Exception: an all-hiragana token whose every
-                    // lookup match is a pure JMnedict name entry (一ッ岳/ひとつだけ) is almost always a
-                    // misparsed common-word run; keep it eligible so the scorer can try 一つ+だけ. The
-                    // acceptance-path guards (HasShortPureNameSegment / negative score) still reject
-                    // genuine name fragmentation.
+                    // An all-hiragana token matching only JMnedict names (ひとつだけ → 一ッ岳) is a misparsed word run.
                     bool pureNameOnly = wordMeta != null
                         && JapaneseTextHelper.IsAllHiragana(word.Text)
                         && IsPureNameOnlyMatch(word.Text, lookups, wordMeta)
@@ -98,8 +92,7 @@ internal static class UncertaintyDetector
         return false;
     }
 
-    // True when every lookup match for `text` is a pure JMnedict name entry and there is no
-    // verb/adjective-derived match — i.e. the only thing keeping the token "resolved" is a name.
+    // A verb/adjective-derived match means the token is not name-only, whatever the lookup entries say.
     private static bool IsPureNameOnlyMatch(string text, Dictionary<string, List<int>> lookups,
         Dictionary<int, JmDictWordMeta> wordMeta)
     {

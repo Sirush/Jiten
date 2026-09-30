@@ -8,7 +8,7 @@ public class UpdateStudyDeckRequest
     public string? Description { get; set; }
     [Range(1, 6)]
     public int DownloadType { get; set; }
-    [Range(1, 5)]
+    [Range(1, 6)]
     public int Order { get; set; }
     [Range(0, int.MaxValue)]
     public int MinFrequency { get; set; }

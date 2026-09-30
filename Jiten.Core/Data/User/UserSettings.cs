@@ -8,4 +8,6 @@ public class UserSettings
     public string MediaFilterPresetsJson { get; set; } = "{}";
 
     public string SmartDeckJson { get; set; } = "{}";
+
+    public string DisplayProfilesJson { get; set; } = "{}";
 }

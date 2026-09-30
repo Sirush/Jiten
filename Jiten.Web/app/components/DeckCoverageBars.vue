@@ -18,16 +18,30 @@
       `\nYoung: ${((props.deck.uniqueWordCount * props.deck.youngUniqueCoverage) / 100).toFixed(0)} / ${props.deck.uniqueWordCount} (${props.deck.youngUniqueCoverage.toFixed(1)}%)` +
       `\nTotal: ${combinedUniqueCoverage.value.toFixed(1)}%`
   );
+
+  const hasSentenceStats = computed(() => props.deck.readableSentences != null);
+  const readable = computed(() => props.deck.readableSentences ?? 0);
+  const readableWithOneLookup = computed(() => Math.min(readable.value + (props.deck.iPlusOneSentences ?? 0), 100));
+  // Truncated, as the title's page does, so the two never show different whole numbers.
+  const whole = (percent: number) => `${Math.floor(percent)}%`;
+  const readableTooltip = computed(
+    () =>
+      `Sentences you understand` +
+      `\n${whole(readable.value)} with every word known` +
+      `\n${whole(readableWithOneLookup.value)} with at most one new word`
+  );
+
+  const barClass = computed(() => (hasSentenceStats.value ? 'h-2 mt-0.5' : 'h-2.5 mt-1'));
 </script>
 
 <template>
-  <div class="flex flex-col gap-2 text-sm">
+  <div class="flex flex-col" :class="hasSentenceStats ? 'gap-1.5 text-xs' : 'gap-2 text-sm'">
     <Tooltip :content="coverageTooltip" block>
       <div class="flex items-baseline justify-between gap-2">
         <span class="min-w-0 truncate text-gray-600 dark:text-gray-400 font-normal">Coverage</span>
         <span class="shrink-0 tabular-nums font-bold text-gray-900 dark:text-gray-50">{{ deck.coverage.toFixed(1) }}%</span>
       </div>
-      <div class="relative w-full bg-gray-300 dark:bg-gray-700 rounded h-2.5 overflow-hidden mt-1">
+      <div class="relative w-full bg-gray-300 dark:bg-gray-700 rounded overflow-hidden" :class="barClass">
         <div class="absolute inset-y-0 bg-purple-500/40 rounded-l transition-all duration-700" :style="{ width: combinedCoverage.toFixed(1) + '%' }" />
         <div class="absolute inset-y-0 bg-purple-500 rounded-l transition-all duration-700" :style="{ width: deck.coverage.toFixed(1) + '%' }" />
       </div>
@@ -37,9 +51,19 @@
         <span class="min-w-0 truncate text-gray-600 dark:text-gray-400 font-normal">Unique</span>
         <span class="shrink-0 tabular-nums font-bold text-gray-900 dark:text-gray-50">{{ deck.uniqueCoverage.toFixed(1) }}%</span>
       </div>
-      <div class="relative w-full bg-gray-300 dark:bg-gray-700 rounded h-2.5 overflow-hidden mt-1">
+      <div class="relative w-full bg-gray-300 dark:bg-gray-700 rounded overflow-hidden" :class="barClass">
         <div class="absolute inset-y-0 bg-purple-500/40 rounded-l transition-all duration-700" :style="{ width: combinedUniqueCoverage.toFixed(1) + '%' }" />
         <div class="absolute inset-y-0 bg-purple-500 rounded-l transition-all duration-700" :style="{ width: deck.uniqueCoverage.toFixed(1) + '%' }" />
+      </div>
+    </Tooltip>
+    <Tooltip v-if="hasSentenceStats" :content="readableTooltip" block>
+      <div class="flex items-baseline justify-between gap-2">
+        <span class="min-w-0 truncate text-gray-600 dark:text-gray-400 font-normal">Sentences</span>
+        <span class="shrink-0 tabular-nums font-bold text-gray-900 dark:text-gray-50">{{ whole(readable) }}</span>
+      </div>
+      <div class="relative w-full bg-gray-300 dark:bg-gray-700 rounded overflow-hidden" :class="barClass">
+        <div class="absolute inset-y-0 bg-green-500/60 rounded-l transition-all duration-700" :style="{ width: readableWithOneLookup.toFixed(1) + '%' }" />
+        <div class="absolute inset-y-0 bg-green-500 rounded-l transition-all duration-700" :style="{ width: readable.toFixed(1) + '%' }" />
       </div>
     </Tooltip>
   </div>

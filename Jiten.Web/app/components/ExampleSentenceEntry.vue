@@ -1,5 +1,6 @@
 <script setup lang="ts">
-  import type { ExampleSentence } from '~/types';
+  import type { ExampleSentence, SentenceFuriganaMode } from '~/types';
+  import { sentenceRubyHtml, targetWordId, visibleFurigana } from '~/utils/sentenceRuby';
   import { computed, ref } from 'vue';
   import { useToast } from 'primevue/usetoast';
 
@@ -13,6 +14,11 @@
     // Marked text of the custom sentences already saved for this word, so a sentence saved in an
     // earlier visit still shows as starred.
     savedTexts?: string[];
+    // Defaults to the site-wide furigana preference.
+    furiganaMode?: SentenceFuriganaMode;
+    hiddenWordId?: number;
+    /** The sentence's own word is known, so the i+N badge counts from i+0. */
+    targetKnown?: boolean;
   }>();
 
   const emit = defineEmits<{
@@ -31,8 +37,29 @@
   const revealedLocally = ref(false);
   const isRevealed = computed(() => store.displayAllNsfw || revealedLocally.value);
 
+  const stateColour = useWordStateColour();
+
   const formattedText = computed(() => {
-    const { text, wordPosition, wordLength } = props.exampleSentence;
+    const { text, wordPosition, wordLength, furigana } = props.exampleSentence;
+    const setting = props.furiganaMode ?? store.sentenceFurigana;
+    // Signed out, every word reads as unknown, so "unknown words only" means all of them.
+    const mode = setting === 'unknown' && !authStore.isAuthenticated ? 'all' : setting;
+    const hiddenWordId = props.hiddenWordId ?? (mode === 'exceptTarget' ? targetWordId(furigana, wordPosition, wordLength) : undefined);
+    const shown = new Set(visibleFurigana(furigana, mode, hiddenWordId));
+    const coloured = store.colourWordsByState && authStore.isAuthenticated;
+    const peek = store.furiganaOnHover;
+    const unknownSpans = props.exampleSentence.unknownSpans ?? [];
+    if (unknownSpans.length > 0 || (furigana?.length && (shown.size > 0 || coloured || peek))) {
+      return sanitiseHtml(
+        sentenceRubyHtml(text, wordPosition, wordLength, furigana ?? [], {
+          unknownSpans,
+          showReading: (g) => shown.has(g),
+          // The caller's hidden word is the answer being tested, so it never peeks.
+          revealOnHover: peek ? (g) => g.wordId !== props.hiddenWordId : undefined,
+          colourOf: coloured ? (g) => (g.wordId === props.hiddenWordId ? null : (stateColour(g.states)?.color ?? null)) : undefined,
+        })
+      );
+    }
     if (wordPosition < 0 || wordLength <= 0 || wordPosition >= text.length) {
       return sanitiseHtml(text);
     }
@@ -114,12 +141,15 @@
       <blockquote class="relative inline-block border-l-4 border-primary-500 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r shadow-sm overflow-hidden">
         <div class="flex items-start gap-2">
           <div
-            class="md:text-lg text-sm transition-filter duration-200 flex-1"
+            class="transition-filter duration-200 flex-1"
             lang="ja"
-            :class="{ 'blur-sm': isNsfw && !isRevealed }"
+            :class="[sentenceSizeClass(store.sentenceSize), { 'blur-sm': isNsfw && !isRevealed }]"
             @click="handleReveal"
             v-html="formattedText"
           />
+          <span v-if="exampleSentence.isIPlusOne || exampleSentence.unknownCount != null" class="mt-0.5 h-5 shrink-0 inline-flex items-center">
+            <IPlusOneBadge :unknown="exampleSentence.unknownCount ?? 0" :target-known="targetKnown" />
+          </span>
           <TtsButton :text="exampleSentence.text" :sentence-id="exampleSentence.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
           <button
             v-if="canEdit"

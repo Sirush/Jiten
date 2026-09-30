@@ -13,7 +13,6 @@ public partial class MorphologicalAnalyser
         ("ほう", "が", "いい", PartOfSpeech.Expression),
         ("に", "とっ", "て", PartOfSpeech.Expression),
         ("に", "つい", "て", PartOfSpeech.Expression),
-        // ("いそう", "に", "ない") removed: いそうにない has no JMDict entry, tokens should stay split
         ("か", "の", "ように", PartOfSpeech.Expression),
         ("それ", "よ", "か", PartOfSpeech.Expression),
         ("に", "劣ら", "ず", PartOfSpeech.Expression),
@@ -23,7 +22,7 @@ public partial class MorphologicalAnalyser
         ("いけす", "か", "ねー", PartOfSpeech.IAdjective),
         ("たら", "し", "たら", PartOfSpeech.Verb),
         ("どう", "あって", "も", PartOfSpeech.Expression),
-        // じゃない+か → じゃないか 2819990 (checked before SpecialCases2 じゃ+ない so the か is absorbed)
+        // Checked before SpecialCases2's じゃ+ない so the か is absorbed into じゃないか 2819990.
         ("じゃ", "ない", "か", PartOfSpeech.Expression),
     ];
 
@@ -48,17 +47,13 @@ public partial class MorphologicalAnalyser
         "くれる", "呉れる",
         "もらう", "貰う",
         "やる",
-        // 差し上げる is deliberately absent: unlike the fully grammaticalised single-morpheme
-        // subsidiaries above, the honorific benefactive is a content verb worth keeping as its
-        // own token (判じて + 差し上げる).
+        // 差し上げる is absent: the honorific benefactive is a content verb kept as its own token (判じて + 差し上げる).
         "くださる", "下さる",
         "おく", "置く",
         "みる", "見る",
     ];
 
-    // Te-form auxiliary verbs with full deconjugator support (both dict form and conjugated forms)
-    // Used in 3-token combining: verb + て/で + aux
-    // Only include verbs that have deconjugator rules so combined tokens get proper conjugation info
+    // Aux for verb + て/で + aux merges; each needs deconjugator rules so the merged token keeps its conjugation info.
     private static readonly HashSet<string> TeFormAuxChainVerbs =
     [
         "いる", "居る",
@@ -82,8 +77,10 @@ public partial class MorphologicalAnalyser
     private static readonly HashSet<(string, string, PartOfSpeech?)> SpecialCases2 =
     [
         ("じゃ", "ない", PartOfSpeech.Expression),
-        ("本当", "に", PartOfSpeech.Adverb), // 本当に 1611580 ("really") — recombine the 本当+に that Sudachi sometimes splits
-        ("ため", "に", PartOfSpeech.Conjunction), // ために 1157150 ("for the sake of / because of")
+        ("とんでも", "なく", PartOfSpeech.IAdjective), // adverbial とんでもない; Sudachi splits off the adverb とんでも
+        ("とんでも", "なかっ", PartOfSpeech.IAdjective),
+        ("本当", "に", PartOfSpeech.Adverb), // 本当に 1611580; Sudachi sometimes splits it
+        ("ため", "に", PartOfSpeech.Conjunction), // ために 1157150
         ("だ", "ろう", PartOfSpeech.Auxiliary), // Sudachi shreds そりゃそうだろう into …だ|ろう(蝋)
         ("す", "べき", PartOfSpeech.Expression), // classical す + べき → すべき 1006200 (とすべき戦術)
         ("なさ", "すぎる", PartOfSpeech.Verb), // なさ[ない]+すぎる → ない via さすぎる excess deconj
@@ -110,14 +107,14 @@ public partial class MorphologicalAnalyser
         ("誰", "か", PartOfSpeech.Expression),
         ("すぐ", "に", PartOfSpeech.Adverb),
         ("たしか", "に", PartOfSpeech.Adverb),
-        ("確か", "に", PartOfSpeech.Adverb), // 確かに 1205770 — kanji variant of the たしか row above
-        ("直", "に", PartOfSpeech.Adverb), // 直に 1430690 (じかに, "directly/in person") — the bare 直 otherwise reads ちょく
-        ("ゆえ", "に", PartOfSpeech.Conjunction), // 故に 1267130 ("therefore") — literary connective Sudachi splits
-        ("故", "に", PartOfSpeech.Conjunction), // kanji variant of the ゆえ row above
-        ("とう", "に", PartOfSpeech.Adverb), // 疾うに 1633370 ("long ago") — the bare とう otherwise strands on 塔
-        ("そ", "も", PartOfSpeech.Conjunction), // そも 2836401 ("in the first place") — Sudachi emits archaic pronoun そ + も
-        ("どう", "こう", PartOfSpeech.Adverb), // どうこう 2670710 ("this or that / one thing or another")
-        ("何で", "も", PartOfSpeech.Adverb), // 何でも 1611030 ("anything / whatever")
+        ("確か", "に", PartOfSpeech.Adverb), // 確かに 1205770
+        ("直", "に", PartOfSpeech.Adverb), // 直に 1430690 (じかに); the bare 直 otherwise reads ちょく
+        ("ゆえ", "に", PartOfSpeech.Conjunction), // 故に 1267130
+        ("故", "に", PartOfSpeech.Conjunction),
+        ("とう", "に", PartOfSpeech.Adverb), // 疾うに 1633370; the bare とう otherwise strands on 塔
+        ("そ", "も", PartOfSpeech.Conjunction), // そも 2836401; Sudachi emits archaic pronoun そ + も
+        ("どう", "こう", PartOfSpeech.Adverb), // どうこう 2670710
+        ("何で", "も", PartOfSpeech.Adverb), // 何でも 1611030
         ("ただ", "今", PartOfSpeech.Adverb),
         ("ところ", "で", PartOfSpeech.Conjunction),
         ("度", "に", PartOfSpeech.Expression),
@@ -224,19 +221,16 @@ public partial class MorphologicalAnalyser
         ("だから", "こそ", PartOfSpeech.Expression),
         ("では", "あるまい", PartOfSpeech.Expression),
         ("に", "於いて", PartOfSpeech.Expression),
-        // user_dic にせよ only wins the lattice after なる; recombine the に+せよ(為る命令形) cut
-        // that Sudachi produces after other verbs (振られるにせよ, 成就するにせよ)
+        // user_dic にせよ only wins the lattice after なる; after other verbs Sudachi cuts に+せよ(為る命令形) (成就するにせよ).
         ("に", "せよ", PartOfSpeech.Expression),
         // Sudachi splits colloquial どっか/どっから as どっ(代名詞)+particle
         ("どっ", "か", PartOfSpeech.Adverb),
         ("どっ", "から", PartOfSpeech.Adverb),
-        // CombineTte builds ちゃってぇ with the expressive small-vowel tail; merged back onto なん,
-        // the lookup's small-kana strip resolves なんちゃって (matched via CombineFinal, post-tte)
+        // Matches in CombineFinal after CombineTte builds ちゃってぇ; the lookup's small-kana strip resolves なんちゃって.
         ("なん", "ちゃってぇ", PartOfSpeech.Expression),
-        // Compound particles / expressions (parallel to に+ついて, に+とって, それ+じゃ above)
-        ("ばかり", "に", PartOfSpeech.Expression), // ばかりに 1010250 "(just) because"
-        ("それ", "では", PartOfSpeech.Conjunction), // それでは 1406050 "well then" (mirrors それじゃ)
-        ("に", "対して", PartOfSpeech.Expression), // に対して 1009800 (mirrors について/にとって)
+        ("ばかり", "に", PartOfSpeech.Expression), // ばかりに 1010250
+        ("それ", "では", PartOfSpeech.Conjunction), // それでは 1406050
+        ("に", "対して", PartOfSpeech.Expression), // に対して 1009800
         ("いい", "ぞ", PartOfSpeech.Interjection),
         ("に", "よって", PartOfSpeech.Expression)
     ];
@@ -245,6 +239,9 @@ public partial class MorphologicalAnalyser
 
     private static readonly string _stopToken = "|";
     private static readonly string _batchDelimiter = "|||";
+
+    // Private-use char tagging a line-final ）; preprocessing erases line structure, so the tag carries it to the sentence splitter.
+    private const char LineEndParenMark = '\uE000';
 
     private static readonly HashSet<string> NCompoundSuffixes =
         ["だ", "です", "じゃ", "なら", "ても", "でも", "だろ", "だろう", "だって", "だけど", "だけ", "だが", "だし", "だから"];

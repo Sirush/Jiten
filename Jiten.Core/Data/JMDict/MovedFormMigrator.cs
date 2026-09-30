@@ -12,10 +12,15 @@ public static class MovedFormMigrator
     public sealed record MovedForm(int OldWordId, short OldReadingIndex, string Text, int NewWordId, short NewReadingIndex,
                                    int LookupsRemoved, bool FormRankCopied, bool WordRankCopied);
 
-    public static async Task<List<MovedForm>> Run(IDbContextFactory<JitenDbContext> contextFactory, bool dryRun, string? reportPath = null)
+    /// <summary>Ambiguous moves need a reparse to reassign occurrences; a deleted old entry sharing a spelling is not the same word (だもの vs 駄物).</summary>
+    public sealed record DetectedMove(int OldWordId, short OldReadingIndex, string Text, int NewWordId, short NewReadingIndex,
+                                      int OwnerCount, bool OldEntryDeleted)
     {
-        await using var db = await contextFactory.CreateDbContextAsync();
+        public bool Ambiguous => OwnerCount > 1;
+    }
 
+    public static async Task<List<DetectedMove>> DetectMoves(JitenDbContext db)
+    {
         var inactive = await db.WordForms.AsNoTracking()
                                .Where(f => !f.IsActiveInLatestSource && f.WordId < JmDictRangeEnd)
                                .Select(f => new { f.WordId, f.ReadingIndex, f.Text })
@@ -30,15 +35,36 @@ public static class MovedFormMigrator
             .GroupBy(f => f.Text)
             .ToDictionary(g => g.Key, g => g.ToList());
 
-        var moves = new List<(int oldId, short oldRi, string text, int newId, short newRi)>();
+        var inactiveWordIds = inactive.Select(f => f.WordId).Distinct().ToList();
+        var survivingWordIds = (await db.WordForms.AsNoTracking()
+                                        .Where(f => f.IsActiveInLatestSource && inactiveWordIds.Contains(f.WordId))
+                                        .Select(f => f.WordId)
+                                        .Distinct()
+                                        .ToListAsync())
+            .ToHashSet();
+
+        var moves = new List<DetectedMove>();
         foreach (var f in inactive)
         {
             if (!activeByText.TryGetValue(f.Text, out var targets)) continue;
+            var owners = targets.Where(t => t.WordId != f.WordId).ToList();
+            if (owners.Count == 0) continue;
             // The split-out entry is the newest one carrying the text; the old entry itself never qualifies.
-            var target = targets.Where(t => t.WordId != f.WordId).OrderByDescending(t => t.WordId).FirstOrDefault();
-            if (target == null) continue;
-            moves.Add((f.WordId, f.ReadingIndex, f.Text, target.WordId, target.ReadingIndex));
+            var target = owners.OrderByDescending(t => t.WordId).First();
+            moves.Add(new DetectedMove(f.WordId, f.ReadingIndex, f.Text, target.WordId, target.ReadingIndex,
+                                       owners.Select(t => t.WordId).Distinct().Count(), !survivingWordIds.Contains(f.WordId)));
         }
+
+        return moves;
+    }
+
+    public static async Task<List<MovedForm>> Run(IDbContextFactory<JitenDbContext> contextFactory, bool dryRun, string? reportPath = null)
+    {
+        await using var db = await contextFactory.CreateDbContextAsync();
+
+        var moves = (await DetectMoves(db))
+                    .Select(m => (oldId: m.OldWordId, oldRi: m.OldReadingIndex, text: m.Text, newId: m.NewWordId, newRi: m.NewReadingIndex))
+                    .ToList();
         if (moves.Count == 0) return [];
 
         var oldIds = moves.Select(m => m.oldId).Distinct().ToList();

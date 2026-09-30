@@ -14,10 +14,32 @@
     });
   }
 
+  const jitenStore = useJitenStore();
+  // On <html> so teleported popovers and dialogs pick up the Japanese font, furigana size and motion choice too; read from cookies, so SSR paints them.
+  const displayClasses = computed(() =>
+    [
+      jitenStore.japaneseFont !== 'default' ? `font-ja-${jitenStore.japaneseFont}` : '',
+      jitenStore.japaneseFontWordsOnly ? 'font-ja-words-only' : '',
+      jitenStore.japaneseFontDictionaries ? 'font-ja-dictionaries' : '',
+      jitenStore.reducedMotion === 'always' ? 'reduce-motion' : '',
+      jitenStore.furiganaSize !== 'md' ? `furigana-${jitenStore.furiganaSize}` : '',
+    ]
+      .filter(Boolean)
+      .join(' ')
+  );
+
+  const customFontStyle = computed(() => {
+    const family = jitenStore.japaneseFont === 'custom' ? customFontFamily(jitenStore.japaneseCustomFont) : null;
+    return family ? `--jiten-font-custom: ${family}` : undefined;
+  });
+
+  if (import.meta.client) watch(() => jitenStore.japaneseFont, loadJapaneseFont, { immediate: true });
+
   useHead({
     titleTemplate: (titleChunk) => {
       return titleChunk ? `${titleChunk} - Jiten` : 'Jiten';
     },
+    htmlAttrs: { class: displayClasses, style: customFontStyle },
   });
 
   const route = useRoute();

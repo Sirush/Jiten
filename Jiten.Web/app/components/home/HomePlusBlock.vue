@@ -4,6 +4,8 @@
   const { tier, sources, fetched } = useJitenPlus();
 
   const PITCHES = [
+    'sentence stats that show how many of each title you understand',
+    'i+1 sentences for any word',
     'a Smart Deck that selects the best words for what you are currently immersing in',
     'richer cards with images and audio',
     'custom frequency lists',

@@ -48,8 +48,7 @@ internal static class KanaConverter
         return result;
     }
 
-    // Katakana letters shift to hiragana one-to-one; ヵヶヮゎ take JapaneseTextHelper's spellings and
-    // ー stays only when long-vowel conversion is off. Any other character defers to WanaKana.
+    // ヵヶヮゎ must match JapaneseTextHelper's spellings; anything beyond plain katakana defers to WanaKana.
     internal static bool TryFoldKatakana(string text, bool convertLongVowelMark, out string folded)
     {
         foreach (char c in text)
@@ -80,8 +79,7 @@ internal static class KanaConverter
         return true;
     }
 
-    // Plain hiragana + kanji passes through WanaKana unchanged, so the cache probe is pure overhead.
-    // ゎ (U+308E) is excluded: JapaneseTextHelper rewrites it to わ before converting.
+    // Hiragana + kanji skip the cache probe; ゎ (U+308E) is excluded because JapaneseTextHelper rewrites it to わ.
     private static bool IsAlreadyHiragana(string text)
     {
         foreach (char c in text)

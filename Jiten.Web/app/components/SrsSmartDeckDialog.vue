@@ -471,7 +471,7 @@
                   <img :src="coverUrl(t.coverName)" :alt="''" class="w-8 h-11 rounded object-cover bg-surface-100 dark:bg-surface-700 shrink-0" />
                   <div class="min-w-0 flex-1">
                     <div class="text-sm font-medium truncate">
-                      <NuxtLink :to="`/decks/media/${t.deckId}/detail`" class="hover:text-primary-500">{{ localiseTitle(t) }}</NuxtLink>
+                      <NuxtLink :to="`/decks/media/${t.deckId}/detail`" class="hover:text-primary-500" v-bind="japaneseTextAttrs(localiseTitle(t))">{{ localiseTitle(t) }}</NuxtLink>
                     </div>
                     <div class="text-xs text-gray-500 dark:text-gray-400 truncate">{{ getMediaTypeText(t.mediaType) }} · {{ progressText(t) }}</div>
                   </div>
@@ -653,7 +653,7 @@
                       @click="pick(r)"
                     >
                       <img :src="coverUrl(r.coverName)" alt="" class="w-6 h-8 rounded object-cover shrink-0" />
-                      <span class="text-sm truncate">{{ localiseTitle(r) }}</span>
+                      <span class="text-sm truncate" v-bind="japaneseTextAttrs(localiseTitle(r))">{{ localiseTitle(r) }}</span>
                       <span class="text-xs text-gray-400 shrink-0">{{ getMediaTypeText(r.mediaType) }}</span>
                     </button>
                   </li>

@@ -97,8 +97,8 @@
 
     // The "View franchise" tag is always visible, so reserve its width up front like the label.
     const fr = franchiseRef.value;
-    const franchiseEl = fr instanceof HTMLElement ? fr : (fr?.$el as HTMLElement | undefined);
-    const franchiseWidth = franchiseEl?.getBoundingClientRect().width ?? 0;
+    const franchiseEl: unknown = fr instanceof HTMLElement ? fr : fr?.$el;
+    const franchiseWidth = franchiseEl instanceof Element ? franchiseEl.getBoundingClientRect().width : 0;
 
     let accumulatedWidth = labelWidth + 4 + (franchiseWidth > 0 ? franchiseWidth + props.gapSize : 0); // Label + margin
     let count = 0;
@@ -178,7 +178,7 @@
       class="text-xs whitespace-nowrap no-underline hover:underline underline-offset-2 transition-colors"
     >
       <span class="text-gray-600 dark:text-gray-400">{{ getRelationshipTypeLabel(rel.relationshipType) }}:</span>
-      <span class="ml-1 text-primary">{{ localiseTitle(rel.targetDeck) }}</span>
+      <span class="ml-1 text-primary" v-bind="japaneseTextAttrs(localiseTitle(rel.targetDeck))">{{ localiseTitle(rel.targetDeck) }}</span>
     </NuxtLink>
 
     <Tag

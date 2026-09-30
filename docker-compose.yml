@@ -111,6 +111,9 @@ services:
       # and exist here so the ceiling can be lowered without a redeploy if CDN spend runs away.
       - JitenPlus__CardMediaStorage__TrialBytes=${JITENPLUS_TRIAL_STORAGE_BYTES:-314572800}
       - JitenPlus__CardMediaStorage__FullBytes=${JITENPLUS_FULL_STORAGE_BYTES:-10737418240}
+      # Forum login answers 503 until the secret is set; it must equal the forum's discourse_connect_secret.
+      - Discourse__Url=${DISCOURSE_URL:-https://community.jiten.moe}
+      - Discourse__SsoSecret=${DISCOURSE_SSO_SECRET:-}
     volumes:
       - ./Shared:/app/Shared:ro
       - uploads:/app/uploads

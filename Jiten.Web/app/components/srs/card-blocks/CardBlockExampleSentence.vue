@@ -2,6 +2,7 @@
   import type { CardLayoutBlock, ExampleSentenceBlockOptions, UserExampleSentenceDto } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { sanitiseHtml } from '~/utils/sanitiseHtml';
+  import { sentenceRubyHtml, visibleFurigana } from '~/utils/sentenceRuby';
   import ExampleSentenceEntry from '~/components/ExampleSentenceEntry.vue';
   import InlineSentenceEditor from '~/components/InlineSentenceEditor.vue';
   import { useToast } from 'primevue/usetoast';
@@ -15,6 +16,7 @@
 
   const { $api } = useNuxtApp();
   const authStore = useAuthStore();
+  const jitenStore = useJitenStore();
   const localiseTitle = useLocaliseTitle();
   const srsStore = useSrsStore();
   const toast = useToast();
@@ -23,6 +25,8 @@
   const blurred = computed(() => opts.value.blur && !exampleRevealed.value && !(opts.value.unblurOnFlip && isFlipped.value));
 
   const sizeClass = computed(() => (opts.value.size === 'small' ? 'text-sm' : opts.value.size === 'large' ? 'text-lg' : 'text-base'));
+
+  const hiddenWordId = computed(() => (isFlipped.value ? undefined : card.value?.wordId));
 
   const previewHtml = computed(() => {
     if (!isPreview) return '';
@@ -39,6 +43,16 @@
       return parseCustomSentenceHtml(ex.customText);
     }
     const { text, wordPosition, wordLength } = ex;
+    const shown = new Set(visibleFurigana(ex.furigana, opts.value.furigana, hiddenWordId.value));
+    const peek = jitenStore.furiganaOnHover;
+    if (ex.furigana?.length && (shown.size > 0 || peek)) {
+      return sanitiseHtml(
+        sentenceRubyHtml(text, wordPosition, wordLength, ex.furigana, {
+          showReading: (g) => shown.has(g),
+          revealOnHover: peek ? (g) => g.wordId !== hiddenWordId.value : undefined,
+        })
+      );
+    }
     if (wordPosition < 0 || wordLength <= 0 || wordPosition >= text.length) {
       return text;
     }
@@ -177,6 +191,7 @@
         >
           <div class="flex items-start gap-2">
             <div class="leading-relaxed flex-1" :class="sizeClass" lang="ja" v-html="exampleSentenceHtml" />
+            <span v-if="cardExample?.isIPlusOne" class="mt-0.5 h-5 shrink-0 inline-flex items-center"><IPlusOneBadge /></span>
             <div v-if="opts.showActions" class="flex items-center gap-1 mt-0.5 shrink-0" :class="{ 'pointer-events-none': blurred }">
               <TtsButton
                 v-if="cardExample"
@@ -245,7 +260,14 @@
       </button>
 
       <div v-if="extraSentencesExpanded" class="mt-2 space-y-2">
-        <ExampleSentenceEntry v-for="(sentence, i) in extraSentences" :key="i" :example-sentence="sentence" :show-source="true" />
+        <ExampleSentenceEntry
+          v-for="(sentence, i) in extraSentences"
+          :key="i"
+          :example-sentence="sentence"
+          :show-source="true"
+          :furigana-mode="opts.furigana"
+          :hidden-word-id="hiddenWordId"
+        />
         <div v-if="isLoadingMoreSentences" class="border-l-4 border-surface-300 dark:border-surface-600 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r">
           <div class="h-5 w-3/4 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
         </div>

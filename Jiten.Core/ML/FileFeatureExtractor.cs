@@ -139,7 +139,7 @@ public class FileFeatureExtractor
         features.UniqueKanjiCount = deck.UniqueKanjiCount;
         features.UniqueKanjiOnceCount = deck.UniqueKanjiUsedOnceCount;
 
-        if (deck.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio)
+        if (deck.MediaType is MediaType.Manga or MediaType.Anime or MediaType.Movie or MediaType.Drama or MediaType.Audio or MediaType.YouTube)
             deck.SentenceCount = 0;
 
         features.SentenceCount = deck.SentenceCount;

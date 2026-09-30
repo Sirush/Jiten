@@ -3,11 +3,21 @@
   import { useJitenStore } from '~/stores/jitenStore';
   import { useAuthStore } from '~/stores/authStore';
   import { kanjiScaleOptions } from '~/data/kanjiGroupings';
+  import { useDisplayProfileStore } from '~/stores/displayProfileStore';
+  import {
+    DIFFICULTY_DISPLAY_STYLE_OPTIONS,
+    DIFFICULTY_VALUE_DISPLAY_STYLE_OPTIONS,
+    HEADWORD_FURIGANA_OPTIONS,
+    SENTENCE_FURIGANA_OPTIONS,
+    TITLE_LANGUAGE_OPTIONS,
+    TTS_VOICE_OPTIONS,
+  } from '~/utils/displaySettingOptions';
 
   const store = useJitenStore();
   const {
     titleLanguage,
-    displayFurigana,
+    headwordFurigana,
+    sentenceFurigana,
     displayAllNsfw,
     hideVocabularyDefinitions,
     hideCoverageBorders,
@@ -15,7 +25,7 @@
     hideTags,
     hideRelations,
     hideDescriptions,
-    hideExternalRating,
+    externalRatingHidden,
     hideAlternativeTitles,
     quickMasterVocabulary,
     displayAdminFunctions,
@@ -26,6 +36,14 @@
     ttsVoice,
   } = storeToRefs(store);
   const auth = useAuthStore();
+  const displayProfiles = useDisplayProfileStore();
+  const profileOptions = computed(() => displayProfiles.profiles.map((p) => ({ label: p.name, value: p.id })));
+  const activeProfileId = computed({
+    get: () => displayProfiles.activeId,
+    set: (id: string | null) => {
+      if (id) displayProfiles.switchTo(id);
+    },
+  });
 
   const { speakWord, isSpeaking, isLoading } = useTts(undefined, 'word');
 
@@ -37,37 +55,10 @@
   // Coverage indicators only count while its checkbox is rendered, or a logged-out visitor reads a
   // count they have no way to see or clear.
   const hiddenSectionsCount = computed(() => {
-    const toggles = [hideGenres, hideTags, hideRelations, hideDescriptions, hideExternalRating, hideAlternativeTitles];
+    const toggles = [hideGenres, hideTags, hideRelations, hideDescriptions, externalRatingHidden, hideAlternativeTitles];
     if (auth.isAuthenticated) toggles.push(hideCoverageBorders);
     return toggles.filter((s) => s.value).length;
   });
-
-  const titleLanguageOptions = ref([
-    { label: 'Japanese', value: 0 },
-    { label: 'Romaji', value: 1 },
-    { label: 'English', value: 2 },
-  ]);
-
-  const ttsVoiceOptions = ref([
-    { label: 'Female 1', value: 'female' },
-    { label: 'Female 2', value: 'female2' },
-    { label: 'Male 1', value: 'male' },
-    { label: 'Male 2', value: 'male2' },
-    { label: 'ASMR', value: 'asmr' },
-    { label: 'System', value: 'system' },
-    { label: 'Random', value: 'random' },
-  ]);
-
-  const difficultyDisplayStyleOptions = ref([
-    { label: 'Name only', value: 0 },
-    { label: 'Name and value', value: 1 },
-    { label: 'Value only', value: 2 },
-  ]);
-
-  const difficultyValueDisplayStyleOptions = ref([
-    { label: '0 to 5', value: 1 },
-    { label: 'Percentage', value: 2 },
-  ]);
 
   const onSettingsMouseEnter = () => {
     isOverSettings.value = true;
@@ -106,36 +97,49 @@
   >
     <div class="flex flex-col gap-2">
       <div class="flex justify-between items-center mb-2">
-        <span class="font-semibold text-base">Display Settings</span>
+        <span class="font-semibold text-base">Display settings</span>
         <Button class="md:hidden" icon="pi pi-times" text rounded size="small" aria-label="Close settings" @click="settings.hide()" />
       </div>
+      <FloatLabel v-if="auth.isAuthenticated && displayProfiles.profiles.length > 1" variant="on">
+        <Select
+          v-model="activeProfileId"
+          :options="profileOptions"
+          option-label="label"
+          option-value="value"
+          input-id="displayProfile"
+          @show="isSettingsInteracted = true"
+          @hide="isSettingsInteracted = false"
+        />
+        <label for="displayProfile">Profile</label>
+      </FloatLabel>
+
       <FloatLabel variant="on" class="">
         <Select
           v-model="titleLanguage"
-          :options="titleLanguageOptions"
+          :options="TITLE_LANGUAGE_OPTIONS"
           option-label="label"
           option-value="value"
-          placeholder="Titles Language"
+          placeholder="Title language"
           input-id="titleLanguage"
           @show="isSettingsInteracted = true"
           @hide="isSettingsInteracted = false"
         />
-        <label for="titleLanguage">Titles Language</label>
+        <label for="titleLanguage">Title language</label>
       </FloatLabel>
 
       <div class="flex items-center gap-2">
         <FloatLabel variant="on" class="flex-1">
           <Select
             v-model="ttsVoice"
-            :options="ttsVoiceOptions"
+            :options="TTS_VOICE_OPTIONS"
             option-label="label"
             option-value="value"
-            placeholder="TTS Voice"
+            placeholder="Text-to-speech voice"
             input-id="ttsVoice"
             @show="isSettingsInteracted = true"
             @hide="isSettingsInteracted = false"
           />
-          <label for="ttsVoice">TTS Voice</label>
+          <label for="ttsVoice">TTS voice</label>
         </FloatLabel>
         <button
           v-if="ttsVoice !== 'system'"
@@ -154,14 +158,35 @@
 
       <Divider class="!my-1 md:!my-2 !mx-2" />
 
-      <div class="flex items-center gap-2 py-1">
-        <Checkbox v-model="displayFurigana" input-id="displayFurigana" name="furigana" :binary="true" />
-        <label for="displayFurigana" class="text-sm cursor-pointer">Display Furigana</label>
-      </div>
+      <FloatLabel variant="on">
+        <Select
+          v-model="headwordFurigana"
+          :options="HEADWORD_FURIGANA_OPTIONS"
+          option-label="label"
+          option-value="value"
+          input-id="headwordFurigana"
+          @show="isSettingsInteracted = true"
+          @hide="isSettingsInteracted = false"
+        />
+        <label for="headwordFurigana">Furigana on words</label>
+      </FloatLabel>
+
+      <FloatLabel variant="on">
+        <Select
+          v-model="sentenceFurigana"
+          :options="SENTENCE_FURIGANA_OPTIONS"
+          option-label="label"
+          option-value="value"
+          input-id="sentenceFurigana"
+          @show="isSettingsInteracted = true"
+          @hide="isSettingsInteracted = false"
+        />
+        <label for="sentenceFurigana">Furigana in example sentences</label>
+      </FloatLabel>
 
       <div class="flex items-center gap-2 py-1">
         <Checkbox v-model="hideVocabularyDefinitions" input-id="hideVocabularyDefinitions" name="hideVocabularyDefinitions" :binary="true" />
-        <label for="hideVocabularyDefinitions" class="text-sm cursor-pointer">Hide Vocabulary Definitions</label>
+        <label for="hideVocabularyDefinitions" class="text-sm cursor-pointer">Hide definitions in lists</label>
       </div>
 
       <div v-if="auth.isAuthenticated" class="flex items-center gap-2 py-1">
@@ -171,7 +196,7 @@
 
       <div class="flex items-center gap-2 py-1">
         <Checkbox v-model="displayAllNsfw" input-id="displayAllNsfw" name="nsfw" :binary="true" />
-        <label for="displayAllNsfw" class="text-sm cursor-pointer">Unblur all NSFW sentences</label>
+        <label for="displayAllNsfw" class="text-sm cursor-pointer">Unblur NSFW sentences</label>
       </div>
 
       <Divider class="!my-1 md:!my-2 !mx-2" />
@@ -183,7 +208,7 @@
         @click="mediaSectionsOpen = !mediaSectionsOpen"
       >
         <span class="text-sm font-medium">
-          Media page sections
+          Hide on media pages
           <span v-if="hiddenSectionsCount > 0" class="font-normal text-muted-color">({{ hiddenSectionsCount }} hidden)</span>
         </span>
         <i class="pi text-xs" :class="mediaSectionsOpen ? 'pi-chevron-up' : 'pi-chevron-down'" />
@@ -192,50 +217,56 @@
       <div v-if="mediaSectionsOpen" class="flex flex-col gap-2 pl-1">
         <div v-if="auth.isAuthenticated" class="flex items-center gap-2 py-1">
           <Checkbox v-model="hideCoverageBorders" input-id="hideCoverageBorders" name="hideCoverageBorders" :binary="true" />
-          <label for="hideCoverageBorders" class="text-sm cursor-pointer">Hide coverage indicators</label>
+          <label for="hideCoverageBorders" class="text-sm cursor-pointer">Coverage indicators</label>
         </div>
 
         <div class="flex items-center gap-2 py-1">
           <Checkbox v-model="hideGenres" input-id="hideGenres" name="hideGenres" :binary="true" />
-          <label for="hideGenres" class="text-sm cursor-pointer">Hide genres</label>
+          <label for="hideGenres" class="text-sm cursor-pointer">Genres</label>
         </div>
 
         <div class="flex items-center gap-2 py-1">
           <Checkbox v-model="hideTags" input-id="hideTags" name="hideTags" :binary="true" />
-          <label for="hideTags" class="text-sm cursor-pointer">Hide tags</label>
+          <label for="hideTags" class="text-sm cursor-pointer">Tags</label>
         </div>
 
         <div class="flex items-center gap-2 py-1">
           <Checkbox v-model="hideRelations" input-id="hideRelations" name="hideRelations" :binary="true" />
-          <label for="hideRelations" class="text-sm cursor-pointer">Hide relations</label>
+          <label for="hideRelations" class="text-sm cursor-pointer">Relations</label>
         </div>
 
         <div class="flex items-center gap-2 py-1">
           <Checkbox v-model="hideDescriptions" input-id="hideDescriptions" name="hideDescriptions" :binary="true" />
-          <label for="hideDescriptions" class="text-sm cursor-pointer">Hide descriptions</label>
+          <label for="hideDescriptions" class="text-sm cursor-pointer">Descriptions</label>
         </div>
 
         <div class="flex items-center gap-2 py-1">
-          <Checkbox v-model="hideExternalRating" input-id="hideExternalRating" name="hideExternalRating" :binary="true" />
-          <label for="hideExternalRating" class="text-sm cursor-pointer">Hide external ratings</label>
+          <Checkbox v-model="externalRatingHidden" input-id="hideExternalRating" name="hideExternalRating" :binary="true" />
+          <label for="hideExternalRating" class="text-sm cursor-pointer">External ratings</label>
         </div>
 
         <div class="flex items-center gap-2 py-1">
           <Checkbox v-model="hideAlternativeTitles" input-id="hideAlternativeTitles" name="hideAlternativeTitles" :binary="true" />
-          <label for="hideAlternativeTitles" class="text-sm cursor-pointer">Hide alternative titles</label>
+          <label for="hideAlternativeTitles" class="text-sm cursor-pointer">Alternative titles</label>
         </div>
       </div>
 
       <Divider class="!my-1 md:!my-2 !mx-2" />
 
       <div class="flex flex-col gap-2 md:gap-4">
-        <label for="readingSpeed" class="text-sm font-medium">Reading Speed (chars/hour)</label>
-        <div class="w-full">
-          <InputNumber v-model="readingSpeed" show-buttons :min="100" :max="100000" :step="100" size="small" class="w-full" fluid />
-        </div>
-        <div class="w-full px-1">
-          <Slider v-model="readingSpeed" :min="100" :max="100000" :step="100" class="w-full" />
-        </div>
+        <label for="readingSpeed" class="text-sm font-medium">Reading speed (characters per hour)</label>
+        <p v-if="store.readingSpeedByDifficulty" class="text-xs text-surface-600 dark:text-surface-400">
+          Set per difficulty in
+          <NuxtLink to="/settings/display" class="text-primary-600 underline dark:text-primary-400" @click="hide()">display settings</NuxtLink>.
+        </p>
+        <template v-else>
+          <div class="w-full">
+            <InputNumber v-model="readingSpeed" show-buttons :min="100" :max="100000" :step="100" size="small" class="w-full" fluid />
+          </div>
+          <div class="w-full px-1">
+            <Slider v-model="readingSpeed" :min="100" :max="100000" :step="100" class="w-full" />
+          </div>
+        </template>
       </div>
 
       <Divider class="!my-1 md:!my-2 !mx-2" />
@@ -243,29 +274,29 @@
       <FloatLabel variant="on" class="">
         <Select
           v-model="difficultyDisplayStyle"
-          :options="difficultyDisplayStyleOptions"
+          :options="DIFFICULTY_DISPLAY_STYLE_OPTIONS"
           option-label="label"
           option-value="value"
-          placeholder="Difficulty Style"
+          placeholder="Difficulty style"
           input-id="difficultyDisplayStyle"
           @show="isSettingsInteracted = true"
           @hide="isSettingsInteracted = false"
         />
-        <label for="difficultyDisplayStyle">Difficulty Style</label>
+        <label for="difficultyDisplayStyle">Difficulty style</label>
       </FloatLabel>
 
       <FloatLabel variant="on" class="">
         <Select
           v-model="difficultyValueDisplayStyle"
-          :options="difficultyValueDisplayStyleOptions"
+          :options="DIFFICULTY_VALUE_DISPLAY_STYLE_OPTIONS"
           option-label="label"
           option-value="value"
-          placeholder="Difficulty Value Style"
+          placeholder="Difficulty value"
           input-id="difficultyValueDisplayStyle"
           @show="isSettingsInteracted = true"
           @hide="isSettingsInteracted = false"
         />
-        <label for="difficultyValueDisplayStyle">Difficulty Value Style</label>
+        <label for="difficultyValueDisplayStyle">Difficulty value</label>
       </FloatLabel>
 
       <FloatLabel variant="on" class="">
@@ -274,12 +305,12 @@
           :options="kanjiScaleOptions"
           option-label="label"
           option-value="value"
-          placeholder="Kanji breakdown scale"
+          placeholder="Kanji level badge"
           input-id="kanjiScale"
           @show="isSettingsInteracted = true"
           @hide="isSettingsInteracted = false"
         />
-        <label for="kanjiScale">Kanji breakdown scale</label>
+        <label for="kanjiScale">Kanji level badge</label>
       </FloatLabel>
 
       <div v-if="auth.isAuthenticated && auth.isAdmin" class="flex items-center gap-2 py-1">
@@ -287,13 +318,11 @@
         <label for="displayAdminFunctions" class="text-sm cursor-pointer">Display admin functions</label>
       </div>
 
-      <template v-if="auth.isAuthenticated">
-        <Divider class="!my-1 md:!my-2 !mx-2" />
-        <NuxtLink to="/settings" class="flex items-center justify-between py-1 text-sm font-medium" @click="hide()">
-          <span>All settings</span>
-          <i class="pi pi-arrow-right text-xs" />
-        </NuxtLink>
-      </template>
+      <Divider class="!my-1 md:!my-2 !mx-2" />
+      <NuxtLink to="/settings/display" class="flex items-center justify-between py-1 text-sm font-medium" @click="hide()">
+        <span>More display settings</span>
+        <i class="pi pi-sliders-h text-xs" aria-hidden="true" />
+      </NuxtLink>
     </div>
   </Popover>
 </template>

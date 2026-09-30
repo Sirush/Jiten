@@ -4,6 +4,7 @@
   import Button from 'primevue/button';
   import { useJitenStore } from '~/stores/jitenStore';
   import VocabularyStatus from '~/components/VocabularyStatus.vue';
+  import { pitchColourClasses } from '~/utils/pitchAccent';
 
   const props = defineProps<{
     word: Word;
@@ -23,6 +24,8 @@
   }>();
 
   const convertToRuby = useConvertToRuby();
+  const jitenStore = useJitenStore();
+  const stateColour = useWordStateColour();
   const isCompact = ref(props.isCompact);
 
   const { resolvedGroups } = useDictionaryDefinitions(
@@ -33,6 +36,8 @@
   const toggleCompact = () => {
     isCompact.value = !isCompact.value;
   };
+
+  const headwordPitchClass = computed(() => (jitenStore.pitchAccentColours ? pitchColourClasses(props.word.mainReading.text, props.word.pitchAccents) : ''));
 
   const rankLabel = computed(() => rowRankLabel(props.word.mainReading, props.rankSourceLabel));
 </script>
@@ -45,11 +50,19 @@
           <Checkbox v-if="selectable" :model-value="selected" :binary="true" class="mr-2" @change="emit('select', word)" @click.stop />
           <router-link
             class="leading-relaxed"
-            :class="headwordSizeClass(word.mainReading.text, true)"
+            :class="[headwordSizeClass(word.mainReading.text, true, jitenStore.headwordSize), headwordPitchClass]"
             :to="`/vocabulary/${word.wordId}/${word.mainReading.readingIndex}`"
             lang="ja"
+            :style="stateColour(word.knownStates)"
             @click.stop
-            v-html="convertToRuby(word.mainReading.text)"
+            v-html="convertToRuby(word.mainReading.text, undefined, word.knownStates)"
+          />
+          <PitchAccentNumbers
+            v-if="(jitenStore.pitchAccentDisplay === 'number' || jitenStore.pitchAccentDisplay === 'both') && word.pitchAccents?.length"
+            :accents="word.pitchAccents"
+            :reading="word.mainReading.text"
+            class="ml-2 md:ml-0"
+            @click.stop
           />
           <Button
             text

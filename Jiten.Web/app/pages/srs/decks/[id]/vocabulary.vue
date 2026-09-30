@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import Breadcrumb from 'primevue/breadcrumb';
   import { useSrsStore } from '~/stores/srsStore';
-  import { type Word, KnownState, SortOrder, StudyDeckType } from '~/types';
+  import { type Word, DeckOrder, KnownState, SortOrder, StudyDeckType } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
@@ -45,6 +45,12 @@
   const breadcrumbHome = { icon: 'pi pi-home', route: '/' };
   const breadcrumbItems = computed(() => [{ label: 'Decks', route: '/srs/decks' }, { label: deckName.value }, { label: 'Vocabulary' }]);
 
+  const { fetched: planFetched, hasFeature } = useJitenPlus();
+  const hasSentenceOrder = computed(() => deck.value?.deckType === StudyDeckType.MediaDeck && deck.value.order === DeckOrder.SentenceUnlock);
+
+  const sentenceOrderLapsed = computed(() => hasSentenceOrder.value && planFetched.value && !hasFeature('sentence-order'));
+  const usesSentenceOrder = computed(() => hasSentenceOrder.value && !sentenceOrderLapsed.value);
+
   const sortByOptions = computed(() => {
     const d = deck.value;
     if (!d) return [{ label: frequencySortLabel.value, value: 'globalFreq' }];
@@ -52,6 +58,7 @@
     switch (d.deckType) {
       case StudyDeckType.MediaDeck:
         return [
+          ...(usesSentenceOrder.value ? [{ label: getDeckOrderText(DeckOrder.SentenceUnlock), value: 'sentenceUnlock' }] : []),
           { label: 'Chronological', value: 'chrono' },
           { label: 'Deck Frequency', value: 'deckFreq' },
           { label: frequencySortLabel.value, value: 'globalFreq' },
@@ -96,7 +103,8 @@
     if (!d) return 'globalFreq';
     switch (d.deckType) {
       case StudyDeckType.MediaDeck:
-        return 'chrono';
+        if (usesSentenceOrder.value) return 'sentenceUnlock';
+        return sentenceOrderLapsed.value ? 'deckFreq' : 'chrono';
       case StudyDeckType.GlobalDynamic:
         return 'globalFreq';
       case StudyDeckType.StaticWordList:
@@ -120,6 +128,14 @@
   const hideKanaOnly = ref(toBooleanOrNull(route.query.hideKanaOnly) ?? false);
 
   const sortOrder = computed(() => (sortDescending.value ? SortOrder.Descending : SortOrder.Ascending));
+
+  watch(
+    sentenceOrderLapsed,
+    (lapsed) => {
+      if (lapsed && sortBy.value === 'sentenceUnlock') sortBy.value = 'deckFreq';
+    },
+    { immediate: true },
+  );
 
   watch(sortDescending, () => {
     router.replace({ query: { ...route.query, sortOrder: sortOrder.value } });
@@ -356,7 +372,7 @@
       </Breadcrumb>
       <div class="flex items-center justify-between gap-2 min-h-[2.5rem]">
         <h1 class="text-lg font-bold md:text-2xl truncate">
-          {{ deckName }}
+          <span v-bind="japaneseTextAttrs(deckName)">{{ deckName }}</span>
           <span class="hidden md:inline">- Vocabulary List</span>
         </h1>
         <div v-if="isStaticDeck" class="flex gap-2 shrink-0">

@@ -30,6 +30,12 @@
       <h2 id="settings-account" class="mb-2 text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Account</h2>
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <SettingsTile icon="pi pi-user" title="Account" to="/settings/account" description="Account details, email, password and sign-in methods." />
+        <SettingsTile
+          icon="pi pi-palette"
+          title="Display"
+          to="/settings/display"
+          description="Furigana, fonts, word colours, media card stats and your display profiles."
+        />
         <SettingsJitenPlus />
       </div>
     </section>

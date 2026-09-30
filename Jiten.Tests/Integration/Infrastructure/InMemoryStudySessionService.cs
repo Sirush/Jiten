@@ -71,4 +71,20 @@ public class InMemoryStudySessionService : IStudySessionService
     {
         return Task.FromResult(_cursorHints.TryRemove($"{userId}:{wordKey}", out var deckId) ? deckId : (int?)null);
     }
+
+    private readonly ConcurrentDictionary<string, byte> _servedCards = new();
+
+    public Task RecordServedCards(string userId, IReadOnlyCollection<long> wordKeys)
+    {
+        foreach (var wordKey in wordKeys)
+            _servedCards[$"{userId}:{wordKey}"] = 0;
+        return Task.CompletedTask;
+    }
+
+    public Task<HashSet<long>> GetServedCards(string userId, IReadOnlyCollection<long> wordKeys)
+    {
+        return Task.FromResult(wordKeys.Where(k => _servedCards.ContainsKey($"{userId}:{k}")).ToHashSet());
+    }
+
+    public void ClearServedCards() => _servedCards.Clear();
 }

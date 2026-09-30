@@ -23,14 +23,11 @@ internal static class AdjacentWordScorer
             uint nextMask = nextPOS != null ? PosMask.FromList(nextPOS) : 0;
             bool hasNext = nextPOS != null;
 
-            // JMDict tags ordinals and number compounds as plain nouns (第二 [n], 百八 [n]), so the
-            // resolved-POS mask loses their numeral-ness — but a counter reading after them behaves
-            // exactly as after a bare numeral (第二話 = だいにわ). Restore the bit from the surface.
+            // JMDict tags ordinals as plain nouns (第二 [n]), but counters after them read as after a numeral (第二話 = だいにわ).
             if (hasPrev && IsNumericSurface(prevText))
                 prevMask |= PosMask.Numeral;
 
-            // Soft-rule ContextMatch depends only on context, so compute the applicable-rule set once
-            // per token here rather than re-evaluating it for every candidate in EvaluateSoftRules.
+            // Soft-rule ContextMatch depends only on context, so it is computed once per token, not per candidate.
             ulong applicable = TransitionRuleEngine.ComputeContextApplicableMask(
                 prevMask, hasPrev, prevText, nextMask, hasNext, nextText);
 
@@ -38,8 +35,7 @@ internal static class AdjacentWordScorer
         }
     }
 
-    // Numeric surface material: kanji/ASCII/full-width digits, optionally opened by the ordinal
-    // prefix 第 or the quantity interrogative/approximator 何・数 (何話, 数分).
+    // Digits of any script, optionally opened by 第 or the quantity interrogative/approximator 何 or 数 (何話, 数分).
     internal static bool IsNumericSurface(string? text)
     {
         if (string.IsNullOrEmpty(text)) return false;

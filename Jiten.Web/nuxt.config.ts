@@ -20,6 +20,7 @@ export default defineNuxtConfig({
       beatOnLocalhost: process.env.NUXT_PUBLIC_BEAT_ON_LOCALHOST === '1',
       baseURL: process.env.NUXT_PUBLIC_BASE_URL || 'https://localhost:7299/api/',
       googleSignInClientId: process.env.NUXT_PUBLIC_GOOGLE_SIGNIN_CLIENT_ID || '',
+      communityUrl: process.env.NUXT_PUBLIC_COMMUNITY_URL || 'https://community.jiten.moe',
       legal: {
         publisherName: process.env.NUXT_PUBLIC_LEGAL_PUBLISHER_NAME || '',
         publicationDirector: process.env.NUXT_PUBLIC_LEGAL_PUBLICATION_DIRECTOR || '',
@@ -166,7 +167,7 @@ export default defineNuxtConfig({
       name: 'Jiten',
       url: 'https://jiten.moe',
       logo: 'https://jiten.moe/web-app-manifest-512x512.png',
-      sameAs: ['https://github.com/Sirush/Jiten', 'https://discord.gg/cZWM7b4wzk', 'https://patreon.com/JitenMoe', 'https://ko-fi.com/jiten'],
+      sameAs: ['https://github.com/Sirush/Jiten', 'https://discord.gg/cZWM7b4wzk', 'https://community.jiten.moe','https://patreon.com/JitenMoe', 'https://ko-fi.com/jiten'],
     },
   },
   ogImage: {

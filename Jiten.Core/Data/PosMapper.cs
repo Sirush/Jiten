@@ -77,6 +77,8 @@ public static class PosMapper
         // Godan verbs (group 5)
         "v5aru", "v5b", "v5g", "v5k", "v5k-s",
         "v5m", "v5n", "v5r", "v5r-i", "v5s", "v5t", "v5u", "v5u-s", "v5uru",
+        // Archaic yodan (group 4)
+        "v4r",
         // Adjectives
         "adj-i", "adj-na", "adj-ix",
         // Auxiliary
@@ -138,6 +140,9 @@ public static class PosMapper
             ["v5r-i"] = ["v5r-i", "v5r"],
             ["v5k-s"] = ["v5k-s", "v5k"],
             ["v5u-s"] = ["v5u-s", "v5u"],
+
+            // Yodan-ru inflects like godan-ru (癒り → 治る), never like ichidan
+            ["v4r"] = ["v4r", "v5r", "v5r-i", "v5aru"],
 
             // Verb stem tags — only match directly-conjugating verbs, not suru-verbs
             ["stem-past"] = DirectConjugationVerbTags,

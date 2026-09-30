@@ -30,7 +30,6 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
 
         await jitenDb.DeckWords.Where(dw => dw.WordId == WordId).ExecuteDeleteAsync();
-        await jitenDb.ExampleSentenceWords.ExecuteDeleteAsync();
         await jitenDb.ExampleSentences.ExecuteDeleteAsync();
         await jitenDb.JMDictWords.Where(w => w.WordId == WordId).ExecuteDeleteAsync();
         await userDb.UserStudyDecks.Where(d => d.UserId == TestUsers.UserA).ExecuteDeleteAsync();
@@ -91,16 +90,21 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
 
     private static async Task<long> AddSentence(JitenDbContext db, int deckId, string text, float difficulty)
     {
-        var sentence = new ExampleSentence { DeckId = deckId, Text = text, Difficulty = difficulty };
+        var sentence = NewSentence(deckId, text, difficulty, WordId);
         db.ExampleSentences.Add(sentence);
         await db.SaveChangesAsync();
-
-        db.ExampleSentenceWords.Add(new ExampleSentenceWord
-        {
-            ExampleSentenceId = sentence.SentenceId, WordId = WordId, ReadingIndex = 0, Position = 0, Length = 2,
-        });
-        await db.SaveChangesAsync();
         return sentence.SentenceId;
+    }
+
+    private static ExampleSentence NewSentence(int deckId, string text, float difficulty, int wordId)
+    {
+        SentenceToken[] tokens = [new(wordId, 0, 0, 2, IsTarget: true, IsFunctionWord: false)];
+        return new ExampleSentence
+        {
+            DeckId = deckId, Text = text, Difficulty = difficulty,
+            Tokens = ExampleSentenceTokens.Encode(tokens),
+            WordKeys = ExampleSentenceTokens.WordKeys(tokens, Random.Shared.Next(ExampleSentenceTokens.FineBucketCount)),
+        };
     }
 
     private async Task<SentencesResponse> Query(object payload, string? userId = TestUsers.UserA)
@@ -255,6 +259,21 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
         result.Sentences.Should().HaveCount(1, "six route subdecks share one parent title");
     }
 
+    [Theory]
+    [InlineData("?mediaTypes=1", 0)]
+    [InlineData("?mediaTypes=1&mediaTypes=4", 3)]
+    [InlineData("/1?mediaTypes=4", 3)]
+    [InlineData("", 3)]
+    public async Task Anonymous_FiltersBySeveralMediaTypes(string filter, int expected)
+    {
+        var request = new HttpRequestMessage(HttpMethod.Post, $"/api/vocabulary/{WordId}/0/random-example-sentences{filter}")
+            .WithJsonContent(Array.Empty<int>());
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await response.Content.ReadFromJsonAsync<List<SentenceDto>>())!.Should().HaveCount(expected);
+    }
+
     [Fact]
     public async Task Anonymous_RejectsOversizedExclusionList()
     {
@@ -327,6 +346,46 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task StudyDeckSeries_DrawsFromItsVolumes()
+    {
+        await SetExampleSentenceSource("StudyDecks");
+
+        long volumeSentenceId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+
+            var series = NewDeck("Series");
+            jitenDb.Decks.Add(series);
+            await jitenDb.SaveChangesAsync();
+            var volume = NewDeck("Volume 1");
+            volume.ParentDeckId = series.DeckId;
+            jitenDb.Decks.Add(volume);
+            await jitenDb.SaveChangesAsync();
+
+            volumeSentenceId = await AddSentence(jitenDb, volume.DeckId, "volume sentence", 0.2f);
+            await jitenDb.Database.ExecuteSqlRawAsync(
+                "INSERT INTO DeckWords (DeckId, WordId, ReadingIndex, Occurrences) VALUES ({0}, {1}, 0, 1)",
+                volume.DeckId, WordId);
+
+            await userDb.UserStudyDecks.Where(d => d.UserId == TestUsers.UserA).ExecuteDeleteAsync();
+            userDb.UserStudyDecks.Add(new UserStudyDeck
+            {
+                UserId = TestUsers.UserA, DeckType = StudyDeckType.MediaDeck, Name = "Series", DeckId = series.DeckId,
+            });
+            await userDb.SaveChangesAsync();
+        }
+
+        for (var i = 0; i < 10; i++)
+            (await CardExampleSentenceId()).Should().Be(volumeSentenceId);
+
+        var more = await Query(new { wordId = WordId, readingIndex = 0, sorting = "Random", take = 3 });
+        more.Sentences[0].SentenceId.Should().Be(volumeSentenceId);
+        more.Sentences[0].FromStudyDeck.Should().BeTrue();
+    }
+
+    [Fact]
     public async Task CardExamples_RandomSource_StillPrefersCustomSentences()
     {
         await SetExampleSentenceSource("Random");
@@ -357,15 +416,9 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
             var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
             await jitenDb.JMDictWords.Where(w => w.WordId == bigWordId).ExecuteDeleteAsync();
             jitenDb.JMDictWords.Add(new JmDictWord { WordId = bigWordId, PartsOfSpeech = ["noun"] });
-            jitenDb.ExampleSentences.Add(new ExampleSentence
-            {
-                SentenceId = bigSentenceId, DeckId = _otherDeckIds[0], Text = "big id sentence", Difficulty = 0.2f,
-            });
-            await jitenDb.SaveChangesAsync();
-            jitenDb.ExampleSentenceWords.Add(new ExampleSentenceWord
-            {
-                ExampleSentenceId = bigSentenceId, WordId = bigWordId, ReadingIndex = 0, Position = 0, Length = 2,
-            });
+            var sentence = NewSentence(_otherDeckIds[0], "big id sentence", 0.2f, bigWordId);
+            sentence.SentenceId = bigSentenceId;
+            jitenDb.ExampleSentences.Add(sentence);
             await jitenDb.SaveChangesAsync();
         }
 

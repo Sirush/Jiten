@@ -184,6 +184,8 @@
       <LazyCoverageJourneySection v-if="deckResponse?.data?.mainDeck" :deck="deckResponse.data.mainDeck" :title="title" hydrate-on-visible />
     </div>
 
+    <LazyDeckSentenceCard v-if="deckResponse?.data?.mainDeck" :deck-id="deckResponse.data.mainDeck.deckId" class="!mt-0" />
+
     <!-- Difficulty Section (independent of coverage) -->
     <Card v-if="isDifficultyLoading" class="p-2">
       <template #content>

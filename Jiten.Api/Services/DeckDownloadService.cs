@@ -5,6 +5,7 @@ using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Helpers;
 using Jiten.Core;
+using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
 using WanaKanaShaapu;
@@ -32,23 +33,28 @@ public class DeckDownloadService(JitenDbContext context) : IDeckDownloadService
             var exampleSentences = await context.ExampleSentences
                                                 .AsNoTracking()
                                                 .Where(es => sentenceDeckIds.Contains(es.DeckId))
-                                                .Include(es => es.Words.Where(w => wordIds.Contains(w.WordId)))
+                                                .Select(es => new { es.Text, es.Tokens })
                                                 .ToListAsync();
 
+            // Picks fill first: they are the sentence the extractor chose for that word, a plain occurrence is a stand-in
+            var fallbacks = new Dictionary<(int WordId, byte ReadingIndex), (string Text, byte Position, byte Length)>();
+            var wordIdSet = wordIds.Select(id => (int)id).ToHashSet();
             foreach (var sentence in exampleSentences)
             {
-                foreach (var word in sentence.Words.Where(w => wordIds.Contains(w.WordId)))
+                foreach (var token in ExampleSentenceTokens.Decode(sentence.Tokens))
                 {
-                    var key = (word.WordId, word.ReadingIndex);
-                    if (!wordToSentencesMap.ContainsKey(key))
-                        wordToSentencesMap[key] = new List<(string, byte, byte)>();
+                    if (!wordIdSet.Contains(token.WordId)) continue;
 
-                    if (wordToSentencesMap[key].Count > 0)
-                        continue;
-
-                    wordToSentencesMap[key].Add((sentence.Text, word.Position, word.Length));
+                    var key = (token.WordId, token.ReadingIndex);
+                    if (token.IsTarget)
+                        wordToSentencesMap.TryAdd(key, [(sentence.Text, token.Position, token.Length)]);
+                    else
+                        fallbacks.TryAdd(key, (sentence.Text, token.Position, token.Length));
                 }
             }
+
+            foreach (var (key, sentence) in fallbacks)
+                wordToSentencesMap.TryAdd(key, [sentence]);
         }
 
         switch (request.Format)

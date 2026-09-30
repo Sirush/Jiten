@@ -2,7 +2,7 @@
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
   import { useAuthStore } from '~/stores/authStore';
-  import type { AccountInfo, TokenResponse } from '~/types/types';
+  import type { AccountInfo, DisplayNameUpdateResponse, TokenResponse } from '~/types/types';
 
   definePageMeta({
     middleware: ['auth'],
@@ -72,6 +72,19 @@
     if (!/\d/.test(password)) return 'Password must contain at least one digit';
     return null;
   }
+
+  const displayNameLocked = computed(() => {
+    const at = account.value?.displayNameChangeAvailableAt;
+    return !!at && new Date(at) > new Date();
+  });
+
+  const onDisplayNameSaved = (result: DisplayNameUpdateResponse) => {
+    if (account.value) {
+      account.value.displayName = result.displayName;
+      account.value.displayNameChangeAvailableAt = result.displayNameChangeAvailableAt;
+    }
+    toast.add({ severity: 'success', summary: 'Display name saved', life: 2500 });
+  };
 
   // --- Change email ---
   const emailForm = reactive({ newEmail: '', currentPassword: '' });
@@ -247,6 +260,12 @@
             <dt class="font-semibold text-muted-color">Username</dt>
             <dd class="break-all">{{ account.userName }}</dd>
 
+            <dt class="font-semibold text-muted-color">Display name</dt>
+            <dd class="break-all">
+              <span v-if="account.displayName">{{ account.displayName }}</span>
+              <span v-else class="text-muted-color">Not set</span>
+            </dd>
+
             <dt class="font-semibold text-muted-color">User ID</dt>
             <dd class="flex items-center gap-2 flex-wrap">
               <code class="bg-surface-100 dark:bg-surface-800 px-2 py-1 rounded break-all">{{ account.userId }}</code>
@@ -297,6 +316,29 @@
               </template>
             </dd>
           </dl>
+        </template>
+      </Card>
+
+      <Card>
+        <template #title>
+          <h3 class="text-lg font-semibold">Display name</h3>
+        </template>
+        <template #content>
+          <p class="text-gray-600 dark:text-gray-300 mb-2">
+            Your public name on the Jiten Community (forums), and anywhere else Jiten shows your name. Your username stays private and is only used to log in.
+          </p>
+          <p class="text-gray-600 dark:text-gray-300 mb-4">
+            You can change it once every 30 days.
+          </p>
+          <Message v-if="displayNameLocked" severity="secondary" :closable="false" class="mb-4">
+            You can change your display name again on {{ formatDate(account.displayNameChangeAvailableAt!) }}.
+          </Message>
+          <DisplayNameForm
+            :initial="account.displayName"
+            :submit-label="account.displayName ? 'Change' : 'Save'"
+            :disabled="displayNameLocked"
+            @saved="onDisplayNameSaved"
+          />
         </template>
       </Card>
 

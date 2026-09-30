@@ -13,6 +13,9 @@
   import { useConfirm } from 'primevue/useconfirm';
   import { useToast } from 'primevue/usetoast';
   import { apiErrorMessage } from '~/utils/apiErrorMessage';
+  import { deckHasStatData, isDefaultMediaCardStatColumns, mediaCardStatColumns, type MediaCardStatId } from '~/utils/mediaCardStats';
+  import { DEFAULT_MEDIA_CARD_SECTION_LAYOUT, type MediaCardSectionId } from '~/utils/mediaCardSections';
+  import { getDifficultyName } from '~/utils/difficultyColours';
 
   const props = defineProps<{
     deck: Deck;
@@ -43,6 +46,10 @@
   const menu = ref();
   const statusPopover = ref();
   const difficultyRef = ref<{ tooltip: string }>();
+  // A string ref inside the stat v-for would collect an array; the function form keeps the single instance.
+  const setDifficultyRef = (el: unknown) => {
+    difficultyRef.value = (el as { tooltip: string } | null) ?? undefined;
+  };
 
   const popularityTooltip = computed(() => {
     const deck = props.deck;
@@ -85,11 +92,15 @@
   }
 
   const displayAdminFunctions = computed(() => store.displayAdminFunctions);
-  const readingSpeed = computed(() => store.readingSpeed);
+  // The community-adjusted difficulty, the one the card shows.
+  const deckDifficulty = computed(() => props.deck.difficultyRaw ?? props.deck.difficulty);
+  const readingSpeed = computed(() => store.readingSpeedFor(deckDifficulty.value));
+  const readingSpeedLabel = computed(() =>
+    store.readingSpeedByDifficulty && deckDifficulty.value >= 0 ? `your reading speed for ${getDifficultyName(deckDifficulty.value)} titles` : 'your reading speed'
+  );
   const readingDuration = computed(() => Math.round(props.deck.characterCount / readingSpeed.value));
   const speechSpeed = computed(() => props.deck.speechSpeed ?? 0);
 
-  const isAudioVisual = computed(() => [MediaType.Anime, MediaType.Drama, MediaType.Movie, MediaType.Audio, MediaType.YouTube].includes(props.deck.mediaType));
   const hasLandscapeCover = computed(() => props.deck.mediaType === MediaType.YouTube && !!props.deck.parentDeckId);
   const isVideo = computed(() => props.deck.mediaType === MediaType.YouTube && !!props.deck.parentDeckId);
   const youtubeUrl = computed(() => props.deck.links?.find((l) => l.linkType === LinkType.YouTube)?.url ?? null);
@@ -397,10 +408,6 @@
     });
   });
 
-  const toggleDescription = () => {
-    isDescriptionExpanded.value = !isDescriptionExpanded.value;
-  };
-
   const canEditInline = computed(() => !props.isCompact && authStore.isAdmin && displayAdminFunctions.value);
   const isEditing = ref(false);
 
@@ -436,6 +443,39 @@
   );
 
   const formatOnce = (count: number) => `${count.toLocaleString()} once`;
+
+  const hiddenInDemo = new Set<MediaCardStatId>(['dialogue', 'readingDuration', 'externalRating']);
+
+  const statVisible = (id: MediaCardStatId): boolean => {
+    if (!deckHasStatData(props.deck, id)) return false;
+    if (props.demoCoverage && hiddenInDemo.has(id)) return false;
+    return id !== 'externalRating' || !store.hideExternalRating;
+  };
+
+  // The stat editor covers the full card only; compact cards keep the built-in layout.
+  const profileColumns = computed(() => (props.isCompact ? null : store.mediaCardStatColumns));
+  const hasCustomStats = computed(() => !isDefaultMediaCardStatColumns(profileColumns.value));
+  const statColumns = computed(() => mediaCardStatColumns(profileColumns.value, statVisible));
+
+  const sectionShown = (section: MediaCardSectionId): boolean => {
+    const deck = props.deck;
+    switch (section) {
+      case 'description':
+        return !!deck.description && !store.hideDescriptions;
+      case 'genres':
+        return !store.hideGenres && !!deck.genres?.length;
+      case 'tags':
+        return !store.hideTags && !!deck.tags?.length;
+      case 'relations':
+        return !store.hideRelations && !!deck.relationships?.length;
+    }
+  };
+
+  // Compact cards have no section editor of their own, so they keep the built-in order.
+  const cardSections = computed(() => {
+    const { top, bottom } = props.isCompact ? DEFAULT_MEDIA_CARD_SECTION_LAYOUT : store.mediaCardSectionLayout;
+    return { top: top.filter(sectionShown), bottom: bottom.filter(sectionShown) };
+  });
 
   const showCoverageStrip = computed(
     () => (authStore.isAuthenticated || props.demoCoverage) && !store.hideCoverageBorders && (props.deck.coverage != 0 || props.deck.uniqueCoverage != 0)
@@ -525,9 +565,9 @@
               </Tooltip>
             </div>
             <Tooltip v-if="isCompact" :content="localiseTitle(deck)">
-              <component :is="titleTag || 'span'" class="break-words">{{ localiseTitle(deck) }}</component>
+              <component :is="titleTag || 'span'" class="break-words" v-bind="japaneseTextAttrs(localiseTitle(deck))">{{ localiseTitle(deck) }}</component>
             </Tooltip>
-            <component :is="titleTag || 'span'" v-else class="break-words">{{ localiseTitle(deck) }}</component>
+            <component :is="titleTag || 'span'" v-else class="break-words" v-bind="japaneseTextAttrs(localiseTitle(deck))">{{ localiseTitle(deck) }}</component>
             <span v-if="isTitleClipped" aria-hidden="true" class="title-clip-ellipsis pointer-events-none absolute bottom-0 right-0 pl-6">…</span>
           </div>
         </template>
@@ -552,10 +592,13 @@
             <template v-if="alternateTitles.length && !store.hideAlternativeTitles">
               <span class="text-gray-400 dark:text-gray-400">·</span>
               <!-- Full text stays in the DOM (truncate only clips visually) so it remains crawlable. -->
-              <span class="min-w-0 flex-1 truncate md:overflow-visible md:whitespace-normal md:break-words text-gray-600 dark:text-gray-400">
+              <span
+                data-section="alternativeTitles"
+                class="min-w-0 flex-1 truncate md:overflow-visible md:whitespace-normal md:break-words text-gray-600 dark:text-gray-400"
+              >
                 <template v-for="(t, i) in alternateTitles" :key="i">
                   <span v-if="i > 0" class="mx-1 text-gray-400 dark:text-gray-400">·</span>
-                  <span :lang="t.ja ? 'ja' : undefined">{{ t.text }}</span>
+                  <span :lang="t.ja ? 'ja' : undefined" :class="{ 'ja-general': t.ja }">{{ t.text }}</span>
                 </template>
               </span>
             </template>
@@ -605,189 +648,173 @@
                     class="grid grid-cols-1 gap-x-3 @xl:gap-x-8 @3xl:gap-x-12 gap-y-1 max-w-[51rem] text-sm"
                     :class="isCompact ? '' : '@xs:grid-cols-2 @3xl:grid-cols-3'"
                   >
-                    <div class="min-w-0 @max-3xl:contents">
-                      <div v-if="isAudioVisual && deck.speechDuration > 0" class="flex justify-between gap-2 stat-row">
-                        <Tooltip :content="'Total duration of speech, excluding silence.\nCharacter count: ' + deck.characterCount.toLocaleString()">
-                          <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
-                            <span class="@xl:hidden">Speech time</span><span class="hidden @xl:inline">Speech duration</span>
-                          </span>
-                        </Tooltip>
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ formattedSpeechDuration }}</span>
-                      </div>
-                      <div v-else class="flex justify-between gap-2 stat-row">
-                        <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
-                          <span class="@xl:hidden">Characters</span><span class="hidden @xl:inline">Character count</span>
-                        </span>
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.characterCount.toLocaleString() }}</span>
-                      </div>
-                      <div class="flex justify-between gap-2 stat-row">
-                        <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Word count</span>
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.wordCount.toLocaleString() }}</span>
-                      </div>
-                      <div class="flex justify-between gap-2 stat-row">
-                        <Tooltip :content="'Words appearing exactly once: ' + deck.uniqueWordUsedOnceCount.toLocaleString()">
-                          <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
-                            Unique words
-                            <span class="hidden @xl:inline text-gray-600 dark:text-gray-400 text-xs tabular-nums"
-                              >· {{ formatOnce(deck.uniqueWordUsedOnceCount) }}</span
-                            >
-                          </span>
-                        </Tooltip>
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
-                          deck.uniqueWordCount.toLocaleString()
-                        }}</span>
-                      </div>
-                    </div>
-
-                    <div class="min-w-0 @max-3xl:contents">
-                      <div class="flex justify-between gap-2 stat-row">
-                        <Tooltip :content="'Kanji appearing exactly once: ' + deck.uniqueKanjiUsedOnceCount.toLocaleString()">
-                          <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
-                            Unique kanji
-                            <span class="hidden @xl:inline text-gray-600 dark:text-gray-400 text-xs tabular-nums"
-                              >· {{ formatOnce(deck.uniqueKanjiUsedOnceCount) }}</span
-                            >
-                          </span>
-                        </Tooltip>
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
-                          deck.uniqueKanjiCount.toLocaleString()
-                        }}</span>
-                      </div>
-                      <div v-if="deck.averageSentenceLength !== 0 && !deck.hideAverageSentenceLength" class="flex justify-between gap-2 stat-row">
-                        <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap"
-                          ><span class="@xl:hidden">Avg. sentence</span><span class="hidden @xl:inline">Average sentence length</span></span
-                        >
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
-                          deck.averageSentenceLength.toFixed(1)
-                        }}</span>
-                      </div>
-                      <div v-if="speechSpeed > 0" class="flex justify-between gap-2 stat-row">
-                        <Tooltip content="Average speed of speech in mora per minute.">
-                          <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Speech speed</span>
-                        </Tooltip>
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ speechSpeed.toFixed(0) }}</span>
-                      </div>
-
-                      <div v-if="deck.difficulty != -1" class="stat-row cursor-help @max-3xl:col-span-full @max-3xl:order-first">
-                        <Tooltip :content="difficultyRef?.tooltip ?? ''" block>
-                          <div class="flex justify-between gap-x-2">
-                            <span class="text-gray-600 dark:text-gray-400 font-normal shrink-0">
-                              Difficulty
-                              <i class="pi pi-info-circle text-primary-400 text-xs ml-0.5" />
+                    <div v-for="(column, columnIndex) in statColumns" :key="columnIndex" class="min-w-0 @max-3xl:contents">
+                      <template v-for="statId in column" :key="statId">
+                        <div v-if="statId === 'speechDuration'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                          <Tooltip :content="'Total duration of speech, excluding silence.\nCharacter count: ' + deck.characterCount.toLocaleString()">
+                            <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
+                              <span class="@xl:hidden">Speech time</span><span class="hidden @xl:inline">Speech duration</span>
                             </span>
-                            <DifficultyDisplay
-                              ref="difficultyRef"
-                              :difficulty="deck.difficulty"
-                              :difficulty-raw="deck.difficultyRaw"
-                              :difficulty-algorithmic="deck.difficultyAlgorithmic"
-                              :user-adjustment="deck.userAdjustment"
-                              :vote-count="deck.distinctVoterCount || 0"
-                              :adjustment-confidence="deck.adjustmentConfidence || 0"
-                            />
+                          </Tooltip>
+                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ formattedSpeechDuration }}</span>
+                        </div>
+                        <div v-else-if="statId === 'characters'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                          <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
+                            <span class="@xl:hidden">Characters</span><span class="hidden @xl:inline">Character count</span>
+                          </span>
+                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.characterCount.toLocaleString() }}</span>
+                        </div>
+                        <div v-else-if="statId === 'wordCount'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                          <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Word count</span>
+                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.wordCount.toLocaleString() }}</span>
+                        </div>
+                        <div v-else-if="statId === 'uniqueWords'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                          <Tooltip :content="'Words appearing exactly once: ' + deck.uniqueWordUsedOnceCount.toLocaleString()">
+                            <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
+                              Unique words
+                              <span class="hidden @xl:inline text-gray-600 dark:text-gray-400 text-xs tabular-nums"
+                                >· {{ formatOnce(deck.uniqueWordUsedOnceCount) }}</span
+                              >
+                            </span>
+                          </Tooltip>
+                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
+                            deck.uniqueWordCount.toLocaleString()
+                          }}</span>
+                        </div>
+                        <div v-else-if="statId === 'uniqueKanji'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                          <Tooltip :content="'Kanji appearing exactly once: ' + deck.uniqueKanjiUsedOnceCount.toLocaleString()">
+                            <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
+                              Unique kanji
+                              <span class="hidden @xl:inline text-gray-600 dark:text-gray-400 text-xs tabular-nums"
+                                >· {{ formatOnce(deck.uniqueKanjiUsedOnceCount) }}</span
+                              >
+                            </span>
+                          </Tooltip>
+                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
+                            deck.uniqueKanjiCount.toLocaleString()
+                          }}</span>
+                        </div>
+                        <div v-else-if="statId === 'averageSentenceLength'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                          <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap"
+                            ><span class="@xl:hidden">Avg. sentence</span><span class="hidden @xl:inline">Average sentence length</span></span
+                          >
+                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
+                            deck.averageSentenceLength.toFixed(1)
+                          }}</span>
+                        </div>
+                        <div v-else-if="statId === 'speechSpeed'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                          <Tooltip content="Average speed of speech in mora per minute.">
+                            <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Speech speed</span>
+                          </Tooltip>
+                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ speechSpeed.toFixed(0) }}</span>
+                        </div>
+                        <div
+                          v-else-if="statId === 'difficulty'"
+                          :data-stat="statId"
+                          class="stat-row cursor-help @max-3xl:col-span-full"
+                          :class="{ '@max-3xl:order-first': !hasCustomStats }"
+                        >
+                          <Tooltip :content="difficultyRef?.tooltip ?? ''" block>
+                            <div class="flex justify-between gap-x-2">
+                              <span class="text-gray-600 dark:text-gray-400 font-normal shrink-0">
+                                Difficulty
+                                <i class="pi pi-info-circle text-primary-400 text-xs ml-0.5" />
+                              </span>
+                              <DifficultyDisplay
+                                :ref="setDifficultyRef"
+                                :difficulty="deck.difficulty"
+                                :difficulty-raw="deck.difficultyRaw"
+                                :difficulty-algorithmic="deck.difficultyAlgorithmic"
+                                :user-adjustment="deck.userAdjustment"
+                                :vote-count="deck.distinctVoterCount || 0"
+                                :adjustment-confidence="deck.adjustmentConfidence || 0"
+                              />
+                            </div>
+                          </Tooltip>
+                        </div>
+                        <div v-else-if="statId === 'dialogue'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                          <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Dialogue</span>
+                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.dialoguePercentage.toFixed(1) }}%</span>
+                        </div>
+                        <template v-else-if="statId === 'children'">
+                          <router-link
+                            v-if="showChildrenLink"
+                            :data-stat="statId"
+                            :to="`/decks/media/${deck.deckId}/detail`"
+                            class="flex justify-between gap-2 stat-row group cursor-pointer no-underline"
+                          >
+                            <span class="text-primary-600 dark:text-primary-400 font-normal whitespace-nowrap underline-offset-2 group-hover:underline">{{
+                              childrenLabel
+                            }}</span>
+                            <span class="tabular-nums font-semibold whitespace-nowrap text-primary-600 dark:text-primary-400">
+                              {{ deck.childrenDeckCount.toLocaleString() }}
+                              <i class="pi pi-arrow-right text-xs ml-0.5 transition-transform group-hover:translate-x-0.5" />
+                            </span>
+                          </router-link>
+                          <div v-else :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                            <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">{{ childrenLabel }}</span>
+                            <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
+                              deck.childrenDeckCount.toLocaleString()
+                            }}</span>
                           </div>
-                        </Tooltip>
-                      </div>
-                    </div>
+                        </template>
+                        <div v-else-if="statId === 'runtime'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                          <Tooltip :content="deck.parentDeckId ? 'Length of the video.' : 'Median length of a video on this channel.'">
+                            <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
+                              <span v-if="deck.parentDeckId">Length</span
+                              ><span v-else><span class="@xl:hidden">Avg. length</span><span class="hidden @xl:inline">Average video length</span></span>
+                            </span>
+                          </Tooltip>
+                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ runtimeLabel }}</span>
+                        </div>
+                        <div v-else-if="statId === 'readingDuration'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                          <Tooltip
+                            :content="
+                              'Based on ' +
+                              readingSpeedLabel +
+                              ':\n ' +
+                              '<strong>' +
+                              readingSpeed.toLocaleString() +
+                              '</strong>' +
+                              ' characters per hour.\n<i>You can change it in the display settings.</i>'
+                            "
+                          >
+                            <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
+                              Duration
+                              <i class="pi pi-info-circle cursor-pointer text-primary-500" />
+                            </span>
+                          </Tooltip>
 
-                    <div class="min-w-0 @max-3xl:contents">
-                      <div
-                        v-if="!deck.hideDialoguePercentage && deck.dialoguePercentage != 0 && deck.dialoguePercentage != 100 && !demoCoverage"
-                        class="flex justify-between gap-2 stat-row"
-                      >
-                        <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Dialogue</span>
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.dialoguePercentage.toFixed(1) }}%</span>
-                      </div>
-
-                      <router-link
-                        v-if="showChildrenLink"
-                        :to="`/decks/media/${deck.deckId}/detail`"
-                        class="flex justify-between gap-2 stat-row group cursor-pointer no-underline"
-                      >
-                        <span class="text-primary-600 dark:text-primary-400 font-normal whitespace-nowrap underline-offset-2 group-hover:underline">{{
-                          childrenLabel
-                        }}</span>
-                        <span class="tabular-nums font-semibold whitespace-nowrap text-primary-600 dark:text-primary-400">
-                          {{ deck.childrenDeckCount.toLocaleString() }}
-                          <i class="pi pi-arrow-right text-xs ml-0.5 transition-transform group-hover:translate-x-0.5" />
-                        </span>
-                      </router-link>
-                      <div v-else-if="deck.childrenDeckCount != 0" class="flex justify-between gap-2 stat-row">
-                        <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">{{ childrenLabel }}</span>
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
-                          deck.childrenDeckCount.toLocaleString()
-                        }}</span>
-                      </div>
-
-                      <div v-if="runtimeLabel" class="flex justify-between gap-2 stat-row">
-                        <Tooltip :content="deck.parentDeckId ? 'Length of the video.' : 'Median length of a video on this channel.'">
+                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap"
+                            >{{ readingDuration > 0 ? readingDuration : '<1' }} h</span
+                          >
+                        </div>
+                        <div v-else-if="statId === 'externalRating'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                          <Tooltip content="Score based on user ratings from 3rd party websites, such as AniList, TMDB, VNDB or IGDB.">
+                            <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
+                              <span class="@xl:hidden">Rating</span><span class="hidden @xl:inline">External Rating</span>
+                            </span>
+                          </Tooltip>
+                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.externalRating }} %</span>
+                        </div>
+                        <div v-else-if="statId === 'appears'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
-                            <span v-if="deck.parentDeckId">Length</span
-                            ><span v-else><span class="@xl:hidden">Avg. length</span><span class="hidden @xl:inline">Average video length</span></span>
+                            <span class="@xl:hidden">Appears</span><span class="hidden @xl:inline">Appears (times)</span>
                           </span>
-                        </Tooltip>
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ runtimeLabel }}</span>
-                      </div>
-
-                      <div
-                        v-if="
-                          (deck.mediaType == MediaType.Novel ||
-                            deck.mediaType == MediaType.NonFiction ||
-                            deck.mediaType == MediaType.VisualNovel ||
-                            deck.mediaType == MediaType.WebNovel) &&
-                          !demoCoverage
-                        "
-                        class="flex justify-between gap-2 stat-row"
-                      >
-                        <Tooltip
-                          :content="
-                            'Based on your reading speed of:\n ' +
-                            '<strong>' +
-                            readingSpeed +
-                            '</strong>' +
-                            ' characters per hour.\n<i>You can adjust it in the quick settings cog at the top right.</i>'
-                          "
-                        >
-                          <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
-                            Duration
-                            <i class="pi pi-info-circle cursor-pointer text-primary-500" />
-                          </span>
-                        </Tooltip>
-
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap"
-                          >{{ readingDuration > 0 ? readingDuration : '<1' }} h</span
-                        >
-                      </div>
-
-                      <div v-if="deck.externalRating != 0 && !store.hideExternalRating && !demoCoverage" class="flex justify-between gap-2 stat-row">
-                        <Tooltip content="Score based on user ratings from 3rd party websites, such as AniList, TMDB, VNDB or IGDB.">
-                          <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
-                            <span class="@xl:hidden">Rating</span><span class="hidden @xl:inline">External Rating</span>
-                          </span>
-                        </Tooltip>
-                        <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.externalRating }} %</span>
-                      </div>
-
-                      <div v-if="deck.selectedWordOccurrences != 0" class="flex justify-between gap-2 stat-row">
-                        <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
-                          <span class="@xl:hidden">Appears</span><span class="hidden @xl:inline">Appears (times)</span>
-                        </span>
-                        <span class="tabular-nums font-bold whitespace-nowrap">{{ deck.selectedWordOccurrences.toLocaleString() }}</span>
-                      </div>
+                          <span class="tabular-nums font-bold whitespace-nowrap">{{ deck.selectedWordOccurrences.toLocaleString() }}</span>
+                        </div>
+                      </template>
                     </div>
                   </div>
 
-                  <div class="mt-3">
-                    <div v-if="deck.description && !store.hideDescriptions" class="description-container" :class="{ expanded: isDescriptionExpanded }">
-                      <p class="whitespace-pre-line mb-0 text-sm leading-relaxed text-gray-600 dark:text-gray-400">{{ deck.description }}</p>
-                      <button
-                        v-if="deck.description.length > 50"
-                        type="button"
-                        class="text-primary-500 hover:text-primary-700 text-sm cursor-pointer"
-                        @click="toggleDescription"
-                      >
-                        {{ isDescriptionExpanded ? 'View less' : 'View more' }}
-                      </button>
-                    </div>
+                  <div class="mt-3 space-y-2">
+                    <MediaDeckCardSection
+                      v-for="section in cardSections.top"
+                      :key="section"
+                      v-model:description-expanded="isDescriptionExpanded"
+                      :section="section"
+                      :deck="deck"
+                    />
                   </div>
 
                   <ExampleSentenceEntry v-if="deck.exampleSentence != undefined" :example-sentence="deck.exampleSentence" />
@@ -795,13 +822,13 @@
                   <div class="mt-auto">
                     <LazyDeckInlineEditor v-if="isEditing" :deck="deck" @saved="onMetadataSaved" @close="isEditing = false" />
 
-                    <div v-else-if="deck.genres?.length || deck.tags?.length || deck.relationships?.length" class="pt-5 space-y-2 max-w-[51rem]">
-                      <GenreTagDisplay v-if="!store.hideGenres && deck.genres?.length" :genres="deck.genres" label="Genres" />
-                      <GenreTagDisplay v-if="!store.hideTags && deck.tags?.length" :tags="deck.tags" label="Tags" />
-                      <RelatedMediaDisplay
-                        v-if="!store.hideRelations && deck.relationships?.length"
-                        :relationships="deck.relationships"
-                        :deck-id="deck.deckId"
+                    <div v-else-if="cardSections.bottom.length" class="pt-5 space-y-2 max-w-[51rem]">
+                      <MediaDeckCardSection
+                        v-for="section in cardSections.bottom"
+                        :key="section"
+                        v-model:description-expanded="isDescriptionExpanded"
+                        :section="section"
+                        :deck="deck"
                       />
                     </div>
                   </div>
@@ -881,6 +908,7 @@
 
       <CoverageStrip
         v-if="showCoverageStrip"
+        data-section="coverage"
         :coverage="deck.coverage"
         :young-coverage="deck.youngCoverage"
         with-tooltip
@@ -978,29 +1006,9 @@
 </template>
 
 <style scoped>
-  .description-container:not(.expanded) p {
-    display: -webkit-box;
-    line-clamp: 2;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
   /* Ensure text wraps properly on small screens */
   .flex-1 {
     min-width: 0;
-  }
-
-  @media (max-width: 768px) {
-    .description-container:not(.expanded) p {
-      line-clamp: 4;
-      -webkit-line-clamp: 4;
-    }
-  }
-
-  .description-container.expanded p {
-    white-space: pre-line;
   }
 
   /* Add additional responsive behavior for small screens */

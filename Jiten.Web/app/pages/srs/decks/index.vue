@@ -17,6 +17,10 @@
   const toast = useToast();
   const confirm = useConfirm();
   const localiseTitle = useLocaliseTitle();
+  const deckTitle = (deck: StudyDeckDto) =>
+    deck.deckType === StudyDeckType.MediaDeck ? localiseTitle({ originalTitle: deck.title, romajiTitle: deck.romajiTitle, englishTitle: deck.englishTitle }) : deck.name;
+  const parentTitle = (deck: StudyDeckDto) =>
+    localiseTitle({ originalTitle: deck.parentTitle ?? '', romajiTitle: deck.parentRomajiTitle, englishTitle: deck.parentEnglishTitle });
   const router = useRouter();
 
   const showAddDialog = ref(false);
@@ -95,6 +99,7 @@
     [DeckOrder.DeckFrequency]: 'Deck frequency',
     [DeckOrder.ImportOrder]: 'Import order',
     [DeckOrder.Random]: 'Random',
+    [DeckOrder.SentenceUnlock]: 'Sentence unlock',
   };
 
   function pct(count: number, total: number) {
@@ -138,7 +143,7 @@
     return ids;
   });
 
-  const { limits: planLimits, isPlus } = useJitenPlus();
+  const { limits: planLimits, isPlus, fetched: planFetched, hasFeature } = useJitenPlus();
 
   const deckUsage = computed(() => srsStore.studyDecks.length);
   const staticWordUsage = computed(() =>
@@ -391,6 +396,8 @@
 
   function deckOrderLabel(deck: StudyDeckDto): string | undefined {
     if (deck.deckType === StudyDeckType.GlobalDynamic && deck.order === DeckOrder.GlobalFrequency) return undefined;
+    if (deck.order === DeckOrder.SentenceUnlock && planFetched.value && !hasFeature('sentence-order'))
+      return 'Deck frequency (sentence unlock needs Jiten+)';
     return orderLabels[deck.order];
   }
 
@@ -740,10 +747,10 @@
 
               <!-- Info -->
               <div class="flex-1 min-w-0">
-                <div v-if="deck.parentTitle" class="text-xs text-surface-400 dark:text-surface-400 truncate">
-                  {{ localiseTitle({ originalTitle: deck.parentTitle, romajiTitle: deck.parentRomajiTitle, englishTitle: deck.parentEnglishTitle }) }}
+                <div v-if="deck.parentTitle" class="text-xs text-surface-400 dark:text-surface-400 truncate" v-bind="japaneseTextAttrs(parentTitle(deck))">
+                  {{ parentTitle(deck) }}
                 </div>
-                <div class="font-semibold truncate">
+                <div class="font-semibold truncate" v-bind="japaneseTextAttrs(deckTitle(deck))">
                   <NuxtLink
                     v-if="deck.deckType === StudyDeckType.MediaDeck && deck.deckId"
                     :to="`/decks/media/${deck.deckId}/detail`"
@@ -920,10 +927,10 @@
 
               <!-- Info -->
               <div class="flex-1 min-w-0">
-                <div v-if="deck.parentTitle" class="text-xs text-surface-400 dark:text-surface-400 truncate">
-                  {{ localiseTitle({ originalTitle: deck.parentTitle, romajiTitle: deck.parentRomajiTitle, englishTitle: deck.parentEnglishTitle }) }}
+                <div v-if="deck.parentTitle" class="text-xs text-surface-400 dark:text-surface-400 truncate" v-bind="japaneseTextAttrs(parentTitle(deck))">
+                  {{ parentTitle(deck) }}
                 </div>
-                <div class="font-semibold truncate">
+                <div class="font-semibold truncate" v-bind="japaneseTextAttrs(deckTitle(deck))">
                   <NuxtLink
                     v-if="deck.deckType === StudyDeckType.MediaDeck && deck.deckId"
                     :to="`/decks/media/${deck.deckId}/detail`"

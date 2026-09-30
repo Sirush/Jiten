@@ -3,12 +3,7 @@ using Jiten.Parser.Runtime;
 
 namespace Jiten.Parser;
 
-/// <summary>
-/// Mines low-margin (uncertain-segmentation) regions from raw text using the Sudachi lattice
-/// margin export (FFI v3). Pure tokenizer pass — no DB/Redis/JMDict needed — so it can sweep
-/// large corpora quickly. Low margins flag near-tied alternative segmentations: candidate
-/// hard cases for the eval set, penalty calibration, and user_dic cost measurement.
-/// </summary>
+/// <summary>Mines near-tied Sudachi segmentations via the lattice margin export (FFI v3); tokenizer-only, no DB/Redis.</summary>
 public static class MarginMiner
 {
     public sealed record MarginFinding(
@@ -18,14 +13,7 @@ public static class MarginMiner
         string ExampleSentence,
         string Segmentation);
 
-    /// <summary>
-    /// Incremental mining session with bounded memory, suitable for multi-GB corpora.
-    /// Feed sentences via <see cref="Process"/>; pull current top findings any time via
-    /// <see cref="Snapshot"/>. Sentence dedup uses 64-bit hashes (cleared when the set hits
-    /// <see cref="DedupCapacity"/>), and the ambiguity-type table prunes high-margin singletons
-    /// when it exceeds <see cref="TypePruneThreshold"/>, so counts for rare types are a floor,
-    /// not an exact tally.
-    /// </summary>
+    /// <summary>Bounded-memory session: dedup and type-table pruning reset at their caps, so rare-type counts are a floor.</summary>
     public sealed class Session(int threshold = 5000, int minMargin = 0)
     {
         private const int DedupCapacity = 50_000_000;
@@ -99,7 +87,7 @@ public static class MarginMiner
 
             string? segmentation = null;
 
-            // Group adjacent in-band tokens into one ambiguous span = one ambiguity type
+            // Adjacent in-band tokens form one ambiguity type.
             for (int i = 0; i < tokens.Count; i++)
             {
                 if (!InBand(tokens[i]))
@@ -159,10 +147,7 @@ public static class MarginMiner
             TypesPruned += evict.Count;
         }
 
-        // OCR/char-level corpora put a space between every character, which forces a Sudachi
-        // boundary at every position and hides all lattice ambiguity (margins never in band).
-        // When spaces make up ~half the sentence, treat it as char-spaced and strip them all.
-        // Shared with UserDicAuditor, which needs the same treatment for its A/B diff.
+        // Char-spaced OCR text forces a boundary at every char and hides all ambiguity; UserDicAuditor shares this.
         internal static string CollapseCharSpacing(string s)
         {
             int spaces = 0;
@@ -191,10 +176,7 @@ public static class MarginMiner
         }
     }
 
-    /// <summary>
-    /// Convenience wrapper for in-memory text (tests, CLI literal input). For large corpora,
-    /// drive a <see cref="Session"/> with <see cref="EnumerateSentences"/> instead.
-    /// </summary>
+    /// <summary>For in-memory text only; large corpora should drive a <see cref="Session"/> with <see cref="EnumerateSentences"/>.</summary>
     public static List<MarginFinding> MineText(string text, int threshold = 5000, int maxFindings = 200,
                                                int minMargin = 0, Action<int, int>? progress = null)
     {
@@ -211,11 +193,7 @@ public static class MarginMiner
         return session.Snapshot(maxFindings);
     }
 
-    /// <summary>
-    /// Streams sentences out of a reader without ever materializing the whole text: reads in
-    /// 64K-char blocks, cuts on 。！？ (ender kept) and newline (dropped), and force-flushes
-    /// pathological ender-less runs at 4096 chars so a single-line corpus stays bounded.
-    /// </summary>
+    /// <summary>Streams sentences cut on 。！？ and newline; ender-less runs flush at 4096 chars so single-line corpora stay bounded.</summary>
     public static IEnumerable<string> EnumerateSentences(TextReader reader)
     {
         const int MaxSentenceChars = 4096;

@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
   import {
     KnownState,
     type DerivationCoverDto,
@@ -11,8 +11,9 @@
   } from '~/types';
   import type { ComputedRef } from 'vue';
   import { formatPercentageApprox } from '~/utils/formatPercentageApprox';
-  import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { getListedMediaTypes, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
+  import { pitchColourClasses } from '~/utils/pitchAccent';
   import ExampleSentenceEntry from '~/components/ExampleSentenceEntry.vue';
   import CustomExampleSentenceEntry from '~/components/CustomExampleSentenceEntry.vue';
   import Button from 'primevue/button';
@@ -43,6 +44,7 @@
   const { $api } = useNuxtApp();
 
   const store = useJitenStore();
+  const stateColour = useWordStateColour();
   const authStore = useAuthStore();
   const convertToRuby = useConvertToRuby();
 
@@ -94,6 +96,9 @@
   });
 
   const knownStatesOverride = computed(() => fetchedKnownStates.value ?? word.value?.knownStates ?? undefined);
+  const headwordPitchClass = computed(() =>
+    store.pitchAccentColours && word.value ? pitchColourClasses(word.value.mainReading.text, word.value.pitchAccents) : ''
+  );
 
   // The word payload is publicly cached, so the covering entry — which is per-user — is fetched on its own,
   // and only once the state actually says Redundant.
@@ -176,21 +181,26 @@
     return Object.values(mediaAmountResponse.value).reduce((sum, count) => sum + count, 0);
   });
 
-  const selectedMediaType = ref<MediaType | null>(null);
+  const selectedMediaTypes = ref<MediaType[]>([]);
+  const selectedMediaType = computed(() => (selectedMediaTypes.value.length === 1 ? selectedMediaTypes.value[0]! : null));
+  const mediaTypeOptions = computed(() => getListedMediaTypes().map((mediaType) => ({ label: getMediaTypeText(mediaType), value: mediaType })));
   const mediaAccordionValue = ref('0');
-  const selectMediaType = (type: number | string | null) => {
-    if (type != null) {
-      selectedMediaType.value = Number(type) as MediaType;
-    } else {
-      selectedMediaType.value = null;
-    }
-    mediaAccordionValue.value = '1';
+
+  const reloadExampleSentences = () => {
     exampleSentences.value = [];
     canLoadExampleSentences.value = true;
     nextBandMin.value = 0;
     nextBandMax.value = bandSize;
     loadExampleSentences();
   };
+
+  const selectMediaType = (type: number | string | null) => {
+    selectedMediaTypes.value = type != null ? [Number(type) as MediaType] : [];
+    mediaAccordionValue.value = '1';
+    reloadExampleSentences();
+  };
+
+  const mediaTypesQuery = () => selectedMediaTypes.value.map((t) => `mediaTypes=${t}`).join('&');
 
   const isTransitioning = ref(false);
   let switchSeq = 0;
@@ -204,7 +214,7 @@
     if (seq !== switchSeq) return;
 
     isTransitioning.value = false;
-    selectedMediaType.value = null;
+    selectedMediaTypes.value = [];
     mediaAccordionValue.value = '0';
 
     loadCustomSentences();
@@ -314,11 +324,8 @@
 
   async function getRandomExampleSentences() {
     isLoadingExampleSentences.value = true;
-    let url = `vocabulary/${props.wordId}/${currentReadingIndex.value}/random-example-sentences`;
-
-    if (selectedMediaType.value != null) {
-      url += '/' + selectedMediaType.value;
-    }
+    const query = mediaTypesQuery();
+    const url = `vocabulary/${props.wordId}/${currentReadingIndex.value}/random-example-sentences${query ? `?${query}` : ''}`;
 
     const alreadyLoaded = exampleSentences.value.map((sentence) => sentence.sourceDeckParent?.deckId ?? sentence.sourceDeck.deckId);
 
@@ -346,17 +353,14 @@
   async function getExampleSentencesByDifficulty() {
     isLoadingExampleSentences.value = true;
     const descending = selectedSortMode.value === 'hardest';
-    let url = `vocabulary/${props.wordId}/${currentReadingIndex.value}/example-sentences-by-difficulty`;
-
-    if (selectedMediaType.value != null) {
-      url += '/' + selectedMediaType.value;
-    }
+    const url = `vocabulary/${props.wordId}/${currentReadingIndex.value}/example-sentences-by-difficulty`;
+    const query = mediaTypesQuery();
 
     const alreadyLoaded = exampleSentences.value.map((sentence) => sentence.sourceDeckParent?.deckId ?? sentence.sourceDeck.deckId);
 
     try {
       const results = await $api<ExampleSentencesByDifficultyResponse>(
-        `${url}?minDifficulty=${nextBandMin.value}&maxDifficulty=${nextBandMax.value}&descending=${descending}`,
+        `${url}?minDifficulty=${nextBandMin.value}&maxDifficulty=${nextBandMax.value}&descending=${descending}${query ? `&${query}` : ''}`,
         { method: 'POST', body: alreadyLoaded }
       );
 
@@ -397,9 +401,28 @@
               <div v-if="conjugationString != null" class="text-gray-500 dark:text-gray-400 text-xs font-noto-sans">(Conjugation: {{ conjugationString }})</div>
               <div class="flex items-center gap-2 min-w-0">
                 <NuxtLink v-if="showRedirect" :to="`/vocabulary/${wordId}/${currentReadingIndex}`" class="min-w-0">
-                  <div class="font-noto-sans leading-relaxed" :class="headwordSizeClass(word.mainReading.text)" lang="ja" v-html="convertToRuby(word.mainReading.text)" />
+                  <div
+                    class="font-noto-sans leading-relaxed"
+                    :class="[headwordSizeClass(word.mainReading.text, false, store.headwordSize), headwordPitchClass]"
+                    :style="stateColour(knownStatesOverride)"
+                    lang="ja"
+                    v-html="convertToRuby(word.mainReading.text, undefined, knownStatesOverride)"
+                  />
                 </NuxtLink>
-                <div v-if="!showRedirect" class="font-noto-sans leading-relaxed min-w-0" :class="headwordSizeClass(word.mainReading.text)" lang="ja" v-html="convertToRuby(word.mainReading.text)" />
+                <div
+                  v-if="!showRedirect"
+                  class="font-noto-sans leading-relaxed min-w-0"
+                  :class="[headwordSizeClass(word.mainReading.text, false, store.headwordSize), headwordPitchClass]"
+                  :style="stateColour(knownStatesOverride)"
+                  lang="ja"
+                  v-html="convertToRuby(word.mainReading.text, undefined, knownStatesOverride)"
+                />
+                <PitchAccentNumbers
+                  v-if="(store.pitchAccentDisplay === 'number' || store.pitchAccentDisplay === 'both') && word.pitchAccents?.length"
+                  :accents="word.pitchAccents"
+                  :reading="word.mainReading.text"
+                  class="shrink-0"
+                />
                 <TtsButton :text="stripRubyMarkup(word.mainReading.text)" :word-id="wordId" :reading-index="currentReadingIndex" size="md" class="shrink-0" />
               </div>
             </div>
@@ -474,18 +497,13 @@
             </div>
           </div>
 
-          <ClientOnly>
-            <div v-if="word.pitchAccents && word.pitchAccents.length > 0" :key="`pitch-${wordId}-${currentReadingIndex}`">
-              <h1 class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm">Pitch accents</h1>
-              <div class="pl-2 flex flex-row flex-wrap gap-8">
-                <span v-for="pitchAccent in word.pitchAccents" :key="pitchAccent">
-                  <div>
-                    <LazyPitchDiagram :reading="word.mainReading.text" :pitch-accent="pitchAccent" />
-                  </div>
-                </span>
-              </div>
-            </div>
-          </ClientOnly>
+          <div
+            v-if="word.pitchAccents?.length && (store.pitchAccentDisplay === 'graph' || store.pitchAccentDisplay === 'both')"
+            :key="`pitch-${wordId}-${currentReadingIndex}`"
+          >
+            <h1 class="text-gray-500 dark:text-gray-300 font-noto-sans text-sm">Pitch accents</h1>
+            <PitchAccentView :reading="word.mainReading.text" :accents="word.pitchAccents" numbers-beside-word class="pl-2" />
+          </div>
 
           <KanjiBreakdown :key="`${wordId}-${currentReadingIndex}`" :word-id="wordId" :reading-index="currentReadingIndex" />
 
@@ -566,7 +584,7 @@
           <Accordion value="1" lazy>
             <AccordionPanel value="1">
               <AccordionHeader>
-                <div class="flex items-center gap-1 cursor-pointer w-full">
+                <div class="flex flex-wrap items-center gap-1 cursor-pointer w-full">
                   <span>Example sentences</span>
                   <NuxtLink
                     v-if="authStore.isAuthenticated"
@@ -601,6 +619,21 @@
                       </div>
                     </template>
                   </Select>
+                  <MultiSelect
+                    v-model="selectedMediaTypes"
+                    :options="mediaTypeOptions"
+                    option-label="label"
+                    option-value="value"
+                    placeholder="All media"
+                    :show-toggle-all="false"
+                    :max-selected-labels="2"
+                    selected-items-label="{0} media types"
+                    variant="filled"
+                    class="sort-mode-select"
+                    aria-label="Media type"
+                    @click.stop
+                    @change="reloadExampleSentences()"
+                  />
                 </div>
               </AccordionHeader>
               <AccordionContent>
@@ -660,6 +693,29 @@
         </div>
       </ClientOnly>
 
+      <ClientOnly>
+        <Accordion lazy>
+          <AccordionPanel value="readable">
+            <AccordionHeader>
+              <div class="flex items-center gap-2 cursor-pointer">
+                <span>Sentences you can read (i+1)</span>
+                <JitenPlusBadge :link="false" />
+              </div>
+            </AccordionHeader>
+            <AccordionContent>
+              <ReadableSentencesSection
+                :word-id="props.wordId"
+                :reading-index="currentReadingIndex"
+                :at-limit="customSentences.length >= planLimits.customSentencesPerWord"
+                :saved-texts="customSentenceTexts"
+                :known-states="knownStatesOverride"
+                @favourited="loadCustomSentences()"
+              />
+            </AccordionContent>
+          </AccordionPanel>
+        </Accordion>
+      </ClientOnly>
+
       <Accordion v-if="word.mainReading.usedInMediaAmount > 0" :value="mediaAccordionValue" lazy>
         <AccordionPanel value="1">
           <AccordionHeader>
@@ -696,11 +752,13 @@
     font-size: 0.875rem;
   }
 
-  :deep(.sort-mode-select .p-select-label) {
+  :deep(.sort-mode-select .p-select-label),
+  :deep(.sort-mode-select .p-multiselect-label) {
     padding: 0.125rem 0.25rem !important;
   }
 
-  :deep(.sort-mode-select .p-select-dropdown) {
+  :deep(.sort-mode-select .p-select-dropdown),
+  :deep(.sort-mode-select .p-multiselect-dropdown) {
     width: 1.25rem;
     color: var(--p-text-muted-color);
   }

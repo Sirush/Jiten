@@ -423,6 +423,9 @@ namespace Jiten.Core.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<byte[]>("SpeechBoundaries")
+                        .HasColumnType("bytea");
+
                     b.HasKey("DeckId");
 
                     b.HasIndex("DeckId")
@@ -451,6 +454,34 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_DeckRelationships_TargetDeckId");
 
                     b.ToTable("DeckRelationships", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.DeckSentenceProfile", b =>
+                {
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("BuiltAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<byte[]>("Profile")
+                        .HasColumnType("bytea");
+
+                    b.Property<byte[]>("Sample")
+                        .HasColumnType("bytea");
+
+                    b.Property<int>("SampleCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SentenceCount")
+                        .HasColumnType("integer");
+
+                    b.Property<short>("Version")
+                        .HasColumnType("smallint");
+
+                    b.HasKey("DeckId");
+
+                    b.ToTable("DeckSentenceProfiles", "jiten");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.DeckStats", b =>
@@ -780,47 +811,25 @@ namespace Jiten.Core.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<byte[]>("Tokens")
+                        .IsRequired()
+                        .HasColumnType("bytea");
+
+                    b.PrimitiveCollection<int[]>("WordKeys")
+                        .IsRequired()
+                        .HasColumnType("integer[]");
+
                     b.HasKey("SentenceId");
 
-                    b.HasIndex("DeckId")
-                        .HasDatabaseName("IX_ExampleSentence_DeckId");
+                    b.HasIndex("WordKeys")
+                        .HasDatabaseName("IX_ExampleSentence_WordKeys");
 
-                    b.HasIndex("SentenceId")
-                        .HasDatabaseName("IX_ExampleSentence_SentenceId_IncDeckId");
-
-                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("SentenceId"), new[] { "DeckId" });
+                    NpgsqlIndexBuilderExtensions.HasMethod(b.HasIndex("WordKeys"), "gin");
 
                     b.HasIndex("DeckId", "Difficulty")
                         .HasDatabaseName("IX_ExampleSentence_DeckId_Difficulty");
 
                     b.ToTable("ExampleSentences", "jiten");
-                });
-
-            modelBuilder.Entity("Jiten.Core.Data.ExampleSentenceWord", b =>
-                {
-                    b.Property<long>("ExampleSentenceId")
-                        .HasColumnType("bigint");
-
-                    b.Property<int>("WordId")
-                        .HasColumnType("integer");
-
-                    b.Property<byte>("Position")
-                        .HasColumnType("smallint");
-
-                    b.Property<byte>("Length")
-                        .HasColumnType("smallint");
-
-                    b.Property<byte>("ReadingIndex")
-                        .HasColumnType("smallint");
-
-                    b.HasKey("ExampleSentenceId", "WordId", "Position");
-
-                    b.HasIndex("WordId", "ReadingIndex")
-                        .HasDatabaseName("IX_ExampleSentenceWord_WordIdReadingIndex_IncSentenceId");
-
-                    NpgsqlIndexBuilderExtensions.IncludeProperties(b.HasIndex("WordId", "ReadingIndex"), new[] { "ExampleSentenceId" });
-
-                    b.ToTable("ExampleSentenceWords", "jiten");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.ExternalGenreMapping", b =>
@@ -1082,6 +1091,9 @@ namespace Jiten.Core.Migrations
 
                     b.Property<int>("ComponentWordId")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("IsGrammatical")
+                        .HasColumnType("boolean");
 
                     b.HasKey("WordId", "ReadingIndex", "Position");
 
@@ -2572,6 +2584,15 @@ namespace Jiten.Core.Migrations
                     b.Navigation("TargetDeck");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.DeckSentenceProfile", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", null)
+                        .WithOne()
+                        .HasForeignKey("Jiten.Core.Data.DeckSentenceProfile", "DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.DeckStats", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Deck", "Deck")
@@ -2693,25 +2714,6 @@ namespace Jiten.Core.Migrations
                         .IsRequired();
 
                     b.Navigation("Deck");
-                });
-
-            modelBuilder.Entity("Jiten.Core.Data.ExampleSentenceWord", b =>
-                {
-                    b.HasOne("Jiten.Core.Data.ExampleSentence", "ExampleSentence")
-                        .WithMany("Words")
-                        .HasForeignKey("ExampleSentenceId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("Jiten.Core.Data.JMDict.JmDictWord", "Word")
-                        .WithMany()
-                        .HasForeignKey("WordId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ExampleSentence");
-
-                    b.Navigation("Word");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.ExternalTagMapping", b =>
@@ -3012,11 +3014,6 @@ namespace Jiten.Core.Migrations
             modelBuilder.Entity("Jiten.Core.Data.DifficultyRankGroup", b =>
                 {
                     b.Navigation("Items");
-                });
-
-            modelBuilder.Entity("Jiten.Core.Data.ExampleSentence", b =>
-                {
-                    b.Navigation("Words");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWord", b =>

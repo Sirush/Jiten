@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
+using Jiten.Api.Helpers;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data.Authentication;
@@ -30,6 +31,8 @@ public class AccountController : ControllerBase
     private readonly ILogger<AccountController> _logger;
 
     private static readonly TimeSpan EmailChangeCooldown = TimeSpan.FromMinutes(15);
+
+    public static readonly TimeSpan DisplayNameChangeCooldown = TimeSpan.FromDays(30);
 
     public AccountController(
         UserManager<User> userManager,
@@ -66,7 +69,8 @@ public class AccountController : ControllerBase
                   {
                       UserId = user.Id, UserName = user.UserName, Email = user.Email, EmailConfirmed = user.EmailConfirmed,
                       HasPassword = user.PasswordHash != null, CreatedAt = user.CreatedAt, ReceivesNewsletter = user.ReceivesNewsletter,
-                      RateLimitTier = user.RateLimitTier.ToString(), Roles = roles
+                      RateLimitTier = user.RateLimitTier.ToString(), Roles = roles, DisplayName = user.DisplayName,
+                      DisplayNameChangeAvailableAt = DisplayNameChangeAvailableAt(user, roles.Contains("Administrator"))
                   });
     }
 
@@ -264,6 +268,55 @@ public class AccountController : ControllerBase
 
         return Ok(new { receivesNewsletter = user.ReceivesNewsletter });
     }
+
+    [HttpPut("display-name")]
+    [Authorize(AuthenticationSchemes = JwtBearerDefaults.AuthenticationScheme)]
+    [EnableRateLimiting("auth")]
+    public async Task<IActionResult> UpdateDisplayName([FromBody] UpdateDisplayNameRequest model)
+    {
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
+        if (string.IsNullOrEmpty(userId)) return Unauthorized();
+
+        var user = await _userManager.FindByIdAsync(userId);
+        if (user == null) return NotFound("User not found.");
+
+        var isAdmin = User.IsInRole("Administrator");
+        var displayName = DisplayNameValidator.Normalize(model.DisplayName);
+        if (displayName == user.DisplayName)
+            return Ok(new { displayName, displayNameChangeAvailableAt = DisplayNameChangeAvailableAt(user, isAdmin) });
+
+        var error = DisplayNameValidator.Validate(displayName, allowReserved: isAdmin);
+        if (error != null) return BadRequest(new { message = error });
+
+        var availableAt = DisplayNameChangeAvailableAt(user, isAdmin);
+        if (availableAt > DateTime.UtcNow)
+            return BadRequest(new { message = $"You can change your display name again on {availableAt:yyyy-MM-dd}." });
+
+        var key = DisplayNameValidator.ToKey(displayName);
+        if (await _context.Users.AnyAsync(u => u.NormalizedDisplayName == key && u.Id != user.Id))
+            return Conflict(new { message = DisplayNameValidator.UnavailableMessage });
+
+        user.DisplayName = displayName;
+        user.NormalizedDisplayName = key;
+        user.DisplayNameChangedAt = DateTime.UtcNow;
+
+        try
+        {
+            await _context.SaveChangesAsync();
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict(new { message = DisplayNameValidator.UnavailableMessage });
+        }
+
+        _logger.LogInformation("Display name set: UserId={UserId}", user.Id);
+        return Ok(new { displayName, displayNameChangeAvailableAt = DisplayNameChangeAvailableAt(user, isAdmin) });
+    }
+
+    private static DateTime? DisplayNameChangeAvailableAt(User user, bool isAdmin) =>
+        isAdmin || user.DisplayName == null || user.DisplayNameChangedAt == null
+            ? null
+            : user.DisplayNameChangedAt.Value + DisplayNameChangeCooldown;
 
     private async Task<bool> ValidateRecaptcha(string recaptchaToken)
     {

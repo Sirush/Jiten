@@ -1,4 +1,6 @@
 @import '@fontsource-variable/noto-sans-jp';
+@import '@fontsource/klee-one/400.css';
+@import '@fontsource/klee-one/600.css';
 @import 'tailwindcss';
 @import 'tailwindcss-primeui';
 @import 'primeicons/primeicons.css';
@@ -41,11 +43,134 @@
   --jiten-page-bg: black;
 }
 
+/* Japanese text follows the profile's font. Unlayered, so it beats the `font-noto-sans` utility that many
+   Japanese elements still carry. Latin UI text never matches :lang(ja) and keeps Noto Sans.
+   Installed faces lead each stack; the Textbook, Rounded and UD web fonts load on demand from utils/japaneseFonts.ts. */
+:root {
+  --jiten-font-ja: var(--font-noto-sans);
+  /* Screen fonts draw several kanji differently from the handwritten school forms. */
+  --jiten-font-kyokasho: 'UD Digi Kyokasho N-R', 'UD Digi Kyokasho NK-R', 'UD デジタル 教科書体 N-R', 'YuKyokasho Yoko', 'YuKyokasho', 'Klee One', var(--font-noto-sans);
+  --jiten-font-serif: 'Hiragino Mincho ProN', 'Yu Mincho', 'YuMincho', 'Noto Serif JP', 'Noto Serif CJK JP', 'Source Han Serif JP', serif;
+  --jiten-font-rounded: 'Hiragino Maru Gothic ProN', 'Zen Maru Gothic', var(--font-noto-sans);
+  --jiten-font-ud: 'BIZ UDPGothic', var(--font-noto-sans);
+  /* --jiten-font-custom is the quoted family name of an installed font, set on <html> by app.vue. */
+  --jiten-font-custom-stack: var(--jiten-font-custom, 'Noto Sans JP Variable'), var(--font-noto-sans);
+}
+
+:lang(ja) {
+  font-family: var(--jiten-font-ja);
+}
+
+:root.font-ja-kyokasho {
+  --jiten-font-ja: var(--jiten-font-kyokasho);
+}
+
+:root.font-ja-serif {
+  --jiten-font-ja: var(--jiten-font-serif);
+}
+
+:root.font-ja-rounded {
+  --jiten-font-ja: var(--jiten-font-rounded);
+}
+
+:root.font-ja-ud {
+  --jiten-font-ja: var(--jiten-font-ud);
+}
+
+:root.font-ja-custom {
+  --jiten-font-ja: var(--jiten-font-custom-stack);
+}
+
+/* Titles and descriptions carry .ja-general next to lang="ja"; the variable inherits, so nested spans follow. */
+:root.font-ja-words-only .ja-general {
+  --jiten-font-ja: var(--font-noto-sans);
+}
+
+/* Opt-in, and also covers spans a dictionary marks lang="ja" itself, so an opted-out dictionary never mixes fonts. */
+:root:not(.font-ja-dictionaries) .ja-dictionary {
+  --jiten-font-ja: var(--font-noto-sans);
+}
+
+/* "Always reduce" in the display profile, for people whose system has no reduced-motion setting. */
+:root.reduce-motion *,
+:root.reduce-motion *::before,
+:root.reduce-motion *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
+  scroll-behavior: auto !important;
+}
+
 /* A ruby box grows to fit its annotation, so an oversized reading spaces the kanji of a compound
    apart. Half the base size makes the common two-kana reading exactly as wide as its kanji; the
    floor keeps furigana legible where the base text is small. */
 ruby rt {
-  font-size: max(0.5em, 10px);
+  font-size: max(calc(0.5em * var(--jiten-furigana-scale, 1)), 10px);
+}
+
+:root.furigana-sm {
+  --jiten-furigana-scale: 0.8;
+}
+
+:root.furigana-lg {
+  --jiten-furigana-scale: 1.2;
+}
+
+:root.furigana-xl {
+  --jiten-furigana-scale: 1.4;
+}
+
+/* Hidden by visibility rather than removed, so revealing a reading never shifts the line. */
+ruby rt.furigana-peek {
+  visibility: hidden;
+}
+
+ruby:hover > rt.furigana-peek {
+  visibility: visible;
+}
+
+.pitch-heiban {
+  --pitch-colour: var(--p-blue-600);
+}
+.pitch-atamadaka {
+  --pitch-colour: var(--p-red-600);
+}
+.pitch-nakadaka {
+  --pitch-colour: var(--p-orange-600);
+}
+.pitch-odaka {
+  --pitch-colour: var(--p-green-600);
+}
+.dark-mode .pitch-heiban {
+  --pitch-colour: var(--p-blue-400);
+}
+.dark-mode .pitch-atamadaka {
+  --pitch-colour: var(--p-red-400);
+}
+.dark-mode .pitch-nakadaka {
+  --pitch-colour: var(--p-orange-400);
+}
+.dark-mode .pitch-odaka {
+  --pitch-colour: var(--p-green-400);
+}
+
+/* Only the reading takes the colour, so a word-status colour on the kanji still shows. */
+.pitch-coloured rt,
+.pitch-coloured.pitch-kana {
+  color: var(--pitch-colour);
+}
+
+ruby {
+  ruby-align: center;
+}
+
+ruby rt {
+  ruby-align: space-around;
+}
+
+ruby rt,
+ruby rp {
+  user-select: none;
 }
 
 .p-card {

@@ -79,7 +79,7 @@
   useSeoMeta({
     title: 'Jiten+ - Get more from Jiten and help it grow',
     description:
-      'Jiten+ adds a richer cards, custom frequency lists, a Smart Deck, a personalised immersion plan, media request boosts, your coverage journey, higher limits and more while helping support Jiten. Everything free stays free.',
+      'Jiten+ shows how many sentences of each title you can read, finds i+1 sentences for any word, and adds a Smart Deck, richer cards, custom frequency lists and more. Everything free stays free.',
     ogTitle: 'Jiten+ - Get more from Jiten and help it grow',
     ogDescription: 'Get useful extras while helping support Jiten. Everything free stays free.',
     ogType: 'website',
@@ -107,10 +107,6 @@
     {
       q: 'Does supporting on Patreon or Ko-fi include Jiten+?',
       a: "No. Patreon and Ko-fi contributions are treated as donations and don't include Jiten+. They're available for anyone who would like to provide additional support for Jiten's development.",
-    },
-    {
-      q: 'How does the lifetime offer work?',
-      a: "Lifetime access is available during limited offer periods, which may return from time to time. If you're already subscribed, your prepaid subscription time is credited toward the lifetime price. You pay once and keep every Jiten+ benefit for the lifetime of the service, with no renewals or additional subscription payments.",
     },
   ];
 </script>
@@ -147,6 +143,14 @@
           <ul class="mt-5 flex flex-wrap items-center justify-center gap-y-2.5 gap-x-6 text-sm font-medium text-gray-700 dark:text-gray-200">
             <li class="inline-flex items-center gap-1.5">
               <Icon name="material-symbols:check-circle-rounded" class="text-primary-500" />
+              Sentence stats for every title
+            </li>
+            <li class="inline-flex items-center gap-1.5">
+              <Icon name="material-symbols:check-circle-rounded" class="text-primary-500" />
+              i+1 sentences for any word
+            </li>
+            <li class="inline-flex items-center gap-1.5">
+              <Icon name="material-symbols:check-circle-rounded" class="text-primary-500" />
               Richer cards with images &amp; audio
             </li>
             <li class="inline-flex items-center gap-1.5">
@@ -170,6 +174,13 @@
               Higher limits &amp; monthly boosts
             </li>
           </ul>
+          <div class="mt-6 flex flex-wrap items-center justify-center gap-x-4 gap-y-2">
+            <p class="text-gray-700 dark:text-gray-200">
+              <span class="font-semibold text-gray-900 dark:text-white">€{{ JITEN_PLUS_PRICES.monthlyEur }}</span> a month or
+              <span class="font-semibold text-gray-900 dark:text-white">€{{ JITEN_PLUS_PRICES.yearlyEur }}</span> a year
+            </p>
+            <Button as="a" href="#pricing" label="See plans" size="small" />
+          </div>
           <div v-if="showLifetimeNotice" class="mt-5">
             <a
               href="#pricing"
@@ -181,9 +192,24 @@
           </div>
         </section>
 
-        <!-- Pricing cards -->
         <div class="mt-10">
-          <JitenPlusPricingCards :pricing="pricing" />
+          <JitenPlusSentenceShowcase>
+            <div class="mt-16 text-center">
+              <h2 class="text-2xl md:text-3xl font-bold text-gray-900 dark:text-white">All of this for €{{ JITEN_PLUS_PRICES.monthlyEur }} a month</h2>
+              <p class="mt-2 text-gray-700 dark:text-gray-300">Or €{{ JITEN_PLUS_PRICES.yearlyEur }} a year, with two months free.</p>
+            </div>
+
+            <div class="mt-10">
+              <JitenPlusPricingCards :pricing="pricing" />
+            </div>
+
+            <div class="mt-10 flex flex-col items-center gap-3 text-center">
+              <p class="max-w-xl text-gray-700 dark:text-gray-300">
+                Plus a Smart Deck, card images and audio, custom frequency lists, immersion plans, your coverage journey and higher limits.
+              </p>
+              <Button as="a" href="#more-in-jiten-plus" label="See the other features" icon="pi pi-arrow-down" icon-pos="right" outlined class="!bg-white dark:!bg-gray-900" />
+            </div>
+          </JitenPlusSentenceShowcase>
         </div>
 
         <!-- Personal note -->
@@ -203,8 +229,8 @@
         </section>
 
         <!-- What you get -->
-        <section class="mt-14 max-w-4xl mx-auto">
-          <h2 class="text-2xl font-bold text-center mb-2 text-gray-900 dark:text-white">Everything included with Jiten+</h2>
+        <section id="more-in-jiten-plus" class="mt-14 max-w-4xl mx-auto scroll-mt-20">
+          <h2 class="text-2xl font-bold text-center mb-2 text-gray-900 dark:text-white">More in Jiten+</h2>
           <p class="text-center text-gray-600 dark:text-gray-300 mb-6">Jiten's core features stay free. Jiten+ adds these extras on top.</p>
           <div class="grid gap-4 sm:grid-cols-2">
             <div class="jp-feature border border-gray-200 bg-white dark:border-gray-700 dark:bg-gray-900">

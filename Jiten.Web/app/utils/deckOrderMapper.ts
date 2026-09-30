@@ -12,6 +12,8 @@ export function getDeckOrderText(deckOrder: DeckOrder): string {
       return 'Import Order';
     case DeckOrder.Random:
       return 'Random';
+    case DeckOrder.SentenceUnlock:
+      return 'Sentence Unlock';
     default:
       return 'Unknown';
   }

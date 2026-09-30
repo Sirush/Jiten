@@ -196,7 +196,7 @@
                 <!-- Media list for this type -->
                 <ul class="list-disc ml-8">
                   <li v-for="deck in typeDecks" :key="deck.deckId" class="mb-1">
-                    <NuxtLink :to="`/decks/media/${deck.deckId}/detail`" target="_blank" class="hover:underline">
+                    <NuxtLink :to="`/decks/media/${deck.deckId}/detail`" target="_blank" class="hover:underline" v-bind="japaneseTextAttrs(localiseTitle(deck))">
                       {{ localiseTitle(deck) }}
                     </NuxtLink>
                   </li>

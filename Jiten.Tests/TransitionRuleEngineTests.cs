@@ -343,17 +343,32 @@ public class TransitionRuleEngineTests
     {
         // SFP merge must inherit the predecessor's POS, not force PartOfSpeech.Verb.
         // Previous word is a Noun; the merged token must remain a Noun.
+        // The noun is not clause-initial: a clause-initial noun + よ is a vocative and stays split.
         var words = Sentence(
+            W("古い", PartOfSpeech.IAdjective),
             W("本", PartOfSpeech.Noun),
             W("よ", PartOfSpeech.Particle, "よ", PartOfSpeechSection.SentenceEndingParticle),
             W("読む", PartOfSpeech.Verb));
         TransitionRuleEngine.ApplyHardRules(words, WithLookup("本よ"));
 
-        words.Should().HaveCount(2);
-        words[0].word.Text.Should().Be("本よ");
-        words[0].word.PartOfSpeech.Should().Be(PartOfSpeech.Noun,
+        words.Should().HaveCount(3);
+        words[1].word.Text.Should().Be("本よ");
+        words[1].word.PartOfSpeech.Should().Be(PartOfSpeech.Noun,
             "SFP merge must preserve the predecessor's POS, not force PartOfSpeech.Verb");
-        words[1].word.Text.Should().Be("読む");
+        words[2].word.Text.Should().Be("読む");
+    }
+
+    [Fact]
+    public void Sfp_ClauseInitialNounYo_IsVocative_NotMerged()
+    {
+        // 主よどうか…: merging would fabricate the imperative of a verb 主る.
+        var words = Sentence(
+            W("主", PartOfSpeech.Noun),
+            W("よ", PartOfSpeech.Particle, "よ", PartOfSpeechSection.SentenceEndingParticle),
+            W("導き", PartOfSpeech.Verb));
+        TransitionRuleEngine.ApplyHardRules(words, WithLookup("主よ"));
+
+        words.Select(w => w.word.Text).Should().Equal("主", "よ", "導き");
     }
 
     [Fact]

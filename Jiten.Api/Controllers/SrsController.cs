@@ -157,6 +157,11 @@ public class SrsController(
         {
             return await ReviewClaimed(request, userId, hasIdempotency, idempotencyScope);
         }
+        catch (DbUpdateException ex) when (ex.IsUniqueViolation())
+        {
+            if (hasIdempotency) await sessionService.ReleaseReviewClaim(idempotencyScope, request.ClientRequestId!);
+            return DuplicateJustRecorded();
+        }
         catch
         {
             if (hasIdempotency) await sessionService.ReleaseReviewClaim(idempotencyScope, request.ClientRequestId!);
@@ -1445,7 +1450,14 @@ public class SrsController(
             userContext, userId, card is { CardId: 0 } ? [card] : []);
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
-        await userContext.SaveChangesAsync();
+        try
+        {
+            await userContext.SaveChangesAsync();
+        }
+        catch (DbUpdateException ex) when (ex.IsUniqueViolation())
+        {
+            return Results.Conflict(new { error_message = "This word's state was just changed by another request. Duplicate ignored." });
+        }
         await sessionService.BumpStudyOverviewVersion(userId);
 
         if (autoRestored > 0)
@@ -1944,7 +1956,7 @@ public class SrsController(
             var knownWordIds = known.Select(k => k.WordId).Distinct().ToList();
             var raw = await context.WordCompositions
                 .AsNoTracking()
-                .Where(c => knownWordIds.Contains(c.WordId))
+                .Where(c => knownWordIds.Contains(c.WordId) && !c.IsGrammatical)
                 .Select(c => new { c.WordId, c.ReadingIndex, c.ComponentWordId, c.ComponentReadingIndex })
                 .ToListAsync();
 
@@ -1963,7 +1975,7 @@ public class SrsController(
 
             var candidatePairs = await context.WordCompositions
                 .AsNoTracking()
-                .Where(c => knownComponentIds.Contains(c.ComponentWordId))
+                .Where(c => knownComponentIds.Contains(c.ComponentWordId) && !c.IsGrammatical)
                 .Select(c => new { c.WordId, c.ReadingIndex })
                 .Distinct()
                 .ToListAsync();
@@ -1976,7 +1988,7 @@ public class SrsController(
 
             var allRows = await context.WordCompositions
                 .AsNoTracking()
-                .Where(c => candidateWordIds.Contains(c.WordId))
+                .Where(c => candidateWordIds.Contains(c.WordId) && !c.IsGrammatical)
                 .Select(c => new { c.WordId, c.ReadingIndex, c.ComponentWordId, c.ComponentReadingIndex })
                 .ToListAsync();
 

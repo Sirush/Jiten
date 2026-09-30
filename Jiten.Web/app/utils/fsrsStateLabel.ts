@@ -21,7 +21,7 @@ export function fsrsStateLabel(state: FsrsState): { value: string; severity: str
 
 const stateToneClasses: Record<string, string> = {
   info: 'text-blue-600 dark:text-blue-400',
-  success: 'text-emerald-600 dark:text-emerald-400',
+  success: 'text-green-600 dark:text-green-400',
   warn: 'text-amber-600 dark:text-amber-400',
   danger: 'text-red-600 dark:text-red-400',
   secondary: 'text-surface-500 dark:text-surface-400',

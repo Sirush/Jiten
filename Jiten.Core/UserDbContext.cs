@@ -72,6 +72,10 @@ public class UserDbContext : IdentityDbContext<User>
         {
             if (isNpgsql)
                 entity.Property(e => e.Id).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+
+            entity.Property(e => e.DisplayName).HasMaxLength(20);
+            entity.Property(e => e.NormalizedDisplayName).HasMaxLength(20);
+            entity.HasIndex(e => e.NormalizedDisplayName).IsUnique();
         });
 
         modelBuilder.Entity<IdentityUserClaim<string>>(entity =>
@@ -179,11 +183,13 @@ public class UserDbContext : IdentityDbContext<User>
                 entity.Property(us => us.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
                 entity.Property(us => us.MediaFilterPresetsJson).HasColumnType("jsonb").HasDefaultValue("{}");
                 entity.Property(us => us.SmartDeckJson).HasColumnType("jsonb").HasDefaultValue("{}");
+                entity.Property(us => us.DisplayProfilesJson).HasColumnType("jsonb").HasDefaultValue("{}");
             }
             else
             {
                 entity.Property(us => us.MediaFilterPresetsJson).HasDefaultValue("{}");
                 entity.Property(us => us.SmartDeckJson).HasDefaultValue("{}");
+                entity.Property(us => us.DisplayProfilesJson).HasDefaultValue("{}");
             }
 
             entity.HasOne<User>()

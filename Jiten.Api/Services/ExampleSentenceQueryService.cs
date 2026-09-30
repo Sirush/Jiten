@@ -1,4 +1,4 @@
-﻿using Jiten.Api.Dtos;
+using Jiten.Api.Dtos;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Microsoft.EntityFrameworkCore;
@@ -8,23 +8,30 @@ namespace Jiten.Api.Services;
 public interface IExampleSentenceQueryService
 {
     /// <summary>Random example sentences for a form, one per title (subdecks collapse to their parent). Sentences from priorityDeckIds are picked first.</summary>
-    Task<List<ExampleSentenceDto>> GetRandomAsync(int wordId, int readingIndex, List<int> excludedDeckIds, MediaType? mediaType,
+    Task<List<ExampleSentenceDto>> GetRandomAsync(int wordId, int readingIndex, List<int> excludedDeckIds, IReadOnlyCollection<MediaType>? mediaTypes,
                                                   int take, int[]? priorityDeckIds = null);
 
     /// <summary>Example sentences for a form walking outward from a difficulty band. Within each band, priorityDeckIds win.</summary>
     Task<ExampleSentencesByDifficultyResponse> GetByDifficultyAsync(int wordId, int readingIndex, List<int> excludedDeckIds,
-                                                                    MediaType? mediaType, float minDifficulty, float maxDifficulty,
+                                                                    IReadOnlyCollection<MediaType>? mediaTypes, float minDifficulty, float maxDifficulty,
                                                                     bool descending, int take, int[]? priorityDeckIds = null);
+
+    /// <summary>Sentence DTOs for the given ids, in the order given, with source decks and the caller's furigana.</summary>
+    Task<List<ExampleSentenceDto>> BuildDtosAsync(IReadOnlyList<long> sentenceIds, int wordId, int readingIndex);
 }
 
-public class ExampleSentenceQueryService(JitenDbContext context) : IExampleSentenceQueryService
+public class ExampleSentenceQueryService(JitenDbContext context, ISentenceTokenService sentenceTokens) : IExampleSentenceQueryService
 {
     private const float BandSize = 0.5f;
 
-    private record PickedSentence(long SentenceId, string Text, float Difficulty, int DeckId, int? ParentDeckId, bool FromStudyDeck);
+    /// <summary>Candidate pool standing in for a word's full sentence set, which for a common word is too large to sort.</summary>
+    private const int WideSampleSize = 500;
+
+    private record PickedSentence(long SentenceId, string Text, float Difficulty, int DeckId, int? ParentDeckId, bool FromStudyDeck,
+                                  byte[] Tokens);
 
     public async Task<List<ExampleSentenceDto>> GetRandomAsync(int wordId, int readingIndex, List<int> excludedDeckIds,
-                                                               MediaType? mediaType, int take, int[]? priorityDeckIds = null)
+                                                               IReadOnlyCollection<MediaType>? mediaTypes, int take, int[]? priorityDeckIds = null)
     {
         priorityDeckIds = await NarrowToDecksHoldingWord(wordId, readingIndex, priorityDeckIds, excludedDeckIds);
 
@@ -32,11 +39,9 @@ public class ExampleSentenceQueryService(JitenDbContext context) : IExampleSente
 
         if (priorityDeckIds is { Length: > 0 })
         {
-            var sentenceIdSubquery = SentenceIdsFor(wordId, readingIndex);
             picked = await PickRandomSentences(
-                context.ExampleSentences.AsNoTracking()
-                       .Where(s => sentenceIdSubquery.Contains(s.SentenceId) && priorityDeckIds.Contains(s.DeckId)),
-                excludedDeckIds, mediaType, take, fromStudyDeck: true);
+                SentencesWithForm(wordId, readingIndex).Where(s => priorityDeckIds.Contains(s.DeckId)),
+                excludedDeckIds, mediaTypes, take, fromStudyDeck: true);
         }
 
         if (picked.Count < take)
@@ -46,24 +51,17 @@ public class ExampleSentenceQueryService(JitenDbContext context) : IExampleSente
 
             // Sample candidate ids first so ORDER BY random() never sorts the full sentence set of a common word
             const int sampleSize = 200;
-            var candidateIds = await context.ExampleSentenceWords
-                .Where(w => w.WordId == wordId && w.ReadingIndex == readingIndex)
-                .OrderBy(_ => EF.Functions.Random())
-                .Take(sampleSize)
-                .Select(w => w.ExampleSentenceId)
-                .ToListAsync();
+            var candidateIds = await SampleSentenceIds(wordId, readingIndex, sampleSize);
 
             var topUp = await PickRandomSentences(
                 context.ExampleSentences.AsNoTracking().Where(s => candidateIds.Contains(s.SentenceId)),
-                excluded, mediaType, remaining, fromStudyDeck: false);
+                excluded, mediaTypes, remaining, fromStudyDeck: false);
 
-            // A truncated sample can miss all eligible sentences under heavy filtering; fall back to the full set
+            // A truncated sample can miss every eligible sentence under heavy filtering; retry on a wider one
             if (topUp.Count < remaining && candidateIds.Count == sampleSize)
             {
-                var sentenceIdSubquery = SentenceIdsFor(wordId, readingIndex);
-                topUp = await PickRandomSentences(
-                    context.ExampleSentences.AsNoTracking().Where(s => sentenceIdSubquery.Contains(s.SentenceId)),
-                    excluded, mediaType, remaining, fromStudyDeck: false);
+                topUp = await PickRandomSentences(SentencesById(await SampleSentenceIds(wordId, readingIndex, WideSampleSize)),
+                                                  excluded, mediaTypes, remaining, fromStudyDeck: false);
             }
 
             picked.AddRange(topUp);
@@ -75,7 +73,7 @@ public class ExampleSentenceQueryService(JitenDbContext context) : IExampleSente
     }
 
     public async Task<ExampleSentencesByDifficultyResponse> GetByDifficultyAsync(int wordId, int readingIndex, List<int> excludedDeckIds,
-                                                                                 MediaType? mediaType, float minDifficulty,
+                                                                                 IReadOnlyCollection<MediaType>? mediaTypes, float minDifficulty,
                                                                                  float maxDifficulty, bool descending, int take,
                                                                                  int[]? priorityDeckIds = null)
     {
@@ -84,11 +82,9 @@ public class ExampleSentenceQueryService(JitenDbContext context) : IExampleSente
 
         priorityDeckIds = await NarrowToDecksHoldingWord(wordId, readingIndex, priorityDeckIds, excludedDeckIds);
 
-        var sentenceIdSubquery = SentenceIdsFor(wordId, readingIndex);
-
-        var baseSentences = context.ExampleSentences
-                                   .AsNoTracking()
-                                   .Where(s => sentenceIdSubquery.Contains(s.SentenceId));
+        // A common word's full set is millions of rows, so bands walk a wide sample; the deck filter keeps study decks exact.
+        var baseSentences = SentencesById(await SampleSentenceIds(wordId, readingIndex, WideSampleSize));
+        var priorityPool = SentencesWithForm(wordId, readingIndex);
 
         var difficultyStats = await baseSentences
             .GroupBy(_ => 1)
@@ -125,14 +121,15 @@ public class ExampleSentenceQueryService(JitenDbContext context) : IExampleSente
             var batch = new List<PickedSentence>();
             if (priorityDeckIds is { Length: > 0 })
             {
-                batch = await PickRandomSentences(band.Where(s => priorityDeckIds.Contains(s.DeckId)),
-                                                  excludeIds, mediaType, remaining, fromStudyDeck: true);
+                batch = await PickRandomSentences(
+                    priorityPool.Where(s => s.Difficulty >= bandMin && s.Difficulty < bandMax && priorityDeckIds.Contains(s.DeckId)),
+                    excludeIds, mediaTypes, remaining, fromStudyDeck: true);
             }
 
             if (batch.Count < remaining)
             {
                 var topUpExcluded = excludeIds.Concat(batch.Select(b => b.ParentDeckId ?? b.DeckId)).Distinct().ToList();
-                batch.AddRange(await PickRandomSentences(band, topUpExcluded, mediaType, remaining - batch.Count, fromStudyDeck: false));
+                batch.AddRange(await PickRandomSentences(band, topUpExcluded, mediaTypes, remaining - batch.Count, fromStudyDeck: false));
             }
 
             collected.AddRange(batch);
@@ -220,48 +217,68 @@ public class ExampleSentenceQueryService(JitenDbContext context) : IExampleSente
                             .ToArrayAsync();
     }
 
-    private IQueryable<long> SentenceIdsFor(int wordId, int readingIndex)
-        => context.ExampleSentenceWords
-                  .Where(w => w.WordId == wordId && w.ReadingIndex == readingIndex)
-                  .Select(w => w.ExampleSentenceId)
-                  .Distinct();
+    private IQueryable<ExampleSentence> SentencesWithForm(int wordId, int readingIndex)
+    {
+        var key = ExampleSentenceTokens.WordKey(wordId, (byte)readingIndex);
+        return context.ExampleSentences.AsNoTracking().Where(s => s.WordKeys.Contains(key));
+    }
+
+    private IQueryable<ExampleSentence> SentencesById(List<long> ids) =>
+        context.ExampleSentences.AsNoTracking().Where(s => ids.Contains(s.SentenceId));
+
+    private async Task<List<long>> SampleSentenceIds(int wordId, int readingIndex, int size)
+    {
+        var key = ExampleSentenceTokens.WordKey(wordId, (byte)readingIndex);
+        return (await SentenceSampler.SampleAsync(context, [key], size)).GetValueOrDefault(key, []);
+    }
 
     /// <summary>Random candidates drawn per requested slot; enough to fill a page after collapsing same-title picks.</summary>
     private const int OversampleFactor = 4;
 
     private async Task<List<PickedSentence>> PickRandomSentences(IQueryable<ExampleSentence> sentences, List<int> excludedDeckIds,
-                                                                 MediaType? mediaType, int take, bool fromStudyDeck)
+                                                                 IReadOnlyCollection<MediaType>? mediaTypes, int take, bool fromStudyDeck)
     {
         if (take <= 0) return [];
 
+        var types = mediaTypes?.Distinct().ToArray() ?? [];
         var picked = await sentences
                .Join(context.Decks.AsNoTracking(),
                      s => s.DeckId, d => d.DeckId,
                      (s, d) => new { Sentence = s, Deck = d })
-               .Where(j => !mediaType.HasValue || j.Deck.MediaType == mediaType.Value)
+               .Where(j => types.Length == 0 || types.Contains(j.Deck.MediaType))
                .Where(j => !excludedDeckIds.Contains(j.Deck.DeckId)
                            && (!j.Deck.ParentDeckId.HasValue || !excludedDeckIds.Contains(j.Deck.ParentDeckId.Value)))
                .OrderBy(_ => EF.Functions.Random())
                .Take(take * OversampleFactor)
                .Select(j => new PickedSentence(
                            j.Sentence.SentenceId, j.Sentence.Text, j.Sentence.Difficulty,
-                           j.Deck.DeckId, j.Deck.ParentDeckId, fromStudyDeck))
+                           j.Deck.DeckId, j.Deck.ParentDeckId, fromStudyDeck, j.Sentence.Tokens))
                .ToListAsync();
 
         return picked.DistinctBy(p => p.ParentDeckId ?? p.DeckId).Take(take).ToList();
     }
 
+    public async Task<List<ExampleSentenceDto>> BuildDtosAsync(IReadOnlyList<long> sentenceIds, int wordId, int readingIndex)
+    {
+        if (sentenceIds.Count == 0) return [];
+
+        var rows = await context.ExampleSentences.AsNoTracking()
+                                .Where(s => sentenceIds.Contains(s.SentenceId))
+                                .Join(context.Decks.AsNoTracking(), s => s.DeckId, d => d.DeckId,
+                                      (s, d) => new PickedSentence(s.SentenceId, s.Text, s.Difficulty, s.DeckId, d.ParentDeckId, false, s.Tokens))
+                                .ToDictionaryAsync(p => p.SentenceId);
+
+        return await BuildExampleSentenceDtos(sentenceIds.Where(rows.ContainsKey).Select(id => rows[id]).ToList(), wordId, readingIndex);
+    }
+
     private async Task<List<ExampleSentenceDto>> BuildExampleSentenceDtos(List<PickedSentence> picked, int wordId, int readingIndex)
     {
-        var selectedIds = picked.Select(p => p.SentenceId).ToList();
-        var positionMap = (await context.ExampleSentenceWords
-                              .AsNoTracking()
-                              .Where(w => w.WordId == wordId && w.ReadingIndex == readingIndex
-                                          && selectedIds.Contains(w.ExampleSentenceId))
-                              .Select(w => new { w.ExampleSentenceId, w.Position, w.Length })
-                              .ToListAsync())
-            .DistinctBy(w => w.ExampleSentenceId)
-            .ToDictionary(w => w.ExampleSentenceId);
+        var positionMap = new Dictionary<long, (byte Position, byte Length)>();
+        foreach (var p in picked)
+        {
+            if (ExampleSentenceTokens.FindForm(ExampleSentenceTokens.Decode(p.Tokens), wordId, (byte)readingIndex) is { } token)
+                positionMap[p.SentenceId] = (token.Position, token.Length);
+        }
 
         var deckIds = picked.Select(p => p.DeckId)
                             .Concat(picked.Where(p => p.ParentDeckId.HasValue).Select(p => p.ParentDeckId!.Value))
@@ -279,9 +296,11 @@ public class ExampleSentenceQueryService(JitenDbContext context) : IExampleSente
                                  })
                                  .ToDictionaryAsync(d => d.DeckId);
 
+        var furigana = await sentenceTokens.BuildFuriganaDtosAsync(picked.Select(p => (p.SentenceId, p.Text, (byte[]?)p.Tokens)));
+
         return picked.Select(p =>
         {
-            positionMap.TryGetValue(p.SentenceId, out var pos);
+            var hasPosition = positionMap.TryGetValue(p.SentenceId, out var pos);
             decks.TryGetValue(p.DeckId, out var sourceDeck);
             StudyExampleSourceDto? parentDeck = null;
             if (p.ParentDeckId.HasValue)
@@ -292,11 +311,12 @@ public class ExampleSentenceQueryService(JitenDbContext context) : IExampleSente
                 SentenceId = p.SentenceId,
                 Text = p.Text,
                 Difficulty = p.Difficulty,
-                WordPosition = pos?.Position ?? 0,
-                WordLength = pos?.Length ?? 0,
+                WordPosition = hasPosition ? pos.Position : 0,
+                WordLength = hasPosition ? pos.Length : 0,
                 SourceDeck = sourceDeck,
                 SourceDeckParent = parentDeck,
-                FromStudyDeck = p.FromStudyDeck
+                FromStudyDeck = p.FromStudyDeck,
+                Furigana = furigana.GetValueOrDefault(p.SentenceId)
             };
         }).ToList();
     }

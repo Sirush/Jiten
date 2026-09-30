@@ -78,13 +78,11 @@ public class RedisJmDictCache : IJmDictCache
 
         var redisKeys = uniqueKeys.Select(k => (RedisKey)BuildLookupKey(k)).ToArray();
 
-        // 1. Fetch all keys from Redis in a single MGET command
         var redisValues = await _redisDb.StringGetAsync(redisKeys);
 
         var results = new Dictionary<string, List<int>>();
         var missedKeys = new List<string>();
 
-        // 2. Process the results from Redis
         for (int i = 0; i < redisKeys.Length; i++)
         {
             var lookupKey = uniqueKeys[i];
@@ -107,7 +105,6 @@ public class RedisJmDictCache : IJmDictCache
             }
         }
 
-        // 3. If any keys were not in the cache, fetch them from the database in a single query
         if (missedKeys.Any())
         {
             await using var dbContext = await _contextFactory.CreateDbContextAsync();
@@ -122,7 +119,6 @@ public class RedisJmDictCache : IJmDictCache
                             .GroupBy(l => l.LookupKey)
                             .ToDictionary(g => g.Key, g => g.Select(l => l.WordId).ToList());
 
-            // 4. Add the database results to our main results and prepare to cache them
             var cacheBatch = _redisDb.CreateBatch();
             foreach (var kvp in dbResults)
             {
@@ -132,7 +128,6 @@ public class RedisJmDictCache : IJmDictCache
                 _ = cacheBatch.StringSetAsync(redisKey, bytes, expiry: _cacheExpiry);
             }
 
-            // Execute the batch to write all new entries to Redis
             cacheBatch.Execute();
         }
 
@@ -348,7 +343,7 @@ public class RedisJmDictCache : IJmDictCache
         if (!word.PartsOfSpeech.Contains("arch"))
             return;
 
-        // Definitions weren't loaded — IsFullyArchaic was pre-computed by the caller.
+        // Definitions not loaded means the caller pre-computed IsFullyArchaic.
         if (word.Definitions.Count == 0)
             return;
 

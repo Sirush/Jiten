@@ -39,6 +39,8 @@ public static class CompositionBackfill
         ['は'] = "ばぱ", ['ひ'] = "びぴ", ['ふ'] = "ぶぷ", ['へ'] = "べぺ", ['ほ'] = "ぼぽ"
     };
 
+    private readonly record struct Component(int Wid, short Ridx, string Surface, bool Grammatical);
+
     private sealed class ResolverData
     {
         public readonly Dictionary<int, string[]> Pos = new();
@@ -63,7 +65,7 @@ public static class CompositionBackfill
 
         var stats = new Dictionary<string, int>
         {
-            ["total"] = 0, ["modeA"] = 0, ["ruby"] = 0,
+            ["total"] = 0, ["modeA"] = 0, ["ruby"] = 0, ["expression"] = 0,
             ["drop_phrase"] = 0, ["drop_single"] = 0, ["drop_uncov"] = 0, ["drop_nameOnly"] = 0,
             ["drop_grammatical"] = 0, ["drop_inflTail"] = 0,
             ["nameLanding"] = 0, ["componentTotal"] = 0
@@ -98,18 +100,21 @@ public static class CompositionBackfill
                 {
                     var c = components[pos];
                     stats["componentTotal"]++;
-                    if (!IsContent(data.Pos.GetValueOrDefault(c.Wid, Array.Empty<string>())))
+                    if (!c.Grammatical && !IsContent(data.Pos.GetValueOrDefault(c.Wid, Array.Empty<string>())))
                         stats["nameLanding"]++;
                     pending.Add(new JmDictWordComposition
                     {
                         WordId = wid, ReadingIndex = ridx, Position = pos,
-                        ComponentWordId = c.Wid, ComponentReadingIndex = c.Ridx, ComponentSurface = c.Surface
+                        ComponentWordId = c.Wid, ComponentReadingIndex = c.Ridx, ComponentSurface = c.Surface,
+                        IsGrammatical = c.Grammatical
                     });
                 }
 
                 if (samples.Count < 70)
                     samples.Add($"- **{surface}** [{source}] = " +
-                                string.Join(" + ", components.Select(c => $"{c.Surface}({Truncate(Gloss(context, c.Wid), 22)})")));
+                                string.Join(" + ", components.Select(c => c.Grammatical
+                                                       ? $"[{c.Surface}]"
+                                                       : $"{c.Surface}({Truncate(Gloss(context, c.Wid), 22)})")));
 
                 if (!dryRun && pending.Count >= 20_000)
                 {
@@ -125,10 +130,10 @@ public static class CompositionBackfill
 
         int total = Math.Max(stats["total"], 1);
         int compTotal = Math.Max(stats["componentTotal"], 1);
-        int kept = stats["modeA"] + stats["ruby"];
+        int kept = stats["modeA"] + stats["ruby"] + stats["expression"];
         Console.WriteLine($@"=== Composition Backfill ({(dryRun ? "DRY RUN" : "APPLIED")}) ===
 Target compounds:          {stats["total"]:N0}
-Kept (useful composition): {kept:N0} ({100.0 * kept / total:F1}%)  [modeA {stats["modeA"]}, ruby {stats["ruby"]}]
+Kept (useful composition): {kept:N0} ({100.0 * kept / total:F1}%)  [modeA {stats["modeA"]}, ruby {stats["ruby"]}, expression {stats["expression"]}]
 Dropped - phrase:          {stats["drop_phrase"]:N0}
 Dropped - all single char: {stats["drop_single"]:N0}
 Dropped - name-only comp:  {stats["drop_nameOnly"]:N0}
@@ -147,24 +152,37 @@ Name-only component landings: {stats["nameLanding"]:N0}/{compTotal:N0} ({100.0 *
         {
             Console.WriteLine($"Inserted {kept:N0} compositions.");
         }
+
+        // Existing rows are never revisited by the backfill, so drift from dictionary syncs (a parent retagged as a name) is cleaned here.
+        await CompositionCleaner.Cleanup(contextFactory, dryRun);
     }
 
-    /// <summary>Returns (components, source) where source is "modeA"/"ruby" on success, or a "drop_*" reason on failure.</summary>
-    private static (List<(int Wid, short Ridx, string Surface)>? Components, string Source) BuildComposition(
+    /// <summary>Returns (components, source) where source is "modeA"/"expression"/"ruby" on success, or a "drop_*" reason on failure.</summary>
+    private static (List<Component>? Components, string Source) BuildComposition(
         ResolverData data, string surface, int parentWid, short parentRidx, List<WordInfo> morphemes)
     {
         // Primary: Mode A morphemes, if it actually split the compound.
         var concat = string.Concat(morphemes.Select(m => m.Text));
         if (morphemes.Count >= 2 && concat == surface)
         {
-            if (morphemes.Any(m => m.PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Auxiliary or PartOfSpeech.Conjunction))
+            var parentTags = data.Pos.GetValueOrDefault(parentWid, Array.Empty<string>());
+            var gate = CompositionRules.Classify(parentTags, morphemes.Select(m => m.PartOfSpeech).ToList());
+            if (gate == CompositionGate.Phrase)
                 return (null, "drop_phrase");
             if (morphemes.All(m => m.Text.Length == 1))
                 return (null, "drop_single");
 
-            var resolved = new List<(int, short, string)>();
+            var resolved = new List<Component>();
             foreach (var m in morphemes)
             {
+                if (CompositionRules.IsGrammatical(m.PartOfSpeech))
+                {
+                    // A particle with no JMDict entry is left out; the content words still carry the composition.
+                    var g = ResolveGrammatical(data, m.Text, m.DictionaryForm);
+                    if (g != null) resolved.Add(new Component(g.Value.Wid, g.Value.Ridx, m.Text, true));
+                    continue;
+                }
+
                 var r = Resolve(data, m.Text, m.DictionaryForm, Hira(m.Reading), m.PartOfSpeech);
                 if (r == null) return (null, "drop_uncov");
                 var tags = data.Pos.GetValueOrDefault(r.Value.Wid, Array.Empty<string>());
@@ -173,14 +191,16 @@ Name-only component landings: {stats["nameLanding"]:N0}/{compTotal:N0} ({100.0 *
                 // A single-hiragana component that isn't a real affix is an inflectional fragment (し, る...).
                 if (m.Text.Length == 1 && JapaneseTextHelper.IsHiragana(m.Text[0]) && !IsAffix(tags))
                     return (null, "drop_grammatical");
-                resolved.Add((r.Value.Wid, r.Value.Ridx, m.Text));
+                resolved.Add(new Component(r.Value.Wid, r.Value.Ridx, m.Text, false));
             }
+            if (resolved.Count < 2)
+                return (null, "drop_phrase");
             // An inflecting parent (verb / i-adjective) must end in a verb/adjective head; otherwise we have
             // split off its inflectional tail onto a homographic noun (可憐しい -> 可憐 + 尿).
-            var parentTags = data.Pos.GetValueOrDefault(parentWid, Array.Empty<string>());
-            if (IsVerbOrAdj(parentTags) && !IsVerbOrAdj(data.Pos.GetValueOrDefault(resolved[^1].Item1, Array.Empty<string>())))
+            var head = resolved.Last(c => !c.Grammatical);
+            if (IsVerbOrAdj(parentTags) && !IsVerbOrAdj(data.Pos.GetValueOrDefault(head.Wid, Array.Empty<string>())))
                 return (null, "drop_inflTail");
-            return (resolved, "modeA");
+            return (resolved, gate == CompositionGate.Expression ? "expression" : "modeA");
         }
 
         // Fallback: per-kanji ruby split, but ONLY when Mode A returned the compound as a single
@@ -197,14 +217,14 @@ Name-only component landings: {stats["nameLanding"]:N0}/{compTotal:N0} ({100.0 *
             if (groups is { Count: >= 2 } && !groups.All(g => g.Surface.Length == 1)
                 && !groups.Any(g => g.Surface.Length == 1 && JapaneseTextHelper.IsKana(g.Surface[0])))
             {
-                var resolved = new List<(int, short, string)>();
+                var resolved = new List<Component>();
                 foreach (var g in groups)
                 {
                     var r = Resolve(data, g.Surface, g.Surface, g.Reading, PartOfSpeech.Unknown);
                     if (r == null) return (null, "drop_uncov");
                     if (!IsContent(data.Pos.GetValueOrDefault(r.Value.Wid, Array.Empty<string>())))
                         return (null, "drop_nameOnly");
-                    resolved.Add((r.Value.Wid, r.Value.Ridx, g.Surface));
+                    resolved.Add(new Component(r.Value.Wid, r.Value.Ridx, g.Surface, false));
                 }
                 return (resolved, "ruby");
             }
@@ -242,6 +262,24 @@ Name-only component landings: {stats["nameLanding"]:N0}/{compTotal:N0} ({100.0 *
                .OrderByDescending(c => Score(data, c.Wid, pos))
                .ThenByDescending(c => data.KanjiForm.TryGetValue((c.Wid, c.Ridx), out var f) && f.Text == surface)
                .First();
+    }
+
+    /// <summary>Only particle/auxiliary entries qualify, so a kana homograph (田 for た) is never picked.</summary>
+    private static (int Wid, short Ridx)? ResolveGrammatical(ResolverData data, string surface, string dictForm)
+    {
+        var cands = new List<(int Wid, short Ridx)>();
+        foreach (var t in new[] { surface, dictForm })
+        {
+            if (string.IsNullOrEmpty(t)) continue;
+            if (data.KanaByText.TryGetValue(Hira(t), out var n)) cands.AddRange(n);
+            if (data.KanjiByText.TryGetValue(t, out var k)) cands.AddRange(k);
+        }
+
+        return cands
+               .Where(c => data.Pos.GetValueOrDefault(c.Wid, Array.Empty<string>()).Any(CompositionRules.GrammaticalTags.Contains))
+               .OrderByDescending(c => data.Freq.GetValueOrDefault(c.Wid))
+               .Select(c => ((int, short)?)c)
+               .FirstOrDefault();
     }
 
     private static double Score(ResolverData data, int wid, PartOfSpeech pos)

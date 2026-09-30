@@ -4,20 +4,13 @@
   import type { Context } from 'chartjs-plugin-datalabels';
   import ChartDataLabels from 'chartjs-plugin-datalabels'; // Import datalabels plugin and Context type
   import { hatsuon, getPitchPatternName } from 'hatsuon/dist/index.es';
+  import { pitchCategory, type PitchCategory } from '~/utils/pitchAccent';
 
   ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, ChartDataLabels);
 
   const COLORS = {
     white: '#fff',
   };
-
-  interface ColorPalette {
-    平板: string;
-    頭高: string;
-    中高: string;
-    尾高: string;
-    不詳: string;
-  }
 
   const props = defineProps({
     reading: {
@@ -30,13 +23,14 @@
     },
   });
 
-  const colors: ColorPalette = {
-    平板: '#d20ca3',
-    頭高: '#ea9316',
-    中高: '#27a2ff',
-    尾高: '#0cd24d',
-    不詳: '#cccccc',
+  // The 500 shades of the .pitch-* colours in main.css, which read on both themes.
+  const colors: Record<PitchCategory, string> = {
+    heiban: '#3b82f6',
+    atamadaka: '#ef4444',
+    nakadaka: '#f97316',
+    odaka: '#22c55e',
   };
+  const UNKNOWN_COLOUR = '#cccccc';
 
   const showMora = true;
   const showLabel = false;
@@ -57,7 +51,7 @@
   });
 
   const effectiveMorae = computed(() => hatsuonResult.value?.morae);
-  const patternName = computed(() => hatsuonResult.value?.patternName as keyof ColorPalette);
+  const patternName = computed(() => hatsuonResult.value?.patternName as string | undefined);
 
   const patternNameEn = computed(() => {
     try {
@@ -73,8 +67,8 @@
   });
 
   const lineColor = computed(() => {
-    const name = patternName.value;
-    return colors[name] || colors['不詳'];
+    const category = pitchCategory(props.pitchAccent, effectiveMorae.value?.length ?? 0);
+    return category ? colors[category] : UNKNOWN_COLOUR;
   });
 
   // Dynamic chart width based on number of data points (morae + particle)

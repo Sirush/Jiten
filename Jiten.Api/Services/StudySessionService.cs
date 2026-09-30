@@ -9,6 +9,7 @@ public class StudySessionService(IConnectionMultiplexer redis, ILogger<StudySess
     private static readonly TimeSpan PendingClaimTtl = TimeSpan.FromSeconds(30);
     private const string PendingMarker = "\u0001pending";
     private static readonly TimeSpan CursorHintTtl = TimeSpan.FromHours(24);
+    private static readonly TimeSpan ServedCardTtl = TimeSpan.FromHours(24);
     private readonly IDatabase _db = redis.GetDatabase();
 
     public async Task<string> CreateSession(string userId)
@@ -146,5 +147,42 @@ public class StudySessionService(IConnectionMultiplexer redis, ILogger<StudySess
         }
     }
 
+    public async Task RecordServedCards(string userId, IReadOnlyCollection<long> wordKeys)
+    {
+        if (wordKeys.Count == 0) return;
+        try
+        {
+            var key = ServedCardsKey(userId);
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            var batch = _db.CreateBatch();
+            var add = batch.SortedSetAddAsync(key, wordKeys.Distinct().Select(k => new SortedSetEntry(k, now)).ToArray());
+            var trim = batch.SortedSetRemoveRangeByScoreAsync(key, double.NegativeInfinity, now - ServedCardTtl.TotalSeconds, Exclude.Stop);
+            var expire = batch.KeyExpireAsync(key, ServedCardTtl);
+            batch.Execute();
+            await Task.WhenAll(add, trim, expire);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Failed to record served cards in Redis");
+        }
+    }
+
+    public async Task<HashSet<long>> GetServedCards(string userId, IReadOnlyCollection<long> wordKeys)
+    {
+        if (wordKeys.Count == 0) return [];
+        try
+        {
+            var keys = wordKeys.Distinct().ToArray();
+            var scores = await _db.SortedSetScoresAsync(ServedCardsKey(userId), keys.Select(k => (RedisValue)k).ToArray());
+            var cutoff = DateTimeOffset.UtcNow.ToUnixTimeSeconds() - ServedCardTtl.TotalSeconds;
+            return keys.Where((_, i) => scores[i] >= cutoff).ToHashSet();
+        }
+        catch
+        {
+            return [];
+        }
+    }
+
     private static string CursorHintKey(string userId) => $"srs:new-cursor:{userId}";
+    private static string ServedCardsKey(string userId) => $"srs:served:{userId}";
 }

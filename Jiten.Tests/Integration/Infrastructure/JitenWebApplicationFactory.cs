@@ -27,6 +27,9 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
     /// <summary>The recording email stub registered for IEmailService/IEmailSender. Singleton, so reads are reliable.</summary>
     public RecordingEmailService Emails => Services.GetRequiredService<RecordingEmailService>();
 
+    public const string DiscourseUrl = "https://community.test";
+    public const string DiscourseSsoSecret = "discourse-test-secret";
+
     /// <summary>The stub Stripe gateway. Singleton, so tests can configure canned responses and read recorded calls.</summary>
     public StubStripeGateway Stripe => Services.GetRequiredService<StubStripeGateway>();
 
@@ -52,6 +55,9 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
         Environment.SetEnvironmentVariable("Stripe__YearlyPriceId", "price_yearly");
         Environment.SetEnvironmentVariable("Stripe__LifetimePriceId", "price_lifetime");
         Environment.SetEnvironmentVariable("Stripe__LifetimeWindowEnd", "2999-01-01T00:00:00Z");
+
+        Environment.SetEnvironmentVariable("Discourse__Url", DiscourseUrl);
+        Environment.SetEnvironmentVariable("Discourse__SsoSecret", DiscourseSsoSecret);
 
         // The SRS suites assert intervals computed from the FSRS-6 defaults for users without parameters.
         FsrsVersions.ConfigureUnoptimised(FsrsVersion.V6);

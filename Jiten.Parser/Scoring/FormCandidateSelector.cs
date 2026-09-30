@@ -25,9 +25,7 @@ internal static class FormCandidateSelector
             allCandidates.RemoveAll(c =>
                 KanaScoringHelpers.IsKanaSurfaceWithNoMatchingReading(context, c.Word, c.Form.Text));
 
-        // A pure-katakana surface with a script-exact non-name
-        // candidate must not fall through to hiragana-fold matches of words attested only in
-        // kanji/hiragana (フル must stay フル, not 降る — even in rederivation pools).
+        // A katakana surface with a script-exact non-name candidate must not fold to kanji/hiragana-only words (フル, not 降る).
         if (KanaScoringHelpers.IsPureKatakanaToken(context.Surface)
             && allCandidates.Any(c => c.Form.Text == context.Surface
                 && c.Word.CachedPOS.Any(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown))))
@@ -40,9 +38,7 @@ internal static class FormCandidateSelector
         if (allCandidates.Count == 0)
             return new CandidateSelectionResult(null, null);
 
-        // POS-incompatible direct-surface candidates (e.g. noun 1197950 "artistry" competing with
-        // adj-na 2653620 "serious" when Sudachi tags the token as NaAdjective) get a -15 penalty
-        // so POS-compatible matches win the close races they should win.
+        // Applies the -15 POS-incompatible penalty (noun 1197950 vs adj-na 2653620 when Sudachi says NaAdjective).
         static int EffectiveScore(FormCandidate c) => ScoringPolicy.EffectiveScore(c);
 
         FormCandidate? best = null;
@@ -68,9 +64,7 @@ internal static class FormCandidateSelector
 
         best = RefineBest(best, allCandidates, context);
 
-        // Compute margin via linear scan for the second-best alternate (different WordId).
-        // Filter out POS-incompatible runners-up so their -15 penalty doesn't produce a false low margin.
-        // Fallback: if ALL candidates are POS-incompatible, use the full pool.
+        // POS-incompatible runners-up are skipped (unless all are) so their -15 penalty can't fake a low margin.
         int? margin = null;
         if (best != null)
         {
@@ -144,9 +138,7 @@ internal static class FormCandidateSelector
         return new CandidateSelectionResult(best, margin);
     }
 
-    /// Applies the post-selection refinement passes in order (frequency priors → kanji-homograph
-    /// priority cap → archaic exact-surface rescue). Each pass returns null when it does not
-    /// apply, so the previous best is kept. No-op when best is null.
+    /// <summary>Order matters: each pass sees the previous pass's pick, and null keeps it.</summary>
     public static FormCandidate? RefineBest(
         FormCandidate? best, List<FormCandidate> allCandidates, FormScoringContext context)
     {
@@ -161,11 +153,7 @@ internal static class FormCandidateSelector
         return best;
     }
 
-    /// A kana surface whose entry was reached through Sudachi's kanji NormalizedForm (ちょっとぉ → 一寸)
-    /// carries that key into FormCandidateFactory, which admits only forms spelling the key — so the
-    /// kanji form can be the entry's ONLY candidate and takes the ReadingIndex by construction, with no
-    /// kana form ever scored against it. Fall back to the entry's primary kana form. Gated on the word
-    /// having contributed no kana candidate at all, so any contest scoring actually saw is left alone.
+    /// <summary>A kana surface reached via a kanji NormalizedForm (ちょっとぉ → 一寸) gets its primary kana form.</summary>
     public static FormCandidate? ApplyKanaSurfaceKanjiFormRemap(
         FormCandidate best, List<FormCandidate> allCandidates, FormScoringContext context)
     {
@@ -194,23 +182,19 @@ internal static class FormCandidateSelector
         return remapped;
     }
 
-    /// A contracted copula surface (奢りじゃ悪い → じゃ = では) gets matched to the plain copula だ
-    /// (2089020) via its dictionary form, displaying じゃ as だ. When a dedicated entry matches the
-    /// surface directly and is itself a copula (じゃ 2851029), prefer it so the contracted form keeps
-    /// its own identity. Gated on the pick being the copula matched from a different surface, so
-    /// genuine だ tokens and non-copula homographs are untouched.
+    /// <summary>Contracted copula じゃ reached via だ (2089020) prefers a direct-surface copula entry (じゃ 2851029).</summary>
     public static FormCandidate? ApplyContractedCopulaExactSurface(
         FormCandidate best, List<FormCandidate> allCandidates, FormScoringContext context)
     {
         if (!context.IsKanaSurface) return null;
-        if (context.Surface == best.Form.Text) return null;                       // best matched a contracted form
+        if (context.Surface == best.Form.Text) return null;
         if (!best.Word.PartsOfSpeech.Any(p => p is "cop")) return null;
 
         foreach (var c in allCandidates)
         {
             if (c.Word.WordId == best.Word.WordId) continue;
-            if (context.Surface != c.Form.Text) continue;                         // exact surface
-            if (c.DeconjForm?.Process is { Length: > 0 }) continue;                // direct match
+            if (context.Surface != c.Form.Text) continue;
+            if (c.DeconjForm?.Process is { Length: > 0 }) continue;
             if (c.Word.PartsOfSpeech.Any(p => p is "cop"))
                 return c;
         }
@@ -218,11 +202,7 @@ internal static class FormCandidateSelector
         return null;
     }
 
-    /// The jiten word-boost reflects a high-frequency KANJI word's corpus weight. When the pick is
-    /// that boost landing on one of the word's minor kana readings (終/竟/遂 → つい "never"), and a
-    /// dedicated pure-kana entry with public frequency evidence matches the same surface (つい adv
-    /// 1008030, ichi1), defer to the dedicated entry. Gated on a pure-kana competitor so kanji
-    /// homophone disambiguation (ようかい → 妖怪 over 溶解) is untouched.
+    /// <summary>The jiten boost is a kanji word's weight; on its minor kana reading (遂 つい) a frequent kana entry wins.</summary>
     public static FormCandidate? ApplyJitenMinorKanaReadingCap(
         FormCandidate best, List<FormCandidate> allCandidates, FormScoringContext context)
     {
@@ -237,7 +217,7 @@ internal static class FormCandidateSelector
         {
             if (c.Word.WordId == best.Word.WordId) continue;
             if (c.DeconjForm?.Process is { Length: > 0 } || context.Surface != c.Form.Text) continue;
-            if (c.Word.Forms.Any(f => f.FormType == JmDictFormType.KanjiForm)) continue;  // pure-kana entry only
+            if (c.Word.Forms.Any(f => f.FormType == JmDictFormType.KanjiForm)) continue;
             if (c.Word.CachedPOS.Contains(PartOfSpeech.Name)) continue;
             if (!KanaScoringHelpers.HasFrequencyMarker(c.Word.Priorities, includeJiten: false)) continue;
             return c;
@@ -246,13 +226,7 @@ internal static class FormCandidateSelector
         return null;
     }
 
-    /// A standalone interjection written exactly as a sentence-final token (来い "come!") is almost
-    /// always the lexicalised interjection, not the homographic verb imperative the deconjugator also
-    /// produces (来い ← 来る). Flip to the interjection only when (a) the sentence ends here, (b) the
-    /// current pick reached the surface by deconjugating a verb, and (c) an interjection entry matches
-    /// the surface directly — so 来い mid-sentence and non-homograph imperatives (食べろ) are untouched.
-    /// The entry must be a pure interjection: an idiom whose int sense is secondary to another word
-    /// class (出来た exp/adj-f/int "of fine character") is far narrower than the verb it would displace.
+    /// <summary>Sentence-final 来い is the interjection, not 来る's imperative; mixed entries (出来た exp/int) don't qualify.</summary>
     public static FormCandidate? ApplySentenceFinalInterjection(
         FormCandidate best, List<FormCandidate> allCandidates, FormScoringContext context)
     {
@@ -265,8 +239,8 @@ internal static class FormCandidateSelector
         foreach (var candidate in allCandidates)
         {
             if (candidate.Word.WordId == best.Word.WordId) continue;
-            if (candidate.DeconjForm?.Process is { Length: > 0 }) continue;   // direct surface match only
-            if (context.Surface != candidate.Form.Text) continue;            // exact surface
+            if (candidate.DeconjForm?.Process is { Length: > 0 }) continue;
+            if (context.Surface != candidate.Form.Text) continue;
             if (candidate.Word.CachedPOS.Any(p => p is not (PartOfSpeech.Interjection or PartOfSpeech.Unknown)))
                 continue;
             if (IsUnattestedInterjectionOverPastForm(candidate.Word, best.DeconjForm.Process))
@@ -281,10 +255,7 @@ internal static class FormCandidateSelector
     private static readonly string[] PublicFrequencyMarkers =
         ["ichi1", "ichi2", "news1", "news2", "spec1", "spec2", "gai1", "gai2"];
 
-    /// A past form states a proposition, so an interjection homographic with one (来た int "it's here!"
-    /// against the past of 来る) may only claim the surface when public frequency evidence backs the
-    /// lexicalised use — やった "hooray" (spec1) does, 来た does not. Utterance-shaped homographs carry
-    /// no tense (来い ← imperative) and stay eligible without evidence.
+    /// <summary>A past form states a proposition, so an int homograph needs frequency evidence (やった spec1 yes, 来た no).</summary>
     public static bool IsUnattestedInterjectionOverPastForm(JmDictWord word, IReadOnlyList<string> deconjProcess)
     {
         if (!deconjProcess.Contains("past")) return false;
@@ -296,10 +267,7 @@ internal static class FormCandidateSelector
                                             || p.StartsWith("nf", StringComparison.Ordinal));
     }
 
-    /// An archaic word written exactly as its surface (人にあらざる) is self-evidently
-    /// intended — but its −350 penalty buries it below junk fallbacks. Rescue it only when
-    /// nothing else scores above the junk band, so real alternatives (聞ける → potential of
-    /// 聞く) keep winning. Returns the rescued candidate or null when no rescue applies.
+    /// <summary>Rescues an exact-surface archaic word (あらざる) from its -350 only when all else is junk (聞ける stays 聞く).</summary>
     public static FormCandidate? ApplyArchaicExactSurfaceRescue(
         FormCandidate best, List<FormCandidate> allCandidates, FormScoringContext context)
     {
@@ -320,8 +288,7 @@ internal static class FormCandidateSelector
             : null;
     }
 
-    /// Selects the best candidate using pre-scored candidates + a per-candidate bonus function.
-    /// Candidates must already have scores set via FormCandidateScorer.Score before calling this.
+    /// <summary>Candidates must already be scored via FormCandidateScorer.Score.</summary>
     public static FormCandidate? PickTopCandidatesWithBonus(
         List<FormCandidate> allCandidates,
         Func<FormCandidate, int> bonusFunc)
@@ -350,13 +317,7 @@ internal static class FormCandidateSelector
         return best;
     }
 
-    /// Sudachi's lexeme reading earns ReadingMatchScore (+70) for whichever homograph entry the
-    /// lattice happened to carry. When that entry has no JMDict priority while a same-surface
-    /// rival is ichi/news-prioritized and lost ONLY because of the reading bonus, prefer the
-    /// prioritized entry — 歩兵 must be ほへい (news1), not the shogi pawn ふひょう, just because
-    /// Sudachi's lexicon says フヒョウ; 間中 must be "during" (news1), not まなか "half a ken".
-    /// Kana surfaces are owned by WordFrequencyPriors; both-prioritized homographs (一日, 方)
-    /// stay with the reading evidence.
+    /// <summary>An unprioritized pick that won only via Sudachi's +70 reading yields to a prioritized rival (歩兵 ほへい).</summary>
     internal static FormCandidate? ApplyKanjiHomographPriorityCap(
         FormCandidate best,
         List<FormCandidate> allCandidates,
@@ -380,9 +341,7 @@ internal static class FormCandidateSelector
             if (c.ReadingMatchScore > 0) continue;
             if (c.DeconjForm?.Process is { Length: > 0 }) continue;
             if (c.IsPosIncompatibleDirectSurface && !best.IsPosIncompatibleDirectSurface) continue;
-            // JMDict entry priorities are form-level and often land on the wrong homograph
-            // (里(り) carries ichi1, 汝(うぬ) carries news2). Only flip when the furigana corpus
-            // doesn't side with Sudachi's choice (里=さと is heavily glossed; ほへい vs ふひょう isn't).
+            // JMDict priorities often land on the wrong homograph (里 り has ichi1), so ruby priors backing Sudachi veto the flip.
             if (c.RubyPriorsScore < best.RubyPriorsScore) continue;
 
             int effective = ScoringPolicy.EffectiveScore(c);

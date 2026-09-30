@@ -125,6 +125,8 @@ public class MorphologicalAnalyserTests
         yield return ["反論は認めません", new[] { "反論", "は", "認めません" }];
         yield return ["見たような気がする", new[] { "見た", "ような気がする" }];
         yield return ["幽霊を見たような顔つきをしていた", new[] { "幽霊", "を", "見た", "ような", "顔つき", "を", "していた" }];
+        // Sudachi tags 素 a suffix and hands 振り to the user-dic 振りをする; 素振り is the noun
+        yield return ["嫌がるような素振りをする。", new[] { "嫌がる", "ような", "素振り", "を", "する" }];
         yield return ["元気になる", new[] { "元気", "に", "なる" }];
         yield return ["半端なかった", new[] { "半端なかった" }];
         yield return ["一人ですね", new[] { "一人", "です", "ね" }];
@@ -643,6 +645,9 @@ public class MorphologicalAnalyserTests
         yield return ["出来そう", new[] { "出来そう" }];
         yield return ["その上着貸してください", new[] { "その", "上着", "貸してください" }];
         yield return ["幸多き", new[] { "幸", "多き" }];
+        // Sudachi splits noun + classical き adjective (気 | 高き); the compound is attested only under its modern い lemma
+        yield return ["気高き魂を持つ者", new[] { "気高き", "魂", "を", "持つ", "者" }];
+        yield return ["名高き騎士", new[] { "名高き", "騎士" }];
         yield return ["きっと気に入っていつかまた来てくれるよ", new[] { "きっと", "気に入って", "いつか", "また", "来てくれる", "よ" }];
         yield return ["私がいそうな場所知ってたんだから", new[] { "私", "が", "いそう", "な", "場所", "知ってた", "んだ", "から" }];
         yield return ["うまくハメられた", new[] { "うまく", "ハメられた" }];
@@ -701,6 +706,9 @@ public class MorphologicalAnalyserTests
         yield return ["読んだけど", new[] { "読んだ", "けど" }];
         yield return ["飲んだから", new[] { "飲んだ", "から" }];
         yield return ["遊んだし", new[] { "遊んだ", "し" }];
+        // Only clause-initial ですが is the conjunction; after a noun it stays copula + particle.
+        yield return ["ですが、私は行く。", new[] { "ですが", "私", "は", "行く" }];
+        yield return ["学生ですが、", new[] { "学生", "です", "が" }];
         yield return ["客を待ってるんだけど", new[] { "客", "を", "待ってる", "んだ", "けど" }];
         yield return ["学生さんだって", new[] { "学生", "さん", "だって" }];
         yield return ["ちょっと休憩ーなんて言って", new[] { "ちょっと", "休憩", "なんて", "言って" }];
@@ -2380,6 +2388,60 @@ public class MorphologicalAnalyserTests
         yield return ["よかった探しっていう", new[] { "よかった", "探し", "っていう" }];
         yield return ["「アホを探せっつってな」", new[] { "アホ", "を", "探せ", "っつって", "な" }];
         yield return ["犯人捜しっス", new[] { "犯人", "捜し", "っス" }];
+        // A kanji noun Sudachi reads as a rare verb before って/ッス (番っ[番う], 主っ[司る]) is the noun
+        // + quotative って or copula っす; common verbs outrank their kanji nouns and keep the te-form.
+        yield return ["「じゃあ、次はウチの番ってことでいいよね」", new[] { "じゃあ", "次", "は", "ウチ", "の", "番", "って", "こと", "で", "いい", "よね" }];
+        yield return ["俺様の出番ッスね！", new[] { "俺様", "の", "出番", "ッス", "ね" }];
+        yield return ["「河の主って、どんなのかな」", new[] { "河", "の", "主", "って", "どんな", "の", "かな" }];
+        yield return ["…とりあえず、コイツはこの店の主ってことか。", new[] { "とりあえず", "コイツ", "は", "この", "店", "の", "主", "って", "こと", "か" }];
+        yield return ["彼の言ってることは正しい。", new[] { "彼", "の", "言ってる", "こと", "は", "正しい" }];
+        yield return ["打ってみろ。", new[] { "打ってみろ" }];
+        // Clause-initial noun + よ is a vocative, not an imperative of a fabricated verb (主る)
+        yield return ["主よどうか我らを平安の地平へ導きたまえ。", new[] { "主", "よ", "どうか", "我ら", "を", "平安", "の", "地平", "へ", "導き", "たまえ" }];
+        // Question か after a plain verb stays split even when the next line runs on (no アルか "erhua")
+        yield return ["あんた、口づけしたことあるか?\n俺はない。", new[] { "あんた", "口づけ", "した", "こと", "ある", "か", "俺", "は", "ない" }];
+        // A loanword head Sudachi tags as a proper noun, with its last mora fused into the particle (ドラ|マで)
+        yield return ["あ、いや、そうか、刑事ドラマでよくあるところの", new[] { "あ", "いや", "そう", "か", "刑事ドラマ", "で", "よくある", "ところ", "の" }];
+        // Katakana-headed mixed surface must not fold onto an all-hiragana expression (しょうとして 証として)
+        yield return ["断線した部分がショートして火災の原因になったり", new[] { "断線した", "部分", "が", "ショートして", "火災", "の", "原因", "に", "なったり" }];
+        // Question か never reattaches into a kanji noun (か行) when the mora-theft repair re-cuts 行っ|て
+        yield return ["そうか行ってくれるか！", new[] { "そう", "か", "行ってくれる", "か" }];
+        // Sudachi's 結構人 "good-natured person" is the adverb 結構 + 人 in running text
+        yield return ["校庭に結構人が居るし", new[] { "校庭", "に", "結構", "人", "が", "居る", "し" }];
+        // A stranded head kanji rejoins the lexicalised 女っぷり only when the pair is a word (巫女)
+        yield return ["そして本日もまたステキな巫女っぷりですねー", new[] { "そして", "本日", "も", "また", "ステキな", "巫女", "っぷり", "です", "ね" }];
+        yield return ["いい女っぷりだ。", new[] { "いい", "女っぷり", "だ" }];
+        // Prefix kanji paired into a rare word (当薬) re-cuts to the far more frequent 薬局
+        yield return ["平素より当薬局をご利用いただき", new[] { "平素より", "当", "薬局", "を", "ご", "利用", "いただき" }];
+        yield return ["大学生になった。", new[] { "大学生", "に", "なった" }];
+        // An N+particle+V expression that swallowed a compound's tail gives it back (両|手を入れる)
+        yield return ["襟の中に両手を入れる", new[] { "襟", "の", "中", "に", "両手", "を", "入れる" }];
+        // Suru-noun whose last kanji Sudachi reads as a verb stem (不時|着し)
+        yield return ["公園の端に不時着した。", new[] { "公園", "の", "端", "に", "不時着", "した" }];
+        // Passive suru chains still recover the noun compound
+        yield return ["彼は指名手配されている。", new[] { "彼", "は", "指名手配", "されている" }];
+        // っ-final shred whose word ends one mora into the next token
+        yield return ["よーしちびっこども", new[] { "よーし", "ちびっこ", "ども" }];
+        yield return ["とんでもなく盛り上がっております", new[] { "とんでもなく", "盛り上がっております" }];
+        yield return ["これは心ばかりだが…", new[] { "これ", "は", "心ばかり", "だが" }];
+        yield return ["心ばかりが焦る。", new[] { "心", "ばかり", "が", "焦る" }];
+        // だもの is だ + sentence-final もの, not 駄物
+        yield return ["「だって、あの子にとって、拓也くんは特別だもの」", new[] { "だって", "あの子", "にとって", "拓也", "くん", "は", "特別", "だ", "もの" }];
+        // Verb 連用形 + 方: Sudachi's unattested 張り方 splits into stem + かた
+        yield return ["「どういう意地の張り方なの、それは？」", new[] { "どういう", "意地", "の", "張り", "方", "なの", "それ", "は" }];
+        yield return ["「…次は結界張りますよ」", new[] { "次", "は", "結界", "張ります", "よ" }];
+        // Ellipsis before a lone interjection kana must not glue it to the previous word (が…ん → がん)
+        yield return ["あんまり見られたくないんだが…ん？", new[] { "あんまり", "見られたくない", "んだ", "が", "ん" }];
+        yield return ["あてぃしだけの責任にしたら", new[] { "あてぃし", "だけ", "の", "責任", "に", "したら" }];
+        // A kana-less line of non-Shift_JIS hanzi is a Chinese subtitle track, not Japanese
+        yield return ["我爱你，这是我们的约定\n私はあなたを愛している。", new[] { "私", "は", "あなた", "を", "愛している" }];
+        // Sudachi's adverb もさ is も + さ (kana 猛者 must not claim it)
+        yield return ["でもさあの人って", new[] { "でも", "さ", "あの", "人", "って" }];
+        yield return ["ソーマくんもさ……ハルモニーに来てから", new[] { "ソーマ", "くん", "も", "さ", "ハルモニー", "に", "来て", "から" }];
+        yield return ["でもサ……どうする気？", new[] { "でも", "サ", "どう", "する", "気" }];
+        // VN ruby/emphasis markup (base#［N reading］) is stripped, never parsed as text
+        yield return ["「癒#［１なお］すがよい。」", new[] { "癒す", "が", "よい" }];
+        yield return ["「御厨#［２みくりや］は起きた」", new[] { "御厨", "は", "起きた" }];
     }
 
     [Theory]

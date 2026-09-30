@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import {
     FsrsRating,
-    KnownState,
+    type KnownState,
     MediaType,
     type Deck,
     type DeckDetail,
@@ -18,6 +18,7 @@
   import { useYouTubePlayer } from '~/composables/useYouTubePlayer';
   import { formatRuntime } from '~/utils/formatRuntime';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
+  import { WORD_STATE_COLOUR_KEYS, WORD_STATE_COLOUR_LABELS, wordStateColourKey } from '~/utils/wordState';
   import Popover from 'primevue/popover';
   import Select from 'primevue/select';
   import ToggleSwitch from 'primevue/toggleswitch';
@@ -179,8 +180,9 @@
   const prefs = computed<WatchPrefs>(() => ({
     ...DEFAULT_WATCH_PREFS,
     ...jitenStore.watchPrefs,
-    colours: { ...DEFAULT_WATCH_COLOURS, ...(jitenStore.watchPrefs?.colours ?? {}) },
   }));
+  // The colours belong to the display profile, so they match vocabulary lists and follow the account.
+  const colours = computed(() => jitenStore.resolvedStateColours);
   const setPref = <K extends keyof WatchPrefs>(key: K, value: WatchPrefs[K]) => {
     jitenStore.watchPrefs = { ...prefs.value, [key]: value };
   };
@@ -241,15 +243,35 @@
   const replayLine = () => seekToIndex(focusIndex.value);
   const stepLine = (delta: number) => seekToIndex(focusIndex.value + delta);
 
+  const bindMediaQuery = (query: string, target: Ref<boolean>) =>
+    onMounted(() => {
+      const mq = window.matchMedia(query);
+      target.value = mq.matches;
+      const onChange = (e: MediaQueryListEvent) => (target.value = e.matches);
+      mq.addEventListener('change', onChange);
+      onBeforeUnmount(() => mq.removeEventListener('change', onChange));
+    });
+
   // ---- mobile layout: pinned player, line controls in a bottom bar, one context line each side ----
   const isMobile = ref(false);
-  onMounted(() => {
-    const mq = window.matchMedia('(max-width: 639px)');
-    isMobile.value = mq.matches;
-    const onChange = (e: MediaQueryListEvent) => (isMobile.value = e.matches);
-    mq.addEventListener('change', onChange);
-    onBeforeUnmount(() => mq.removeEventListener('change', onChange));
+  bindMediaQuery('(max-width: 639px)', isMobile);
+
+  // The desktop word panel needs this width, so narrower screens always stack
+  const canSideLayout = ref(false);
+  bindMediaQuery('(min-width: 1024px)', canSideLayout);
+  // Below this height the stacked layout pushes the current line under the fold, so the transcript moves beside the player
+  const SIDE_LAYOUT_QUERY = '(min-width: 1024px) and (max-height: 820px)';
+  const autoSideLayout = ref(false);
+  bindMediaQuery(SIDE_LAYOUT_QUERY, autoSideLayout);
+  const sideLayout = computed(() => {
+    const layout = prefs.value.transcriptLayout;
+    return canSideLayout.value && (layout === 'side' || (layout === 'auto' && autoSideLayout.value));
   });
+  // A choice that matches what the screen size would pick goes back to auto, so the page keeps adapting
+  const toggleTranscriptLayout = () => {
+    const side = !sideLayout.value;
+    setPref('transcriptLayout', side === autoSideLayout.value ? 'auto' : side ? 'side' : 'below');
+  };
 
   // ---- karaoke window: the current line, faded neighbours, the outermost invisible so lines fade in and out ----
   const karaokeWindow = computed(() => (isMobile.value ? 2 : 3));
@@ -289,7 +311,8 @@
   const karaokeLineStyle = (offset: number, cue: WatchCue) => {
     const distance = Math.abs(offset);
     const shrink = isMobile.value && cue.text.length > LONG_CUE_CHARS;
-    const size = [shrink ? '1.125rem' : 'clamp(1.25rem, 2.5vw, 1.5rem)', shrink ? '1rem' : '1.125rem', '1rem', '1rem'][distance] ?? '1rem';
+    const currentSize = shrink ? '1.125rem' : sideLayout.value ? 'clamp(1.125rem, 1.6vw, 1.375rem)' : 'clamp(1.25rem, 2.5vw, 1.5rem)';
+    const size = [currentSize, shrink ? '1rem' : '1.125rem', '1rem', '1rem'][distance] ?? '1rem';
     const opacity = distance >= karaokeWindow.value ? 0 : [1, 0.75, 0.4][distance];
     return { fontSize: size, opacity, fontWeight: distance === 0 ? 600 : 400, gridRow: offset + karaokeWindow.value + 1 };
   };
@@ -314,41 +337,26 @@
   watch(focusIndex, keepLineInView);
 
   // ---- word colours ----
-  const colourRows: { key: WatchColourKey; label: string }[] = [
-    { key: 'new', label: 'Unknown' },
-    { key: 'young', label: 'Young' },
-    { key: 'due', label: 'Due' },
-    { key: 'mature', label: 'Mature / Mastered' },
-    { key: 'redundant', label: 'Redundant' },
-    { key: 'ignored', label: 'Blacklisted / Suspended' },
-  ];
-  const colourKeyOf = (states: KnownState[] | undefined): WatchColourKey => {
-    if (!states || states.length === 0) return 'new';
-    if (states.includes(KnownState.Blacklisted) || states.includes(KnownState.Suspended)) return 'ignored';
-    if (states.includes(KnownState.Redundant)) return 'redundant';
-    if (states.includes(KnownState.Mastered) || states.includes(KnownState.Mature)) return 'mature';
-    if (states.includes(KnownState.Due)) return 'due';
-    if (states.includes(KnownState.Young)) return 'young';
-    return 'new';
-  };
+  const colourRows = WORD_STATE_COLOUR_KEYS.map((key) => ({ key, label: WORD_STATE_COLOUR_LABELS[key] }));
+  const colourKeyOf = wordStateColourKey;
   const isKnown = (states: KnownState[] | undefined) => colourKeyOf(states) === 'mature';
   const readingTip = (word: WatchWord) => {
     const kana = stripRubyMarkup(word.reading);
     return kana !== word.spelling ? kana : '';
   };
   const wordStyle = (word: WatchWord) => {
-    const colour = prefs.value.colours[colourKeyOf(word.knownStates)];
+    const colour = colours.value[colourKeyOf(word.knownStates)];
     return colour ? { color: colour } : undefined;
   };
-  const setColour = (key: WatchColourKey, value: string | null) => setPref('colours', { ...prefs.value.colours, [key]: value });
-  const resetColours = () => setPref('colours', { ...DEFAULT_WATCH_COLOURS });
+  const setColour = (key: WatchColourKey, value: string | null) => (jitenStore.stateColours = { ...colours.value, [key]: value });
+  const resetColours = () => (jitenStore.stateColours = { ...DEFAULT_WATCH_COLOURS });
   const coloursOp = ref();
   const toggleColours = (event: Event) => coloursOp.value?.toggle(event);
   const mobileMenuOp = ref();
   const toggleMobileMenu = (event: Event) => mobileMenuOp.value?.toggle(event);
   const togglePlay = () => (player.playing.value ? player.pause() : player.play());
   // Native colour inputs need a concrete value; unset rows show the theme text colour
-  const colourInputValue = (key: WatchColourKey) => prefs.value.colours[key] ?? (isDark.value ? '#f3f4f6' : '#111827');
+  const colourInputValue = (key: WatchColourKey) => colours.value[key] ?? (isDark.value ? '#f3f4f6' : '#111827');
   const isDark = ref(false);
   onMounted(() => {
     isDark.value = document.documentElement.classList.contains('dark-mode');
@@ -594,7 +602,7 @@
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto">
+  <div class="mx-auto" :class="sideLayout ? 'w-full' : 'max-w-4xl'">
     <DeckBreadcrumb :deck="mainDeck" :parent-deck="parentDeck" current="Watch" deck-label="Video" class="mb-3" />
 
     <div v-if="mainDeck" class="flex flex-col gap-2 mb-4">
@@ -632,8 +640,8 @@
 
     <div
       v-if="loggedIn && infoStatus === 'success'"
-      class="flex flex-col gap-3 pb-24 sm:pb-0"
-      :class="lightsOff ? 'relative z-[35] -m-3 p-3 rounded-xl bg-surface-0 dark:bg-surface-950' : ''"
+      class="gap-3 pb-24 sm:pb-0"
+      :class="[sideLayout ? 'watch-side' : 'flex flex-col', lightsOff ? 'relative z-[35] -m-3 p-3 rounded-xl bg-surface-0 dark:bg-surface-950' : '']"
     >
       <div ref="stickyHost" class="sticky top-0 z-20 -mx-4 bg-surface-0 dark:bg-surface-950 sm:static sm:mx-0 sm:bg-transparent">
         <div class="aspect-video w-full overflow-hidden bg-surface-900 sm:rounded-lg [&>iframe]:w-full [&>iframe]:h-full">
@@ -780,7 +788,7 @@
           <div class="flex flex-col gap-1.5 text-sm">
             <label v-for="row in colourRows" :key="row.key" class="flex items-center justify-between gap-4">
               <span class="flex items-center gap-2">
-                <span class="font-noto-sans text-base" lang="ja" :style="prefs.colours[row.key] ? { color: prefs.colours[row.key]! } : undefined">言葉</span>
+                <span class="font-noto-sans text-base" lang="ja" :style="colours[row.key] ? { color: colours[row.key]! } : undefined">言葉</span>
                 {{ row.label }}
               </span>
               <span class="flex items-center gap-1">
@@ -797,7 +805,7 @@
                   size="small"
                   severity="secondary"
                   aria-label="Reset colour"
-                  :class="prefs.colours[row.key] === DEFAULT_WATCH_COLOURS[row.key] ? 'invisible' : ''"
+                  :class="colours[row.key] === DEFAULT_WATCH_COLOURS[row.key] ? 'invisible' : ''"
                   @click="setColour(row.key, DEFAULT_WATCH_COLOURS[row.key])"
                 />
               </span>
@@ -826,7 +834,21 @@
         <div class="flex items-center justify-between gap-3 text-xs text-surface-500 dark:text-surface-400">
           <span v-if="timeline && timelineMax > 0" class="font-medium">Vocabulary timeline</span>
           <span v-else class="font-medium">Transcript</span>
-          <span v-if="cueCount && focusIndex >= 0" class="tabular-nums">Line {{ focusIndex + 1 }} / {{ cueCount }}</span>
+          <span class="flex items-center gap-2">
+            <span v-if="cueCount && focusIndex >= 0" class="tabular-nums">Line {{ focusIndex + 1 }} / {{ cueCount }}</span>
+            <Tooltip v-if="canSideLayout" :content="sideLayout ? 'Transcript below the video' : 'Transcript beside the video'">
+              <button
+                type="button"
+                class="-my-1 inline-flex h-6 w-6 items-center justify-center rounded hover:bg-surface-100 dark:hover:bg-surface-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-500"
+                :class="sideLayout ? 'text-primary-600 dark:text-primary-400' : ''"
+                :aria-pressed="sideLayout"
+                aria-label="Transcript beside the video"
+                @click="toggleTranscriptLayout"
+              >
+                <i class="pi pi-objects-column text-xs" aria-hidden="true" />
+              </button>
+            </Tooltip>
+          </span>
         </div>
         <template v-if="timeline && timelineMax > 0">
           <div class="relative">
@@ -857,8 +879,8 @@
         </template>
       </div>
 
-      <Skeleton v-if="canEmbed && !player.ready.value" height="14rem" />
-      <div v-else-if="canEmbed" ref="karaokeHost" class="relative">
+      <Skeleton v-if="canEmbed && !player.ready.value" height="14rem" class="watch-transcript" />
+      <div v-else-if="canEmbed" ref="karaokeHost" class="watch-transcript relative">
         <TransitionGroup
           tag="div"
           :name="cutTransition ? 'karaoke-cut' : 'karaoke'"
@@ -908,6 +930,7 @@
           :can-expand-sentence="canExpandSentence"
           :sentence-mined="sentenceMined"
           :mining="mining"
+          :placement="sideLayout ? 'over-player' : 'right'"
           @close="closeWord"
           @grade="gradeWord"
           @changed="refreshStates"
@@ -959,6 +982,22 @@
       border-left: 1px solid var(--p-content-border-color);
       padding-left: 1rem;
     }
+  }
+
+  .watch-side {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    column-gap: 1.5rem;
+    align-items: start;
+  }
+  .watch-side > * {
+    grid-column: 1;
+  }
+  /* The player keeps its DOM slot so the iframe is never re-parented; only grid placement moves the transcript */
+  .watch-side > .watch-transcript {
+    grid-column: 2;
+    grid-row: 1 / span 3;
+    align-self: center;
   }
 
   .karaoke-window {

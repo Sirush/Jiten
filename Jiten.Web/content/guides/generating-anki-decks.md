@@ -51,7 +51,7 @@ Untick **Start from my current coverage** and the target is worked out from zero
 Some advanced options can be useful:
 
 - **Exclude Kana-only Words** drops words written without kanji.
-- **Exclude Example Sentences** removes them from the generated deck. It is unavailable for anime, dramas, movies, manga and audio, which have no example sentences to begin with.
+- **Exclude Example Sentences** removes them from the generated deck. It is unavailable for manga and audio, which have no example sentences to begin with.
 - **Exclude Mature, Mastered & Blacklisted Vocabulary** and **Exclude All Tracked Vocabulary** are the two ways to leave out what you know. The first still includes words you are part-way through studying, the second removes everything you track. Both need an account.
 - **Use Custom Dictionaries** adds your own definitions into the Anki and CSV output, and is ticked already if you have [imported any](/guides/custom-yomitan-dictionaries).
 

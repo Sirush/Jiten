@@ -126,7 +126,7 @@
           >
             <i v-if="addingTo === deck.userStudyDeckId" class="pi pi-spin pi-spinner shrink-0" />
             <i v-else class="pi pi-list text-surface-400 shrink-0" />
-            <span class="flex-1 truncate font-medium">{{ deck.name }}</span>
+            <span class="flex-1 truncate font-medium" v-bind="japaneseTextAttrs(deck.name)">{{ deck.name }}</span>
             <span class="text-xs text-surface-400 tabular-nums shrink-0">{{ deck.totalWords }}</span>
           </button>
         </div>

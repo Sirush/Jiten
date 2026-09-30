@@ -398,9 +398,11 @@
 
       <LazyCoverageJourneyCard :deck-id="response.data.mainDeck.deckId" />
 
+      <LazyDeckSentenceCard :deck-id="response.data.mainDeck.deckId" />
+
       <div v-if="response.data.parentDeck != null" class="pt-4">
         This deck belongs to
-        <NuxtLink :to="`/decks/media/${response.data.parentDeck.deckId}/detail`">
+        <NuxtLink :to="`/decks/media/${response.data.parentDeck.deckId}/detail`" v-bind="japaneseTextAttrs(localiseTitle(response.data.parentDeck))">
           {{ localiseTitle(response.data.parentDeck) }}
         </NuxtLink>
       </div>

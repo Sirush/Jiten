@@ -9,7 +9,6 @@ namespace Jiten.Parser;
 
 static class SudachiInterop
 {
-    // Existing delegates
     private delegate IntPtr RunCliFfiDelegate(string configPath, string filePath, string dictionaryPath, string outputPath);
 
     private delegate IntPtr ProcessTextFfiDelegate(string configPath, IntPtr inputText, string dictionaryPath, char mode, bool printAll,
@@ -17,11 +16,10 @@ static class SudachiInterop
 
     private delegate void FreeStringDelegate(IntPtr ptr);
 
-    // Streaming callback delegate: receives raw UTF-8 bytes from Sudachi
+    // Receives raw UTF-8 bytes; a chunk may end mid-line.
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private unsafe delegate void OutputCallback(IntPtr userData, byte* data, nuint len);
 
-    // Context management delegates
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private delegate IntPtr CreateContextDelegate(
         [MarshalAs(UnmanagedType.LPUTF8Str)] string configPath,
@@ -39,7 +37,6 @@ static class SudachiInterop
         nuint csvLen,
         out IntPtr ctx);
 
-    // Streaming processor delegate
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private unsafe delegate IntPtr ProcessTextCtxStreamUtf8V2Delegate(
         IntPtr ctx,
@@ -51,8 +48,7 @@ static class SudachiInterop
         OutputCallback callback,
         IntPtr userData);
 
-    // v3: adds emit_margins — when 1, each token line gains a trailing "\tM=<int>" segmentation
-    // margin column (extra cost of the cheapest competing lattice path crossing a token boundary)
+    // emit_margins=1 appends "\tM=<int>" per token: extra cost of the cheapest rival lattice path crossing its boundary.
     [UnmanagedFunctionPointer(CallingConvention.Cdecl)]
     private unsafe delegate IntPtr ProcessTextCtxStreamUtf8V3Delegate(
         IntPtr ctx,
@@ -65,14 +61,14 @@ static class SudachiInterop
         OutputCallback callback,
         IntPtr userData);
 
-    // Static callback delegate instance to prevent GC during native calls
+    // Static so the GC never collects the delegate while native code holds its pointer.
     private static readonly unsafe OutputCallback _outputCallback = OnSudachiOutput;
 
     private static RunCliFfiDelegate _runCliFfi = null!;
     private static ProcessTextFfiDelegate _processTextFfi = null!;
     private static FreeStringDelegate _freeString = null!;
 
-    // Streaming FFI delegates (optional, for newer library versions)
+    // Null when the loaded native library predates the export.
     private static CreateContextDelegate? _createContext;
     private static FreeContextDelegate? _freeContext;
     private static ProcessTextCtxStreamUtf8V2Delegate? _processTextCtxStreamV2;
@@ -81,7 +77,7 @@ static class SudachiInterop
 
     private static readonly IntPtr _libHandle;
 
-    // A slot owns its contexts and the user-dictionary CSV they were built with; a per-deck dictionary swap rebuilds only that slot.
+    // A slot owns its contexts and the user-dict CSV they were built with; a per-deck swap rebuilds only that slot.
     private sealed class ContextSlot
     {
         public readonly Dictionary<string, IntPtr> Contexts = new();
@@ -109,7 +105,6 @@ static class SudachiInterop
         public readonly StringBuilder? RawCapture = captureRaw ? new StringBuilder() : null;
     }
 
-    // Precomputed lookup table for allowed characters (replaces expensive regex)
     private static readonly bool[] _allowedChars = BuildAllowedCharsTable();
 
     private static bool[] BuildAllowedCharsTable()
@@ -122,48 +117,44 @@ static class SudachiInterop
         for (int c = 0x30A0; c <= 0x30FF; c++) table[c] = true;
         // CJK Unified Ideographs
         for (int c = 0x4E00; c <= 0x9FAF; c++) table[c] = true;
-        // Fullwidth Latin Capital Letters (A-Z)
+        // Fullwidth A-Z
         for (int c = 0xFF21; c <= 0xFF3A; c++) table[c] = true;
-        // Fullwidth Latin Small Letters (a-z)
+        // Fullwidth a-z
         for (int c = 0xFF41; c <= 0xFF5A; c++) table[c] = true;
-        // Fullwidth Digits (0-9)
+        // Fullwidth 0-9
         for (int c = 0xFF10; c <= 0xFF19; c++) table[c] = true;
-        // Ideographic Iteration Mark (々)
+        // 々
         table[0x3005] = true;
-        // CJK Punctuation (、。〃)
+        // 、。〃
         for (int c = 0x3001; c <= 0x3003; c++) table[c] = true;
-        // CJK Brackets (〈〉《》「」『』【】)
+        // 〈〉《》「」『』【】
         for (int c = 0x3008; c <= 0x3011; c++) table[c] = true;
-        // More CJK Brackets/Punctuation
+        // 〔〕〖〗〘〙〚〛〜〝〞〟
         for (int c = 0x3014; c <= 0x301F; c++) table[c] = true;
-        // Fullwidth Punctuation (！＂＃＄％＆＇（）＊＋，－．／)
+        // ！＂＃＄％＆＇（）＊＋，－．／
         for (int c = 0xFF01; c <= 0xFF0F; c++) table[c] = true;
-        // More Fullwidth Punctuation (：；＜＝＞？)
+        // ：；＜＝＞？
         for (int c = 0xFF1A; c <= 0xFF1F; c++) table[c] = true;
-        // Fullwidth Brackets (［＼］＾＿)
+        // ［＼］＾＿
         for (int c = 0xFF3B; c <= 0xFF3F; c++) table[c] = true;
-        // Fullwidth Braces (｛｜｝～)
+        // ｛｜｝～｟｠
         for (int c = 0xFF5B; c <= 0xFF60; c++) table[c] = true;
-        // Halfwidth Katakana Punctuation
+        // Halfwidth ｢｣､･
         for (int c = 0xFF62; c <= 0xFF65; c++) table[c] = true;
-        // Pipe (used as batch delimiter and stop token by MorphologicalAnalyser)
+        // MorphologicalAnalyser uses | as batch delimiter and stop token.
         table['|'] = true;
-        // Newline
         table['\n'] = true;
-        // Horizontal Ellipsis (…)
+        // …
         table[0x2026] = true;
-        // Ideographic Space
+        // Ideographic space
         table[0x3000] = true;
-        // Horizontal Bar (―)
+        // ―
         table[0x2015] = true;
-        // Box Drawing Light Horizontal (─)
+        // ─
         table[0x2500] = true;
-        // Parentheses
         table['('] = true;
         table[')'] = true;
-        // Space
         table[' '] = true;
-        // Vertical Bar
         table['|'] = true;
 
         return table;
@@ -183,16 +174,12 @@ static class SudachiInterop
         return true;
     }
 
-    /// <summary>
-    /// Fast character filter using lookup table and ArrayPool.
-    /// Returns original string if no characters were removed (fast path).
-    /// </summary>
-    private static string FilterAllowedChars(string input)
+    /// <summary>Returns the same instance when nothing is removed.</summary>
+    internal static string FilterAllowedChars(string input)
     {
         if (string.IsNullOrEmpty(input))
             return input;
 
-        // First pass: check if any characters need to be removed
         int removeCount = 0;
         foreach (char c in input)
         {
@@ -200,11 +187,9 @@ static class SudachiInterop
                 removeCount++;
         }
 
-        // Fast path: no characters to remove
         if (removeCount == 0)
             return input;
 
-        // Rent a buffer from the pool
         int outputLen = input.Length - removeCount;
         char[] buffer = ArrayPool<char>.Shared.Rent(outputLen);
 
@@ -241,20 +226,17 @@ static class SudachiInterop
 
     static SudachiInterop()
     {
-        // Load the appropriate native library for the current platform
         _libHandle = NativeLibrary.Load(GetSudachiLibPath());
 
-        // Get function pointers for existing exports
         IntPtr runCliFfiPtr = NativeLibrary.GetExport(_libHandle, "run_cli_ffi");
         IntPtr processTextFfiPtr = NativeLibrary.GetExport(_libHandle, "process_text_ffi");
         IntPtr freeStringPtr = NativeLibrary.GetExport(_libHandle, "free_string");
 
-        // Create delegates from function pointers
         _runCliFfi = Marshal.GetDelegateForFunctionPointer<RunCliFfiDelegate>(runCliFfiPtr);
         _processTextFfi = Marshal.GetDelegateForFunctionPointer<ProcessTextFfiDelegate>(processTextFfiPtr);
         _freeString = Marshal.GetDelegateForFunctionPointer<FreeStringDelegate>(freeStringPtr);
 
-        // New streaming exports (optional, for newer library versions)
+        // Optional exports; older native builds lack them.
         if (NativeLibrary.TryGetExport(_libHandle, "create_context_ffi", out IntPtr createCtxPtr))
             _createContext = Marshal.GetDelegateForFunctionPointer<CreateContextDelegate>(createCtxPtr);
         if (NativeLibrary.TryGetExport(_libHandle, "process_text_ctx_stream_utf8_ffi_v2", out IntPtr streamV2Ptr))
@@ -341,13 +323,11 @@ static class SudachiInterop
 
     public static string RunCli(string configPath, string filePath, string dictionaryPath, string outputPath)
     {
-        // Call the FFI function
         IntPtr resultPtr = _runCliFfi(configPath, filePath, dictionaryPath, outputPath);
 
-        // Convert the result to a C# string
         string result = Marshal.PtrToStringAnsi(resultPtr) ?? string.Empty;
 
-        // Free the string allocated in Rust
+        // Rust-allocated; must be freed by the library, not Marshal.
         _freeString(resultPtr);
 
         return result;
@@ -360,10 +340,8 @@ static class SudachiInterop
         var slot = TakeSlot();
         try
         {
-            // Clean up text using fast lookup table filter
             inputText = FilterAllowedChars(inputText);
 
-            // if there's no kanas, kanjis, or fullwidth letters, abort
             if (HasNoJapaneseChars(inputText))
                 return "";
 
@@ -386,15 +364,9 @@ static class SudachiInterop
         }
     }
 
-    /// <summary>
-    /// Indicates whether the streaming FFI is available in the loaded native library.
-    /// </summary>
     public static bool StreamingAvailable => _processTextCtxStreamV2 != null;
 
-    /// <summary>
-    /// Process text using streaming FFI, parsing WordInfo objects incrementally without building the full output string.
-    /// When userDictCsv is provided, the Sudachi context is rebuilt with the extra dictionary entries.
-    /// </summary>
+    /// <summary>A userDictCsv different from the slot's rebuilds that slot's Sudachi contexts.</summary>
     public static List<WordInfo> ProcessTextStreaming(
         string configPath,
         string inputText,
@@ -481,7 +453,7 @@ static class SudachiInterop
         if (_processTextCtxStreamV2 == null)
             throw new InvalidOperationException("Streaming FFI not available in this build");
         if (emitMargins && _processTextCtxStreamV3 == null)
-            emitMargins = false; // old native library without margin support
+            emitMargins = false; // native library predates margin support
 
         {
             if (!CsvUnchanged(slot.UserDictCsv, userDictCsv))
@@ -489,10 +461,8 @@ static class SudachiInterop
                 slot.UserDictCsv = userDictCsv;
                 RecycleContext(slot);
             }
-            // Clean up text using fast lookup table filter
             inputText = FilterAllowedChars(inputText);
 
-            // If there's no kanas, kanjis, or fullwidth letters, abort
             if (HasNoJapaneseChars(inputText))
                 return new List<WordInfo>();
 
@@ -546,7 +516,7 @@ static class SudachiInterop
                 stateHandle.Free();
             }
 
-            // Flush any remaining leftover
+            // Output may not end with a newline.
             if (state.LeftoverLen > 0)
             {
                 ReadOnlySpan<byte> line = state.Leftover.AsSpan(0, state.LeftoverLen);
@@ -633,9 +603,7 @@ static class SudachiInterop
         return ctx;
     }
 
-    /// <summary>
-    /// Cleanup the Sudachi contexts. Call on application shutdown.
-    /// </summary>
+    /// <summary>Call on application shutdown.</summary>
     public static void Cleanup()
     {
         while (_freeSlots.TryPop(out var slot))
@@ -676,7 +644,7 @@ static class SudachiInterop
                 i += nl + 1;
             }
 
-            // Store leftover bytes for next callback
+            // A partial line carries over to the next callback.
             var tail = span.Slice(i);
             if (!tail.IsEmpty)
             {

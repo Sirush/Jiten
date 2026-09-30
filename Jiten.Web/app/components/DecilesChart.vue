@@ -2,7 +2,7 @@
   import { computed } from 'vue';
   import { Bar } from 'vue-chartjs';
   import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend } from 'chart.js';
-  import { getDifficultyChartColour, averageColour, formatDifficultyValue } from '~/utils/difficultyColours';
+  import { averageColour, formatDifficultyValue } from '~/utils/difficultyColours';
 
   ChartJS.register(CategoryScale, LinearScale, BarElement, LineElement, PointElement, Tooltip, Legend);
 
@@ -13,6 +13,7 @@
   }>();
 
   const AXIS = '#6b7280';
+  const { chartColour } = useDifficultyColours();
   const GRID = 'rgba(107, 114, 128, 0.15)';
 
   const chartData = computed(() => {
@@ -27,7 +28,7 @@
     const labels = sortedEntries.map((e) => (e.percentage.includes('%') ? e.percentage : `${e.percentage}%`));
     const rawData = sortedEntries.map((e) => e.difficulty);
     const data = props.usePercentage ? rawData.map((d) => d * 20) : rawData;
-    const colours = rawData.map((d) => getDifficultyChartColour(d));
+    const colours = rawData.map((d) => chartColour(d));
     const averageValue = props.usePercentage ? props.overallDifficulty * 20 : props.overallDifficulty;
     const averageData = sortedEntries.map(() => averageValue);
 

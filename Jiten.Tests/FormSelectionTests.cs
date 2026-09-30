@@ -13,7 +13,7 @@ public class FormSelectionTests
 {
     private static IDbContextFactory<JitenDbContext>? _contextFactory;
 
-    private async Task<List<DeckWord>> Parse(string text)
+    private static IDbContextFactory<JitenDbContext> GetContextFactory()
     {
         if (_contextFactory == null)
         {
@@ -29,8 +29,11 @@ public class FormSelectionTests
             _contextFactory = new PooledDbContextFactory<JitenDbContext>(optionsBuilder.Options);
         }
 
-        return await Jiten.Parser.Parser.ParseText(_contextFactory, text);
+        return _contextFactory;
     }
+
+    private async Task<List<DeckWord>> Parse(string text) =>
+        await Jiten.Parser.Parser.ParseText(GetContextFactory(), text);
 
     public static IEnumerable<object[]> FormSelectionCases()
     {
@@ -40,6 +43,9 @@ public class FormSelectionTests
 
         // Hiragana まま should resolve to まま (as-is, 1585410), not mama
         yield return ["まま", "まま", 1585410, (byte)2];
+
+        // Classical attributive of a noun + adjective compound resolves to the modern lemma 気高い
+        yield return ["気高き魂を持つ者", "気高き", 1222210, (byte)0];
 
         // オレ should resolve to 俺 (1576870), not olé (2768550)
         yield return ["オレ", "オレ", 1576870, (byte)3];
@@ -440,7 +446,7 @@ public class FormSelectionTests
         yield return ["力を蓄え待った", "蓄え", 1596860, (byte)0];
 
         // 頭 as counter とう (1450690, ctr ichi1) after numeral, not がしら suffix (2252670, suf)
-        // Sudachi tags as 接尾辞,助数詞 — FilterMisparse reclassifies Suffix+Counter to Counter POS
+        // Sudachi tags as 接尾辞,助数詞 — ApplyContextPins reclassifies Suffix+Counter to Counter POS
         yield return ["二頭の猟犬", "頭", 1450690, (byte)0];
 
         // わからずじまい is JMDict 2870678 (exp, "ending up not understanding") — kept as compound
@@ -1474,7 +1480,7 @@ public class FormSelectionTests
         yield return ["いいや　何でも", "何でも", 1611030, (byte)0];     // 何で+も → 何でも
         yield return ["あるあるだね", "あるある", 2150380, (byte)0];     // reduplicated あるある expression, not ある
         yield return ["それアルアルだね", "アルアル", 2150380, (byte)0]; // katakana variant of the あるある pin
-        // --- FilterMisparse homograph/reading remaps ---
+        // --- ApplyContextPins homograph/reading remaps ---
         yield return ["ツバを飲む音", "ツバ", 1408410, (byte)1];          // 唾 saliva, not 鍔 sword-guard
         yield return ["帽子のツバをつまんだ", "ツバ", 1433790, (byte)2];  // hat brim is 鍔 — the saliva pin skips hat context
         yield return ["刀のツバに触れた", "ツバ", 1433790, (byte)2];      // sword context → 鍔, not saliva
@@ -1606,6 +1612,9 @@ public class FormSelectionTests
         yield return ["「後もう少しで…って、クソ坊主、どうした！？」", "後", 1269320, (byte)0]; // あと, not ご
         yield return ["「だから、消えた。次の生を迎えるために」", "生", 2088240, (byte)0]; // せい, not なま
         yield return ["俺は二度、素振りをした後、バッターボックスに入る。", "素振り", 1749550, (byte)0]; // すぶり, not そぶり
+        yield return ["毎朝バットで素振りをする。", "素振り", 1749550, (byte)0]; // すぶり: bat in the window
+        yield return ["全身で納得のいってない素振りを見せ、", "素振り", 1397260, (byte)0]; // そぶり: no swing context
+        yield return ["それにどこか俺を避けるような素振りをする環。", "素振り", 1397260, (byte)0]; // そぶり
         yield return ["黛「日本国憲法第２７条１項：すべて国民は、勤労の権利を有し、義務を負う」", "項", 1282980, (byte)0]; // こう, not うなじ
         yield return ["内海は弾かれたように立ち上がると、部屋を飛び出す。", "弾かれた", 1419360, (byte)0]; // はじく, not ひく
         yield return ["「何体目だよ…くっそ…」", "体", 1409150, (byte)0]; // counter たい, not からだ
@@ -1878,6 +1887,9 @@ public class FormSelectionTests
         yield return ["はずって……。これでよく引率が務まるなあ。", "はず", 1476430, (byte)2];
         yield return ["１０度？１０度って。", "度", 1445160, (byte)0];
         yield return ["「じゃあってなによ、じゃあって」", "じゃあ", 1005900, (byte)0];
+        // Clause-initial ですが/ですけど are the polite conjunctions; Sudachi cuts です|が.
+        yield return ["「ですが、私は、アトレは、お兄様のお役に立つことが私の生き甲斐なので。」", "ですが", 2850805, (byte)0];
+        yield return ["ですけど、それは無理です。", "ですけど", 2871534, (byte)0];
         yield return ["と言ってくれた。", "言ってくれた", 1587040, (byte)0];
         yield return ["花が散っていた。", "散っていた", 1303490, (byte)0];
         yield return ["食べちゃってごめん。", "食べちゃって", 1358280, (byte)0];
@@ -1991,10 +2003,66 @@ public class FormSelectionTests
         yield return ["…ご都合のつく日ですか？", "ご", 1270190, (byte)1];
         yield return ["『男性のみのご利用は、ご遠慮させていただいております』", "ご", 1270190, (byte)1];
         yield return ["といってもあなた様ならすでにご承知なのでしょうけど。", "ご", 1270190, (byte)1];
+
+        // A noun-tagged 回し right after a bare 連用形 (V1+V2) or inside an unknown compound (逆回し) is
+        // 回す's stem (1199350), not the sumo belt 回し (1199340), which still wins as a free noun.
+        yield return ["わしを呼び回しに来る前に、お前さんが血止めをしておいたかね", "回し", 1199350, (byte)0];
+        yield return ["ちょうど逆回しみたいな感じで俺たちは戻ってきた。", "回し", 1199350, (byte)0];
+        yield return ["力士が回しを締め直した。", "回し", 1199340, (byte)0];
+
+        yield return ["「じゃあ、次はウチの番ってことでいいよね」", "番", 2022640, (byte)0]; // ばん "turn", not 番う
+        yield return ["断線した部分がショートして火災の原因になったり", "ショートして", 1062300, (byte)0]; // short circuit, not 証として
+        yield return ["校庭に結構人が居るし", "結構", 1254760, (byte)0];
+        yield return ["平素より当薬局をご利用いただき", "薬局", 1538200, (byte)0];
+        yield return ["よーしちびっこども", "ちびっこ", 2095120, (byte)3];
+        yield return ["とんでもなく盛り上がっております", "とんでもなく", 1008790, (byte)2];
+        yield return ["これは心ばかりだが…", "心ばかり", 1793680, (byte)0];
+        // 張り: noun "tension" without a noun host, 張る's stem before ます, suffix after a noun
+        yield return ["張りのある、見るからにおいしそうな雅の胸。", "張り", 1427760, (byte)0];
+        yield return ["護を心配しているらしく、声に少し張りがない。", "張り", 1427760, (byte)0];
+        yield return ["「…次は結界張りますよ」", "張ります", 1427900, (byte)0];
+        yield return ["壁一面が鏡張りの部屋だった。", "張り", 1983280, (byte)0];
+        yield return ["「どういう意地の張り方なの、それは？」", "方", 1516925, (byte)0]; // かた after a verb stem, not ほう
+        // Kana うら in a noun slot is 裏, not the archaic pronoun
+        yield return ["そして、舞台のうらでは、駅長さんと荷物係さんたちが待っていました。", "うら", 1550190, (byte)1];
+        // あいた before a noun/まま is 開く's past; standalone it is "ouch"
+        yield return ["キキは大きな声をはりあげて、あいたままだった列車の扉から飛びだしました。", "あいた", 1586270, (byte)3];
+        yield return ["「あいたっ！」", "あいた", 2857418, (byte)2];
+        // Bare や: Sudachi's 形状詞 is kana 嫌 (やだ), its 助動詞 the Kansai copula
+        yield return ["「やだな、仕返しなんてしないよ。」", "や", 1587610, (byte)3];
+        yield return ["連絡先を聞きにきたんやけど、本人が学校におった", "や", 2028960, (byte)0];
+        // Hiragana つば follows katakana ツバ: 鍔 near 帽子, 唾 otherwise
+        yield return ["彼女は帽子のつばを持ち上げた。", "つば", 1433790, (byte)2];
+        yield return ["ごくりと、つばを飲み込む。", "つば", 1408410, (byte)1];
+        // The user-dic やしない must not turn バレる's stem into a place name
+        yield return ["授業中なら教師が見回りでもしない限りは、そうバレやしない穴場だ。", "バレ", 1010350, (byte)1];
+        // Kana さらう: 攫う by default, 浚う with a dredging object, 復習う when going over memory/information
+        yield return ["猫をさらうよお！", "さらう", 1593870, (byte)3];
+        yield return ["子供がさらわれた。", "さらわれた", 1593870, (byte)3];
+        yield return ["彼女は話題をさらった。", "さらった", 1593870, (byte)3];
+        yield return ["川底をさらう作業。", "さらう", 1593865, (byte)2];
+        yield return ["その前に、今まで手に入れた情報をさらっておこう。", "さらっておこう", 1500810, (byte)2];
+
+        // ヤード after a numeral is the unit; elsewhere the working-area entry
+        yield return ["百ヤード先にある。", "ヤード", 1136260, (byte)1];
+        yield return ["５０ヤード走った", "ヤード", 1136260, (byte)1];
+        yield return ["ヤードで待ってる。", "ヤード", 2873071, (byte)0];
+
+        yield return ["で…でもさこれは決まりなんだよ。", "でも", 1008460, (byte)0];
+
+        // Godan 癒り (なおり) is 治る, never the ichidan archaic 癒る (いる)
+        yield return ["こんどこそは、癒りきるまで、充分に療養せい。", "癒り", 1599400, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()
     {
+        // Loanword fragments must not attest through a kana reading of a kanji word (安否 あんぶ, 兵務 へいむ)
+        yield return ["「このアンブロシアはこちらの世界の人間にあわせて調整はされているけれど」", "アンブ"];
+        yield return ["「エルフヘイムの住人がそう言うのであれば」", "ヘイム"];
+        // Fragment-only kana forms: laughs (禹歩 うほ), the playful おっはよー (尾 お)
+        yield return ["「うほー、肉うめー！」", "うほー"];
+        yield return ["「おっはよー、雷火、國崎、マリアっち」", "お"];
+
         // Kana surface ざと should not match kanji 里 — ざと is not a valid standalone reading
         yield return ["次第に周りからざわざと声が聞こえてくる。", "ざと"];
 
@@ -2044,5 +2112,26 @@ public class FormSelectionTests
 
         var match = results.FirstOrDefault(w => w.OriginalText == tokenText);
         match.Should().BeNull($"token '{tokenText}' should not match any word in '{input}'");
+    }
+
+    [Theory]
+    [InlineData("ひなたさんは何が気に食わないのか。", "ひなた")]
+    [InlineData("美雨さんは何が気に食わないのか。", "美雨")]
+    public async Task DeckNameResolvesToFormMatchingSurface(string input, string name)
+    {
+        var contextFactory = GetContextFactory();
+        var entries = new List<DeckDictionaryEntry> { new() { Surface = name, EntryType = DeckDictionaryEntryType.Name } };
+        var deck = await Jiten.Parser.Parser.ParseTextToDeck(contextFactory, input, predictDifficulty: false,
+                                                             dictionaryEntries: entries);
+
+        var match = deck.DeckWords.FirstOrDefault(w => w.OriginalText == name);
+        match.Should().NotBeNull($"deck name '{name}' should resolve to a word");
+
+        await using var context = await contextFactory.CreateDbContextAsync();
+        var formText = await context.WordForms
+                                    .Where(f => f.WordId == match!.WordId && f.ReadingIndex == match.ReadingIndex)
+                                    .Select(f => f.Text)
+                                    .FirstOrDefaultAsync();
+        formText.Should().Be(name, $"ReadingIndex {match!.ReadingIndex} of word {match.WordId} should be the '{name}' form");
     }
 }

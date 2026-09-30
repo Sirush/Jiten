@@ -6,55 +6,7 @@ namespace Jiten.Parser;
 
 public partial class MorphologicalAnalyser
 {
-    // Hours of the clock: surface → (entry, clock reading). The clock forces native readings for
-    // two digits (四時=よじ, 九時=くじ), which Sudachi's per-token onyomi can't produce.
-    private static readonly Dictionary<string, (int WordId, string Reading)> HourPins = new()
-    {
-        // 一時 is deliberately absent: いちじ/いっとき/ひととき share the surface and the numeral
-        // context can't separate them — baseline scoring already resolves the o'clock uses.
-        ["二時"] = (2612170, "ニジ"),
-        ["三時"] = (1300520, "サンジ"),
-        ["四時"] = (1307230, "ヨジ"),
-        ["五時"] = (2845367, "ゴジ"),
-        ["六時"] = (2583620, "ロクジ"),
-        ["七時"] = (2845363, "シチジ"),
-        ["八時"] = (2845368, "ハチジ"),
-        ["九時"] = (2845349, "クジ"),
-        ["十時"] = (2845369, "ジュウジ"),
-        ["十一時"] = (2845370, "ジュウイチジ"),
-        ["十二時"] = (1334960, "ジュウニジ"),
-        ["零時"] = (1557690, "レイジ"),
-    };
-
-    // Surface → duration-reading pin for fused numeral+分/日/月 homographs; applied only before
-    // a temporal anchor (see the anchored gate in FixReadingAmbiguity).
-    private static readonly Dictionary<string, (int WordId, byte ReadingIndex)> TemporalDurationPins = new()
-    {
-        ["一分"] = (1166290, 1),
-        ["１分"] = (1166290, 0),
-        ["十分"] = (1335070, 1),
-        ["１０分"] = (1335070, 0),
-        ["五分"] = (2039350, 1),
-        ["５分"] = (2039350, 0),
-        ["二分"] = (2219180, 1),
-        ["２分"] = (2219180, 0),
-        ["三分"] = (1814040, 1),
-        ["３分"] = (1814040, 0),
-        ["四分"] = (2863218, 1),
-        ["４分"] = (2863218, 0),
-        ["六分"] = (2056150, 1),
-        ["６分"] = (2056150, 0),
-        ["七分"] = (2864067, 1),
-        ["７分"] = (2864067, 0),
-        ["何分"] = (1189320, 0),
-        ["三十日"] = (1300670, 1),
-        ["一月"] = (1162130, 0),
-    };
-
-    private static readonly HashSet<string> TemporalAnchorTexts =
-        ["前", "後", "間", "ぐらい", "くらい", "ほど", "経つ", "経った", "経って", "待っ"];
-
-    private List<WordInfo> FilterMisparse(List<WordInfo> wordInfos)
+    private List<WordInfo> ApplyContextPins(List<WordInfo> wordInfos)
     {
         for (int i = wordInfos.Count - 1; i >= 0; i--)
         {
@@ -65,13 +17,8 @@ public partial class MorphologicalAnalyser
             if (word.Text == "そう")
                 word.PartOfSpeech = PartOfSpeech.Adverb;
 
-            // Katakana ツバ is overwhelmingly 唾 "saliva" (1408410, ツバを飲む = to swallow saliva),
-            // not 鍔 "sword guard / hat brim" (1433790) that the kanji-frequency prior otherwise picks.
-            // In an explicit sword context (刀/剣/太刀/刃 + の + ツバ) or near 帽子 (帽子のツバ, ツバの広い帽子)
-            // pin 鍔 instead — both directions are pinned because the word cache keys on (surface, POS,
-            // dict form) without context, so an unpinned branch would inherit whichever direction was
-            // cached first.
-            if (word.Text == "ツバ" && word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun)
+            // Kana ツバ is 唾, or 鍔 near 刀の/帽子; both pinned, as the context-blind word cache reuses whichever was cached first.
+            if (word.Text is "ツバ" or "つば" && word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun)
             {
                 bool swordContext = i >= 2 && wordInfos[i - 1].Text == "の"
                     && wordInfos[i - 2].Text is "刀" or "剣" or "太刀" or "刃";
@@ -81,12 +28,115 @@ public partial class MorphologicalAnalyser
                 word.PreMatchedWordId = swordContext || hatContext ? 1433790 : 1408410;
             }
 
-            // A bare kana し/した/して that Sudachi lemmatises as する is that verb; the kana surface
-            // must not fall to a homograph (詩/舌, or the dated particle して) through surface-match
-            // priority. Inflection merges can leave the token with a surface dictionary form and
-            // Unknown POS — the kanji homographs always carry their own dictionary form, so those
-            // stay untouched, and so does the standalone conjunction して (Sudachi lemmatises it
-            // as して itself, so the dictionary-form gate does not fire).
+            // Sudachi tags the noun 張り "tension" a suffix too (張りのある, 声に張りがない); a true suffix needs a noun host.
+            if (word is { Text: "張り", PartOfSpeech: PartOfSpeech.Suffix or PartOfSpeech.Noun or PartOfSpeech.CommonNoun, PreMatchedWordId: null }
+                && (i == 0 || (wordInfos[i - 1].PartOfSpeech is not (PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                        or PartOfSpeech.Name or PartOfSpeech.Pronoun or PartOfSpeech.Suffix)
+                    && wordInfos[i - 1].Text is not ("」" or "』" or "）" or ")"))))
+            {
+                word.PartOfSpeech = PartOfSpeech.Noun;
+                word.PreMatchedWordId = 1427760;
+            }
+
+            // Verb 連用形 + 方 is かた "way of doing", never ほう.
+            if (word.Text.Length >= 3 && word.Text[^1] == '方' && word.PreMatchedWordId == null
+                && word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                && HasNonNameCompoundLookup?.Invoke(word.Text) != true
+                && TryGetRenyoukeiVerb(word.Text[..^1]) is { } stemVerb)
+            {
+                var stemText = word.Text[..^1];
+                int cut = word.StartOffset >= 0 ? word.StartOffset + stemText.Length : -1;
+                wordInfos.Insert(i + 1, new WordInfo(word)
+                {
+                    Text = "方", DictionaryForm = "方", NormalizedForm = "方", Reading = "カタ",
+                    PartOfSpeech = PartOfSpeech.Noun, StartOffset = cut,
+                    PreMatchedWordId = 1516925, PreMatchedReadingIndex = 0,
+                });
+                word.Text = stemText;
+                word.DictionaryForm = stemVerb;
+                word.NormalizedForm = stemVerb;
+                word.Reading = word.Reading is { Length: > 2 } r && r.EndsWith("カタ", StringComparison.Ordinal) ? r[..^2] : "";
+                word.PartOfSpeech = PartOfSpeech.Verb;
+                word.PartOfSpeechSection1 = PartOfSpeechSection.None;
+                word.EndOffset = cut;
+            }
+            else if (word is { Text: "方", PreMatchedWordId: null } && i > 0
+                     && wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb
+                     && TryGetRenyoukeiVerb(wordInfos[i - 1].Text) != null)
+            {
+                word.PreMatchedWordId = 1516925;
+                word.PreMatchedReadingIndex = 0;
+            }
+
+            // The user-dic やしない makes Sudachi misread the ichidan stem before it (バレ[地名]); it only follows a 連用形.
+            if (i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "やしない"
+                && word.PartOfSpeech is not PartOfSpeech.Verb && word.PreMatchedWordId == null
+                && word.Text.Length >= 2 && HasVerbOrAdjectiveLookup?.Invoke(NormalizeToHiragana(word.Text) + "る") == true)
+            {
+                word.PartOfSpeech = PartOfSpeech.Verb;
+                ClearPosSections(word);
+                word.DictionaryForm = word.Text + "る";
+                word.NormalizedForm = word.Text + "る";
+            }
+
+            // Kana うら in a noun slot (舞台のうらで) is 裏; the archaic pronoun only heads a clause (うらは).
+            if (word is { Text: "うら", PartOfSpeech: PartOfSpeech.Pronoun, PreMatchedWordId: null }
+                && ((i > 0 && wordInfos[i - 1].Text == "の")
+                    || (i + 1 < wordInfos.Count && wordInfos[i + 1].Text is "に" or "で" or "から" or "へ" or "の" or "を" or "側")))
+            {
+                word.PartOfSpeech = PartOfSpeech.Noun;
+                word.PreMatchedWordId = 1550190;
+                word.PreMatchedReadingIndex = 1;
+            }
+
+            // "Ouch" あいた stands alone; before a noun or まま it is 開く's past (あいたままの扉).
+            if (word is { Text: "あいた", PartOfSpeech: PartOfSpeech.Interjection, PreMatchedWordId: null }
+                && i + 1 < wordInfos.Count
+                && wordInfos[i + 1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Adverb
+                && wordInfos[i + 1].Text is { Length: > 0 } nextText
+                && (JapaneseTextHelper.IsKanji(nextText[0]) || (JapaneseTextHelper.IsKana(nextText[0]) && nextText[0] is not ('っ' or 'ッ'))))
+            {
+                word.PartOfSpeech = PartOfSpeech.Verb;
+                word.DictionaryForm = "あく";
+                word.NormalizedForm = "開く";
+                word.PreMatchedWordId = 1586270;
+                word.PreMatchedReadingIndex = 3;
+                word.PreMatchedConjugations = PinnedConjugationProcess(word.Text, "あく");
+            }
+
+            // Kana さらう defaults to 攫う (さらわれた, 話題をさらう); 浚う needs a dredging object, 復習う a memory/lines one.
+            if (word.DictionaryForm == "さらう" && word.PreMatchedWordId == null
+                && word.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Unknown
+                && word.Text.StartsWith("さら", StringComparison.Ordinal))
+            {
+                string? contextWord = null;
+                for (int k = Math.Max(0, i - 3); k < i && contextWord == null; k++)
+                    if (wordInfos[k].Text is "川" or "池" or "溝" or "ドブ" or "どぶ" or "底" or "川底" or "泥" or "井戸" or "砂" or "堀"
+                        or "記憶" or "情報" or "復習" or "稽古" or "練習" or "台詞" or "セリフ" or "楽譜" or "曲" or "資料" or "内容")
+                        contextWord = wordInfos[k].Text;
+
+                (word.PreMatchedWordId, word.PreMatchedReadingIndex) = contextWord switch
+                {
+                    null => (1593870, (byte)3),
+                    "記憶" or "情報" or "復習" or "稽古" or "練習" or "台詞" or "セリフ" or "楽譜" or "曲" or "資料" or "内容" => (1500810, (byte)2),
+                    _ => (1593865, (byte)2),
+                };
+                word.PreMatchedConjugations = PinnedConjugationProcess(word.Text, "さらう");
+            }
+
+            // Sudachi's tag settles bare や: 形状詞 is kana 嫌 (やだ), 助動詞 the Kansai copula (んやけど), never 矢.
+            if (word.Text == "や" && word.PreMatchedWordId == null)
+            {
+                if (word.PartOfSpeech == PartOfSpeech.NaAdjective)
+                {
+                    word.PreMatchedWordId = 1587610;
+                    word.PreMatchedReadingIndex = 3;
+                }
+                else if (word.PartOfSpeech == PartOfSpeech.Auxiliary)
+                    word.PreMatchedWordId = 2028960;
+            }
+
+            // Kana し/した/して lemmatised as する is that verb, not 詩/舌; the conjunction して keeps its own lemma.
             if (word.Text is "し" or "した" or "して"
                 && word.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Unknown
                 && word.DictionaryForm is "する" or "為る" or "した" && word.PreMatchedWordId == null)
@@ -95,61 +145,37 @@ public partial class MorphologicalAnalyser
                 word.PreMatchedConjugations = PinnedConjugationProcess(word.Text, "する");
             }
 
-            // Clause-initial ようは is the discourse marker 要は "in short" (1914670), not 様+は;
-            // merge the topic particle in so the expression entry resolves.
+            // Clause-initial ようは is 要は "in short", not 様+は.
             if (word.Text == "よう" && word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
                 && i + 1 < wordInfos.Count && wordInfos[i + 1] is { Text: "は", PartOfSpeech: PartOfSpeech.Particle }
                 && (i == 0 || wordInfos[i - 1].PartOfSpeech == PartOfSpeech.SupplementarySymbol))
             {
-                word.Text = "ようは";
+                AbsorbNext(wordInfos, i, "ヨウハ");
                 word.DictionaryForm = "ようは";
                 word.NormalizedForm = "ようは";
-                word.Reading = "ヨウハ";
                 word.PartOfSpeech = PartOfSpeech.Conjunction;
-                word.EndOffset = wordInfos[i + 1].EndOffset;
                 word.PreMatchedWordId = 1914670;
-                wordInfos.RemoveAt(i + 1);
             }
 
-            // Hiragana きった/きって after a 連用形 is the completion auxiliary 切る (落ちきった);
-            // Sudachi lemmatises the stranded きっ as 来る.
+            // きった/きって after a 連用形 is the completion auxiliary 切る (落ちきった); Sudachi lemmatises it as 来る.
             if (word.Text is "きった" or "きって" && word.PartOfSpeech == PartOfSpeech.Verb
                 && word.PreMatchedWordId == null
                 && i > 0 && wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Verb
                 && !wordInfos[i - 1].Text.EndsWith('て') && !wordInfos[i - 1].Text.EndsWith('で'))
-            {
-                word.DictionaryForm = "切る";
-                word.NormalizedForm = "切る";
-                word.PreMatchedWordId = 1384830;
-                word.PreMatchedConjugations = PinnedConjugationProcess(word.Text, "きる");
-            }
+                PinVerb(word, 1384830, "切る", word.Text, "きる");
 
-            // Bare くれ after を/て/で — including its shouted stretches くれえ/くれぇ/くれー
-            // (許してくれえ; longer runs are collapsed by elongation preprocessing first) — is the
-            // imperative of くれる "give me" (1269130), not the nightfall noun 暮れ or the
-            // approximation suffix くらい.
+            // くれ (or shouted くれえ) after を/て/で is くれる's imperative (許してくれえ), not 暮れ or くらい.
             if (word.Text is "くれ" or "くれえ" or "くれぇ" or "くれー" && i > 0
                 && (wordInfos[i - 1].Text is "を" or "て" or "で"
                     || wordInfos[i - 1].Text.EndsWith("て", StringComparison.Ordinal)
                     || wordInfos[i - 1].Text.EndsWith("で", StringComparison.Ordinal))
                 && word.PreMatchedWordId == null)
-            {
-                word.DictionaryForm = "くれる";
-                word.NormalizedForm = "くれる";
-                word.PartOfSpeech = PartOfSpeech.Verb;
-                word.PreMatchedWordId = 1269130;
-                word.PreMatchedConjugations = PinnedConjugationProcess("くれ", "くれる");
-            }
+                PinVerb(word, 1269130, "くれる", "くれ");
 
-
-            // Utterance-initial ねえ followed by a pause or a vocative name is "hey" (2029080), not
-            // the dialectal negation ない — the negation is a predicate and comes after content
-            // (金なんてねえ), while the attention-getter opens the utterance (ねえ、/ねえ？/ねえ悟).
+            // Utterance-initial ねえ before a pause or name is "hey" (ねえ、悟); the negation ねえ follows content (金なんてねえ).
             if (word.Text == "ねえ" && word.PartOfSpeech == PartOfSpeech.Interjection
-                && (i == 0 || wordInfos[i - 1].PartOfSpeech is PartOfSpeech.SupplementarySymbol
-                    or PartOfSpeech.Symbol or PartOfSpeech.BlankSpace)
-                && (i + 1 >= wordInfos.Count
-                    || wordInfos[i + 1].PartOfSpeech is PartOfSpeech.SupplementarySymbol or PartOfSpeech.Symbol
+                && AtClauseStart(wordInfos, i)
+                && (FollowedByPunctuationOrEnd(wordInfos, i)
                     || wordInfos[i + 1].PartOfSpeech is PartOfSpeech.Name or PartOfSpeech.Pronoun
                     || PosMapper.IsNameLikeSudachiNoun(wordInfos[i + 1].PartOfSpeech,
                         wordInfos[i + 1].PartOfSpeechSection1, wordInfos[i + 1].PartOfSpeechSection2,
@@ -164,16 +190,9 @@ public partial class MorphologicalAnalyser
             // Kana いった after a place/direction word is 行く "went" (どこいった), not 言う.
             if (word.Text == "いった" && i > 0
                 && wordInfos[i - 1].Text is "どこ" or "どっか" or "こっち" or "あっち" or "そっち" or "どこか")
-            {
-                word.DictionaryForm = "行く";
-                word.NormalizedForm = "行く";
-                word.PartOfSpeech = PartOfSpeech.Verb;
-                word.PreMatchedWordId = 1578850;
-                word.PreMatchedConjugations = PinnedConjugationProcess("いった", "いく");
-            }
+                PinVerb(word, 1578850, "行く", "いった", "いく");
 
-            // The negative-quotative cut 出られな|いって is ない + って: Sudachi lets いく steal
-            // ない's final mora. Restore ない and turn the remainder back into the quotative particle.
+            // 出られな|いって is ない + って: Sudachi lets いく steal ない's final mora.
             if (word.Text == "いって" && word.DictionaryForm is "いく" or "行く"
                 && i > 0 && wordInfos[i - 1] is { Text: "な", PartOfSpeech: PartOfSpeech.Auxiliary } naAux)
             {
@@ -189,23 +208,17 @@ public partial class MorphologicalAnalyser
                 word.PreMatchedWordId = null;
             }
 
-            // A single kanji that spells an i-adjective stem, clipped in an exclamation
-            // (痛ぇぇ！, 暗っ！, 寒っ！), is that adjective — not a noun/suffix homograph
-            // (-algia 痛, darkness 暗). Forced-split markers (|) are transparent.
-            int clipNext = i + 1;
-            while (clipNext < wordInfos.Count && wordInfos[clipNext].Text is "|" or "")
-                clipNext++;
+            // A single kanji clipped in an exclamation (痛ぇぇ！, 暗っ！) is the i-adjective, not the noun/suffix homograph.
             if (word.Text.Length == 1 && word.Text[0] is >= '一' and <= '鿿'
                 && word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Suffix
                 && (i == 0 || wordInfos[i - 1].PartOfSpeech is PartOfSpeech.SupplementarySymbol
                     or PartOfSpeech.Symbol or PartOfSpeech.Interjection or PartOfSpeech.BlankSpace)
+                && NextNonSplitMarker(wordInfos, i) is var clipNext
                 && clipNext < wordInfos.Count
                 && wordInfos[clipNext].PartOfSpeech is PartOfSpeech.SupplementarySymbol or PartOfSpeech.Symbol
                 && wordInfos[clipNext].Text.Length > 0
                 && wordInfos[clipNext].Text[0] is 'ぇ' or 'ェ' or 'っ' or 'ッ' or 'ー'
-                // The adjective must be a genuinely common word: exclamations clip everyday
-                // adjectives (痛い, 暗い, 寒い), never dictionary rarities — 今っ！ is the noun 今
-                // clipped, not the obscure 今い "dated".
+                // Exclamations clip only common adjectives: 今っ！ is the noun 今, not the rare 今い.
                 && GetNonNameCompoundWordId?.Invoke(word.Text + "い") is { } clippedAdjId
                 && GetNonNameCompoundFrequencyRank?.Invoke(word.Text + "い") is { } clippedAdjRank
                 && clippedAdjRank <= 5000)
@@ -216,100 +229,25 @@ public partial class MorphologicalAnalyser
                 word.PreMatchedWordId = clippedAdjId;
             }
 
-            // 飛んだ after a case particle is 飛ぶ past (意識が飛んだ, 自力で飛んだ); the 連体詞
-            // とんだ "unexpected" only opens a noun phrase and lists the same surface with
-            // priority, which no scoring nudge can overcome.
-            if (word.Text == "飛んだ" && i > 0
-                && wordInfos[i - 1].Text is "が" or "は" or "も" or "に" or "を" or "で" or "へ" or "から" or "まで"
-                && word.PreMatchedWordId == null)
-            {
-                word.PartOfSpeech = PartOfSpeech.Verb;
-                word.DictionaryForm = "飛ぶ";
-                word.NormalizedForm = "飛ぶ";
-                word.PreMatchedWordId = 1429700;
-                word.PreMatchedConjugations = PinnedConjugationProcess("飛んだ", "飛ぶ");
-            }
-
-            // 連用形 置き continuing a clause (皿を横に置き、…) is 置く (1421850), not the interval
-            // suffix おき (三日置き), which follows a quantity instead of a case particle.
-            if (word.Text == "置き" && i > 0 && wordInfos[i - 1].Text is "に" or "を" or "へ"
-                && word.PreMatchedWordId == null)
-            {
-                word.PartOfSpeech = PartOfSpeech.Verb;
-                word.DictionaryForm = "置く";
-                word.NormalizedForm = "置く";
-                word.PreMatchedWordId = 1421850;
-                word.PreMatchedConjugations = PinnedConjugationProcess("置き", "置く");
-            }
-
-            // Sudachi shreds 強がって into 強/がっ/て; the recombined token is 強がる (1928800).
-            // Conjugated forms only: bare 強がり is legitimately the noun "bluff/bravado".
-            if (word.Text is "強がって" or "強がった" && word.PreMatchedWordId == null
-                && word.DictionaryForm != "強がる")
-            {
-                word.PartOfSpeech = PartOfSpeech.Verb;
-                word.DictionaryForm = "強がる";
-                word.NormalizedForm = "強がる";
-                word.PreMatchedWordId = 1928800;
-                word.PreMatchedConjugations = PinnedConjugationProcess(word.Text, "強がる");
-            }
-
-            // 強がり before a case/topic particle is the noun 強がり "bluff" (1236110) — the がる
-            // deconjugation chain otherwise resolves it all the way down to 強い. Before ながら/つつ
-            // it is the verb's 連用形 and is left to normal matching.
-            if (word.Text == "強がり" && word.PreMatchedWordId == null
-                && i + 1 < wordInfos.Count && wordInfos[i + 1].Text is "を" or "が" or "は" or "の" or "で")
-            {
-                word.PartOfSpeech = PartOfSpeech.Noun;
-                word.DictionaryForm = "強がり";
-                word.NormalizedForm = "強がり";
-                word.PreMatchedWordId = 1236110;
-            }
-
-            // 来 before やがる is the verb stem (来やがる stays split by convention), not the
-            // suffix らい.
+            // 来 before やがる is the verb stem (来やがる stays split by convention), not the suffix らい.
             if (word is { Text: "来", PartOfSpeech: PartOfSpeech.Verb } && i + 1 < wordInfos.Count
                 && wordInfos[i + 1].DictionaryForm == "やがる")
             {
                 word.PreMatchedWordId = 1547720;
             }
 
-            // Clause-final 行け (also shouted 行けー) is the imperative of 行く (先に行け！), not
-            // the potential 行ける.
-            if (word.Text is "行け" or "行けー"
-                && (i + 1 >= wordInfos.Count
-                    || wordInfos[i + 1].PartOfSpeech is PartOfSpeech.SupplementarySymbol or PartOfSpeech.Symbol))
-            {
-                word.PartOfSpeech = PartOfSpeech.Verb;
-                word.DictionaryForm = "行く";
-                word.NormalizedForm = "行く";
-                word.PreMatchedWordId = 1578850;
-                word.PreMatchedConjugations = PinnedConjugationProcess("行け", "行く");
-            }
+            // Clause-final 行け is 行く's imperative (先に行け！), not the potential 行ける.
+            if (word.Text is "行け" or "行けー" && FollowedByPunctuationOrEnd(wordInfos, i))
+                PinVerb(word, 1578850, "行く", "行け");
 
-            // 放ってお* is the expression 放っておく (1907980), not bare 放る.
-            if (word.Text.StartsWith("放ってお", StringComparison.Ordinal) && word.Text.Length >= 5
-                && word.PreMatchedWordId == null)
-            {
-                word.DictionaryForm = "放っておく";
-                word.NormalizedForm = "放っておく";
-                word.PreMatchedWordId = 1907980;
-                word.PreMatchedConjugations = PinnedConjugationProcess(word.Text, "放っておく");
-            }
-
-            // 宛 as a suffix after a name/noun is 宛て "addressed to" (1448820).
+            // Suffix 宛 is 宛て "addressed to".
             if (word is { Text: "宛", PartOfSpeech: PartOfSpeech.Suffix } && i > 0
                 && word.PreMatchedWordId == null)
             {
                 word.PreMatchedWordId = 1448820;
             }
 
-            // ばっか directly after a te-form or a bare noun is the ばかり contraction (してばっか
-            // "nothing but doing", 仕事ばっか "nothing but work"), never a noun — a predicative 馬鹿
-            // needs its own clause slot, which puts a topic particle in between (あんたはばっか).
-            // Pinned because the surface is also a listed kana form of unrelated kanji words
-            // (麦価/幕下), whose exact-form matches otherwise compete with the particle depending
-            // on neighbour scoring.
+            // ばっか right after a te-form or noun is ばかり (仕事ばっか), not 馬鹿 (あんたはばっか); pinned as 麦価/幕下 share the kana.
             if (word is { Text: "ばっか", PreMatchedWordId: null } && i > 0
                 && ((wordInfos[i - 1] is { PartOfSpeech: PartOfSpeech.Verb } vprev
                      && (vprev.Text.EndsWith('て') || vprev.Text.EndsWith('で')))
@@ -323,13 +261,7 @@ public partial class MorphologicalAnalyser
                 word.PartOfSpeech = PartOfSpeech.Particle;
             }
 
-            // A single-kanji noun coordinated with another single-kanji noun (仁も義も礼も智も,
-            // 礼と智を尊ぶ, 仁や義) enumerates concepts, yet Sudachi still lemmatises each bare
-            // kanji to a given-name reading (智→サトシ) and tags it as a proper noun, letting a
-            // name entry outrank the JMDict noun downstream. Inside the frame the name tagging is
-            // noise — strip the proper-noun sections so the token competes as an ordinary noun.
-            // The list partner must itself be a single kanji, so a list of full names (太郎と智)
-            // is untouched; the strip is a no-op for tokens Sudachi never name-tagged.
+            // Single kanji listed with another (仁も義も智も) are concepts Sudachi name-tags (智→サトシ); a name partner (太郎と智) is not.
             if (word.PartOfSpeech is PartOfSpeech.Noun && word.Text.Length == 1
                 && JapaneseTextHelper.IsKanji(word.Text[0]) && word.PreMatchedWordId == null
                 && ((i >= 2
@@ -342,42 +274,9 @@ public partial class MorphologicalAnalyser
                         && wordInfos[i + 2].Text.Length == 1
                         && JapaneseTextHelper.IsKanji(wordInfos[i + 2].Text[0])
                         && wordInfos[i + 2].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun)))
-            {
-                word.PartOfSpeechSection1 = PartOfSpeechSection.None;
-                word.PartOfSpeechSection2 = PartOfSpeechSection.None;
-                word.PartOfSpeechSection3 = PartOfSpeechSection.None;
-            }
+                ClearPosSections(word);
 
-            // 将に is JMDict's rarely-used kanji spelling of まさに, but まさに is an intensifying
-            // adverb that attaches directly to its predicate and never takes a topic particle —
-            // 将に right before は can only be the noun 将 + に (将には必要な資質).
-            if (word is { Text: "将に", PartOfSpeech: PartOfSpeech.Adverb }
-                && i + 1 < wordInfos.Count && wordInfos[i + 1] is { Text: "は", PartOfSpeech: PartOfSpeech.Particle })
-            {
-                int shoEnd = word.EndOffset;
-                word.Text = "将";
-                word.DictionaryForm = "将";
-                word.NormalizedForm = "将";
-                word.Reading = "ショウ";
-                word.PartOfSpeech = PartOfSpeech.Noun;
-                word.EndOffset = shoEnd >= 0 ? shoEnd - 1 : -1;
-                wordInfos.Insert(i + 1, new WordInfo
-                {
-                    Text = "に",
-                    DictionaryForm = "に",
-                    NormalizedForm = "に",
-                    Reading = "ニ",
-                    PartOfSpeech = PartOfSpeech.Particle,
-                    PartOfSpeechSection1 = PartOfSpeechSection.CaseMarkingParticle,
-                    StartOffset = shoEnd >= 0 ? shoEnd - 1 : -1,
-                    EndOffset = shoEnd
-                });
-            }
-
-            // General lattice boundary theft on a 2-kanji + 1-kanji noun pair: a trailing kanji
-            // that is not a word on its own (営) can only be the tail of the following compound —
-            // shift the boundary so both sides are real words (敵陣|営 → 敵|陣営). A trailing kanji
-            // that stands alone stays put (東京|都), so genuinely ambiguous cuts are untouched.
+            // A trailing kanji that is no word alone is a stolen compound tail (敵陣|営 → 敵|陣営); a standalone one stays (東京|都).
             if (word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
                 && word.Text.Length == 2 && word.PreMatchedWordId == null
                 && JapaneseTextHelper.IsKanji(word.Text[0]) && JapaneseTextHelper.IsKanji(word.Text[1])
@@ -395,8 +294,7 @@ public partial class MorphologicalAnalyser
                     tail.Text = newTail;
                     tail.DictionaryForm = newTail;
                     tail.NormalizedForm = newTail;
-                    // Neither side's reading is recoverable from the stolen cut (営 carries the
-                    // mutated lemma's reading); leave them empty so JMDict matching supplies them.
+                    // The stolen cut's readings are wrong on both sides; empty lets JMDict matching supply them.
                     tail.Reading = "";
                     tail.PartOfSpeech = PartOfSpeech.Noun;
                     word.Text = word.Text[..1];
@@ -411,43 +309,31 @@ public partial class MorphologicalAnalyser
                 }
             }
 
+            // 方々 + を/に + movement verb is ほうぼう, after の/adnominal かたがた (その方々); Sudachi's reading is unreliable.
+            if (word.Text == "方々")
+            {
+                bool movementFollows = i + 2 < wordInfos.Count && wordInfos[i + 1].Text is "を" or "に"
+                    && (wordInfos[i + 2].DictionaryForm is "歩く" or "巡る" or "旅する" or "走る" or "駆ける"
+                           or "散る" or "散らばる" or "逃げる" or "飛ぶ"
+                        || wordInfos[i + 2].DictionaryForm.EndsWith("回る", StringComparison.Ordinal)
+                        || wordInfos[i + 2].DictionaryForm.EndsWith("散る", StringComparison.Ordinal));
+                if (movementFollows)
+                    word.PreMatchedWordId = 1584105;
+                else if (i > 0 && (wordInfos[i - 1].Text == "の"
+                                   || wordInfos[i - 1].PartOfSpeech == PartOfSpeech.PrenounAdjectival))
+                    word.PreMatchedWordId = 1584100;
+            }
 
-            // 方々 with を/に + a movement verb (町の方々を歩き回った, 方々に散らばった) is the adverb ほうぼう
-            // "here and there" (1584105) — places are moved through. Sudachi reads bare 方々 as カタガタ, so
-            // skipping the pin is not enough: the reading-match bonus makes かたがた win anyway; pin ほうぼう
-            // explicitly. Otherwise 方々 after の or an adnominal (軍の方々, その方々) is the honorific
-            // "people" かたがた (1584100) — ほうぼう never takes a demonstrative, and Sudachi's reading
-            // is unreliable in that frame (その方々 comes back ホウボウ).
-            bool movementFollows = i + 2 < wordInfos.Count && wordInfos[i + 1].Text is "を" or "に"
-                && (wordInfos[i + 2].DictionaryForm is "歩く" or "巡る" or "旅する" or "走る" or "駆ける"
-                       or "散る" or "散らばる" or "逃げる" or "飛ぶ"
-                    || wordInfos[i + 2].DictionaryForm.EndsWith("回る", StringComparison.Ordinal)
-                    || wordInfos[i + 2].DictionaryForm.EndsWith("散る", StringComparison.Ordinal));
-            if (word.Text == "方々" && movementFollows)
-                word.PreMatchedWordId = 1584105;
-            else if (word.Text == "方々" && i > 0
-                && (wordInfos[i - 1].Text == "の"
-                    || wordInfos[i - 1].PartOfSpeech == PartOfSpeech.PrenounAdjectival))
-                word.PreMatchedWordId = 1584100;
-
-            // Clause-final だい (何がだい, そうだい) is the familiar question particle "is it?" (2097680),
-            // not the noun 代 "charge/price" (1982860); Sudachi tags it Prefix. Remap only at clause end.
+            // Clause-final だい (何がだい) is the question particle, not 代 (Sudachi tags it Prefix).
             if (word.Text == "だい" && word.PartOfSpeech == PartOfSpeech.Prefix
-                && (i + 1 >= wordInfos.Count
-                    || wordInfos[i + 1].PartOfSpeech is PartOfSpeech.SupplementarySymbol or PartOfSpeech.Symbol))
+                && FollowedByPunctuationOrEnd(wordInfos, i))
             {
                 word.PartOfSpeech = PartOfSpeech.Particle;
                 word.DictionaryForm = "だい";
                 word.PreMatchedWordId = 2097680;
             }
 
-            // A kana-spelled reciprocal 〜合う verb (憎みあって, normalized 憎み合う) can't match its kanji-合
-            // entry via the normal deconjugation path and drops. Pin it to the 〜合う compound so it resolves
-            // as one token instead of vanishing (Sudachi keeps the reciprocal whole: 憎みあっ|て). Skip when
-            // any deconjugation of the surface reaches a lookup entry (つきあって→つきあう, わかりあえる→
-            // わかりあう) — those resolve through the normal path, which picks the right form (a potential
-            // keeps its potential chain) and preserves scoring margins; the pin is only for would-drop
-            // surfaces.
+            // Kana reciprocal 〜あう (憎みあって) can't reach its 合う entry and drops; surfaces that resolve (つきあって) skip the pin.
             if (word.PartOfSpeech == PartOfSpeech.Verb && !word.Text.Contains('合')
                 && !string.IsNullOrEmpty(word.NormalizedForm)
                 && word.NormalizedForm.EndsWith("合う", StringComparison.Ordinal)
@@ -459,14 +345,8 @@ public partial class MorphologicalAnalyser
                 word.PreMatchedConjugations = PinnedConjugationProcess(word.Text, word.DictionaryForm);
             }
 
-            // あって/あっていた directly after a verb 連用形 (読み/取り), tagged as ある (有る/在る), is the
-            // reciprocal 合う (1284430, 読み合って) — ある only follows a て-form, never a bare 連用形. Re-pin here
-            // (after the って re-cut has already run) so the reciprocal reading wins without triggering the
-            // っ+て mora-theft that mangles it if done early. 読みがあって keeps ある (the が breaks adjacency).
-            // The previous token must be Sudachi-tagged Verb: a deverbal noun before あって (Sudachi tags 実り
-            // in 実りあって合格した as Noun) is the existential "thanks to X" frame, not a 連用形 mid-compound.
-            // あって followed by の/も/こそ is excluded for the same reason — those are the existential idiom
-            // frames Xあっての/Xあっても/Xあってこそ (命あっての物種, 望みあっても).
+            // あって after a verb 連用形 is reciprocal 合う (読みあって); ある follows a noun or idiom frame (実りあって, 命あっての).
+            // Runs after the って re-cut; pinning earlier triggers the っ+て mora theft.
             if (word.PartOfSpeech == PartOfSpeech.Verb && word.NormalizedForm is "有る" or "在る"
                 && word.Text.StartsWith("あっ", StringComparison.Ordinal)
                 && !(i + 1 < wordInfos.Count && wordInfos[i + 1].Text is "の" or "も" or "こそ")
@@ -479,10 +359,7 @@ public partial class MorphologicalAnalyser
                 word.PreMatchedConjugations = PinnedConjugationProcess(word.Text, word.DictionaryForm);
             }
 
-            // An i-adjective that swallowed a quotative って (硬い+って → 硬いって, mis-deconjugated by
-            // CombineInflections as a bogus "te form") must be re-split: the only adjective inflection ending
-            // in って is the geminated emphatic te-form 〜くって (嬉しくって, よくって) — excluded via the く check —
-            // so everywhere else the って is the quotative particle (2086960). The adjective itself stays whole.
+            // CombineInflections glues quotative って onto i-adjectives (硬いって); only 〜くって (嬉しくって) is a real te-form.
             if (word.PartOfSpeech == PartOfSpeech.IAdjective && word.Text.Length >= 4
                 && word.Text.EndsWith("って", StringComparison.Ordinal)
                 && word.Text[^3] != 'く'
@@ -507,22 +384,12 @@ public partial class MorphologicalAnalyser
                 wordInfos.Insert(i + 1, tte);
             }
 
-            // The contracted もんか after a predicate is the rhetorical "like hell / as if" particle (2130440),
-            // not the noun 門下 "disciple" (1724650, read もんか) — which follows の (剣の門下). Sudachi may keep
-            // もんか whole (あるもんか) or split it もん+か (踊らされる|もん|か, which JMDict would otherwise compound
-            // to 門下); fold the split shape first, then remap. Only the contracted もんか is touched — the
-            // uncontracted ものか/もの+か is genuinely ambiguous with the deliberative もの + か (どうしたものか =
-            // "what to do", 信用していいものか = "is it OK to…"), so that is left to normal scoring.
+            // もんか after a predicate is rhetorical "as if" (あるもんか), not 門下 (剣の門下); ものか stays ambiguous (どうしたものか).
             bool prevIsPredicate = i > 0
                 && wordInfos[i - 1].PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective or PartOfSpeech.Auxiliary;
             if (prevIsPredicate && word.Text == "もん"
                 && i + 1 < wordInfos.Count && wordInfos[i + 1].Text == "か")
-            {
-                word.Text = "もんか";
-                word.Reading = "モンカ";
-                word.EndOffset = wordInfos[i + 1].EndOffset;
-                wordInfos.RemoveAt(i + 1);
-            }
+                AbsorbNext(wordInfos, i, "モンカ");
             if (prevIsPredicate && word.Text == "もんか")
             {
                 word.PartOfSpeech = PartOfSpeech.Particle;
@@ -534,33 +401,9 @@ public partial class MorphologicalAnalyser
             if (word.Text == "おい")
                 word.PartOfSpeech = PartOfSpeech.Interjection;
 
-            if (word is { Text: "つ", PartOfSpeech: PartOfSpeech.Suffix })
-                word.PartOfSpeech = PartOfSpeech.Counter;
+            ApplyCounterPins(wordInfos, i);
 
-            // Sudachi tags counter suffixes (e.g. 頭/とう, 匹, 本) with 助数詞 in POS detail
-            if (word is { PartOfSpeech: PartOfSpeech.Suffix } &&
-                word.HasPartOfSpeechSection(PartOfSpeechSection.Counter))
-                word.PartOfSpeech = PartOfSpeech.Counter;
-
-            // 人 after a numeral should be the counter にん, not the suffix じん. Still needed even
-            // with the Suffix↔ctr-primary compatibility in place: for ６５億人-shapes both じん (suf)
-            // and にん (ctr) are POS-compatible with the Suffix tag, and scoring alone picks じん —
-            // only the POS reclassify restricts the field to the counter.
-            if (word is { Text: "人", PartOfSpeech: PartOfSpeech.Suffix } &&
-                i > 0 && (wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Numeral ||
-                          wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.Numeral)))
-                word.PartOfSpeech = PartOfSpeech.Counter;
-
-            // 度 after a numeral is the degree/occurrence counter ど (1445160), never the
-            // standalone times-entry たび (１０度 = "10 degrees", not "the 10th time").
-            if (word is { Text: "度", PreMatchedWordId: null } &&
-                i > 0 && AdjacentWordScorer.IsNumericSurface(wordInfos[i - 1].Text))
-            {
-                word.PreMatchedWordId = 1445160;
-                word.PreMatchedReadingIndex = 0;
-            }
-
-            // 家 followed by a case particle should be the noun いえ, not the suffix け
+            // 家 before a case particle is the noun いえ, not the suffix け.
             if (word is { Text: "家", PartOfSpeech: PartOfSpeech.Suffix } &&
                 i + 1 < wordInfos.Count &&
                 wordInfos[i + 1] is { PartOfSpeech: PartOfSpeech.Particle, Text: "から" or "を" or "が" or "に" or "で" or "へ" or "の" or "は" or "も" })
@@ -568,79 +411,6 @@ public partial class MorphologicalAnalyser
 
             if (word is { Text: "山", PartOfSpeech: PartOfSpeech.Suffix })
                 word.PartOfSpeech = PartOfSpeech.Noun;
-
-            // 色 tagged as a suffix is the standalone noun いろ ("X-coloured": 敵色, 空色) unless it follows
-            // a numeral, where it is the counter しょく (三色). Compounds where 色 is read しょく (特色, 景色,
-            // 原色) are lexicalised and matched whole, so a lone suffix-色 outside counter context is いろ.
-            if (word is { Text: "色", PartOfSpeech: PartOfSpeech.Suffix } &&
-                !(i > 0 && (wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Numeral ||
-                            wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.Numeral))))
-                word.PartOfSpeech = PartOfSpeech.Noun;
-
-            // Sudachi tags いつ as 名詞,数詞 (the rare 五/いつ "five" reading) when a counter-like token
-            // follows (いつ重…, いつ匹…), but as 代名詞 elsewhere. Standalone いつ is virtually always the
-            // pronoun 何時 "when" (1188760) — the numeral reading only lives in fixed compounds (五日/いつか,
-            // 五つ/いつつ), which Sudachi tokenises whole. Reclassify so it resolves to 何時 instead of the
-            // numeral 五, which is otherwise picked and then dropped as a short-kana misparse.
-            if (word is { Text: "いつ", PartOfSpeech: PartOfSpeech.Noun }
-                && word.PartOfSpeechSection1 == PartOfSpeechSection.Numeral)
-                word.PartOfSpeech = PartOfSpeech.Pronoun;
-
-            // 重 that Sudachi tags as a standalone 助数詞 counter (え, "-fold") directly before a noun is
-            // really the じゅう "heavy" n-prefix (重光線 "heavy beam", 重工業, 重戦車). Real え/じゅう counter
-            // uses (二重, 八重桜, 三重県, 五重の塔) never reach here: Sudachi keeps them as one compound token
-            // or reads 重 as the noun じゅう — only the heavy-prefix-before-noun pattern surfaces as a lone
-            // Counter-え 重. Pin to 2108240 (重/じゅう, n-pref + ctr), which the え reading never reaches.
-            // Stays code: depends on the earlier Suffix→Counter reassignment in this method, so it can't
-            // move to the pre-FilterMisparse rewrite stage.
-            if (word is { Text: "重", PartOfSpeech: PartOfSpeech.Counter } &&
-                i + 1 < wordInfos.Count &&
-                wordInfos[i + 1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun)
-            {
-                word.PartOfSpeech = PartOfSpeech.Prefix;
-                word.Reading = "ジュウ";
-                word.DictionaryForm = "重";
-                word.NormalizedForm = "重";
-                word.PreMatchedWordId = 2108240;
-            }
-
-            // Ordinal 目 written in kana め (３機め, ２回め, ５つめ) is the ordinal suffix 目 (1604890,
-            // "-th"), not the derogatory/humble 奴/め (2089650). Sudachi tags kana め as 接尾辞,名詞的,
-            // routing it through the pure-suffix candidate filter that drops noun/suffix hybrids like 目,
-            // and the bare-kana め→目 form (RI2) is otherwise an ExcludedMisparses entry. Pin it to the
-            // canonical 目 form (RI0) when a counter/counter-possible token preceded by a number sits
-            // directly before it. The derogatory 奴/め (守銭奴め, 馬鹿め) follows plain nouns, never a counter.
-            if (word is { Text: "め", PartOfSpeech: PartOfSpeech.Suffix } && i > 0)
-            {
-                static bool StartsWithNumber(string t) =>
-                    t.Length > 0 && (char.IsDigit(t[0]) || "一二三四五六七八九十百千万〇零".Contains(t[0]));
-                static bool IsNumeral(WordInfo w) =>
-                    w.PartOfSpeech == PartOfSpeech.Numeral ||
-                    w.HasPartOfSpeechSection(PartOfSpeechSection.Numeral) ||
-                    w.HasPartOfSpeechSection(PartOfSpeechSection.Amount) ||
-                    StartsWithNumber(w.Text);
-
-                var prevCtr = wordInfos[i - 1];
-                bool prevIsCounterLike = prevCtr.PartOfSpeech is PartOfSpeech.Counter ||
-                                         prevCtr.HasPartOfSpeechSection(PartOfSpeechSection.Counter) ||
-                                         prevCtr.HasPartOfSpeechSection(PartOfSpeechSection.PossibleCounterWord);
-                // The number can be fused into the counter by CombineAmounts (２回 め, ５人 め, 三つ め),
-                // where Sudachi often drops the counter POS tag, or sit as a separate preceding token
-                // (３ 機 め). A noun-ish token that begins with a number is the fused amount; otherwise
-                // require an explicit counter token preceded by a number. Names (一郎め) keep their Name
-                // POS and plain nouns (馬鹿め, 守銭奴め) carry no number, so the derogatory 奴/め is safe.
-                bool fusedAmount = prevCtr.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Counter or PartOfSpeech.Numeral
-                                   && StartsWithNumber(prevCtr.Text) && prevCtr.Text.Length > 1;
-                bool counterAfterNumber = prevIsCounterLike && i > 1 && IsNumeral(wordInfos[i - 2]);
-                if (fusedAmount || counterAfterNumber)
-                {
-                    word.DictionaryForm = "目";
-                    word.NormalizedForm = "目";
-                    word.PreMatchedWordId = 1604890;
-                    word.PreMatchedReadingIndex = 0;
-                    word.HardPinned = true;
-                }
-            }
 
             if (word is { Text: "だろう" or "だろ", PartOfSpeech: PartOfSpeech.Auxiliary })
             {
@@ -661,10 +431,7 @@ public partial class MorphologicalAnalyser
                 word.PartOfSpeech = PartOfSpeech.Auxiliary;
             }
 
-            // したり after a case particle (を/が) is する + the listing ～たり (キスをしたり), not the
-            // triumphant interjection したり "bless me!" (1631980) — an interjection never follows a
-            // case particle. The whole-surface interjection wins outside the form scorer, so pin する;
-            // PreMatchedConjugations carries the ～たり chain the pin would otherwise drop.
+            // したり after を/が is する + ～たり (キスをしたり), not the interjection; an interjection never follows a case particle.
             if (word.Text == "したり" && i > 0 && wordInfos[i - 1].Text is "を" or "が")
             {
                 word.PartOfSpeech = PartOfSpeech.Verb;
@@ -674,35 +441,64 @@ public partial class MorphologicalAnalyser
                 word.PreMatchedReadingIndex = 1;
                 word.PreMatchedConjugations = ["tari", "(unstressed infinitive)"];
             }
-
-            // Ordinal 目 (kanji) after a numeric 〜つ counter (三つ目) is the ordinal suffix 目 "-th"
-            // (1604890), not the noun 三つ目 "three-eyed being" (2871573) that resolution would otherwise
-            // compound. Scoped to the つ-counter; 番目/回目/個目 resolve correctly already.
-            if (word is { Text: "目", PartOfSpeech: PartOfSpeech.Suffix } && i > 0
-                && wordInfos[i - 1].Text.EndsWith("つ", StringComparison.Ordinal)
-                && wordInfos[i - 1].Text.Length > 1
-                && TakesOrdinalMeAfterTsu(wordInfos[i - 1].Text[0]))
-            {
-                word.DictionaryForm = "目";
-                word.NormalizedForm = "目";
-                word.PreMatchedWordId = 1604890;
-                word.PreMatchedReadingIndex = 0;
-                word.HardPinned = true;
-            }
         }
 
         return wordInfos;
     }
 
-    // First char of a 〜つ counter whose 目 is the ordinal suffix "-th": a numeral other than 一/二 —
-    // 一つ目/二つ目 have their own ordinal entries ("first/second (in a series)", 1160910/1625070).
-    private static bool TakesOrdinalMeAfterTsu(char c) =>
-        c is not ('一' or '二' or '１' or '２')
-        && (char.IsDigit(c) || "一二三四五六七八九十百千".Contains(c));
+    private string? TryGetRenyoukeiVerb(string stem)
+    {
+        if (stem.Length == 0) return null;
+        foreach (var f in PipelineCachedDeconjugate(NormalizeToHiragana(stem)))
+            if (f.Tags.Contains("stem-ren") && f.Tags.Any(t => t.StartsWith('v'))
+                && HasVerbOrAdjectiveLookup?.Invoke(f.Text) == true)
+                return f.Text;
+        return null;
+    }
 
-    // True when the token's surface can reach a JMDict lookup entry without a pin: its dictionary
-    // form, its kana surface, or any deconjugated form of the surface is a lookup key. Such tokens
-    // resolve through the normal scoring path, so a pin would only degrade them.
+    private void PinVerb(WordInfo word, int wordId, string lemma, string conjugationSurface, string? conjugationBase = null)
+    {
+        word.PartOfSpeech = PartOfSpeech.Verb;
+        word.DictionaryForm = lemma;
+        word.NormalizedForm = lemma;
+        word.PreMatchedWordId = wordId;
+        word.PreMatchedConjugations = PinnedConjugationProcess(conjugationSurface, conjugationBase ?? lemma);
+    }
+
+    private static void AbsorbNext(List<WordInfo> wordInfos, int i, string reading)
+    {
+        var word = wordInfos[i];
+        var next = wordInfos[i + 1];
+        word.Text += next.Text;
+        word.Reading = reading;
+        word.EndOffset = next.EndOffset;
+        wordInfos.RemoveAt(i + 1);
+    }
+
+    private static void ClearPosSections(WordInfo word)
+    {
+        word.PartOfSpeechSection1 = PartOfSpeechSection.None;
+        word.PartOfSpeechSection2 = PartOfSpeechSection.None;
+        word.PartOfSpeechSection3 = PartOfSpeechSection.None;
+    }
+
+    private static bool AtClauseStart(List<WordInfo> wordInfos, int i) =>
+        IsClauseBoundary(i > 0 ? wordInfos[i - 1] : null);
+
+    // Unlike IsClauseBoundary, a following space does not end the clause here.
+    private static bool FollowedByPunctuationOrEnd(List<WordInfo> wordInfos, int i) =>
+        i + 1 >= wordInfos.Count
+        || wordInfos[i + 1].PartOfSpeech is PartOfSpeech.SupplementarySymbol or PartOfSpeech.Symbol;
+
+    private static int NextNonSplitMarker(List<WordInfo> wordInfos, int i)
+    {
+        int j = i + 1;
+        while (j < wordInfos.Count && wordInfos[j].Text is "|" or "")
+            j++;
+        return j;
+    }
+
+    // A surface that reaches a lookup entry resolves through normal scoring; a pin would only degrade it.
     private bool KanaSurfaceResolvesViaLookup(WordInfo word)
     {
         if (HasNonNameCompoundLookup == null)
@@ -722,9 +518,7 @@ public partial class MorphologicalAnalyser
         return false;
     }
 
-    // Recovers the conjugation chain for a pinned inflected surface — PreMatchedWordId bypasses the
-    // deconjugation-based resolution that normally fills Conjugations, so without this every pin emits
-    // a bare lemma. Null when the surface already is the dictionary form or no deconjugation reaches it.
+    // A PreMatchedWordId pin skips deconjugation, so without this chain every pin emits a bare lemma.
     private List<string>? PinnedConjugationProcess(string surface, string dictionaryForm)
     {
         var hiraSurface = NormalizeToHiragana(surface);
@@ -741,26 +535,13 @@ public partial class MorphologicalAnalyser
         return null;
     }
 
-    /// <summary>
-    /// Fixes Sudachi reading disambiguations for kanji homographs using contextual cues.
-    /// E.g. 表 before へ/に (directional) when not preceded by a noun → おもて not ひょう.
-    /// </summary>
+    /// <summary>Fixes Sudachi readings of kanji homographs from context (directional 表へ → おもて, not ひょう).</summary>
     private List<WordInfo> FixReadingAmbiguity(List<WordInfo> wordInfos)
     {
         for (int i = 0; i < wordInfos.Count; i++)
         {
             var word = wordInfos[i];
 
-            // 表 (ヒョウ) → オモテ when followed by directional particle and not preceded by a noun
-            // e.g. 表へ出る (go outside) vs メニュー表 (menu chart)
-            if (word is { Text: "表", Reading: "ヒョウ" } &&
-                i + 1 < wordInfos.Count && wordInfos[i + 1].Text is "へ" or "に" &&
-                (i == 0 || wordInfos[i - 1].PartOfSpeech != PartOfSpeech.Noun))
-            {
-                word.Reading = "オモテ";
-            }
-
-            // 何 (ナン) → ナニ before を/が/も or at end of sentence
             if (word is { Text: "何", Reading: "ナン" })
             {
                 var next = i + 1 < wordInfos.Count ? wordInfos[i + 1] : null;
@@ -768,23 +549,10 @@ public partial class MorphologicalAnalyser
                     word.Reading = "ナニ";
             }
 
-            // 一日/１日 → イチニチ unless preceded by a month (X月一日 = date → keep ツイタチ)
-            if (word is { Reading: "ツイタチ", Text: "一日" or "１日" or "1日" })
-            {
-                var prev = i > 0 ? wordInfos[i - 1] : null;
-                if (prev == null || !prev.Text.EndsWith('月'))
-                    word.Reading = "イチニチ";
-            }
-
-            // 張り (バリ) → ハリ when there is nothing to bind to. The ばり suffix is bound: it
-            // attaches directly to the noun or name whose style it borrows (漱石張り, ジョーダン張り).
-            // Governed by a particle or opening a clause, the word is the standalone noun はり
-            // (tension, resilience): 張りのある声, 声に張りがある.
+            // Suffix ばり binds to an adjacent nominal (漱石張り); after a particle or clause start it is はり (声に張りがある).
             if (word is { Text: "張り", Reading: "バリ" })
             {
-                // A quoted host still binds (「漱石」張り): look through closing quotes/brackets and
-                // the blanks the bracket handling inserts, but not across sentence punctuation —
-                // ばり attaches to an adjacent nominal.
+                // A quoted host still binds (「漱石」張り), so skip closing brackets and inserted blanks, not punctuation.
                 int h = i - 1;
                 while (h >= 0 && (wordInfos[h].PartOfSpeech == PartOfSpeech.BlankSpace
                                   || (wordInfos[h].Text.Length == 1 && "」』）】》〉".Contains(wordInfos[h].Text[0]))))
@@ -797,25 +565,7 @@ public partial class MorphologicalAnalyser
                     word.Reading = "ハリ";
             }
 
-            // 禍 (カ) → ワザワイ when standalone — カ reading only used in compounds (コロナ禍, 戦禍, 禍根)
-            if (word is { Text: "禍", Reading: "カ" })
-                word.Reading = "ワザワイ";
-
-            // 全機 (マサキ given-name reading) → ゼンキ "all aircraft/all units" — the common-noun reading.
-            // Sudachi picks the rare まさき name reading after a leading dash/symbol; the name then wins on
-            // ReadingMatchScore. Correcting the reading (cache key includes Reading) flips it back to 全機 ぜんき.
-            if (word is { Text: "全機", Reading: "マサキ" })
-                word.Reading = "ゼンキ";
-
-            // 私 (シ) → ワタシ when standalone — シ reading only in compounds (私的, 私立, 私用)
-            if (word is { Text: "私", Reading: "シ" })
-            {
-                word.Reading = "ワタシ";
-                word.PartOfSpeech = PartOfSpeech.Pronoun;
-            }
-
-            // 寒気 (カンキ cold air) → サムケ (chills) when felt: followed by が+する or
-            // を+覚える/感じる/催す (寒気がする, 寒気を覚える) vs 寒気が南下する (cold air moves south)
+            // 寒気 is サムケ "chills" when felt (寒気がする, 寒気を覚える); 寒気が南下する stays カンキ "cold air".
             if (word is { Text: "寒気", Reading: "カンキ" } &&
                 i + 2 < wordInfos.Count &&
                 ((wordInfos[i + 1].Text == "が" && wordInfos[i + 2].DictionaryForm == "する")
@@ -825,24 +575,9 @@ public partial class MorphologicalAnalyser
                 word.Reading = "サムケ";
             }
 
-            // 後 (ゴ) → アト when followed by a numeral/何 or a quantity adverb — adverbial
-            // "more/remaining": 後何年 (how many more years), 後少し / 後もう少し (a little more)
-            if (word is { Text: "後", Reading: "ゴ" } &&
-                i + 1 < wordInfos.Count &&
-                (wordInfos[i + 1].PartOfSpeech == PartOfSpeech.Numeral ||
-                 wordInfos[i + 1].HasPartOfSpeechSection(PartOfSpeechSection.Numeral) ||
-                 wordInfos[i + 1].Text.StartsWith("もう", StringComparison.Ordinal) ||
-                 wordInfos[i + 1].Text is "少し" or "すこし" or "ちょっと" or "わずか"))
-            {
-                word.Reading = "アト";
-            }
+            FixNumeralReadings(wordInfos, ref i);
 
-            // 弾く read ヒ* is はじく "to flick/repel/deflect" (bullets, glasses, the startle idiom
-            // 弾かれたように) unless an instrument/music word holds the window — ひく "to play" only
-            // lives around music (ピアノが弾かれた, バンドで弾かせてやる, ピアノはもう弾かない). The
-            // scope is semantic, not conjugational: plain/te/past flick uses (グラスを弾いた) default
-            // to ひく just as wrongly as passives did. ヒケ* stays: the 弾く potential is handled with
-            // 弾ける below.
+            // 弾く is はじく (グラスを弾いた) unless a music word is near (ピアノが弾かれた); ヒケ* is left to the 弾ける block.
             if (word.DictionaryForm == "弾く"
                 && word.Reading.StartsWith("ヒ", StringComparison.Ordinal)
                 && !word.Reading.StartsWith("ヒケ", StringComparison.Ordinal))
@@ -855,173 +590,32 @@ public partial class MorphologicalAnalyser
                     word.Reading = "ハジ" + word.Reading[1..];
             }
 
-            // 生 after の with a life-cycle determiner (次の生を迎える) is せい "life/incarnation"
-            // (2088240), not なま "raw" — なま lists the bare 生 with priority, so a reading nudge
-            // is not enough.
-            if (word is { Text: "生", Reading: "ナマ" } && i >= 2
-                && wordInfos[i - 1].Text == "の"
-                && wordInfos[i - 2].Text is "次" or "前" or "今" or "来" or "この" or "別")
-            {
-                word.Reading = "セイ";
-                word.PreMatchedWordId = 2088240;
-            }
-
-            // 一分/１分 before a quantity approximator is the duration いっぷん (1166290); the
-            // fullwidth surface is only listed on the いちぶ "one tenth" entry, so the forward-anchor
-            // boost cannot close the surface-match gap.
-            if (word.Text is "一分" or "１分" && i + 1 < wordInfos.Count
-                && wordInfos[i + 1].Text is "ぐらい" or "くらい" or "ほど"
-                && word.PreMatchedWordId == null)
-            {
-                word.PreMatchedWordId = 1166290;
-            }
-
-            // Sudachi reads batting-practice 素振り as スブリ (1749550); the scorer otherwise
-            // overrides it with the higher-priority そぶり "demeanour" (1397260).
+            // Sudachi reads every 素振り スブリ; "practice swing" needs a swing word nearby, else the scorer keeps そぶり.
             if (word is { Text: "素振り", Reading: "スブリ" })
             {
-                word.PreMatchedWordId = 1749550;
-            }
-
-            // 項 after a numeral is the clause/paragraph counter こう (１項, 第２項; 1282980),
-            // not うなじ "nape".
-            if (word is { Text: "項", Reading: "コウ" } && i > 0
-                && (wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Numeral ||
-                    wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.Numeral)))
-            {
-                word.PreMatchedWordId = 1282980;
-            }
-
-            // 体 between 何/a numeral and 目 is the counter たい (何体目; 1409150), not からだ.
-            if (word is { Text: "体", Reading: "タイ" } && i > 0 && i + 1 < wordInfos.Count
-                && (wordInfos[i - 1].Text == "何"
-                    || wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Numeral
-                    || wordInfos[i - 1].HasPartOfSpeechSection(PartOfSpeechSection.Numeral))
-                && wordInfos[i + 1].Text == "目")
-            {
-                word.PreMatchedWordId = 1409150;
-            }
-
-            // A numeral+分/日/月 run before a temporal anchor is the duration reading, never the
-            // fraction/idiom homograph (十分後 = じっぷん, not じゅうぶん "enough"; 一月経つ = ひとつき,
-            // not January). Pinned at token level, where punctuation still separates — 十分、間を置いて
-            // keeps じゅうぶん. The anchors never follow the fraction frame (四分の一). The lattice
-            // sometimes leaves the pair split (十|分後) — merge it under the same pin.
-            if (word.PreMatchedWordId == null)
-            {
-                int anchorIdx = i + 1;
-                while (anchorIdx < wordInfos.Count && wordInfos[anchorIdx].PartOfSpeech == PartOfSpeech.BlankSpace)
-                    anchorIdx++;
-                bool anchored = anchorIdx < wordInfos.Count
-                    && (TemporalAnchorTexts.Contains(wordInfos[anchorIdx].Text)
-                        || wordInfos[anchorIdx].Text.StartsWith("待っ", StringComparison.Ordinal)
-                        || wordInfos[anchorIdx].Text.StartsWith("経っ", StringComparison.Ordinal));
-                if (anchored)
+                bool swingContext = false;
+                for (int k = Math.Max(0, i - 6); k < Math.Min(wordInfos.Count, i + 7) && !swingContext; k++)
                 {
-                    if (TemporalDurationPins.TryGetValue(word.Text, out var durationPin))
-                    {
-                        word.PreMatchedWordId = durationPin.WordId;
-                        word.PreMatchedReadingIndex = durationPin.ReadingIndex;
-                    }
-                    else if (word.Text is "分" or "日" or "月" && i > 0
-                             && TemporalDurationPins.TryGetValue(wordInfos[i - 1].Text + word.Text, out var pairPin))
-                    {
-                        var numeral = wordInfos[i - 1];
-                        word.Text = numeral.Text + word.Text;
-                        word.Reading = numeral.Reading + word.Reading;
-                        word.StartOffset = numeral.StartOffset;
-                        word.PartOfSpeech = PartOfSpeech.Noun;
-                        word.DictionaryForm = word.Text;
-                        word.NormalizedForm = word.Text;
-                        word.PreMatchedWordId = pairPin.WordId;
-                        word.PreMatchedReadingIndex = pairPin.ReadingIndex;
-                        wordInfos.RemoveAt(i - 1);
-                        i--;
-                    }
+                    var t = wordInfos[k].Text;
+                    swingContext = t is "竹刀" or "木刀" or "刀" or "剣" or "剣道" or "野球" or "打席" or "練習"
+                                       or "稽古" or "部活" or "ゴルフ" or "テニス"
+                                   || t.Contains("バット", StringComparison.Ordinal)
+                                   || t.Contains("バッター", StringComparison.Ordinal)
+                                   || t.Contains("ラケット", StringComparison.Ordinal)
+                                   || t.Contains("スイング", StringComparison.Ordinal);
                 }
+
+                if (swingContext)
+                    word.PreMatchedWordId = 1749550;
             }
 
-            // A numeral + 時 read ジ is an hour of the clock. Left split, the pairwise recombiner
-            // steals digits across the boundary (十二|時 → 十 + 二時) and merged readings
-            // concatenate Sudachi's per-token onyomi (四+時 → シジ, matching the four-seasons
-            // homograph). Merge under the hour entry with the clock reading (四時=ヨジ, 九時=クジ).
-            if (word is { Text: "時", Reading: "ジ", PreMatchedWordId: null } && i > 0
-                && HourPins.TryGetValue(wordInfos[i - 1].Text + "時", out var hourPin))
-            {
-                var numeral = wordInfos[i - 1];
-                word.Text = numeral.Text + word.Text;
-                word.Reading = hourPin.Reading;
-                word.StartOffset = numeral.StartOffset;
-                word.PartOfSpeech = PartOfSpeech.Noun;
-                word.DictionaryForm = word.Text;
-                word.NormalizedForm = word.Text;
-                word.PreMatchedWordId = hourPin.WordId;
-                wordInfos.RemoveAt(i - 1);
-                i--;
-            }
-
-            // [N分]の[numeral] is the fraction frame: 分 is the part-noun ぶん (四分の一 = "one of
-            // four parts"), never the minutes counter. Split the fused token back so the numeral
-            // stays a numeral — unless the whole frame is itself an entry (三分の一), which the
-            // compound matcher should keep.
-            if (word.PreMatchedWordId == null && word.Text.Length >= 2 && word.Text.EndsWith('分')
-                && word.Text[..^1].All(c => JapaneseTextHelper.IsNumeralChar(c))
-                && i + 2 < wordInfos.Count && wordInfos[i + 1].Text == "の"
-                && wordInfos[i + 2].Text.Length > 0 && JapaneseTextHelper.IsNumeralChar(wordInfos[i + 2].Text[0])
-                && HasNonNameCompoundLookup?.Invoke(word.Text + "の" + wordInfos[i + 2].Text) != true)
-            {
-                var numeralText = word.Text[..^1];
-                var reading = word.Reading ?? "";
-                var numeralReading = reading.EndsWith("ブン", StringComparison.Ordinal) ? reading[..^2]
-                    : reading.EndsWith("プン", StringComparison.Ordinal) || reading.EndsWith("フン", StringComparison.Ordinal)
-                        ? reading[..^2]
-                        : "";
-                var numeral = new WordInfo(word)
-                {
-                    Text = numeralText,
-                    DictionaryForm = numeralText,
-                    NormalizedForm = numeralText,
-                    Reading = numeralReading,
-                    EndOffset = word.StartOffset >= 0 ? word.StartOffset + numeralText.Length : -1,
-                    PartOfSpeech = PartOfSpeech.Noun,
-                };
-                word.Text = "分";
-                word.DictionaryForm = "分";
-                word.NormalizedForm = "分";
-                word.Reading = "ブン";
-                word.StartOffset = numeral.EndOffset;
-                word.PreMatchedWordId = 1502860;
-                word.HardPinned = true;
-                wordInfos.Insert(i, numeral);
-                i++;
-            }
-
-            // The same frame arriving already split just needs the ぶん pin — Sudachi's reading
-            // for the bare 分 varies (フン in 七|分|の|一), so gate on the frame, not the reading.
-            if (word is { Text: "分", PreMatchedWordId: null } && i > 0 && i + 2 < wordInfos.Count
-                && wordInfos[i - 1].Text.Length > 0
-                && wordInfos[i - 1].Text.All(c => JapaneseTextHelper.IsNumeralChar(c))
-                && wordInfos[i + 1].Text == "の"
-                && wordInfos[i + 2].Text.Length > 0 && JapaneseTextHelper.IsNumeralChar(wordInfos[i + 2].Text[0])
-                && HasNonNameCompoundLookup?.Invoke(wordInfos[i - 1].Text + "分の" + wordInfos[i + 2].Text) != true)
-            {
-                word.Reading = "ブン";
-                word.PreMatchedWordId = 1502860;
-                word.HardPinned = true;
-            }
-
-            // Sudachi sometimes lemmatises a っ-bearing verb to its っ-less homograph
-            // (かっこつけ→かこつける); when the surface itself deconjugates to an attested
-            // っ-bearing base, that base is the real lemma. Genuine っ-onbin conjugations
-            // (言って→言う) are untouched — their bases carry no っ.
+            // Sudachi drops っ from some lemmas (かっこつけ→かこつける); onbin chains (言って→言う) keep their lemma.
             if (word.PartOfSpeech == PartOfSpeech.Verb && word.PreMatchedWordId == null
                 && word.Text.Contains('っ')
                 && word.DictionaryForm is { Length: > 0 } tsuDf && !tsuDf.Contains('っ'))
             {
-                var tsuForms = Deconjugator.Instance.Deconjugate(word.Text);
+                var tsuForms = PipelineCachedDeconjugate(word.Text);
                 var currentLemma = word.DictionaryForm;
-                // Only when the current lemma is NOT itself a valid deconjugation of the surface —
-                // 背負っていた→背負う and よって→よる are real onbin chains and stay.
                 var tsuBetter = tsuForms.Any(f => f.Text == currentLemma)
                     ? null
                     : tsuForms.FirstOrDefault(f => f.Text.Contains('っ')
@@ -1034,26 +628,7 @@ public partial class MorphologicalAnalyser
                 }
             }
 
-            // 縁 after の with a rimmed-object noun is ふち "rim/edge" (浴槽の縁), not えん "fate".
-            if (word is { Text: "縁", Reading: "エン" } && i >= 2
-                && wordInfos[i - 1].Text == "の"
-                && wordInfos[i - 2].Text is "浴槽" or "風呂" or "プール" or "池" or "井戸" or "窓"
-                    or "テーブル" or "机" or "帽子" or "コップ" or "グラス" or "崖" or "屋根" or "ベッド")
-            {
-                word.Reading = "フチ";
-            }
-
-            // 通り directly after a noun (no particle) is the suffix どおり "as per" (思惑通り,
-            // 予定通り; 1432930), not the standalone street/way noun.
-            if (word is { Text: "通り", Reading: "トオリ" } && i > 0
-                && wordInfos[i - 1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun)
-            {
-                word.PreMatchedWordId = 1432930;
-            }
-
-            // 札 read サツ in a card/tile game frame is ふだ — both a game word in the window AND a
-            // card-handling verb are required, since money changes hands in the same scenes
-            // (麻雀に負けて札を渡した stays banknote).
+            // 札 is ふだ only with a game word AND a card verb; money changes hands in game scenes (麻雀に負けて札を渡した).
             if (word is { Text: "札", Reading: "サツ" })
             {
                 bool cardVerb = i + 2 < wordInfos.Count && wordInfos[i + 1].Text == "を"
@@ -1065,28 +640,7 @@ public partial class MorphologicalAnalyser
                     word.Reading = "フダ";
             }
 
-            // 次 (ジ) standalone prefix → ツギ noun — ジ reading only in compounds (次回, 次期, 次男)
-            if (word is { Text: "次", Reading: "ジ", PartOfSpeech: PartOfSpeech.Prefix })
-            {
-                word.Reading = "ツギ";
-                word.PartOfSpeech = PartOfSpeech.CommonNoun;
-            }
-
-            // 何時 (ナンドキ) → ナンジ — ナンドキ is archaic; modern usage is ナンジ (what time) or いつ (when)
-            if (word is { Text: "何時", Reading: "ナンドキ" })
-                word.Reading = "ナンジ";
-
-            // 長 as suffix (チョウ) means "chief/head" — JMDict only has this as n (1429740), not suf.
-            // Reclassify so the parser matches ちょう instead of なが (2647210, pref/suf "long").
-            if (word is { Text: "長", Reading: "チョウ", PartOfSpeech: PartOfSpeech.Suffix })
-                word.PartOfSpeech = PartOfSpeech.Noun;
-
-            // 隙 (ヒマ) → スキ — ヒマ reading is obsolete; modern standalone 隙 is always すき
-            if (word is { Text: "隙", Reading: "ヒマ" })
-                word.Reading = "スキ";
-
-            // 弄* (イラ*) → イジ*: Sudachi lemmatises 弄った/弄っていた to the archaic 弄う (いらう, 2849632);
-            // modern usage is 弄る (いじる, 1560700).
+            // Sudachi lemmatises 弄った to archaic 弄う (いらう); modern usage is 弄る (いじる).
             if (word.DictionaryForm == "弄う")
             {
                 word.DictionaryForm = "弄る";
@@ -1094,10 +648,7 @@ public partial class MorphologicalAnalyser
                 word.Reading = word.Reading!.Replace("イラ", "イジ");
             }
 
-            // 角 (カド) — Sudachi always gives カド but standalone 角 has three common readings:
-            //   かど (corner): 角を曲がる, 建物の角
-            //   つの (horn):   鬼の角, 角が生えている
-            //   かく (angle):  三角形の角, 角が90度
+            // Sudachi always reads 角 カド; context picks つの (鬼の角, 角が生える) or かく (三角形の角, 角が90度).
             if (word is { Text: "角", Reading: "カド" })
             {
                 var next = i + 1 < wordInfos.Count ? wordInfos[i + 1] : null;
@@ -1105,30 +656,23 @@ public partial class MorphologicalAnalyser
                 var next2 = i + 2 < wordInfos.Count ? wordInfos[i + 2] : null;
                 var prev2 = i >= 2 ? wordInfos[i - 2] : null;
 
-                // つの: 角が生え… / 角が折れ… (only horns grow/break off)
                 bool isHornVerb = next is { Text: "が" or "を" } && next2 != null &&
                                   next2.DictionaryForm is "生える" or "生やす" or "折れる" or "折る"
                                       or "研ぐ" or "磨く";
 
-                // つの: creature/demon + の + 角
                 bool afterCreature = prev is { Text: "の" } && prev2 != null &&
                                      IsHornBearerWord(prev2.Text);
 
-                // つの: 頭/額/おでこ + に/の + 角
                 bool afterHead = prev is { Text: "に" or "の" } && prev2 != null &&
                                  prev2.Text is "頭" or "額" or "おでこ";
 
-                // かく: geometry word + の + 角 (三角形の角, 多角形の角)
                 bool afterGeometry = prev is { Text: "の" } && prev2 != null &&
                                      (prev2.Text.EndsWith("角形", StringComparison.Ordinal) || prev2.Text.EndsWith("多角", StringComparison.Ordinal));
 
-                // かく: 角 + が/は/も + degree/equality (角が90度, 角は等しい)
                 var next3 = i + 3 < wordInfos.Count ? wordInfos[i + 3] : null;
                 bool beforeDegree = next is { Text: "が" or "は" or "も" } && next2 != null &&
                                     (next2.Text.Contains('度') || next2.DictionaryForm is "等しい"
-                                     || ((next2.PartOfSpeech == PartOfSpeech.Numeral
-                                         || next2.HasPartOfSpeechSection(PartOfSpeechSection.Numeral))
-                                        && next3 is { Text: "度" }));
+                                     || (IsNumeralToken(next2) && next3 is { Text: "度" }));
 
                 if (isHornVerb || afterCreature || afterHead)
                     word.Reading = "ツノ";
@@ -1136,8 +680,7 @@ public partial class MorphologicalAnalyser
                     word.Reading = "カク";
             }
 
-            // 額 (ガク) → ヒタイ in body-contact context:
-            // 額にキスをした, 額に手を当てる, 額を叩く, 額の傷, etc.
+            // 額 is ヒタイ in body-contact context (額にキスをした, 額の傷).
             if (word is { Text: "額", Reading: "ガク" })
             {
                 var next = i + 1 < wordInfos.Count ? wordInfos[i + 1] : null;
@@ -1152,33 +695,19 @@ public partial class MorphologicalAnalyser
                     word.Reading = "ヒタイ";
             }
 
-            // 皆 (ミナ) → ミンナ — standalone 皆 is almost always みんな in modern Japanese;
-            // みな is literary/formal and typically written in kana.
-            // if (word is { Text: "皆", Reading: "ミナ" })
-            //     word.Reading = "ミンナ";
-
-            // 抱く (イダク) → ダク — いだく is literary; modern standalone 抱く is overwhelmingly だく.
+            // いだく is literary; modern standalone 抱く is overwhelmingly だく.
             if (word is { DictionaryForm: "抱く", Reading: { } r } && r.StartsWith("イダ", StringComparison.Ordinal))
                 word.Reading = r.Replace("イダ", "ダ");
 
-            // 様 disambiguation: さま (honorific suffix, 1545790) vs よう (appearance/manner, 1605840)
-            // Sudachi reading reliably distinguishes: サマ → honorific, ヨウ → manner
-            // if (word is { Text: "様", Reading: "サマ" })
-            //     word.PreMatchedWordId = 1545790;
-
-            // Kana よう as 形状詞/助動詞語幹 → 様/manner (1605840), not 陽/positive (1605845)
+            // Kana よう as 形状詞/助動詞語幹 is 様 "manner", not 陽 "positive".
             if (word is { Text: "よう", Reading: "ヨウ", DictionaryForm: "よう" })
                 word.PreMatchedWordId = 1605840;
 
-            // 事 (ジ) → コト when Sudachi misclassified as suffix after verb/expression
-            // ジ reading only occurs in kango compounds (仕事, 用事, 無事); those are parsed as single tokens.
-            // When 事 is orphaned (after a non-noun), it is the nominalizer こと.
+            // ジ only occurs inside kango compounds (仕事); an orphaned 事 is the nominaliser こと.
             if (word is { Text: "事", Reading: "ジ", WasReclassifiedFromSuffix: true })
                 word.Reading = "コト";
 
-            // たった in time-elapsed context → 経つ (1251100), not 断つ/立つ.
-            // When preceded by a time-unit noun (年/月/日/週/間), the intended meaning is
-            // "X time has passed" (経つ), not "to cut" (断つ) or "to stand" (立つ).
+            // たった after a time unit (三年たった) is 経つ, not 断つ/立つ.
             if (word is { Text: "たった", PartOfSpeech: PartOfSpeech.Verb or PartOfSpeech.Auxiliary or PartOfSpeech.Unknown })
             {
                 var prev = i > 0 ? wordInfos[i - 1] : null;
@@ -1196,53 +725,7 @@ public partial class MorphologicalAnalyser
                 }
             }
 
-            // 糞 (フン, animal feces) → クソ (damn/shit) unless context suggests literal droppings.
-            // ふん is natural after の (鼠の糞, 犬の糞) or before と (糞と尿);
-            // standalone 糞 is overwhelmingly くそ in modern Japanese.
-            if (word is { Text: "糞", Reading: "フン" })
-            {
-                var prev = i > 0 ? wordInfos[i - 1] : null;
-                var next = i + 1 < wordInfos.Count ? wordInfos[i + 1] : null;
-                bool keepFun = prev is { Text: "の" } || next is { Text: "と" };
-                if (!keepFun)
-                    word.Reading = "クソ";
-            }
-
-            // 訳 (ヤク) → ワケ standalone — ヤク reading is for compounds (翻訳, 英訳) or 訳す;
-            // standalone 訳 is always わけ (reason, meaning)
-            // if (word is { Text: "訳", Reading: "ヤク", PartOfSpeech: PartOfSpeech.Noun })
-            //     word.Reading = "ワケ";
-
-            // 町 (チョウ) → マチ — チョウ reading primarily in compounds (町長, 市町村) parsed as single tokens.
-            // if (word is { Text: "町", Reading: "チョウ" })
-            //     word.Reading = "マチ";
-
-            // あの: Sudachi sometimes misclassifies as 感動詞 (filler) when it's prenominal,
-            // and as 連体詞 when it's actually a filler interjection.
-            // Strategy: override 感動詞→PrenounAdjectival always (Sudachi filler detection unreliable),
-            // then 連体詞→Interjection only when clearly not modifying a noun.
-            if (word.Text == "あの")
-            {
-                if (word.PartOfSpeech == PartOfSpeech.Interjection)
-                {
-                    word.PartOfSpeech = PartOfSpeech.PrenounAdjectival;
-                }
-                else if (word.PartOfSpeech == PartOfSpeech.PrenounAdjectival)
-                {
-                    var next = i + 1 < wordInfos.Count ? wordInfos[i + 1] : null;
-                    bool nextIsNoun = next is { PartOfSpeech: PartOfSpeech.Noun or PartOfSpeech.Pronoun
-                        or PartOfSpeech.NaAdjective or PartOfSpeech.Counter or PartOfSpeech.Numeral
-                    };
-                    if (!nextIsNoun)
-                        word.PartOfSpeech = PartOfSpeech.Interjection;
-                }
-            }
-
-            // Continuative-form detection: noun immediately before a verb (no particle between)
-            // is likely an ichidan verb stem used as a conjunctive (連用中止法).
-            // e.g. 体を支え立ち上がった → 支え = 支える continuative, not the noun 支え.
-            // Reclassify so the scorer applies verb-affinity and ichidan stem penalties correctly.
-            // Guard: only for kanji tokens with え-row endings (valid ichidan stems), skip pre-matched.
+            // A kanji noun directly before a verb is an ichidan 連用中止 stem (体を支え立ち上がった: 支える, not 支え).
             if (word.PartOfSpeech == PartOfSpeech.Noun
                 && word.DictionaryForm == word.Text
                 && word.PreMatchedWordId == null
@@ -1251,8 +734,7 @@ public partial class MorphologicalAnalyser
                 && IsIchidanStemEnding(word.Reading)
                 && i + 1 < wordInfos.Count
                 && wordInfos[i + 1].PartOfSpeech == PartOfSpeech.Verb
-                // A suru-noun before できる is the potential pattern (真似+できない), not a
-                // continuative verb stem — keep the noun reading.
+                // A suru-noun before できる is the potential pattern (真似できない), not a verb stem.
                 && !(wordInfos[i + 1].DictionaryForm is "できる" or "出来る"
                      && HasSuruVerbCompoundLookup?.Invoke(word.Text) == true))
             {
@@ -1260,9 +742,7 @@ public partial class MorphologicalAnalyser
                 word.DictionaryForm = word.Text + "る";
             }
 
-
-            // 露 directly before になる is あらわ "exposed" (服が露になった), not dew/Russia —
-            // Sudachi's ロ lexeme reading otherwise drags scoring to the wrong homograph.
+            // 露 before になる is あらわ "exposed" (服が露になった); Sudachi's ロ reading drags scoring to dew/Russia.
             if (word is { Text: "露", PartOfSpeech: PartOfSpeech.Noun }
                 && i + 2 < wordInfos.Count
                 && wordInfos[i + 1].Text == "に"
@@ -1272,26 +752,20 @@ public partial class MorphologicalAnalyser
                 word.NormalizedForm = "露わ";
             }
 
-            // Clause-final あり after a に/と-ending token is the classical continuative of ある
-            // (私は貴女と共にあり――), not the noun 蟻. Real ant sentences continue with が/は/を,
-            // so the clause-final gate keeps them on the noun.
+            // Clause-final あり after に/と is classical ある (貴女と共にあり――); the ant 蟻 takes が/は/を.
             if (word is { Text: "あり", PartOfSpeech: PartOfSpeech.Noun }
                 && i > 0 && (wordInfos[i - 1].Text.EndsWith('に') || wordInfos[i - 1].Text.EndsWith('と'))
-                && (i + 1 >= wordInfos.Count
-                    || wordInfos[i + 1].PartOfSpeech is PartOfSpeech.SupplementarySymbol
-                        or PartOfSpeech.Symbol or PartOfSpeech.BlankSpace))
+                && IsClauseBoundary(i + 1 < wordInfos.Count ? wordInfos[i + 1] : null))
             {
                 word.PartOfSpeech = PartOfSpeech.Verb;
                 word.DictionaryForm = "ある";
             }
 
-            // 捩* (モジ*) → ネジ* — standalone 捩る is almost always ねじる (to twist);
-            // もじる (to parody) is rare and typically written in kana.
+            // Standalone 捩る is ねじる "twist"; もじる "parody" is rare and usually kana.
             if (word.DictionaryForm == "捩る" && word.Reading.StartsWith("モジ", StringComparison.Ordinal))
                 word.Reading = word.Reading.Replace("モジ", "ネジ");
 
-            // 大勢 (タイセイ, general trend) → オオゼイ (many people) — the common reading.
-            // タイセイ reading only in set phrases like 大勢に影響がない.
+            // 大勢 is オオゼイ "many people"; タイセイ "trend" only in set phrases (大勢に影響がない).
             if (word is { Text: "大勢", Reading: "タイセイ" })
             {
                 var next = i + 1 < wordInfos.Count ? wordInfos[i + 1] : null;
@@ -1301,27 +775,14 @@ public partial class MorphologicalAnalyser
                     word.Reading = "オオゼイ";
             }
 
-            // 大仰 (オオノキ, place name) → オオギョウ (exaggerated, adj-na).
-            // The place name reading is rare; the adjective is by far the common reading in prose.
-            if (word is { Text: "大仰", Reading: "オオノキ" })
-            {
-                word.Reading = "オオギョウ";
-                word.PartOfSpeech = PartOfSpeech.NaAdjective;
-            }
-
-            // イキ (katakana) → 行く, not 生きる. Sudachi maps katakana イキ to dict=イキる/norm=生きる,
-            // but standalone katakana イキ is slang for 行く (イク). 生きる is never written as イキ.
-            // After CombineAuxiliary, the token may be イキました/イキます etc.
+            // Sudachi maps katakana イキ to 生きる, which is never written イキ; it is slang 行く (イキました).
             if (word.DictionaryForm == "イキる" && word.Text.StartsWith("イキ", StringComparison.Ordinal))
             {
                 word.DictionaryForm = "行く";
                 word.NormalizedForm = "行く";
             }
 
-            // いける (kana verb): default to 行ける (1631370 "to be good; go well") — the overwhelmingly
-            // common bare いける. Switch to 生ける (1587190 "to arrange flowers") only with a flower
-            // object nearby (花をいける). Sudachi gives dict=いける for all senses (生ける/活ける/埋ける/
-            // 行ける); the 花 object is the disambiguator.
+            // Kana いける is 行ける "go well" unless a flower object precedes (花をいける → 生ける).
             if (word is { Text: "いける", DictionaryForm: "いける" })
             {
                 var prevTok = i > 0 ? wordInfos[i - 1] : null;
@@ -1329,22 +790,17 @@ public partial class MorphologicalAnalyser
                 bool flowerContext =
                     (prevTok != null && (prevTok.Text.Contains('花') || prevTok.Text.Contains('華')))
                     || (prev2Tok != null && (prev2Tok.Text.Contains('花') || prev2Tok.Text.Contains('華')));
-                // Set DictionaryForm too, not just PreMatchedWordId: the DeckWord cache keys on
-                // (Text, POS, DictForm, Reading) and is context-blind, so both senses must produce
-                // distinct cache keys or whichever parses first in a deck wins for all いける.
+                // DictionaryForm splits the context-blind DeckWord cache key; else the first sense parsed wins every いける.
                 word.PreMatchedWordId = flowerContext ? 1587190 : 1631370;
                 word.DictionaryForm = flowerContext ? "生ける" : "行ける";
             }
 
-            // ツイてる/ツイてない/ツイてた (katakana ツイ + てる) is the colloquial 付いてる "to be lucky"
-            // (1894260, uk). The grammatical ついて "about" (1854750) is never written in katakana, so the
-            // katakana ツイ head is an unambiguous signal (mirrors the ノリ/セン/イキ katakana rules above).
+            // Katakana ツイてる is 付いてる "lucky"; ついて "about" is never written in katakana.
             if (word.Text.StartsWith("ツイて", StringComparison.Ordinal))
             {
                 word.PreMatchedWordId = 1894260;
                 word.DictionaryForm = "ツイてる";
-                // The PreMatched path bypasses deconjugation, so the conjugation chain must be set
-                // explicitly or non-present forms render as the bare lemma (ツイてた = past, not ツイてる).
+                // The pin skips deconjugation; without an explicit chain ツイてた renders as the bare lemma.
                 word.PreMatchedConjugations = word.Text["ツイて".Length..] switch
                 {
                     "なかった" => ["negative", "past"],
@@ -1354,22 +810,14 @@ public partial class MorphologicalAnalyser
                 };
             }
 
-            // 弾ける: Sudachi gives dict=弾ける for both はじける (to burst) and the potential of
-            // 弾く/ひく (to play). The reading disambiguates: ヒケ* = 弾く potential, ハジケ* = 弾ける.
+            // Sudachi lemmatises 弾く's potential as 弾ける too; reading ヒケ* marks the potential.
             if (word.DictionaryForm == "弾ける" && word.Reading.StartsWith("ヒケ", StringComparison.Ordinal))
             {
                 word.DictionaryForm = "弾く";
                 word.NormalizedForm = "弾く";
             }
 
-            // 来る: Sudachi sometimes classifies modern くる as archaic きたる (文語四段-ラ行),
-            // giving NormalizedForm=来たる and Reading=キタル. This causes the scorer to favor
-            // the きたる entry (1591270) over くる (1547720) via ReadingMatchScore.
-            // Handles two patterns:
-            //   1. Bare 来る/来 with NormalizedForm=来たる (Sudachi 文語四段 misclassification)
-            //   2. Combined tokens like 来たー/来た where Reading=キタ… from concatenation
-            //      (Sudachi correctly said カ行変格 for 来, but combined reading キタ… matches きたる)
-            // Preserve genuine archaic forms: 来り (continuative unique to きたる) is excluded.
+            // A キタ reading on 来 (来た, or Sudachi's 文語 来たる) makes ReadingMatchScore pick きたる; 来り is genuinely きたる.
             if (word.NormalizedForm == "来たる" && word.Text is "来る" or "来")
             {
                 word.Reading = word.Reading.Replace("キタ", "ク");
@@ -1382,12 +830,9 @@ public partial class MorphologicalAnalyser
                 word.Reading = "ク" + word.Reading[2..];
             }
 
-            // Clause-initial よって、 is the conjunction 因って "therefore" (1605970), not the te-form
-            // of 依る/因る "to depend on" (1168660). Mid-clause よって (場合によって) keeps the verb.
-            // Setting DictionaryForm too keeps the context-blind DeckWord cache from collapsing both.
+            // Clause-initial よって、 is "therefore"; 場合によって keeps the verb. DictionaryForm splits the context-blind cache key.
             if (word is { Text: "よって" } && word.DictionaryForm is "依る" or "因る" or "よる"
-                && (i == 0 || wordInfos[i - 1].PartOfSpeech is PartOfSpeech.SupplementarySymbol
-                    or PartOfSpeech.Symbol or PartOfSpeech.BlankSpace)
+                && AtClauseStart(wordInfos, i)
                 && i + 1 < wordInfos.Count && wordInfos[i + 1].Text is "、" or "，")
             {
                 word.PreMatchedWordId = 1605970;

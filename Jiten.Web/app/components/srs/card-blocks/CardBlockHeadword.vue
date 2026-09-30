@@ -2,6 +2,7 @@
   import type { CardLayoutBlock, HeadwordBlockOptions } from '~/types';
   import { headwordDefaults, resolveOptions } from './cardBlockOptions';
   import { useCardContext } from './useCardContext';
+  import { pitchColourClasses } from '~/utils/pitchAccent';
 
   const props = defineProps<{ block: CardLayoutBlock; side: 'front' | 'back' }>();
   const opts = computed(() => resolveOptions<HeadwordBlockOptions>(headwordDefaults, props.block.options));
@@ -26,6 +27,7 @@
   } = useCardContext();
 
   const convertToRuby = useConvertToRuby();
+  const jitenStore = useJitenStore();
 
   const sizeClass = computed(() => {
     switch (opts.value.size) {
@@ -88,6 +90,14 @@
   });
   onUnmounted(() => audioObserver?.disconnect());
 
+  // Back only: before the flip the colour would give away the pitch.
+  const backPitchClass = computed(() => {
+    if (!jitenStore.pitchAccentColours || writeInOutcome.value) return '';
+    const reading = isPreview ? sample!.wordRuby : wordData.value?.mainReading?.text || card.value?.wordText || '';
+    const accents = isPreview ? [sample!.pitchAccent] : wordData.value?.pitchAccents || card.value?.pitchAccents;
+    return pitchColourClasses(reading, accents);
+  });
+
   const frontPlain = computed(() => (isPreview ? sample!.wordPlain : (card.value?.wordTextPlain ?? '')));
   const frontRubyHtml = computed(() => convertToRuby(isPreview ? sample!.wordRuby : card.value?.wordText || card.value?.wordTextPlain || '', true));
   const backRubyHtml = computed(() =>
@@ -107,7 +117,7 @@
       <div
         v-else
         class="text-center font-noto-sans head-word"
-        :class="[sizeClass, { 'writein-correct': writeInOutcome === 'correct', 'writein-wrong': writeInOutcome === 'wrong' }]"
+        :class="[sizeClass, backPitchClass, { 'writein-correct': writeInOutcome === 'correct', 'writein-wrong': writeInOutcome === 'wrong' }]"
         lang="ja"
         v-html="backRubyHtml"
       />
@@ -164,9 +174,14 @@
 
 <style scoped>
   .head-word :deep(rt) {
-    font-size: 0.35em !important;
+    font-size: calc(0.35em * var(--jiten-furigana-scale, 1)) !important;
     font-weight: 700;
     color: light-dark(var(--p-surface-700), var(--p-surface-400));
+  }
+
+  .head-word.pitch-coloured :deep(rt),
+  .head-word.pitch-kana {
+    color: var(--pitch-colour);
   }
 
   /* Write-in reveal: tint the furigana reading to echo whether the typed reading matched. */

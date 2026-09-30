@@ -41,7 +41,6 @@ public partial class MorphologicalAnalyser
             var currentPOS = currentWord.PartOfSpeech;
             var currentDictFormHiragana = KanaNormalizer.Normalize(KanaConverter.ToHiragana(currentDictForm));
 
-            // Iteratively try to merge subsequent tokens
             while (i + 1 < wordInfos.Count)
             {
                 var nextWord = wordInfos[i + 1];
@@ -49,26 +48,23 @@ public partial class MorphologicalAnalyser
                 if (ShouldStopMerging(currentWord, nextWord, wordInfos, i, currentPOS))
                     break;
 
-                // Check if valid inflection part
                 bool isValidPart = PosMapper.IsInflectionPart(nextWord.PartOfSpeech) ||
                                    nextWord.HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem) ||
                                    nextWord.HasPartOfSpeechSection(PartOfSpeechSection.ConjunctionParticle) ||
                                    nextWord.HasPartOfSpeechSection(PartOfSpeechSection.Dependant) ||
                                    nextWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant);
 
-                // Sudachi tags やれ as interjection, but after て-form it's the imperative of auxiliary やる
+                // Sudachi tags やれ as an interjection; after a て-form it is auxiliary やる's imperative.
                 if (!isValidPart && nextWord is { Text: "やれ", PartOfSpeech: PartOfSpeech.Interjection } &&
                     currentWord.Text.EndsWith('て'))
                     isValidPart = true;
 
-                // Sudachi sometimes tags colloquial ねえ (= ない negative) as noun (姉)
-                // After te/de-form, ねえ is the negative auxiliary, not the word for sister
+                // Sudachi tags colloquial ねえ (ない) as the noun 姉; after a て/で-form it is the negative.
                 if (!isValidPart && nextWord is { Text: "ねえ", PartOfSpeech: PartOfSpeech.Noun } &&
                     (currentWord.Text.EndsWith('て') || currentWord.Text.EndsWith('で')))
                     isValidPart = true;
 
-                // Greedy steal: handle そうだ/そうか by taking just そう if it forms valid inflection
-                // e.g., 新しそうだ → 新しそう + だ, 話そうか → 話そう + か
+                // Steals そう from そうだ/そうか when it forms a valid inflection (新しそうだ → 新しそう + だ).
                 if (!isValidPart && nextWord.Text is "そうだ" or "そうか")
                 {
                     string stealCandidate = currentWord.Text + "そう";
@@ -94,7 +90,6 @@ public partial class MorphologicalAnalyser
                         currentWord.PartOfSpeech = currentPOS;
                         currentDictForm = currentWord.DictionaryForm;
 
-                        // Modify the original token to be just だ or か for subsequent processing
                         string remainder = nextWord.Text == "そうだ" ? "だ" : "か";
                         wordInfos[i + 1] = new WordInfo
                                            {
@@ -102,14 +97,12 @@ public partial class MorphologicalAnalyser
                                                PartOfSpeech = remainder == "だ" ? PartOfSpeech.Auxiliary : PartOfSpeech.Particle,
                                                Reading = remainder
                                            };
-                        // Don't increment i - let the remainder be processed as a new token in the main loop
+                        // i is not advanced: the remainder is processed as its own token by the outer loop.
                         break;
                     }
                 }
 
-                // Handle なさそう: negative-appearance suffix (e.g., 食べなさそう = seems like one can't eat)
-                // なさそう is tagged NaAdjective by Sudachi so doesn't pass isValidPart, but it attaches to
-                // the negative stem (mizenkei) which is the same as the masu-stem for ichidan verbs
+                // Sudachi tags なさそう as NaAdjective, failing isValidPart, yet it attaches to the negative stem (食べなさそう).
                 if (!isValidPart && nextWord is { DictionaryForm: "なさそう" })
                 {
                     string stealCandidate = currentWord.Text + nextWord.Text;
@@ -140,8 +133,7 @@ public partial class MorphologicalAnalyser
                     }
                 }
 
-                // Kansai-ben negative せん (= しない): Sudachi tags this as a plain noun/prefix,
-                // but after a PossibleSuru base it's a valid inflection (e.g. 卑下せん → 卑下する neg.)
+                // Kansai negative せん (しない) is tagged noun/prefix by Sudachi; after a suru base it inflects (卑下せん).
                 if (!isValidPart && nextWord.Text == "せん" &&
                     currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru))
                     isValidPart = true;
@@ -160,10 +152,7 @@ public partial class MorphologicalAnalyser
                     (HasCompoundLookup == null || HasCompoundLookup(currentDictForm) ||
                      (currentNormForm != currentDictForm && HasCompoundLookup(currentNormForm)));
 
-                // A vs-only noun + す directly before べき/べし is the classical する+べき "should" expression
-                // (帰投すべき → 帰投 + すべき), NOT a verb: merging it yields a bogus short-causative reading
-                // (帰投す "make return"). Keep す standalone so it merges rightward into すべき. Real godan -す
-                // verbs (愛す, 訳す) keep merging here, since [stem]す is itself a dictionary verb.
+                // Noun + す before べき is する+べき (帰投 + すべき), not a short causative; godan -す verbs (愛す) still merge.
                 if (scenarioAMatch && currentPOS == PartOfSpeech.Noun && nextWord.Text == "す"
                     && i + 2 < wordInfos.Count
                     && (wordInfos[i + 2].Text == "べき" || wordInfos[i + 2].DictionaryForm == "べし")
@@ -319,7 +308,7 @@ public partial class MorphologicalAnalyser
     private static bool ShouldStopMerging(WordInfo currentWord, WordInfo nextWord,
         List<WordInfo> wordInfos, int i, PartOfSpeech currentPOS)
     {
-        // Allow negative stem な when followed by すぎる (e.g., わからなすぎる)
+        // Negative stem な may merge before すぎる (わからなすぎる).
         bool isNegativeStemBeforeDependant = false;
         if (nextWord is { Text: "な", PartOfSpeech: PartOfSpeech.Auxiliary, DictionaryForm: "ない" } &&
             i + 2 < wordInfos.Count)
@@ -336,11 +325,11 @@ public partial class MorphologicalAnalyser
         if (nextWord.Text == "な" && !isNegativeStemBeforeDependant)
             return true;
 
-        // Standalone よう is always noun 様, not a volitional suffix (those are single tokens)
+        // Standalone よう is always 様; volitional よう arrives inside the verb token.
         if (nextWord is { Text: "よう", DictionaryForm: "よう" })
             return true;
 
-        // いけ after ちゃ/じゃ/きゃ/にゃ is obligation/prohibition, not compound
+        // いけ after ちゃ/じゃ/きゃ/にゃ is obligation/prohibition, not a compound.
         if (nextWord.DictionaryForm == "いける" &&
             (currentWord.Text.EndsWith("ちゃ", StringComparison.Ordinal) || currentWord.Text.EndsWith("じゃ", StringComparison.Ordinal) ||
              currentWord.Text.EndsWith("きゃ", StringComparison.Ordinal) || currentWord.Text.EndsWith("にゃ", StringComparison.Ordinal)))
@@ -349,48 +338,36 @@ public partial class MorphologicalAnalyser
         if (nextWord is { Text: "ん", DictionaryForm: "の" or "ん" })
             return true;
 
-        // って before ん/んだ/んです is quotative, not te-form
+        // って before ん/んだ/んです is quotative, not te-form.
         if (nextWord.Text == "って" && i + 2 < wordInfos.Count &&
             wordInfos[i + 2].Text is "ん" or "んだ" or "んです")
             return true;
 
-        // って re-cut as quotative (DictionaryForm って, vs て for a real te-particle) stays split
-        // when followed by a quote-taking verb (かな+って+思ったら). Otherwise allow the re-merge —
-        // an auxiliary continuation (つか+って+ください, かな+って+いる) proves the re-cut wrong.
-        // Both kanji and kana dictionary forms are listed: Sudachi tags 言う as the kana いう just as
-        // often (寄ってくる+って+いう → keep くる|って split, never くる+って glued into a blob).
+        // Quotative って stays split before a kanji or kana quote verb (かな+って+思ったら); つか+って+ください re-merges.
         if (nextWord is { Text: "って", DictionaryForm: "って" } && i + 2 < wordInfos.Count &&
             wordInfos[i + 2].DictionaryForm is "思う" or "おもう" or "言う" or "いう"
                 or "聞く" or "きく" or "考える" or "感じる")
             return true;
 
-        // Re-cut って before a noun (なくなった+って+話), punctuation, or sentence end is the
-        // quotative/たって particle — a te-form continuation needs a verb/auxiliary after it.
-        // Re-merging makes an unresolvable blob (なくなったって has no deconjugation path) that
-        // would be dropped from output entirely.
+        // って before a noun, punctuation or end (なくなった+って+話) is quotative; re-merging leaves an unresolvable blob.
         if (nextWord is { Text: "って", DictionaryForm: "って" } &&
             (i + 2 >= wordInfos.Count ||
              wordInfos[i + 2].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
                  or PartOfSpeech.SupplementarySymbol))
             return true;
 
-        // Re-cut って before a sentence-ending particle (待つ+って+さ, 行く+って+よ/ね/わ) is the
-        // quotative — a te-form continuation needs a verb/auxiliary after it, never a final particle.
-        // Without this the verb re-absorbs って into an unresolvable blob (待つって).
+        // って before a sentence-ending particle (待つ+って+さ) is quotative; re-merging leaves an unresolvable blob.
         if (nextWord is { Text: "って", DictionaryForm: "って" } && i + 2 < wordInfos.Count
             && wordInfos[i + 2] is { PartOfSpeech: PartOfSpeech.Particle }
             && wordInfos[i + 2].Text is "さ" or "よ" or "ね" or "わ" or "ぞ" or "ぜ")
             return true;
 
-        // Benefactive auxiliaries after a te-form stay separate tokens (堪能させて|いただきます,
-        // 繕って|貰いて). The て+貰う/いただく deconjugator rules exist for chain display on tokens
-        // merged by the Dependant path (して貰いたい) — they must not widen this stage's merges.
+        // Benefactives stay separate (させて|いただきます); the て+貰う deconj rules serve Dependant-path merges only.
         if ((currentWord.Text.EndsWith('て') || currentWord.Text.EndsWith('で'))
             && nextWord.DictionaryForm is "いただく" or "頂く" or "貰う")
             return true;
 
-        // Te-form auxiliaries attach to VERB te-forms only; after an adjective くて the next
-        // verb starts its own clause (頭が良くて + やりたい, never 良い + [do-for-someone]).
+        // A verb after an adjective くて starts a new clause (頭が良くて + やりたい).
         if (currentPOS == PartOfSpeech.IAdjective && currentWord.Text.EndsWith('て')
             && nextWord.PartOfSpeech == PartOfSpeech.Verb)
             return true;
@@ -411,11 +388,7 @@ public partial class MorphologicalAnalyser
     private static bool IsKanjiPrefix(string text) =>
         text.Length > 0 && JapaneseTextHelper.IsKanji(text[0]);
 
-    // The prefix combine runs long before noun compounding, so an honorific that is merely the
-    // outermost layer can consume the head of the compound underneath it (お|母|上 → お母, stranding
-    // 上). The head belongs to the longer attested compound; the prefix then stands alone, which is
-    // the correct reading (お + 母上). Only diverts when the three-token whole is NOT itself a word,
-    // so お+手+紙 → お手紙 is untouched.
+    // Prefix combine runs before noun compounding: お|母|上 must yield お + 母上, not お母; お+手+紙 → お手紙 is a word.
     private bool CompletesCompoundWithFollowing(List<WordInfo> wordInfos, int prefixIndex)
     {
         if (HasNonNameCompoundLookup == null || prefixIndex + 2 >= wordInfos.Count)
@@ -442,9 +415,7 @@ public partial class MorphologicalAnalyser
         {
             var currentWord = wordInfos[i];
 
-            // The emphatic prefix ど is tagged Adverb (truncated どう) by Sudachi; before an
-            // i-adjective it is the intensifier (ど偉い, どでかい) — the attested-compound guards
-            // below decide whether a real compound exists.
+            // Sudachi tags emphatic ど as Adverb (truncated どう); before an i-adjective it is a prefix (ど偉い).
             bool isEmphaticDo = currentWord.Text == "ど" && currentWord.PartOfSpeech == PartOfSpeech.Adverb
                 && i + 1 < wordInfos.Count && wordInfos[i + 1].PartOfSpeech == PartOfSpeech.IAdjective;
 
@@ -453,8 +424,7 @@ public partial class MorphologicalAnalyser
                 var nextWord = wordInfos[i + 1];
                 bool isKanjiPrefix = IsKanjiPrefix(currentWord.Text);
 
-                // Kanji prefixes (相, 再, 不, etc.) can combine with verbs/adjectives to form compound nouns
-                // Kana prefixes (お, ご) should only combine with nouns/NaAdjectives
+                // Kanji prefixes (相, 再, 不) may take verbs/adjectives; kana prefixes (お, ご) only nominals.
                 bool isContentWord = nextWord.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.NaAdjective
                     or PartOfSpeech.Adverb or PartOfSpeech.NominalAdjective or PartOfSpeech.CommonNoun
                     || ((isKanjiPrefix || isEmphaticDo) && nextWord.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective);
@@ -481,9 +451,7 @@ public partial class MorphologicalAnalyser
                         continue;
                     }
 
-                    // Classical/inflected i-adjective: the conjugated surface isn't a dictionary
-                    // entry but the modern dictionary form of the compound is (故 + 無き → 故無い
-                    // 2112310). Keep IAdjective so the deconjugator reaches the 連体形 → adj-i.
+                    // Classical i-adjective: 故 + 無き → 故無い (2112310); IAdjective kept so deconjugation reaches adj-i.
                     if (nextWord.PartOfSpeech == PartOfSpeech.IAdjective
                         && !string.IsNullOrEmpty(nextWord.NormalizedForm)
                         && nextWord.NormalizedForm != nextWord.Text)
@@ -505,8 +473,7 @@ public partial class MorphologicalAnalyser
                         }
                     }
 
-                    // Reading-based compound: Sudachi's reading may differ from the surface for
-                    // colloquial/contracted forms (e.g., 古 + くせー reading=クサイ → 古くさい).
+                    // Colloquial surfaces carry the standard form in Reading (古 + くせー reading クサイ → 古くさい).
                     if (!string.IsNullOrEmpty(nextWord.Reading))
                     {
                         var readingHira = KanaConverter.ToHiragana(nextWord.Reading);
@@ -530,12 +497,7 @@ public partial class MorphologicalAnalyser
                         }
                     }
 
-                    // Try partial combination: prefix + beginning of next token
-                    // Only when the next token itself is NOT a valid word (Sudachi drew wrong boundaries)
-                    // e.g. 相+当腹 → 相当+腹 (当腹 is not a valid word, so Sudachi mis-segmented)
-                    // The remainder must be a word too: a re-cut that strands a multi-char unattested
-                    // blob is not a boundary repair (おバ[小母] + junk). A single stray kana is fine —
-                    // the stutter filter cleans it (お+にぃ → おに + ぃ).
+                    // Re-cuts an unattested next token (相+当腹 → 相当+腹); remainder is a word or one stray kana (おに + ぃ).
                     if (nextWord.Text.Length >= 2 &&
                         !PrefixCombineExclusions.Contains(combinedText) &&
                         !HasCompoundLookup(nextWord.Text))
@@ -621,10 +583,7 @@ public partial class MorphologicalAnalyser
         MergeAdjacentWhere(wordInfos, static (currentWord, nextWord) =>
             currentWord.Text.EndsWith('っ') && nextWord.Text.StartsWith('て'));
 
-    // Quotative って + the kana verb いう fuse into the single relativiser っていう (= という,
-    // JMDict 2757880), matching how ってのは/たって already surface as one cluster. Restricted to the
-    // kana dictionary form いう: the kanji 言う is the lexical verb "to say" (だって|言う|人) and stays
-    // split. A conjugated いう (いって/いった) is a real verb form and is likewise left alone.
+    // って + kana いう → っていう (2757880); kanji 言う is "to say" (だって|言う|人) and stays split.
     private List<WordInfo> CombineQuotativeToIu(List<WordInfo> wordInfos)
     {
         if (wordInfos.Count < 2)
@@ -655,13 +614,7 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
-            // A quotative って Sudachi glues onto a volitional predicate (しようって, 来ようって) instead of
-            // splitting also fails to form っていう before kana いう. Split って back off and cluster.
-            // Gated so the stem before って ends in a う-row kana (the volitional う) and is at least
-            // 2 chars — the length guard skips the bare うって Sudachi strands off some volitionals
-            // (やろ|うって), which this can't reattach. A te-form って leaves a bare stem ending in a
-            // kanji or あ/い-row char (黙って, 言って, 買って), never う-row, so a te-form is never
-            // mis-split; the copula だって (stem だ) is excluded for the same reason.
+            // Splits って off a volitional (しようって) for っていう; te-form stems (黙って) never end in う-row; bare うって skipped.
             if (i + 1 < wordInfos.Count
                 && word.Text.Length > 3
                 && word.Text.EndsWith("って", StringComparison.Ordinal)
@@ -696,8 +649,7 @@ public partial class MorphologicalAnalyser
         return newList ?? wordInfos;
     }
 
-    // A stem that a quotative って attaches to ends in a う-row kana (terminal verb / volitional).
-    // A te-form って leaves a bare stem ending elsewhere, so this never matches one.
+    // Quotative って follows a う-row kana; a te-form stem never ends in one.
     private static bool IsQuotativeTteStem(string s) =>
         s.Length > 0 && s[^1] is 'う' or 'く' or 'ぐ' or 'す' or 'つ' or 'ぬ' or 'ぶ' or 'む' or 'る';
 
@@ -753,8 +705,7 @@ public partial class MorphologicalAnalyser
         return newList ?? wordInfos;
     }
 
-    // The quote-taking verbs that mark a preceding って as quotative — the same set the
-    // ShouldStopMerging re-cut uses (kanji and kana lemmas both: Sudachi tags 言う as いう freely).
+    // Keep in sync with ShouldStopMerging's list; kana lemmas included since Sudachi tags 言う as いう freely.
     private static bool IsQuoteTakingVerb(WordInfo w) =>
         w.DictionaryForm is "思う" or "おもう" or "言う" or "いう" or "聞く" or "きく" or "考える" or "感じる";
 
@@ -776,7 +727,7 @@ public partial class MorphologicalAnalyser
 
             if (currentWord.PartOfSpeech != PartOfSpeech.Auxiliary)
             {
-                // Copula である: merge copula で (reclassified to Particle but dictForm stays だ) with following ある form
+                // Copula で keeps DictionaryForm だ after reclassification to Particle; で + ある → である.
                 if (previousWord is { Text: "で", DictionaryForm: "だ" } &&
                     currentWord.DictionaryForm is "ある" or "有る")
                 {
@@ -802,8 +753,7 @@ public partial class MorphologicalAnalyser
                     previousWord.PartOfSpeech != PartOfSpeech.Verb ||
                     previousWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
                     VerbDictFormExistsInLookup(previousWord.DictionaryForm, previousWord.NormalizedForm, Deconj))
-                // A pinned auxiliary is a repair stage's explicit decision that this token is its own
-                // vocabulary item (した+んだ) — absorbing it would erase that word from the output.
+                // A pinned auxiliary (した+んだ) is a repair stage's decision; absorbing it erases the word.
                 && currentWord.PreMatchedWordId == null
                 && currentWord.Text != "な"
                 && currentWord.Text != "に"
@@ -826,10 +776,7 @@ public partial class MorphologicalAnalyser
                 && currentWord.Text != "やしない"
                 && currentWord.Text != "し"
                 && !(currentWord.Text == "って" && previousWord.IsImperative)
-                // A って-final copula before a quote-taking verb carries the quotative, not an
-                // inflection: 大袈裟|だって|言いたい is 大袈裟だ + って + 言いたい, never the
-                // 大袈裟だった-style fold. Only the copula だ — a volitional ようって must fold
-                // (来ようって|いう) and gets re-cut by CombineQuotativeToIu afterwards.
+                // Copula だって before a quote verb is quotative (大袈裟|だって|言いたい); ようって folds for CombineQuotativeToIu.
                 && !(currentWord.DictionaryForm == "だ"
                      && currentWord.Text.EndsWith("って", StringComparison.Ordinal)
                      && i + 1 < wordInfos.Count && IsQuoteTakingVerb(wordInfos[i + 1]))
@@ -876,9 +823,7 @@ public partial class MorphologicalAnalyser
         return newList ?? wordInfos;
     }
 
-    // Completion auxiliaries that Sudachi tokenises as a bare verb after a 連用形 stem when the
-    // compound is absent from its own lexicon (逃げ|切った). Merged only when JMDict attests the
-    // compound (逃げ切る), so an ordinary main-verb use (紙を切った) is never touched.
+    // Merged only when JMDict attests the compound (逃げ|切った → 逃げ切る), so 紙を切った is untouched.
     private static readonly HashSet<string> CompletionAuxVerbs = ["切る"];
 
     private List<WordInfo> CombineCompletionAuxVerb(List<WordInfo> wordInfos)
@@ -932,8 +877,7 @@ public partial class MorphologicalAnalyser
         {
             var nextWord = wordInfos[i];
 
-            // Combine AuxiliaryVerbStem (そう, etc.) with preceding verb/adjective
-            // Also handle adjectival suffixes like やすい, にくい, づらい (their stem forms: やす, にく, づら)
+            // Adjectival suffixes (やすい, にくい) arrive as their stems (やす, にく) and also host そう.
             var isAdjectivalSuffix = wordInfos[i - 1].PartOfSpeech == PartOfSpeech.Suffix &&
                                      wordInfos[i - 1].DictionaryForm.EndsWith('い');
             if (wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.AuxiliaryVerbStem) &&
@@ -983,8 +927,7 @@ public partial class MorphologicalAnalyser
             if ((wordInfos[i].PartOfSpeech == PartOfSpeech.Suffix || wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.Suffix))
                 && (wordInfos[i].DictionaryForm == "っこ"
                     || wordInfos[i].DictionaryForm == "さ"
-                    // がる only attaches to adjective stems (怖がる) — never to a pronoun host
-                    // (何|がって is case-particle が + quotative って, not 何がる)
+                    // 何|がって is が + って, not 何がる.
                     || (wordInfos[i].DictionaryForm == "がる" && currentWord.PartOfSpeech != PartOfSpeech.Pronoun)
                     || (wordInfos[i].DictionaryForm is "ぶり" or "振り" &&
                         currentWord.PartOfSpeech == PartOfSpeech.IAdjective &&
@@ -1011,8 +954,7 @@ public partial class MorphologicalAnalyser
                 currentWord.EndOffset = nextWord.EndOffset;
                 currentWord.Reading += nextWord.Reading;
             }
-            // Handle がったり misparsed as adverb after adjective stem (e.g., 怖がったり, 悲しがったり)
-            // Sudachi sometimes parses these as: adj-stem + がったり (adverb) instead of correctly splitting
+            // Sudachi misparses がったり after an adjective stem as an adverb (怖|がったり).
             else if (nextWord is { PartOfSpeech: PartOfSpeech.Adverb, Text: "がったり" }
                      && currentWord.PartOfSpeech == PartOfSpeech.IAdjective
                      && !currentWord.Text.EndsWith('い')
@@ -1037,8 +979,7 @@ public partial class MorphologicalAnalyser
         return newList;
     }
 
-    // Every kanji of the surface survives into the candidate base — the base is a spelling of
-    // this surface, not merely a lemma the deconjugator can reach from it.
+    // The base must be a spelling of the surface, not merely a lemma the deconjugator reaches.
     private static bool KanjiPreserved(string surface, string baseForm)
     {
         foreach (var c in surface)
@@ -1055,20 +996,11 @@ public partial class MorphologicalAnalyser
             if (wordInfos[i].PartOfSpeech != PartOfSpeech.Suffix)
                 continue;
 
-            // じまい (仕舞い) is a genuine suffix that attaches to verb ず-forms (e.g., わからずじまい)
-            // Honorific suffixes (さん/くん/ちゃん/様/殿/氏) are always person-title suffixes, never reclassified
+            // じまい follows ず-forms (わからずじまい) and honorifics follow names; both are genuine suffixes.
             if (wordInfos[i].DictionaryForm is "じまい" or "仕舞い" or "ちゃん" or "さん" or "くん" or "様" or "殿" or "氏")
                 continue;
 
-            // A suffix is a lexical item in its own right, so its surface is attested (たち, ども,
-            // 的, 長, っぱなし). A Suffix-tagged surface that is NOT attested but deconjugates to an
-            // attested verb is a conjugated verb Sudachi bound to the preceding noun
-            // (レッテル|貼り, フライヤー|貼り) — its own spelling has no suffix entry, and the fold to
-            // one (貼り → 張り's ばり) is a different word. Route it to the verb path.
-            // Scoped to kanji-bearing surfaces whose base keeps those kanji (貼り → 貼る): that is
-            // what makes the token a spelling of the verb rather than a lemma the deconjugator
-            // merely reaches. Kana suffixes are excluded by construction — a conjugating suffix
-            // (ぶっ+た → ぶった) deconjugates to unrelated verbs (打つ) and must stay a suffix.
+            // An unattested kanji "suffix" spelling a verb (レッテル|貼り → 貼る) is a verb; kana ones stay (ぶっ+た ≠ 打つ).
             if (HasNonNameCompoundLookup != null && !HasNonNameCompoundLookup(wordInfos[i].Text)
                 && wordInfos[i].Text.Any(JapaneseTextHelper.IsKanji))
             {
@@ -1084,8 +1016,7 @@ public partial class MorphologicalAnalyser
                     wordInfos[i].DictionaryForm = form.Text;
                     wordInfos[i].NormalizedForm = form.Text;
                     wordInfos[i].Reading = string.Empty;
-                    // Same contract as the noun exit: a Sudachi-bound suffix must not anchor
-                    // compound/expression windows after reclassification.
+                    // A reclassified suffix must not anchor compound/expression windows.
                     wordInfos[i].WasReclassifiedFromSuffix = true;
                     break;
                 }
@@ -1094,10 +1025,7 @@ public partial class MorphologicalAnalyser
                     continue;
             }
 
-            // Sudachi shreds an OOV katakana adjective into 名詞 + 接尾辞 (チッチャ|い) and then tags
-            // the following content word 接尾辞 too — a "suffix chain" anchored on an adjective
-            // tail, not a nominal host. A bare predicate ending cannot host a suffix, so it does
-            // not count as one here (車 after チッチャい must reclassify to reach its noun entry).
+            // A predicate-tail suffix (チッチャ|い) can't host a suffix; 車 after it must reclassify to reach its noun.
             var prevInfo = wordInfos[i - 1];
             bool prevIsPredicateTailSuffix = prevInfo.PartOfSpeech == PartOfSpeech.Suffix
                                              && prevInfo.Text is "い" or "く" or "かっ";
@@ -1106,10 +1034,7 @@ public partial class MorphologicalAnalyser
                 || (prev == PartOfSpeech.Suffix && !prevIsPredicateTailSuffix))
                 continue;
 
-            // Adjectival suffixes (形容詞的) like くさい, らしい, っぽい should keep their POS
-            // so the parser's Adjectival section check routes them through the verb/adj branch.
-            // NaAdjectiveLike (形状詞的) like 気 can start compound expressions (e.g. 気を引き締める)
-            // so don't mark them as reclassified — that would block the compound detection window.
+            // 形容詞的 (っぽい) need their POS for the adj branch; 形状詞的 (気) may start expressions (気を引き締める).
             if (wordInfos[i].PartOfSpeechSection1 is PartOfSpeechSection.Adjectival or PartOfSpeechSection.NaAdjectiveLike)
                 continue;
 
@@ -1133,9 +1058,7 @@ public partial class MorphologicalAnalyser
         {
             WordInfo currentWord = wordInfos[i];
 
-            // Combine かもしれ* (kamoshirenai, kamoshiremasen, etc.) into single expression.
-            // The ん-contracted しんない/しんねえ is the same expression — the deconjugator's
-            // しんない ending-rule recovers かもしれない from the fused tail.
+            // か+も+しれ* is one expression; the deconjugator recovers かもしれない from contracted しんない.
             if (i + 2 < wordInfos.Count &&
                 currentWord.Text == "か" &&
                 wordInfos[i + 1].Text == "も" &&
@@ -1153,9 +1076,7 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
-            // Same expression when か+も has already been fused into かも upstream (the polite
-            // かもしれません and the plain かもしれない both reach here as [かも][しれ*] once the
-            // ん-repair has glued the しれ* tail): join the remaining しれ* token.
+            // かも already fused upstream (after the ん-repair) arrives as [かも][しれ*].
             if (i + 1 < wordInfos.Count &&
                 currentWord.Text == "かも" &&
                 (wordInfos[i + 1].Text.StartsWith("しれ", StringComparison.Ordinal) ||
@@ -1173,10 +1094,7 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
-            // A fused じゃない / ではない token directly followed by か → じゃないか expression. Sudachi usually
-            // splits では|ない|か (joined below), but when ない is already glued into a single じゃない token
-            // the か is left stranded; rejoin it so じゃないか stays one unit. Only the copula-negative
-            // expression merges — a verb's negative (しない か, 飲む か) keeps the question particle separate.
+            // A fused じゃない expression + か → じゃないか; a verb negative (しない か) keeps か separate.
             if (i + 1 < wordInfos.Count &&
                 currentWord.PartOfSpeech == PartOfSpeech.Expression &&
                 currentWord.DictionaryForm is "じゃない" or "ではない" &&
@@ -1210,7 +1128,6 @@ public partial class MorphologicalAnalyser
                     combinedWord.EndOffset = nextWord.EndOffset;
                     combinedWord.Reading = currentWord.Reading + nextWord.Reading;
 
-                    // では + conjugated form of ない (+ optional か) → ではない(か) expression
                     if (combinedText == "では" && i + 2 < wordInfos.Count)
                     {
                         var lookAhead = wordInfos[i + 2];
@@ -1320,8 +1237,7 @@ public partial class MorphologicalAnalyser
 
             if (SpecialCases2Dict.TryGetValue(currentWord.Text, out var sc2List))
             {
-                // ところ+で → ところで (1343110: sentence-initial "by the way", or 〜たところで "even if").
-                // Mid-sentence after a non-past stem it is the locative ところ + で (静かなところで, 今のところで).
+                // ところで (1343110) only sentence-initially or after た/だ; 静かなところで is locative ところ + で.
                 bool tokoroDeBlocked = currentWord.Text == "ところ" && i > 0 &&
                     !(wordInfos[i - 1].Text.EndsWith("た", StringComparison.Ordinal) ||
                       wordInfos[i - 1].Text.EndsWith("だ", StringComparison.Ordinal));
@@ -1384,10 +1300,7 @@ public partial class MorphologicalAnalyser
         return newList ?? wordInfos;
     }
 
-    /// <summary>
-    /// Re-merges と (particle) + conjugated なる that Sudachi splits when punctuation follows.
-    /// E.g. トラウマとなり、 → Sudachi: と + なり + 、; should be: となり + 、
-    /// </summary>
+    /// <summary>Re-merges と + なる that Sudachi splits before punctuation (トラウマとなり、).</summary>
     private List<WordInfo> CombineToNaru(List<WordInfo> wordInfos)
     {
         if (wordInfos.Count < 2)
