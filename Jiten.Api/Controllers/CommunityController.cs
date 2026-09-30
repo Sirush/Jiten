@@ -34,12 +34,9 @@ public class CommunityController(
         if (!options.IsConfigured)
             return StatusCode(StatusCodes.Status503ServiceUnavailable, new { message = "Jiten Community isn't available right now." });
 
-        var request = DiscourseConnect.ReadRequest(body.Sso, body.Sig, options);
+        var request = DiscourseConnect.ReadRequest(body.Sso, body.Sig, options, logger);
         if (request == null)
-        {
-            logger.LogWarning("Rejected DiscourseConnect payload with an invalid signature or return URL");
             return BadRequest(new { message = "This login link is invalid or has expired. Go back to Jiten Community and try again." });
-        }
 
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier);
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
