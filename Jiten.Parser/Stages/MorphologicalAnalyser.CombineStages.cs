@@ -338,6 +338,10 @@ public partial class MorphologicalAnalyser
         if (nextWord is { Text: "ん", DictionaryForm: "の" or "ん" })
             return true;
 
+        // An imperative has no te-form, so a following って is quotative (来い|って).
+        if (nextWord is { Text: "って", DictionaryForm: "って" } && currentWord.IsImperative)
+            return true;
+
         // って before ん/んだ/んです is quotative, not te-form.
         if (nextWord.Text == "って" && i + 2 < wordInfos.Count &&
             wordInfos[i + 2].Text is "ん" or "んだ" or "んです")
