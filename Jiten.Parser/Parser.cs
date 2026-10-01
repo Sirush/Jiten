@@ -2564,6 +2564,13 @@ namespace Jiten.Parser
             return (bestPair, margin);
         }
 
+        private static bool IsGodanClassTag(string tag) => tag.StartsWith("v5", StringComparison.Ordinal) || tag.StartsWith("v4", StringComparison.Ordinal);
+
+        private static bool IsIchidanOnlyVerb(List<string> partsOfSpeech) =>
+            partsOfSpeech.Any(p => p is "v1" or "v1-s")
+            && !partsOfSpeech.Any(p => IsGodanClassTag(p) || p.StartsWith("v2", StringComparison.Ordinal)
+                                       || p.StartsWith("vs", StringComparison.Ordinal) || p is "vk" or "vz");
+
         private static async Task TryFallbackLookup(
             string formText,
             WordInfo wordInfo,
@@ -2588,18 +2595,21 @@ namespace Jiten.Parser
                                  (extraProcessPrefix != null && d.Text.StartsWith(extraProcessPrefix, StringComparison.Ordinal))))
                     .MinBy(d => d.Text.Length)?.Process
                     ?.Where(p => !string.IsNullOrEmpty(p)).ToList() ?? [];
+                // Imperatives are left out: godan 食べれ/起きれ is also ichidan ら抜き, and the deconjugator only reads the godan side.
                 var verbClassTags = deconjugated
-                    .Where(d => d.Process.Length > 0 && d.Text == formHiragana)
+                    .Where(d => d.Process.Length > 0 && d.Text == formHiragana && !d.Process.Contains("imperative"))
                     .Select(d => PosMapper.GetValidatableDeconjTags(d.Tags).LastOrDefault())
                     .Where(t => t != null && t[0] == 'v')
                     .Select(t => t!)
                     .ToList();
+                // Truncated godan forms read as ichidan (揺 of 揺られる, 帰ろ) and stretched vowels as volitional (やめろー), so neither is godan evidence.
+                bool godanEvidence = verbClassTags.Count > 0
+                                     && verbClassTags.All(IsGodanClassTag)
+                                     && !wordInfo.Text.Contains('ー');
                 foreach (var word in wordCache.Values)
                 {
-                    // A verb entry must fit the surface's conjugation class: godan 癒り is 治る, not ichidan 癒る (いる).
-                    if (verbClassTags.Count > 0
-                        && word.CachedPOS.Contains(PartOfSpeech.Verb)
-                        && !verbClassTags.Any(t => PosMapper.IsDeconjTagCompatibleWithJmDict(t, word.PartsOfSpeech)))
+                    // Godan evidence rules out an ichidan-only entry: 癒り is 治る, not ichidan 癒る (いる).
+                    if (godanEvidence && IsIchidanOnlyVerb(word.PartsOfSpeech))
                         continue;
 
                     if (word.CachedPOS.Contains(wordInfo.PartOfSpeech))

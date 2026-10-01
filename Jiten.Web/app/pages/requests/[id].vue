@@ -815,7 +815,7 @@
             </div>
 
             <div v-if="isWaitingForDeck" class="flex items-center gap-2 text-sm text-muted-color">
-              <ProgressSpinner style="width: 18px; height: 18px" stroke-width="6" />
+              <ProgressSpinner style="width: 18px; height: 18px; margin: 0" stroke-width="6" class="shrink-0" aria-hidden="true" />
               <span>Parsing the deck. This page updates itself when it is ready.</span>
             </div>
 

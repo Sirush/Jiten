@@ -594,6 +594,7 @@ export interface ExampleSentence {
   /** Where the other unknown words sit in text; set only by the Jiten+ readable-sentence search. */
   unknownSpans?: { position: number; length: number; wordId: number; readingIndex: number }[] | null;
   furigana?: SentenceFurigana[] | null;
+  words?: SentenceWord[] | null;
 }
 
 export type ReadableSentenceSort = 'Random' | 'EasiestFirst' | 'HardestFirst';
@@ -618,6 +619,13 @@ export interface SentenceFurigana {
   known: boolean;
   /** The signed-in user's states for the word; null when signed out. */
   states?: KnownState[] | null;
+}
+
+export interface SentenceWord {
+  position: number;
+  length: number;
+  wordId: number;
+  states: KnownState[];
 }
 
 export type SentenceFuriganaMode = 'off' | 'unknown' | 'all' | 'exceptTarget';
@@ -1457,6 +1465,7 @@ export interface StudyExampleSentenceDto {
   customText?: string;
   isIPlusOne?: boolean;
   furigana?: SentenceFurigana[] | null;
+  words?: SentenceWord[] | null;
 }
 
 export interface StudyExampleSourceDto {

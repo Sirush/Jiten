@@ -106,6 +106,14 @@ public partial class MorphologicalAnalyser
         return false;
     }
 
+    private bool HasAttestedDeconjugatedBase(string text)
+    {
+        foreach (var form in PipelineCachedDeconjugate(KanaConverter.ToHiragana(text)))
+            if (form.Text.Length >= 2 && form.Text != text && HasNonNameCompoundLookup!(form.Text))
+                return true;
+        return false;
+    }
+
     /// <summary>Splits OOV compound verbs (驚き戸惑う) into stem + verb so they aren't dropped; both parts must resolve.</summary>
     private List<WordInfo> SplitUnresolvableCompoundVerbs(List<WordInfo> wordInfos)
     {
@@ -138,24 +146,12 @@ public partial class MorphologicalAnalyser
                 continue;
             }
 
-            // OOV verbs carry their surface as DictionaryForm (手に取って); keep whole if the deconjugated base resolves.
-            if (dictForm == word.Text && !MorphologicalAnalyser.DictionaryVerbEndings.Contains(dictForm[^1]))
+            // Keep whole when the lemma deconjugates to an attested verb: OOV surface lemmas (手に取って), Sudachi passive lemmas (揺られる → 揺る).
+            if ((dictForm != word.Text || !MorphologicalAnalyser.DictionaryVerbEndings.Contains(dictForm[^1]))
+                && HasAttestedDeconjugatedBase(dictForm))
             {
-                bool baseAttested = false;
-                foreach (var form in PipelineCachedDeconjugate(KanaConverter.ToHiragana(word.Text)))
-                {
-                    if (form.Text.Length >= 2 && form.Text != word.Text && HasNonNameCompoundLookup(form.Text))
-                    {
-                        baseAttested = true;
-                        break;
-                    }
-                }
-
-                if (baseAttested)
-                {
-                    result?.Add(word);
-                    continue;
-                }
+                result?.Add(word);
+                continue;
             }
 
             (string prefixBase, int splitAt, bool stemIsVerb)? split = null;

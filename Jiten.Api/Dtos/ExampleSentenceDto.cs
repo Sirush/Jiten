@@ -28,6 +28,9 @@ public class ExampleSentenceDto
 
     /// <summary>Null for sentences parsed before token spans existed.</summary>
     public List<SentenceFuriganaDto>? Furigana { get; set; }
+
+    /// <summary>Every word with the caller's states, for colouring; null when signed out or parsed before token spans existed.</summary>
+    public List<SentenceWordDto>? Words { get; set; }
 }
 
 public class SentenceSpanDto
@@ -90,6 +93,15 @@ public class SentenceFuriganaDto
 
     /// <summary>The caller's states for the word; null when signed out.</summary>
     public List<KnownState>? States { get; set; }
+}
+
+/// <summary>One word over the sentence Text, covering its whole surface including okurigana.</summary>
+public class SentenceWordDto
+{
+    public int Position { get; set; }
+    public int Length { get; set; }
+    public int WordId { get; set; }
+    public List<KnownState> States { get; set; } = [];
 }
 
 public class ExampleSentencesByDifficultyResponse

@@ -2442,6 +2442,10 @@ public class MorphologicalAnalyserTests
         // VN ruby/emphasis markup (base#［N reading］) is stripped, never parsed as text
         yield return ["「癒#［１なお］すがよい。」", new[] { "癒す", "が", "よい" }];
         yield return ["「御厨#［２みくりや］は起きた」", new[] { "御厨", "は", "起きた" }];
+        // Sudachi's passive lemma 揺られる stays one verb, not stem 揺 + られる
+        yield return ["電車に揺られて、目的地の駅に着く。", new[] { "電車", "に", "揺られて", "目的地", "の", "駅", "に", "着く" }];
+        yield return ["そのまま揺られ続けた。", new[] { "そのまま", "揺られ", "続けた" }];
+        yield return ["「いいから来いって」", new[] { "いい", "から", "来い", "って" }];
     }
 
     [Theory]

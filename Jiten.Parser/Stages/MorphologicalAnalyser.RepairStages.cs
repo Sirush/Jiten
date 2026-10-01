@@ -3300,19 +3300,22 @@ public partial class MorphologicalAnalyser
         || (w.PartOfSpeech == PartOfSpeech.Auxiliary && w.Text is "ない" or "た" or "だ" or "です" or "ます" or "てる" or "でる");
 
     // One-step imperative/volitional only, so 信じろ+って matches and a genuine te-form (信じきって) never does.
-    private bool MergesToFinalForm(string text)
+    private bool MergesToFinalForm(string text) => OneStepFinalFormBase(text, includeVolitional: true) != null;
+
+    private string? OneStepFinalFormBase(string text, bool includeVolitional)
     {
-        if (HasCompoundLookup == null) return false;
+        if (HasCompoundLookup == null) return null;
         foreach (var f in Deconjugator.Instance.Deconjugate(text))
         {
             if (f.Process.Length != 1 || string.IsNullOrEmpty(f.Text)) continue;
             var p = f.Process[0];
-            if ((p.Contains("imperative", StringComparison.Ordinal) || p.Contains("volitional", StringComparison.Ordinal))
+            if ((p.Contains("imperative", StringComparison.Ordinal)
+                 || (includeVolitional && p.Contains("volitional", StringComparison.Ordinal)))
                 && HasCompoundLookup(f.Text))
-                return true;
+                return f.Text;
         }
 
-        return false;
+        return null;
     }
 
     private static bool HasOneStepVolitional(string text)
@@ -3676,13 +3679,18 @@ public partial class MorphologicalAnalyser
                     var verbText = "";
                     for (int k = result.Count - stemBack; k < result.Count; k++) verbText += result[k].Text;
                     verbText += thiefMora;
+                    // An imperative Sudachi agrees on keeps its verb lemma (来い → 来る, not the interjection); 待ち合わせ is no 待ち合わす imperative.
+                    var imperativeBase = OneStepFinalFormBase(verbText, includeVolitional: false);
+                    if (imperativeBase != null && KanaConverter.ToHiragana(imperativeBase) != KanaConverter.ToHiragana(stemHead.DictionaryForm))
+                        imperativeBase = null;
                     result.RemoveRange(result.Count - stemBack, stemBack);
                     result.Add(new WordInfo(stemHead)
                     {
                         Text = verbText,
-                        DictionaryForm = verbText,
-                        NormalizedForm = verbText,
+                        DictionaryForm = imperativeBase ?? verbText,
+                        NormalizedForm = imperativeBase ?? verbText,
                         PartOfSpeech = PartOfSpeech.Verb,
+                        IsImperative = imperativeBase != null,
                         EndOffset = moraThief.StartOffset >= 0 ? moraThief.StartOffset + 1 : -1
                     });
                     AddTte(moraThief, wordInfos[i + 1]);

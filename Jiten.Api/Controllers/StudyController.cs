@@ -4147,7 +4147,11 @@ public partial class StudyController(
         var furigana = await sentenceTokens.BuildFuriganaDtosAsync(
             corpusExamples.Select(e => (e.SentenceId, e.Text, (byte[]?)sentences.GetValueOrDefault(e.SentenceId)?.Tokens)));
         foreach (var example in corpusExamples)
-            example.Furigana = furigana.GetValueOrDefault(example.SentenceId);
+        {
+            var annotations = furigana.GetValueOrDefault(example.SentenceId);
+            example.Furigana = annotations?.Furigana;
+            example.Words = annotations?.Words;
+        }
 
         return Results.Ok(new CardExamplesResponse { Examples = result });
     }

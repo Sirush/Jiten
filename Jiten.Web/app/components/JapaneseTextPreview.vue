@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { KnownState, type SentenceFurigana } from '~/types';
+  import { KnownState, type SentenceFurigana, type SentenceWord } from '~/types';
   import { useJitenStore } from '~/stores/jitenStore';
   import { useAuthStore } from '~/stores/authStore';
   import { sentenceRubyHtml, targetWordId, visibleFurigana } from '~/utils/sentenceRuby';
@@ -10,6 +10,7 @@
   const auth = useAuthStore();
   const convertToRuby = useConvertToRuby();
   const stateColour = useWordStateColour();
+  const stateHex = useWordStateHex();
 
   const known = [KnownState.Mature];
   const unknown: KnownState[] = [];
@@ -24,6 +25,12 @@
     { position: 3, length: 2, reading: 'りんご', wordId: 2, known: false, states: unknown },
     { position: 6, length: 1, reading: 'た', wordId: 3, known: true, states: known },
   ];
+  const sentenceWords: SentenceWord[] = [
+    { position: 0, length: 2, wordId: 1, states: known },
+    { position: 3, length: 2, wordId: 2, states: unknown },
+    { position: 5, length: 1, wordId: 4, states: known },
+    { position: 6, length: 3, wordId: 3, states: known },
+  ];
 
   const target = { position: 3, length: 2 };
 
@@ -36,7 +43,8 @@
       sentenceRubyHtml(sentence, target.position, target.length, groups, {
         showReading: (g) => shown.has(g),
         revealOnHover: store.furiganaOnHover ? () => true : undefined,
-        colourOf: coloured ? (g) => stateColour(g.states)?.color ?? null : undefined,
+        words: sentenceWords,
+        colourOf: coloured ? (w) => stateHex(w.states) : undefined,
       })
     );
   });

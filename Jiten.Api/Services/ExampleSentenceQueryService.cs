@@ -365,7 +365,8 @@ public class ExampleSentenceQueryService(JitenDbContext context, ISentenceTokenS
                 SourceDeck = sourceDeck,
                 SourceDeckParent = parentDeck,
                 FromStudyDeck = p.FromStudyDeck,
-                Furigana = furigana.GetValueOrDefault(p.SentenceId)
+                Furigana = furigana.GetValueOrDefault(p.SentenceId)?.Furigana,
+                Words = furigana.GetValueOrDefault(p.SentenceId)?.Words
             };
         }).ToList();
     }

@@ -22,6 +22,8 @@
   const toast = useToast();
   const { limits: planLimits } = useJitenPlus();
 
+  const stateHex = useWordStateHex();
+
   const blurred = computed(() => opts.value.blur && !exampleRevealed.value && !(opts.value.unblurOnFlip && isFlipped.value));
 
   const sizeClass = computed(() => (opts.value.size === 'small' ? 'text-sm' : opts.value.size === 'large' ? 'text-lg' : 'text-base'));
@@ -48,11 +50,14 @@
     const { text, wordPosition, wordLength } = ex;
     const shown = new Set(visibleFurigana(ex.furigana, furiganaMode.value, readingHiddenWordId.value));
     const peek = jitenStore.furiganaOnHover;
-    if (ex.furigana?.length && (shown.size > 0 || peek)) {
+    const coloured = jitenStore.colourWordsByState && authStore.isAuthenticated && !!ex.words?.length;
+    if (coloured || (ex.furigana?.length && (shown.size > 0 || peek))) {
       return sanitiseHtml(
-        sentenceRubyHtml(text, wordPosition, wordLength, ex.furigana, {
+        sentenceRubyHtml(text, wordPosition, wordLength, ex.furigana ?? [], {
           showReading: (g) => shown.has(g),
           revealOnHover: peek ? (g) => g.wordId !== hiddenWordId.value : undefined,
+          words: ex.words ?? undefined,
+          colourOf: coloured ? (w) => (w.wordId === hiddenWordId.value ? null : stateHex(w.states)) : undefined,
         })
       );
     }

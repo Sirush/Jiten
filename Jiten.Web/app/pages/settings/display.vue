@@ -22,7 +22,7 @@
   } from '~/utils/displaySettingOptions';
   import { localiseTitleWithLanguage } from '~/utils/localiseTitle';
   import { DEFAULT_TTS_VOLUME, resolveTtsVolume } from '~/utils/ttsVolume';
-  import { DEFAULT_WORD_STATE_COLOURS, WORD_STATE_COLOUR_KEYS, WORD_STATE_COLOUR_LABELS, type WordStateColourKey } from '~/utils/wordState';
+  import { DEFAULT_WORD_STATE_COLOURS, WORD_STATE_COLOUR_KEYS, WORD_STATE_COLOUR_LABELS, wordColourStyle, type WordStateColourKey } from '~/utils/wordState';
   import { DEFAULT_READING_SPEEDS, MAX_READING_SPEED, MIN_READING_SPEED } from '~/utils/displayProfile';
   import { AVERAGE_BAND, difficultyNames } from '~/utils/difficultyColours';
   import { PITCH_CATEGORY_LABELS, type PitchCategory } from '~/utils/pitchAccent';
@@ -349,7 +349,7 @@
             @input="setColour(key, ($event.target as HTMLInputElement).value)"
           />
           <label :for="`colour-${key}`" class="flex min-w-0 flex-1 cursor-pointer items-baseline gap-2 text-sm">
-            <span class="text-lg" lang="ja" :style="colours[key] ? { color: colours[key]! } : undefined">言葉</span>
+            <span class="text-lg" lang="ja" :style="colours[key] ? wordColourStyle(colours[key]!) : undefined">言葉</span>
             <span class="truncate">{{ WORD_STATE_COLOUR_LABELS[key] }}</span>
           </label>
           <Button

@@ -299,9 +299,10 @@ public partial class MorphologicalAnalyser
             .Replace("もうすぐそこ", $"もうすぐ{_stopToken}そこ")
             ;
 
-        // Kana すみません collides with the verb 済む; すいませんでした is covered by a user_dic entry.
+        // Kana すみません collides with the verb 済む; before っ Sudachi's single でした fuses すいませんでした into 吸う.
         text = text
             .Replace("すみませんでした", $"すみません{_stopToken}でした")  // すみ|ませんでした
+            .Replace("すいませんでした", $"すいません{_stopToken}でした")
             .Replace("この世界", $"この{_stopToken}世界")                  // この世+界 → この|世界
             .Replace("だけって", $"だけ{_stopToken}って")                  // 広がっ+ただけ phantom けっ → だけ|って
             .Replace("ははーん", "ははん")                                // は+はーん(ハーン khan) → ははん(2096970)

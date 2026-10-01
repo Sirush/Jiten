@@ -2052,6 +2052,42 @@ public class FormSelectionTests
 
         // Godan 癒り (なおり) is 治る, never the ichidan archaic 癒る (いる)
         yield return ["こんどこそは、癒りきるまで、充分に療養せい。", "癒り", 1599400, (byte)0];
+
+        // Sudachi lemmatises these passives as their own verb; they stay whole and reach the godan base
+        yield return ["ふたりで電車に揺られ、隣町までやってくる。", "揺られ", 1584980, (byte)0];
+        yield return ["どれぐらい電車に揺られていただろうか。", "揺られていた", 1584980, (byte)0];
+        yield return ["まゆりは魅入られたように、ゆっくりと右手を空へと伸ばした。", "魅入られた", 1846980, (byte)0];
+        yield return ["以前からオレたちの間じゃ脱出計画が練られていたんだ。", "練られていた", 1559140, (byte)0];
+        yield return ["盗られたものを一々云え。", "盗られた", 1922860, (byte)0];
+
+        // な-adjectives whose entry is also a する-verb must not lose their entry to the verb-class check
+        yield return ["適任ではないとの判断に至るに十分な材料だ", "十分な", 1335080, (byte)0];
+        yield return ["一、二年だけでも相当な人数だからさ", "相当な", 1401240, (byte)0];
+        yield return ["「無理なこと言うなよっ！」", "無理な", 1530970, (byte)0];
+        yield return ["「暇な奴は手伝ってくれ」", "暇な", 1577280, (byte)0];
+        yield return ["服装も性別もてんでバラバラなチームが頭を下げ合う。", "バラバラな", 1010320, (byte)1];
+        yield return ["紅莉栖と、こんな密接な関係になることもなかった。", "密接な", 1528290, (byte)0];
+        yield return ["「…贅沢すぎるだろ」", "贅沢すぎる", 1573150, (byte)0];
+        yield return ["「確認すりゃいいってもんじゃねぇだろ…」", "確認す", 1205900, (byte)0];
+
+        // ら抜き and colloquial imperatives of ichidan verbs read as godan imperatives; that is no class evidence
+        yield return ["「お昼ご飯はお粥しか食べれなくなってもいいんならね」", "食べれなく", 1358280, (byte)0];
+        yield return ["「もう起きれ！」", "起きれ", 1223640, (byte)0];
+        // Yodan 候う inflects like godan, so godan evidence keeps it
+        yield return ["寒厨何の珍味も無之候えども、せめてはトチメンボーでもと只今より心掛居候。", "候え", 2870777, (byte)3];
+
+        // Colloquial volitional and stretched imperative keep their verb
+        yield return ["「今度みっちり教えてあげるからさ、頑張ろ」", "頑張ろ", 1217700, (byte)0];
+        yield return ["「朋也くん、帰ろ」", "帰ろ", 1221270, (byte)0];
+        yield return ["「わーわー！　やめろー！」", "やめろー", 1318950, (byte)3];
+        yield return ["「くわーっ、相変わらず混んでやがんな…」", "やがん", 1012740, (byte)0];
+
+        yield return ["「すいませんっ…勘弁してくださいっ…」", "すいません", 1985560, (byte)0];
+        yield return ["「おはようございますっ。昨日はすいませんでしたっ」", "すいません", 1985560, (byte)0];
+        // A renyokei noun before って is not the imperative of a godan す verb (待ち合わす)
+        yield return ["もしかして待ち合わせって女の子じゃあ", "待ち合わせ", 1410510, (byte)0];
+        // Imperative 来い keeps quotative って separate and stays the verb 来る (くる), not 来る (きたる)
+        yield return ["「いいから来いって」", "来い", 1547720, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()
@@ -2090,6 +2126,9 @@ public class FormSelectionTests
 
         // 挿入る must not fuse into a single verb token (挿入 is a する-verb, る is no conjugation)
         yield return ["彼女の中に挿入る", "挿入る"];
+
+        // The stem of 揺られる must never surface as the noun 揺 (ゆり)
+        yield return ["電車に揺られて、目的地の駅に着く。", "揺"];
     }
 
     [Theory]

@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import { useJitenStore } from '~/stores/jitenStore';
   import { useAuthStore } from '~/stores/authStore';
-  import type { WordStateColourKey } from '~/utils/wordState';
+  import { wordColourStyle, type WordStateColourKey } from '~/utils/wordState';
 
   /** The colour row being hovered or edited, whose words get underlined. */
   defineProps<{ highlight: WordStateColourKey | null }>();
@@ -26,19 +26,23 @@
   ];
 
   const colourElsewhere = computed(() => store.colourWordsByState && auth.isAuthenticated);
-  const colourOf = (state: WordStateColourKey, enabled: boolean) => (enabled ? (store.resolvedStateColours[state] ?? undefined) : undefined);
+  const watchStyle = (state: WordStateColourKey) => {
+    const hex = store.resolvedStateColours[state];
+    return hex ? wordColourStyle(hex) : undefined;
+  };
+  const elsewhereStyle = (state: WordStateColourKey) => (colourElsewhere.value ? watchStyle(state) : undefined);
 </script>
 
 <template>
   <figure class="grid grid-cols-1 gap-3 md:grid-cols-2" aria-label="Preview of your word colours">
     <div class="flex flex-col gap-1.5">
       <span class="text-xs text-surface-600 dark:text-surface-400">Subtitles on the watch page</span>
-      <p class="rounded bg-black px-3 py-3 text-center text-lg text-white dark:ring-1 dark:ring-surface-700" lang="ja">
+      <p class="rounded border border-surface-200 bg-surface-0 px-3 py-3 text-center text-lg text-surface-900 dark:border-surface-700 dark:bg-surface-950 dark:text-surface-0" lang="ja">
         <span
           v-for="(token, i) in tokens"
           :key="i"
           :class="{ 'colour-highlight': highlight === token.state }"
-          :style="{ color: colourOf(token.state, true) }"
+          :style="watchStyle(token.state)"
           >{{ token.text }}</span
         >
       </p>
@@ -52,7 +56,7 @@
           v-for="(token, i) in tokens"
           :key="i"
           :class="{ 'colour-highlight': colourElsewhere && highlight === token.state }"
-          :style="{ color: colourOf(token.state, colourElsewhere) }"
+          :style="elsewhereStyle(token.state)"
           >{{ token.text }}</span
         >
       </p>
