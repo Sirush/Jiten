@@ -68,7 +68,7 @@
           class="w-full"
         />
         <div class="flex justify-between gap-3 text-xs text-muted-color">
-          <span id="displayNameHelp">At least 2 characters. Letters, numbers, Japanese, and . _ -</span>
+          <span id="displayNameHelp">At least 2 characters: letters, numbers, Japanese, dots, underscores and hyphens.</span>
           <span class="tabular-nums shrink-0" aria-hidden="true">{{ displayName.length }}/{{ MAX_LENGTH }}</span>
         </div>
         <small v-if="error" class="text-red-600 dark:text-red-400" role="alert">{{ error }}</small>

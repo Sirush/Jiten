@@ -14,13 +14,16 @@ public record IPlusOneSentence(
     int UnknownCount,
     List<FuriganaGroup> Furigana);
 
+/// <summary>Ruby groups and, for a signed-in caller, every word span to colour by state.</summary>
+public record SentenceAnnotations(List<SentenceFuriganaDto> Furigana, List<SentenceWordDto>? Words);
+
 public interface ISentenceTokenService
 {
     /// <summary>Ruby groups per sentence; sentences without token spans are absent from the result.</summary>
     Task<Dictionary<long, List<FuriganaGroup>>> BuildFuriganaAsync(IEnumerable<(long SentenceId, string Text, byte[]? Tokens)> sentences);
 
-    /// <summary><see cref="BuildFuriganaAsync"/> with each group's word judged against the current user's known words.</summary>
-    Task<Dictionary<long, List<SentenceFuriganaDto>>> BuildFuriganaDtosAsync(IEnumerable<(long SentenceId, string Text, byte[]? Tokens)> sentences);
+    /// <summary><see cref="BuildFuriganaAsync"/> with each group's word judged against the current user's known words, plus every word span to colour.</summary>
+    Task<Dictionary<long, SentenceAnnotations>> BuildFuriganaDtosAsync(IEnumerable<(long SentenceId, string Text, byte[]? Tokens)> sentences);
 
     /// <summary>Sentences with every other content word known to the current user, from a random sample of fully parsed sentences.</summary>
     Task<List<IPlusOneSentence>> FindIPlusOneAsync(int wordId, byte readingIndex, int take, int maxUnknown = 0);
@@ -52,26 +55,42 @@ public class SentenceTokenService(JitenDbContext context, ICurrentUserService cu
         return decoded.ToDictionary(s => s.SentenceId, s => SentenceFurigana.Build(s.Text, s.Tokens, forms));
     }
 
-    public async Task<Dictionary<long, List<SentenceFuriganaDto>>> BuildFuriganaDtosAsync(
+    public async Task<Dictionary<long, SentenceAnnotations>> BuildFuriganaDtosAsync(
         IEnumerable<(long SentenceId, string Text, byte[]? Tokens)> sentences)
     {
-        var groups = await BuildFuriganaAsync(sentences);
+        var list = sentences.ToList();
+        var groups = await BuildFuriganaAsync(list);
         if (groups.Count == 0) return [];
 
-        var forms = groups.Values.SelectMany(g => g).Select(g => (g.WordId, g.ReadingIndex)).ToHashSet();
-        var states = currentUser.IsAuthenticated ? await currentUser.GetKnownWordsState(forms) : [];
-
         var authenticated = currentUser.IsAuthenticated;
-        return groups.ToDictionary(s => s.Key, s => s.Value.Select(g =>
-        {
-            var state = states.GetValueOrDefault((g.WordId, g.ReadingIndex));
-            return new SentenceFuriganaDto
+        var wordTokens = authenticated
+            ? list.Where(s => s.Tokens != null && groups.ContainsKey(s.SentenceId))
+                  .ToDictionary(s => s.SentenceId, s => ExampleSentenceTokens.Decode(s.Tokens!))
+            : [];
+
+        var forms = groups.Values.SelectMany(g => g).Select(g => (g.WordId, g.ReadingIndex))
+                          .Concat(wordTokens.Values.SelectMany(t => t).Select(t => (t.WordId, t.ReadingIndex)))
+                          .ToHashSet();
+        var states = authenticated ? await currentUser.GetKnownWordsState(forms) : [];
+
+        return groups.ToDictionary(s => s.Key, s => new SentenceAnnotations(
+            s.Value.Select(g =>
             {
-                Position = g.Position, Length = g.Length, Reading = g.Reading, WordId = g.WordId,
-                Known = state != null && SentenceComprehension.IsKnown(state),
-                States = authenticated ? state ?? [] : null,
-            };
-        }).ToList());
+                var state = states.GetValueOrDefault((g.WordId, g.ReadingIndex));
+                return new SentenceFuriganaDto
+                {
+                    Position = g.Position, Length = g.Length, Reading = g.Reading, WordId = g.WordId,
+                    Known = state != null && SentenceComprehension.IsKnown(state),
+                    States = authenticated ? state ?? [] : null,
+                };
+            }).ToList(),
+            wordTokens.TryGetValue(s.Key, out var tokens)
+                ? tokens.Select(t => new SentenceWordDto
+                {
+                    Position = t.Position, Length = t.Length, WordId = t.WordId,
+                    States = states.GetValueOrDefault((t.WordId, t.ReadingIndex)) ?? [],
+                }).ToList()
+                : null));
     }
 
     public async Task<List<IPlusOneSentence>> FindIPlusOneAsync(int wordId, byte readingIndex, int take, int maxUnknown = 0)

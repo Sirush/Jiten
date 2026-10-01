@@ -1448,7 +1448,8 @@ public class MediaDeckController(
             result[row.TitleId] = new ExampleSentenceDto
             {
                 SentenceId = row.SentenceId, Text = row.Text, WordPosition = token.Position, WordLength = token.Length,
-                Furigana = furigana.GetValueOrDefault(row.SentenceId)
+                Furigana = furigana.GetValueOrDefault(row.SentenceId)?.Furigana,
+                Words = furigana.GetValueOrDefault(row.SentenceId)?.Words
             };
         }
 

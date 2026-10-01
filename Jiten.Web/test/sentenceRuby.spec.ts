@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import type { SentenceFurigana } from '../app/types';
+import type { SentenceFurigana, SentenceWord } from '../app/types';
 import { sentenceRubyHtml, targetWordId, visibleFurigana } from '../app/utils/sentenceRuby';
+import { wordColourStyle } from '../app/utils/wordState';
 
 const group = (position: number, length: number, reading: string, wordId: number, known = false): SentenceFurigana => ({
   position,
@@ -10,7 +11,10 @@ const group = (position: number, length: number, reading: string, wordId: number
   known,
 });
 
+const word = (position: number, length: number, wordId: number): SentenceWord => ({ position, length, wordId, states: [] });
+
 const ruby = (base: string, reading: string) => `<ruby>${base}<rp>(</rp><rt>${reading}</rt><rp>)</rp></ruby>`;
+const red = wordColourStyle('#f43f5e');
 const highlight = (html: string) => `<span class="text-primary-500 dark:text-primary-500 font-bold">${html}</span>`;
 
 describe('sentenceRubyHtml', () => {
@@ -112,14 +116,33 @@ describe('sentenceRubyHtml options', () => {
   it('colours words, with or without their reading', () => {
     const html = sentenceRubyHtml('猫と犬', -1, 0, groups, {
       showReading: (g) => g.wordId === 2,
-      colourOf: (g) => (g.wordId === 1 ? '#f43f5e' : null),
+      words: [word(0, 1, 1), word(2, 1, 2)],
+      colourOf: (w) => (w.wordId === 1 ? '#f43f5e' : null),
     });
 
-    expect(html).toBe(`<span style="color:#f43f5e">猫</span>と${ruby('犬', 'いぬ')}`);
+    expect(html).toBe(`<span style="${red}">猫</span>と${ruby('犬', 'いぬ')}`);
+  });
+
+  it('colours kana words and okurigana, not only the ruby base', () => {
+    const html = sentenceRubyHtml('もう食べた', -1, 0, [group(2, 1, 'た', 2)], {
+      words: [word(0, 2, 1), word(2, 3, 2)],
+      colourOf: () => '#f43f5e',
+    });
+
+    expect(html).toBe(`<span style="${red}">もう</span><span style="${red}">${ruby('食', 'た')}べた</span>`);
+  });
+
+  it('keeps the target highlight instead of the word colour', () => {
+    const html = sentenceRubyHtml('猫と犬', 0, 1, groups, {
+      words: [word(0, 1, 1), word(2, 1, 2)],
+      colourOf: () => '#f43f5e',
+    });
+
+    expect(html).toBe(`${highlight(ruby('猫', 'ねこ'))}と<span style="${red}">${ruby('犬', 'いぬ')}</span>`);
   });
 
   it('ignores a colour that is not a hex value', () => {
-    const html = sentenceRubyHtml('猫', -1, 0, [group(0, 1, 'ねこ', 1)], { colourOf: () => 'red;background:url(x)' });
+    const html = sentenceRubyHtml('猫', -1, 0, [group(0, 1, 'ねこ', 1)], { words: [word(0, 1, 1)], colourOf: () => 'red;background:url(x)' });
 
     expect(html).toBe(ruby('猫', 'ねこ'));
   });

@@ -37,26 +37,27 @@
   const revealedLocally = ref(false);
   const isRevealed = computed(() => store.displayAllNsfw || revealedLocally.value);
 
-  const stateColour = useWordStateColour();
+  const stateHex = useWordStateHex();
 
   const formattedText = computed(() => {
-    const { text, wordPosition, wordLength, furigana } = props.exampleSentence;
+    const { text, wordPosition, wordLength, furigana, words } = props.exampleSentence;
     const setting = props.furiganaMode ?? store.sentenceFurigana;
     // Signed out, every word reads as unknown, so "unknown words only" means all of them.
     const mode = setting === 'unknown' && !authStore.isAuthenticated ? 'all' : setting;
     const hiddenWordId = props.hiddenWordId ?? (mode === 'exceptTarget' ? targetWordId(furigana, wordPosition, wordLength) : undefined);
     const shown = new Set(visibleFurigana(furigana, mode, hiddenWordId));
-    const coloured = store.colourWordsByState && authStore.isAuthenticated;
+    const coloured = store.colourWordsByState && authStore.isAuthenticated && !!words?.length;
     const peek = store.furiganaOnHover;
     const unknownSpans = props.exampleSentence.unknownSpans ?? [];
-    if (unknownSpans.length > 0 || (furigana?.length && (shown.size > 0 || coloured || peek))) {
+    if (unknownSpans.length > 0 || coloured || (furigana?.length && (shown.size > 0 || peek))) {
       return sanitiseHtml(
         sentenceRubyHtml(text, wordPosition, wordLength, furigana ?? [], {
           unknownSpans,
           showReading: (g) => shown.has(g),
           // The caller's hidden word is the answer being tested, so it never peeks.
           revealOnHover: peek ? (g) => g.wordId !== props.hiddenWordId : undefined,
-          colourOf: coloured ? (g) => (g.wordId === props.hiddenWordId ? null : (stateColour(g.states)?.color ?? null)) : undefined,
+          words: words ?? undefined,
+          colourOf: coloured ? (w) => (w.wordId === props.hiddenWordId ? null : stateHex(w.states)) : undefined,
         })
       );
     }

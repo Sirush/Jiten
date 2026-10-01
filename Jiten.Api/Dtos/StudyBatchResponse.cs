@@ -122,6 +122,9 @@ public class StudyExampleSentenceDto
 
     /// <summary>Null for custom sentences and for corpus sentences parsed before token spans existed.</summary>
     public List<SentenceFuriganaDto>? Furigana { get; set; }
+
+    /// <summary>Every word with the caller's states, for colouring; null for custom sentences.</summary>
+    public List<SentenceWordDto>? Words { get; set; }
 }
 
 public class StudyExampleSourceDto

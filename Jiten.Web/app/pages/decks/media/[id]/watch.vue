@@ -18,7 +18,7 @@
   import { useYouTubePlayer } from '~/composables/useYouTubePlayer';
   import { formatRuntime } from '~/utils/formatRuntime';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
-  import { WORD_STATE_COLOUR_KEYS, WORD_STATE_COLOUR_LABELS, wordStateColourKey } from '~/utils/wordState';
+  import { WORD_STATE_COLOUR_KEYS, WORD_STATE_COLOUR_LABELS, wordColourStyle, wordStateColourKey } from '~/utils/wordState';
   import Popover from 'primevue/popover';
   import Select from 'primevue/select';
   import ToggleSwitch from 'primevue/toggleswitch';
@@ -346,7 +346,7 @@
   };
   const wordStyle = (word: WatchWord) => {
     const colour = colours.value[colourKeyOf(word.knownStates)];
-    return colour ? { color: colour } : undefined;
+    return colour ? wordColourStyle(colour) : undefined;
   };
   const setColour = (key: WatchColourKey, value: string | null) => (jitenStore.stateColours = { ...colours.value, [key]: value });
   const resetColours = () => (jitenStore.stateColours = { ...DEFAULT_WATCH_COLOURS });
@@ -788,7 +788,7 @@
           <div class="flex flex-col gap-1.5 text-sm">
             <label v-for="row in colourRows" :key="row.key" class="flex items-center justify-between gap-4">
               <span class="flex items-center gap-2">
-                <span class="font-noto-sans text-base" lang="ja" :style="colours[row.key] ? { color: colours[row.key]! } : undefined">言葉</span>
+                <span class="font-noto-sans text-base" lang="ja" :style="colours[row.key] ? wordColourStyle(colours[row.key]!) : undefined">言葉</span>
                 {{ row.label }}
               </span>
               <span class="flex items-center gap-1">

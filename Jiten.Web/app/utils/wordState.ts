@@ -43,6 +43,10 @@ export function isKnownForFurigana(states: KnownState[] | undefined | null): boo
   );
 }
 
+export function wordColourStyle(hex: string): string {
+  return `color:${hex};color:oklch(from ${hex} clamp(var(--word-colour-min-l), l, var(--word-colour-max-l)) c h)`;
+}
+
 export function resolveWordStateColours(stored: Partial<WordStateColours> | null | undefined): WordStateColours {
   return { ...DEFAULT_WORD_STATE_COLOURS, ...(stored ?? {}) };
 }

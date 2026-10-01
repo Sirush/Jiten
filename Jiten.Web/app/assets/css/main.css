@@ -43,6 +43,17 @@
   --jiten-page-bg: black;
 }
 
+/* OKLCH lightness band that word-state colours are clamped into, so any chosen colour keeps about 4.5:1 against the page. */
+:root {
+  --word-colour-min-l: 0;
+  --word-colour-max-l: 0.55;
+}
+
+:root.dark-mode {
+  --word-colour-min-l: 0.62;
+  --word-colour-max-l: 1;
+}
+
 /* Japanese text follows the profile's font. Unlayered, so it beats the `font-noto-sans` utility that many
    Japanese elements still carry. Latin UI text never matches :lang(ja) and keeps Noto Sans.
    Installed faces lead each stack; the Textbook, Rounded and UD web fonts load on demand from utils/japaneseFonts.ts. */
