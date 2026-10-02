@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { displayKeyName, mouseToken, normalizeKey } from '~/composables/useStudyKeyboard';
+  import { useMouseNavigationGuard } from '~/composables/useMouseNavigationGuard';
 
   const props = defineProps<{
     modelValue: string;
@@ -13,14 +14,17 @@
 
   const listening = ref(false);
   const btnRef = ref<HTMLButtonElement>();
+  const syncMouseNavigationGuard = useMouseNavigationGuard(() => listening.value);
 
 
   function toggleListening() {
     listening.value = !listening.value;
+    syncMouseNavigationGuard();
   }
 
   function stopListening() {
     listening.value = false;
+    syncMouseNavigationGuard();
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -53,12 +57,20 @@
     swallowContextMenu = e.button === 2;
     emit('update:modelValue', token);
     listening.value = false;
+    syncMouseNavigationGuard();
   }
 
   function handleMouseup(e: MouseEvent) {
     if (!swallowRelease && !listening.value) return;
     if (!mouseToken(e.button)) return;
     e.preventDefault();
+    swallowRelease = false;
+  }
+
+  function handleAuxclick(e: MouseEvent) {
+    if (!swallowRelease || !mouseToken(e.button)) return;
+    e.preventDefault();
+    e.stopPropagation();
     swallowRelease = false;
   }
 
@@ -69,11 +81,13 @@
 
   onMounted(() => {
     window.addEventListener('mouseup', handleMouseup, true);
+    window.addEventListener('auxclick', handleAuxclick, true);
     window.addEventListener('contextmenu', handleContextMenu, true);
   });
 
   onUnmounted(() => {
     window.removeEventListener('mouseup', handleMouseup, true);
+    window.removeEventListener('auxclick', handleAuxclick, true);
     window.removeEventListener('contextmenu', handleContextMenu, true);
   });
 </script>
