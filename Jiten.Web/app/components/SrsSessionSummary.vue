@@ -10,6 +10,7 @@
     activeMs: number;
     hardestCards: HardestCard[];
     gradeCounts: { again: number; hard: number; good: number; easy: number };
+    retention: { total: number; passed: number };
     leeches: LeechCard[];
     buried?: BuriedCard[];
   }>();
@@ -65,11 +66,9 @@
     return again + hard + good + easy;
   });
 
-  // Pass rate = anything but Again recalled, matching the heatmap and the retention metric.
-  // Includes new-card first grades, so it reads higher than measured true retention by design.
-  const passRate = computed(() => {
-    if (totalReviews.value === 0) return 0;
-    return Math.round(((totalReviews.value - props.gradeCounts.again) / totalReviews.value) * 100);
+  const retentionPct = computed(() => {
+    const { total, passed } = props.retention;
+    return total > 0 ? Math.round((passed / total) * 100) : null;
   });
 
   const isAllCaughtUp = computed(() => {
@@ -170,8 +169,13 @@
         <div class="text-sm text-gray-500 dark:text-gray-400">New Cards</div>
       </div>
       <div class="text-center">
-        <div class="text-[clamp(1.1rem,6vw,1.875rem)] font-bold text-blue-600 dark:text-blue-400">{{ passRate }}%</div>
-        <div class="text-sm text-gray-500 dark:text-gray-400" title="Cards recalled (anything but Again), including new cards">Pass rate</div>
+        <div class="text-[clamp(1.1rem,6vw,1.875rem)] font-bold text-blue-600 dark:text-blue-400">
+          {{ retentionPct != null ? `${retentionPct}%` : '—' }}
+        </div>
+        <div class="text-sm text-gray-500 dark:text-gray-400">Retention</div>
+        <div class="text-[11px] text-gray-400 dark:text-gray-500">
+          {{ retention.total > 0 ? `${retention.total} review card${retention.total === 1 ? '' : 's'}` : 'No review cards' }}
+        </div>
       </div>
       <div class="text-center">
         <div class="text-[clamp(1.1rem,6vw,1.875rem)] font-bold text-purple-600 dark:text-purple-400">{{ duration }}</div>
@@ -226,6 +230,8 @@
         </div>
       </div>
     </div>
+
+    <NuxtLink to="/srs/stats#retention" class="mb-6 text-sm text-primary-600 dark:text-primary-400 hover:underline">See your retention over time</NuxtLink>
 
     <!-- Leeches -->
     <div v-if="leeches.length > 0" class="w-full mb-6">

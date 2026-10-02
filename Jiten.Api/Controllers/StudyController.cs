@@ -2386,6 +2386,7 @@ public partial class StudyController(
                 State = item.State,
                 IsNewCard = item.IsNew,
                 Due = fsrsCard?.Due,
+                LastReview = fsrsCard?.LastReview,
                 Lapses = fsrsCard?.Lapses ?? 0,
                 IsLeech = fsrsCard != null && LeechHelper.IsLeech(fsrsCard.Lapses, memoryScheduler.GetStabilityDays(fsrsCard), settings.LeechThreshold),
                 WordText = mainForm?.RubyText ?? mainForm?.Text ?? "",
@@ -3719,7 +3720,8 @@ public partial class StudyController(
             today = new
             {
                 reviews = result.Today.Reviews,
-                passRate = result.Today.PassRate,
+                again = result.Today.Again,
+                retention = MapBucket(result.Today.Retention),
                 minutes = result.Today.Minutes,
                 newCards = result.Today.NewCards,
             },
@@ -3732,6 +3734,7 @@ public partial class StudyController(
         overall = MapBucket(p.Overall),
         young = MapBucket(p.Young),
         mature = MapBucket(p.Mature),
+        grades = p.Grades,
     };
 
     private static object MapWindow(RetentionCalculator.RetentionWindow w) => new
@@ -3759,7 +3762,7 @@ public partial class StudyController(
     };
 
     private static object MapHourly(IReadOnlyList<RetentionCalculator.HourlyBucket> hourly) =>
-        hourly.Select(h => new { count = h.Count, passRate = h.PassRate });
+        hourly.Select(h => new { count = h.Count, retention = MapBucket(h.Retention) });
 
     private static object MapReviewTime(RetentionCalculator.ReviewTimeStats rt) => new
     {

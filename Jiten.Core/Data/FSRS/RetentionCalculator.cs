@@ -16,7 +16,7 @@ public static class RetentionCalculator
 {
     public const int MatureThresholdDays = 21;
 
-    /// <param name="Rating">FSRS rating 1..4 (Again..Easy). Only used for the additive answer-button / hourly / today blocks.</param>
+    /// <param name="Rating">FSRS rating 1..4 (Again..Easy). Only used for the answer-button and per-period grade tallies.</param>
     /// <param name="DurationMs">Review duration in milliseconds, when recorded.</param>
     public readonly record struct ReviewEntry(long CardId, DateTime ReviewUtc, bool IsAgain, int Rating = 0, int? DurationMs = null);
 
@@ -27,21 +27,22 @@ public static class RetentionCalculator
 
     public record RetentionWindow(RetentionBucket Overall, RetentionBucket Young, RetentionBucket Mature);
 
-    public record PeriodRetention(string Period, RetentionBucket Overall, RetentionBucket Young, RetentionBucket Mature);
+    /// <param name="Grades">Every rated review in the period, retention-qualifying or not, indexed [again, hard, good, easy].</param>
+    public record PeriodRetention(string Period, RetentionBucket Overall, RetentionBucket Young, RetentionBucket Mature, int[] Grades);
 
     /// <summary>Per-category answer-button tallies, indexed [again, hard, good, easy].</summary>
     public record AnswerButtons(int[] Learning, int[] Young, int[] Mature);
 
-    /// <summary>One per local hour (0..23). PassRate is the non-Again share, null when Count == 0.</summary>
-    public record HourlyBucket(int Count, double? PassRate);
+    /// <summary>One per local hour (0..23). Count is every review; Retention only the retention-qualifying ones.</summary>
+    public record HourlyBucket(int Count, RetentionBucket Retention);
 
     public record ReviewTimeStats(int[] Buckets, double? AverageSeconds, double TotalHours, int Count);
 
     /// <summary>The three time-window views (trailing 30/90 days, all-time) of a per-window block.</summary>
     public record StatWindows<T>(T Last30, T Last90, T All);
 
-    /// <summary>User-local "today" rollup. PassRate null when Reviews == 0.</summary>
-    public record TodayStats(int Reviews, double? PassRate, int Minutes, int NewCards);
+    /// <summary>User-local "today" rollup. Reviews and Again count every press; Retention only the retention-qualifying ones.</summary>
+    public record TodayStats(int Reviews, int Again, RetentionBucket Retention, int Minutes, int NewCards);
 
     public record RetentionResult(
         RetentionWindow Last30,
@@ -63,6 +64,7 @@ public static class RetentionCalculator
         public int OverallTotal, OverallPassed;
         public int YoungTotal, YoungPassed;
         public int MatureTotal, MaturePassed;
+        public readonly int[] Grades = new int[4];
 
         public void Add(bool passed, bool mature)
         {
@@ -102,6 +104,26 @@ public static class RetentionCalculator
         public AnswerButtons ToResult() => new(_learning, _young, _mature);
     }
 
+    private sealed class HourlyAccumulator
+    {
+        private readonly int[] _counts = new int[24];
+        private readonly int[] _retentionTotal = new int[24];
+        private readonly int[] _retentionPassed = new int[24];
+
+        public void AddReview(int hour) => _counts[hour]++;
+
+        public void AddRetention(int hour, bool passed)
+        {
+            _retentionTotal[hour]++;
+            if (passed) _retentionPassed[hour]++;
+        }
+
+        public IReadOnlyList<HourlyBucket> ToResult() =>
+            Enumerable.Range(0, 24)
+                .Select(h => new HourlyBucket(_counts[h], new RetentionBucket(_retentionTotal[h], _retentionPassed[h])))
+                .ToList();
+    }
+
     /// <param name="logs">All review logs for the user (any order).</param>
     /// <param name="offsetHours">User-local timezone offset, for day/month bucketing.</param>
     /// <param name="nowUtc">Current time, defining the trailing 30/90-day windows.</param>
@@ -121,6 +143,13 @@ public static class RetentionCalculator
         var btn90 = new AnswerButtonAccumulator();
         var btn30 = new AnswerButtonAccumulator();
 
+        var hourlyAll = new HourlyAccumulator();
+        var hourly90 = new HourlyAccumulator();
+        var hourly30 = new HourlyAccumulator();
+
+        var localToday = nowUtc.AddHours(offsetHours).Date;
+        int todayRetentionTotal = 0, todayRetentionPassed = 0;
+
         // First qualifying review per (card, local day) only.
         var seenPerDay = new HashSet<(long, long)>();
 
@@ -131,6 +160,15 @@ public static class RetentionCalculator
             DateTime? previous = null;
             foreach (var entry in cardGroup.OrderBy(l => l.ReviewUtc))
             {
+                var localTime = entry.ReviewUtc.AddHours(offsetHours);
+                var localDate = localTime.Date;
+                var in30 = entry.ReviewUtc >= last30Cutoff;
+                var in90 = entry.ReviewUtc >= last90Cutoff;
+
+                hourlyAll.AddReview(localTime.Hour);
+                if (in90) hourly90.AddReview(localTime.Hour);
+                if (in30) hourly30.AddReview(localTime.Hour);
+
                 var ratingIndex = entry.Rating is >= 1 and <= 4 ? entry.Rating - 1 : -1;
                 if (ratingIndex >= 0)
                 {
@@ -145,36 +183,36 @@ public static class RetentionCalculator
                     }
 
                     btnAll.Add(category, ratingIndex);
-                    if (entry.ReviewUtc >= last90Cutoff) btn90.Add(category, ratingIndex);
-                    if (entry.ReviewUtc >= last30Cutoff) btn30.Add(category, ratingIndex);
+                    if (in90) btn90.Add(category, ratingIndex);
+                    if (in30) btn30.Add(category, ratingIndex);
+
+                    PeriodBucket(monthly, MonthKey(localDate)).Grades[ratingIndex]++;
+                    PeriodBucket(weekly, WeekKey(localDate)).Grades[ratingIndex]++;
                 }
 
                 if (previous is { } prev)
                 {
                     var elapsedDays = (entry.ReviewUtc - prev).TotalDays;
-                    if (elapsedDays >= 1)
+                    if (elapsedDays >= 1 && seenPerDay.Add((entry.CardId, localDate.Ticks)))
                     {
-                        var localDate = entry.ReviewUtc.AddHours(offsetHours).Date;
-                        if (seenPerDay.Add((entry.CardId, localDate.Ticks)))
+                        var passed = !entry.IsAgain;
+                        var mature = elapsedDays >= MatureThresholdDays;
+
+                        all.Add(passed, mature);
+                        if (in30) last30.Add(passed, mature);
+                        if (in90) last90.Add(passed, mature);
+
+                        PeriodBucket(monthly, MonthKey(localDate)).Add(passed, mature);
+                        PeriodBucket(weekly, WeekKey(localDate)).Add(passed, mature);
+
+                        hourlyAll.AddRetention(localTime.Hour, passed);
+                        if (in90) hourly90.AddRetention(localTime.Hour, passed);
+                        if (in30) hourly30.AddRetention(localTime.Hour, passed);
+
+                        if (localDate == localToday)
                         {
-                            var passed = !entry.IsAgain;
-                            var mature = elapsedDays >= MatureThresholdDays;
-
-                            all.Add(passed, mature);
-                            if (entry.ReviewUtc >= last30Cutoff) last30.Add(passed, mature);
-                            if (entry.ReviewUtc >= last90Cutoff) last90.Add(passed, mature);
-
-                            var monthKey = localDate.ToString("yyyy-MM");
-                            if (!monthly.TryGetValue(monthKey, out var macc))
-                                monthly[monthKey] = macc = new Accumulator();
-                            macc.Add(passed, mature);
-
-                            // Week keyed by its Monday (local), so labels are stable, sortable dates.
-                            var weekStart = localDate.AddDays(-(((int)localDate.DayOfWeek + 6) % 7));
-                            var weekKey = weekStart.ToString("yyyy-MM-dd");
-                            if (!weekly.TryGetValue(weekKey, out var wacc))
-                                weekly[weekKey] = wacc = new Accumulator();
-                            wacc.Add(passed, mature);
+                            todayRetentionTotal++;
+                            if (passed) todayRetentionPassed++;
                         }
                     }
                 }
@@ -183,48 +221,44 @@ public static class RetentionCalculator
             }
         }
 
+        static string MonthKey(DateTime localDate) => localDate.ToString("yyyy-MM");
+
+        // Week keyed by its Monday (local), so labels are stable, sortable dates.
+        static string WeekKey(DateTime localDate) =>
+            localDate.AddDays(-(((int)localDate.DayOfWeek + 6) % 7)).ToString("yyyy-MM-dd");
+
+        static Accumulator PeriodBucket(SortedDictionary<string, Accumulator> buckets, string key)
+        {
+            if (!buckets.TryGetValue(key, out var acc))
+                buckets[key] = acc = new Accumulator();
+            return acc;
+        }
+
+        // Periods with presses but no retention-qualifying review would plot as empty points.
         static List<PeriodRetention> ToSeries(SortedDictionary<string, Accumulator> buckets) => buckets
+            .Where(kv => kv.Value.OverallTotal > 0)
             .Select(kv => new PeriodRetention(
                 kv.Key,
                 new RetentionBucket(kv.Value.OverallTotal, kv.Value.OverallPassed),
                 new RetentionBucket(kv.Value.YoungTotal, kv.Value.YoungPassed),
-                new RetentionBucket(kv.Value.MatureTotal, kv.Value.MaturePassed)))
+                new RetentionBucket(kv.Value.MatureTotal, kv.Value.MaturePassed),
+                kv.Value.Grades))
             .ToList();
 
         var answerButtons = new StatWindows<AnswerButtons>(btn30.ToResult(), btn90.ToResult(), btnAll.ToResult());
 
-        var hourly = new StatWindows<IReadOnlyList<HourlyBucket>>(
-            ComputeHourly(materialized.Where(e => e.ReviewUtc >= last30Cutoff), offsetHours),
-            ComputeHourly(materialized.Where(e => e.ReviewUtc >= last90Cutoff), offsetHours),
-            ComputeHourly(materialized, offsetHours));
+        var hourly = new StatWindows<IReadOnlyList<HourlyBucket>>(hourly30.ToResult(), hourly90.ToResult(), hourlyAll.ToResult());
 
         var reviewTime = new StatWindows<ReviewTimeStats>(
             ComputeReviewTime(materialized.Where(e => e.ReviewUtc >= last30Cutoff)),
             ComputeReviewTime(materialized.Where(e => e.ReviewUtc >= last90Cutoff)),
             ComputeReviewTime(materialized));
 
-        var today = ComputeToday(materialized, offsetHours, nowUtc);
+        var today = ComputeToday(materialized, offsetHours, localToday, new RetentionBucket(todayRetentionTotal, todayRetentionPassed));
 
         return new RetentionResult(
             last30.ToWindow(), last90.ToWindow(), all.ToWindow(), ToSeries(weekly), ToSeries(monthly),
             answerButtons, hourly, reviewTime, today);
-    }
-
-    private static List<HourlyBucket> ComputeHourly(IEnumerable<ReviewEntry> logs, double offsetHours)
-    {
-        var counts = new int[24];
-        var passed = new int[24];
-        foreach (var entry in logs)
-        {
-            var hour = entry.ReviewUtc.AddHours(offsetHours).Hour;
-            counts[hour]++;
-            if (!entry.IsAgain) passed[hour]++;
-        }
-
-        var result = new List<HourlyBucket>(24);
-        for (var h = 0; h < 24; h++)
-            result.Add(new HourlyBucket(counts[h], counts[h] > 0 ? (double)passed[h] / counts[h] : null));
-        return result;
     }
 
     private static ReviewTimeStats ComputeReviewTime(IEnumerable<ReviewEntry> logs)
@@ -256,11 +290,10 @@ public static class RetentionCalculator
             count);
     }
 
-    private static TodayStats ComputeToday(IEnumerable<ReviewEntry> logs, double offsetHours, DateTime nowUtc)
+    private static TodayStats ComputeToday(IEnumerable<ReviewEntry> logs, double offsetHours, DateTime localToday, RetentionBucket retention)
     {
-        var localToday = nowUtc.AddHours(offsetHours).Date;
         var reviews = 0;
-        var passed = 0;
+        var again = 0;
         long durationMsSum = 0;
 
         // A card counts as "new today" when its first-ever review falls today.
@@ -272,7 +305,7 @@ public static class RetentionCalculator
 
             if (entry.ReviewUtc.AddHours(offsetHours).Date != localToday) continue;
             reviews++;
-            if (!entry.IsAgain) passed++;
+            if (entry.IsAgain) again++;
             if (entry.DurationMs is { } ms) durationMsSum += ms;
         }
 
@@ -280,7 +313,8 @@ public static class RetentionCalculator
 
         return new TodayStats(
             reviews,
-            reviews > 0 ? (double)passed / reviews : null,
+            again,
+            retention,
             (int)Math.Round(durationMsSum / 60000.0),
             newCards);
     }

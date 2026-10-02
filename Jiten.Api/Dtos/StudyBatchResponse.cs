@@ -23,6 +23,7 @@ public class StudyCardDto
     public bool IsNewCard { get; set; }
     /// <summary>Current due date, echoed back by the client to undo a bury.</summary>
     public DateTime? Due { get; set; }
+    public DateTime? LastReview { get; set; }
     public int Lapses { get; set; }
     public bool IsLeech { get; set; }
     public string WordText { get; set; } = "";

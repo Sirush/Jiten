@@ -1400,6 +1400,7 @@ export interface StudyCardDto {
   state: number;
   isNewCard: boolean;
   due?: string | null;
+  lastReview?: string | null;
   lapses: number;
   isLeech: boolean;
   wordText: string;
@@ -1755,6 +1756,7 @@ export interface PeriodRetentionDto {
   overall: RetentionBucketDto;
   young: RetentionBucketDto;
   mature: RetentionBucketDto;
+  grades: number[];
 }
 
 // The three time-window views of a per-window stats block.
@@ -1773,7 +1775,7 @@ export interface AnswerButtonsDto {
 
 export interface HourlyReviewDto {
   count: number;
-  passRate: number | null;
+  retention: RetentionBucketDto;
 }
 
 // Per-window review-time stats; bucketLabels are window-invariant (top level).
@@ -1790,7 +1792,8 @@ export interface ReviewTimeDto extends StatWindows<ReviewTimeWindowDto> {
 
 export interface RetentionTodayDto {
   reviews: number;
-  passRate: number | null;
+  again: number;
+  retention: RetentionBucketDto;
   minutes: number;
   newCards: number;
 }

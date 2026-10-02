@@ -178,6 +178,15 @@
             const n = bucket?.total ?? 0;
             return `${ctx.dataset.label}: ${v}% (${n} reviews)`;
           },
+          afterBody: (items) => {
+            const grades = series.value[items[0]?.dataIndex ?? -1]?.grades;
+            if (!grades) return [];
+            const [again = 0, hard = 0, good = 0, easy = 0] = grades;
+            const total = grades.reduce((a, b) => a + b, 0);
+            if (total === 0) return [];
+            const passRate = Math.round(((total - again) / total) * 100);
+            return ['', `Gradings: ${total} (${passRate}% pass rate)`, `Again ${again}, Hard ${hard}, Good ${good}, Easy ${easy}`];
+          },
         },
       },
     },
