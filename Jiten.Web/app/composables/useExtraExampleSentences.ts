@@ -22,18 +22,24 @@ export function useExtraExampleSentences(target: MaybeRefOrGetter<ExtraSentenceT
   const isLoading = ref(false);
   const nextBandMin = ref(0);
   const nextBandMax = ref(BAND_SIZE);
+  const bandStarted = ref(false);
 
   function reset() {
     sentences.value = [];
     expanded.value = false;
     canLoadMore.value = true;
-    if (srsStore.studySettings.exampleSentenceSorting === 'HardestFirst') {
+    bandStarted.value = false;
+  }
+
+  function startBand(sorting: string) {
+    if (sorting === 'HardestFirst') {
       nextBandMin.value = 999;
       nextBandMax.value = 999 + BAND_SIZE;
     } else {
       nextBandMin.value = 0;
       nextBandMax.value = BAND_SIZE;
     }
+    bandStarted.value = true;
   }
 
   // Signed-in users get the study-deck-aware endpoint; the anonymous vocabulary routes are the fallback
@@ -77,6 +83,7 @@ export function useExtraExampleSentences(target: MaybeRefOrGetter<ExtraSentenceT
     if (!card) return;
     isLoading.value = true;
     const sorting = srsStore.studySettings.exampleSentenceSorting;
+    if (!bandStarted.value) startBand(sorting);
 
     try {
       const alreadyLoaded = sentences.value.map((s) => s.sourceDeckParent?.deckId ?? s.sourceDeck.deckId);
