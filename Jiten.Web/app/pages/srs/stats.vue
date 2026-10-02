@@ -57,7 +57,8 @@
     const t = today.value;
     return [
       { label: 'Gradings', value: t ? String(t.reviews) : '—' },
-      { label: 'Pass rate', value: t && t.passRate != null ? `${Math.round(t.passRate * 100)}%` : '—' },
+      { label: 'Again', value: t ? String(t.again) : '—' },
+      { label: 'Retention', value: t?.retention.retention != null ? `${Math.round(t.retention.retention * 100)}%` : '—' },
       { label: 'Minutes', value: t ? String(t.minutes) : '—' },
       { label: 'New cards', value: t ? String(t.newCards) : '—' },
     ];
@@ -233,8 +234,8 @@
         },
         {
           type: 'line' as const,
-          label: 'Pass rate',
-          data: h.map((x) => (x.passRate == null ? null : Math.round(x.passRate * 100))),
+          label: 'Retention',
+          data: h.map((x) => (x.retention.retention == null ? null : Math.round(x.retention.retention * 100))),
           borderColor: 'rgb(16, 185, 129)',
           backgroundColor: 'rgba(16, 185, 129, 0.1)',
           borderWidth: 2,
@@ -258,9 +259,10 @@
         callbacks: {
           title: (items) => `${items[0]?.label ?? ''}:00`,
           label: (ctx) => {
-            if (ctx.dataset.label === 'Pass rate') {
+            if (ctx.dataset.label === 'Retention') {
               const v = ctx.raw as number | null;
-              return v == null ? 'Pass rate: —' : `Pass rate: ${v}%`;
+              const n = hourly.value?.[ctx.dataIndex]?.retention.total ?? 0;
+              return v == null ? 'Retention: —' : `Retention: ${v}% (${n} reviews)`;
             }
             return `Reviews: ${ctx.raw as number}`;
           },
@@ -436,7 +438,7 @@
       <!-- 1. Today strip -->
       <div v-if="loadingRetention" class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-4">
         <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
-          <div v-for="i in 4" :key="i" class="h-14 rounded-lg bg-surface-100 dark:bg-surface-800 animate-pulse" />
+          <div v-for="i in 5" :key="i" class="h-14 rounded-lg bg-surface-100 dark:bg-surface-800 animate-pulse" />
         </div>
       </div>
       <div v-else class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-4">
@@ -530,7 +532,7 @@
       </div>
 
       <!-- 3. Retention -->
-      <SrsRetentionPanel :data="retention" :loading="loadingRetention" />
+      <SrsRetentionPanel id="retention" class="scroll-mt-4" :data="retention" :loading="loadingRetention" />
 
       <!-- 4. Difficulty + Retrievability -->
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -654,7 +656,7 @@
             </button>
           </div>
         </div>
-        <div class="text-xs text-gray-500 dark:text-gray-400 mb-3">Reviews and pass rate by hour of day (your local time).</div>
+        <div class="text-xs text-gray-500 dark:text-gray-400 mb-3">Reviews and retention by hour of day (your local time).</div>
         <div v-if="loadingRetention" class="h-[220px] rounded bg-surface-100 dark:bg-surface-800 animate-pulse" />
         <div v-else-if="hasHourly" style="height: 220px">
           <Bar :data="hourlyChartData as any" :options="hourlyChartOptions as any" />

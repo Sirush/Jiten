@@ -232,6 +232,25 @@ public class WordExampleSentencesTests(JitenWebApplicationFactory factory)
         result.SearchedBandMin.Should().BeLessOrEqualTo(0.5f);
     }
 
+    [Theory]
+    [InlineData("EasiestFirst", false, 0f, 0.5f)]
+    [InlineData("HardestFirst", true, 999f, 999.5f)]
+    public async Task Difficulty_NextPageResumesTheBandThatFilledThePage(string sorting, bool descending, float min, float max)
+    {
+        var first = await Query(new { wordId = WordId, readingIndex = 0, sorting, minDifficulty = min, maxDifficulty = max, descending, take = 3 });
+        first.Sentences.Should().HaveCount(3);
+
+        var nextMin = descending ? first.SearchedBandMin - 0.5f : first.SearchedBandMax;
+        var nextMax = descending ? first.SearchedBandMin : first.SearchedBandMax + 0.5f;
+        var second = await Query(new
+        {
+            wordId = WordId, readingIndex = 0, sorting, minDifficulty = nextMin, maxDifficulty = nextMax, descending, take = 3,
+            excludedDeckIds = first.Sentences.Select(s => s.SourceDeck!.DeckId).ToList(),
+        });
+
+        second.Sentences.Should().HaveCount(2, "all five sentences sit in [0, 0.5) and the first page took only three");
+    }
+
     [Fact]
     public async Task Random_CollapsesSubdecksOfOneTitleToASingleSentence()
     {

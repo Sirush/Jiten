@@ -550,6 +550,7 @@
         :active-ms="srsStore.sessionStats.activeMs"
         :hardest-cards="srsStore.hardestCards"
         :grade-counts="srsStore.sessionStats.gradeCounts"
+        :retention="srsStore.sessionStats.retention"
         :leeches="srsStore.sessionLeeches"
         :buried="srsStore.sessionBuried"
         @close="exitStudy"

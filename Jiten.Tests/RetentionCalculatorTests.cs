@@ -223,9 +223,46 @@ public class RetentionCalculatorTests
 
         result.Hourly.All.Should().HaveCount(24);
         result.Hourly.All[0].Count.Should().Be(2);
-        result.Hourly.All[0].PassRate.Should().BeApproximately(0.5, 1e-9);
+        result.Hourly.All[0].Retention.Total.Should().Be(0); // both are first exposures
         result.Hourly.All[12].Count.Should().Be(0);
-        result.Hourly.All[12].PassRate.Should().BeNull();
+        result.Hourly.All[12].Retention.Retention.Should().BeNull();
+    }
+
+    [Fact]
+    public void Hourly_RetentionCountsOnlyQualifyingReviews()
+    {
+        var day = Now.AddDays(-5).Date;
+        var logs = new[]
+        {
+            Rated(1, day.AddHours(8), rating: 3),                 // first exposure
+            Rated(1, day.AddDays(2).AddHours(8), rating: 1),      // gap 2d → qualifies, fail
+            Rated(1, day.AddDays(2).AddHours(8.5), rating: 3),    // same-day relearning step
+        };
+
+        var result = RetentionCalculator.Compute(logs, offsetHours: 0, nowUtc: Now);
+
+        result.Hourly.All[8].Count.Should().Be(3);
+        result.Hourly.All[8].Retention.Total.Should().Be(1);
+        result.Hourly.All[8].Retention.Passed.Should().Be(0);
+    }
+
+    [Fact]
+    public void Periods_GradesCountEveryPress_AndPeriodsWithoutRetentionAreOmitted()
+    {
+        var logs = new[]
+        {
+            Rated(1, new DateTime(2026, 1, 5, 9, 0, 0, DateTimeKind.Utc), rating: 1),  // Jan: first exposure
+            Rated(1, new DateTime(2026, 1, 5, 9, 10, 0, DateTimeKind.Utc), rating: 3), // Jan: learning step
+            Rated(1, new DateTime(2026, 2, 10, 9, 0, 0, DateTimeKind.Utc), rating: 2), // Feb: qualifies, pass
+            Rated(2, new DateTime(2026, 2, 11, 9, 0, 0, DateTimeKind.Utc), rating: 1), // Feb: first exposure
+        };
+
+        var result = RetentionCalculator.Compute(logs, offsetHours: 0, nowUtc: Now);
+
+        result.Monthly.Should().ContainSingle();
+        result.Monthly[0].Period.Should().Be("2026-02");
+        result.Monthly[0].Overall.Total.Should().Be(1);
+        result.Monthly[0].Grades.Should().Equal(1, 1, 0, 0);
     }
 
     [Fact]
@@ -272,7 +309,9 @@ public class RetentionCalculatorTests
 
         result.Today.Reviews.Should().Be(3);           // 2 from card1 today + 1 from card2 today
         result.Today.NewCards.Should().Be(1);          // only card1 first-reviewed today
-        result.Today.PassRate.Should().BeApproximately(2.0 / 3.0, 1e-9); // one Again of three
+        result.Today.Again.Should().Be(1);
+        result.Today.Retention.Total.Should().Be(1);   // only card2's review follows a >= 1d gap
+        result.Today.Retention.Passed.Should().Be(1);
         result.Today.Minutes.Should().Be(3);           // (30000+90000+60000)ms = 180000ms = 3min
     }
 
@@ -285,7 +324,7 @@ public class RetentionCalculatorTests
         result.AnswerButtons.Last30.Learning.Should().Equal(0, 0, 0, 0);
         result.AnswerButtons.Last90.Mature.Should().Equal(0, 0, 0, 0);
         result.Hourly.All.Should().HaveCount(24);
-        result.Hourly.All.Should().OnlyContain(h => h.Count == 0 && h.PassRate == null);
+        result.Hourly.All.Should().OnlyContain(h => h.Count == 0 && h.Retention.Retention == null);
         result.Hourly.Last30.Should().HaveCount(24);
         result.Hourly.Last90.Should().HaveCount(24);
         result.ReviewTime.All.Count.Should().Be(0);
@@ -294,7 +333,8 @@ public class RetentionCalculatorTests
         result.ReviewTime.Last30.Count.Should().Be(0);
         result.ReviewTime.Last90.AverageSeconds.Should().BeNull();
         result.Today.Reviews.Should().Be(0);
-        result.Today.PassRate.Should().BeNull();
+        result.Today.Again.Should().Be(0);
+        result.Today.Retention.Retention.Should().BeNull();
         result.Today.NewCards.Should().Be(0);
     }
 

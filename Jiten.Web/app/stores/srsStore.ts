@@ -37,6 +37,7 @@ interface SessionReview {
 // where it left off. Bumped if the persisted shape changes.
 const SESSION_CACHE_VERSION = 2;
 const SESSION_CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2h, matches the server srs:session TTL
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface PersistedSession {
   version: number;
@@ -57,6 +58,7 @@ interface PersistedSession {
     startTime: number | null;
     activeMs?: number;
     gradeCounts: { again: number; hard: number; good: number; easy: number };
+    retention?: { total: number; passed: number };
   };
   newCardsRemaining: number;
   reviewsRemaining: number;
@@ -112,6 +114,7 @@ interface PendingReview {
     correct: boolean;
     gradeKey: 'again' | 'hard' | 'good' | 'easy';
     clearedGrade: 'hard' | 'good' | 'easy' | null;
+    retentionTest: boolean;
   };
 }
 
@@ -134,6 +137,7 @@ interface UndoSnapshot {
     startTime: Date | null;
     activeMs: number;
     gradeCounts: { again: number; hard: number; good: number; easy: number };
+    retention: { total: number; passed: number };
   };
 }
 
@@ -248,6 +252,7 @@ export const useSrsStore = defineStore('srs', () => {
     startTime: null as Date | null,
     activeMs: 0,
     gradeCounts: { again: 0, hard: 0, good: 0, easy: 0 },
+    retention: { total: 0, passed: 0 },
   });
   const newCardsRemaining = ref(0);
   const reviewsRemaining = ref(0);
@@ -1142,12 +1147,22 @@ export const useSrsStore = defineStore('srs', () => {
     const counted = studySettings.value.countFailedReviews || !isRepeat;
     const wasNew = card.isNewCard && !isRepeat;
     const correct = rating >= FsrsRating.Good;
+    // Same rule as RetentionCalculator: a first answer at least a day after the previous review tests recall.
+    const retentionTest =
+      !isRepeat &&
+      !learningCardKeys.value.has(cardKey) &&
+      card.lastReview != null &&
+      Date.now() - new Date(card.lastReview).getTime() >= DAY_MS;
     const gradeKey: 'again' | 'hard' | 'good' | 'easy' =
       rating === FsrsRating.Again ? 'again' : rating === FsrsRating.Hard ? 'hard' : rating === FsrsRating.Easy ? 'easy' : 'good';
     if (counted) sessionStats.value.cardsReviewed++;
     if (wasNew) sessionStats.value.newCardsLearned++;
     if (correct) sessionStats.value.correctCount++;
     sessionStats.value.gradeCounts[gradeKey]++;
+    if (retentionTest) {
+      sessionStats.value.retention.total++;
+      if (rating !== FsrsRating.Again) sessionStats.value.retention.passed++;
+    }
 
     prefetchSessionSummary();
 
@@ -1235,7 +1250,7 @@ export const useSrsStore = defineStore('srs', () => {
       reinsertedAgainCard,
       reinsertedLearningCard,
       epoch: sessionEpoch,
-      deltas: { counted, wasNew, correct, gradeKey, clearedGrade },
+      deltas: { counted, wasNew, correct, gradeKey, clearedGrade, retentionTest },
     };
     const promise = submitReview(body, ctx);
     inFlightReviews.set(cardKey, promise);
@@ -1361,6 +1376,10 @@ export const useSrsStore = defineStore('srs', () => {
     if (ctx.deltas.wasNew) s.newCardsLearned = Math.max(0, s.newCardsLearned - 1);
     if (ctx.deltas.correct) s.correctCount = Math.max(0, s.correctCount - 1);
     s.gradeCounts[ctx.deltas.gradeKey] = Math.max(0, s.gradeCounts[ctx.deltas.gradeKey] - 1);
+    if (ctx.deltas.retentionTest) {
+      s.retention.total = Math.max(0, s.retention.total - 1);
+      if (ctx.deltas.gradeKey !== 'again') s.retention.passed = Math.max(0, s.retention.passed - 1);
+    }
 
     sessionReviews.value = sessionReviews.value.filter((r) => toRaw(r) !== ctx.reviewEntry);
 
@@ -1698,6 +1717,7 @@ export const useSrsStore = defineStore('srs', () => {
       startTime: blob.sessionStats?.startTime ? new Date(blob.sessionStats.startTime) : new Date(),
       activeMs: blob.sessionStats?.activeMs ?? 0,
       gradeCounts: blob.sessionStats?.gradeCounts ?? { again: 0, hard: 0, good: 0, easy: 0 },
+      retention: blob.sessionStats?.retention ?? { total: 0, passed: 0 },
     };
     newCardsRemaining.value = blob.newCardsRemaining ?? 0;
     reviewsRemaining.value = blob.reviewsRemaining ?? 0;
@@ -1747,7 +1767,7 @@ export const useSrsStore = defineStore('srs', () => {
     sessionLeeches.value = [];
     sessionBuried.value = [];
     lastAutoBuryEvent.value = null;
-    sessionStats.value = { cardsReviewed: 0, newCardsLearned: 0, correctCount: 0, startTime: null, activeMs: 0, gradeCounts: { again: 0, hard: 0, good: 0, easy: 0 } };
+    sessionStats.value = { cardsReviewed: 0, newCardsLearned: 0, correctCount: 0, startTime: null, activeMs: 0, gradeCounts: { again: 0, hard: 0, good: 0, easy: 0 }, retention: { total: 0, passed: 0 } };
     undoStack.value = [];
     isBusy.value = false;
     fetchError.value = null;

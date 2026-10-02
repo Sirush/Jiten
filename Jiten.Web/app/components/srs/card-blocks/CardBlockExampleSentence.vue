@@ -276,6 +276,9 @@
           :furigana-mode="furiganaMode"
           :hidden-word-id="hiddenWordId"
         />
+        <div v-if="extraSentences.length === 0 && !isLoadingMoreSentences" class="text-xs text-gray-500 dark:text-gray-400 ml-1">
+          No other sentences for this word.
+        </div>
         <div v-if="isLoadingMoreSentences" class="border-l-4 border-surface-300 dark:border-surface-600 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r">
           <div class="h-5 w-3/4 bg-surface-200 dark:bg-surface-700 rounded animate-pulse" />
         </div>
@@ -289,6 +292,7 @@
           <i class="pi pi-plus text-[0.6rem]" />
           Load more
         </button>
+        <div v-else-if="extraSentences.length > 0 && !isLoadingMoreSentences" class="text-xs text-gray-500 dark:text-gray-400 ml-1">No more sentences.</div>
       </div>
     </template>
   </div>
