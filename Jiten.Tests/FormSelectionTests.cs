@@ -2088,6 +2088,9 @@ public class FormSelectionTests
         yield return ["もしかして待ち合わせって女の子じゃあ", "待ち合わせ", 1410510, (byte)0];
         // Imperative 来い keeps quotative って separate and stays the verb 来る (くる), not 来る (きたる)
         yield return ["「いいから来いって」", "来い", 1547720, (byte)0];
+        // Kanji prefix + inflected verb is the prefixed verb (相 + 次い → 相次ぐ), not surname 相次 + stray い
+        yield return ["母も姉もめっきり仕事が減り、予約の取り消しも相次いだ。", "相次いだ", 1400980, (byte)0];
+        yield return ["戦闘で死亡するもの、伝染病で亡くなるもの、疲労で脱落したもの、自らの意思で脱走したものなどが相次いだのだ。", "相次いだ", 1400980, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

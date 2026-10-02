@@ -455,6 +455,28 @@ public partial class MorphologicalAnalyser
                         continue;
                     }
 
+                    // Inflected verb: 相 + 次い → 相次ぐ; POS kept so CombineInflections and deconjugation still apply.
+                    if (nextWord.PartOfSpeech == PartOfSpeech.Verb
+                        && !string.IsNullOrEmpty(nextWord.DictionaryForm)
+                        && nextWord.DictionaryForm != nextWord.Text)
+                    {
+                        var dictionaryCombined = currentWord.Text + nextWord.DictionaryForm;
+                        if (!PrefixCombineExclusions.Contains(dictionaryCombined)
+                            && HasVerbOrAdjectiveLookup?.Invoke(dictionaryCombined) == true)
+                        {
+                            var prefixStart = currentWord.StartOffset;
+                            currentWord = new WordInfo(nextWord);
+                            currentWord.Text = combinedText;
+                            currentWord.DictionaryForm = dictionaryCombined;
+                            currentWord.NormalizedForm = dictionaryCombined;
+                            currentWord.StartOffset = prefixStart;
+                            newList ??= CopyAccumulatorUpTo(wordInfos, i);
+                            newList.Add(currentWord);
+                            i += 2;
+                            continue;
+                        }
+                    }
+
                     // Classical i-adjective: 故 + 無き → 故無い (2112310); IAdjective kept so deconjugation reaches adj-i.
                     if (nextWord.PartOfSpeech == PartOfSpeech.IAdjective
                         && !string.IsNullOrEmpty(nextWord.NormalizedForm)
