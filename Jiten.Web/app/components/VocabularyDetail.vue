@@ -186,14 +186,6 @@
   const mediaTypeOptions = computed(() => getListedMediaTypes().map((mediaType) => ({ label: getMediaTypeText(mediaType), value: mediaType })));
   const mediaAccordionValue = ref('0');
 
-  const reloadExampleSentences = () => {
-    exampleSentences.value = [];
-    canLoadExampleSentences.value = true;
-    nextBandMin.value = 0;
-    nextBandMax.value = bandSize;
-    loadExampleSentences();
-  };
-
   const selectMediaType = (type: number | string | null) => {
     selectedMediaTypes.value = type != null ? [Number(type) as MediaType] : [];
     mediaAccordionValue.value = '1';
@@ -218,12 +210,7 @@
     mediaAccordionValue.value = '0';
 
     loadCustomSentences();
-
-    exampleSentences.value = [];
-    canLoadExampleSentences.value = true;
-    nextBandMin.value = 0;
-    nextBandMax.value = bandSize;
-    loadExampleSentences();
+    reloadExampleSentences();
   };
 
   const selectReading = async (index: number) => {
@@ -290,10 +277,17 @@
 
   const nextBandMin = ref(0);
   const nextBandMax = ref(bandSize);
+  const pageSize = 3;
+  // Sentences fetched past the page; kept rather than dropped because the difficulty cursor has already moved beyond them
+  let lookahead: ExampleSentence[] = [];
+  let sourceExhausted = false;
+  let exampleSentenceSeq = 0;
 
-  const switchSortMode = () => {
+  const resetExampleSentences = () => {
     exampleSentences.value = [];
     canLoadExampleSentences.value = true;
+    lookahead = [];
+    sourceExhausted = false;
     if (selectedSortMode.value === 'hardest') {
       nextBandMin.value = 999;
       nextBandMax.value = 999 + bandSize;
@@ -301,6 +295,10 @@
       nextBandMin.value = 0;
       nextBandMax.value = bandSize;
     }
+  };
+
+  const reloadExampleSentences = () => {
+    resetExampleSentences();
     loadExampleSentences();
   };
 
@@ -309,84 +307,74 @@
     loadExampleSentences();
   });
 
-  async function loadExampleSentences() {
-    if (selectedSortMode.value === 'random') {
-      await getRandomExampleSentences();
-    } else {
-      await getExampleSentencesByDifficulty();
-    }
-  }
-
   function isRateLimited(e: unknown) {
     const err = e as { status?: number; statusCode?: number } | null;
     return (err?.status ?? err?.statusCode) === 429;
   }
 
-  async function getRandomExampleSentences() {
+  async function loadExampleSentences() {
+    const seq = ++exampleSentenceSeq;
     isLoadingExampleSentences.value = true;
-    const query = mediaTypesQuery();
-    const url = `vocabulary/${props.wordId}/${currentReadingIndex.value}/random-example-sentences${query ? `?${query}` : ''}`;
-
-    const alreadyLoaded = exampleSentences.value.map((sentence) => sentence.sourceDeckParent?.deckId ?? sentence.sourceDeck.deckId);
+    const page = [...lookahead];
+    lookahead = [];
 
     try {
-      const results = await $api<ExampleSentence[]>(url, {
-        method: 'POST',
-        body: alreadyLoaded,
-      });
+      if (!sourceExhausted) {
+        const alreadyLoaded = [...exampleSentences.value, ...page].map((sentence) => sentence.sourceDeckParent?.deckId ?? sentence.sourceDeck.deckId);
+        const take = pageSize - page.length + 1;
+        const response =
+          selectedSortMode.value === 'random'
+            ? { sentences: await fetchRandomExampleSentences(alreadyLoaded, take) }
+            : await fetchExampleSentencesByDifficulty(alreadyLoaded, take);
+        if (seq !== exampleSentenceSeq) return;
 
-      if (results.length == 0) {
-        canLoadExampleSentences.value = false;
-        return;
+        page.push(...response.sentences);
+        if (response.sentences.length < take) sourceExhausted = true;
+        if ('searchedBandMin' in response) advanceBand(response);
       }
 
-      exampleSentences.value.push(...results);
+      exampleSentences.value.push(...page.slice(0, pageSize));
+      lookahead = page.slice(pageSize);
+      canLoadExampleSentences.value = lookahead.length > 0 || !sourceExhausted;
     } catch (e) {
-      if (!isRateLimited(e)) {
+      if (seq !== exampleSentenceSeq) return;
+      if (isRateLimited(e)) {
+        lookahead = page;
+      } else {
+        exampleSentences.value.push(...page);
         canLoadExampleSentences.value = false;
       }
     } finally {
-      isLoadingExampleSentences.value = false;
+      if (seq === exampleSentenceSeq) isLoadingExampleSentences.value = false;
     }
   }
 
-  async function getExampleSentencesByDifficulty() {
-    isLoadingExampleSentences.value = true;
-    const descending = selectedSortMode.value === 'hardest';
-    const url = `vocabulary/${props.wordId}/${currentReadingIndex.value}/example-sentences-by-difficulty`;
+  async function fetchRandomExampleSentences(alreadyLoaded: number[], take: number) {
     const query = mediaTypesQuery();
+    return await $api<ExampleSentence[]>(
+      `vocabulary/${props.wordId}/${currentReadingIndex.value}/random-example-sentences?take=${take}${query ? `&${query}` : ''}`,
+      { method: 'POST', body: alreadyLoaded }
+    );
+  }
 
-    const alreadyLoaded = exampleSentences.value.map((sentence) => sentence.sourceDeckParent?.deckId ?? sentence.sourceDeck.deckId);
+  async function fetchExampleSentencesByDifficulty(alreadyLoaded: number[], take: number) {
+    const descending = selectedSortMode.value === 'hardest';
+    const query = mediaTypesQuery();
+    return await $api<ExampleSentencesByDifficultyResponse>(
+      `vocabulary/${props.wordId}/${currentReadingIndex.value}/example-sentences-by-difficulty?minDifficulty=${nextBandMin.value}&maxDifficulty=${nextBandMax.value}&descending=${descending}&take=${take}${query ? `&${query}` : ''}`,
+      { method: 'POST', body: alreadyLoaded }
+    );
+  }
 
-    try {
-      const results = await $api<ExampleSentencesByDifficultyResponse>(
-        `${url}?minDifficulty=${nextBandMin.value}&maxDifficulty=${nextBandMax.value}&descending=${descending}${query ? `&${query}` : ''}`,
-        { method: 'POST', body: alreadyLoaded }
-      );
-
-      if (results.sentences.length > 0) {
-        exampleSentences.value.push(...results.sentences);
-      }
-
-      if (descending) {
-        nextBandMax.value = results.searchedBandMin;
-        nextBandMin.value = nextBandMax.value - bandSize;
-        if (nextBandMax.value <= results.minDifficulty) {
-          canLoadExampleSentences.value = false;
-        }
-      } else {
-        nextBandMin.value = results.searchedBandMax;
-        nextBandMax.value = nextBandMin.value + bandSize;
-        if (nextBandMin.value > results.maxDifficulty) {
-          canLoadExampleSentences.value = false;
-        }
-      }
-    } catch (e) {
-      if (!isRateLimited(e)) {
-        canLoadExampleSentences.value = false;
-      }
-    } finally {
-      isLoadingExampleSentences.value = false;
+  function advanceBand(results: ExampleSentencesByDifficultyResponse) {
+    if (selectedSortMode.value === 'hardest') {
+      nextBandMax.value = results.searchedBandMin;
+      nextBandMin.value = nextBandMax.value - bandSize;
+      if (nextBandMax.value <= results.minDifficulty) sourceExhausted = true;
+    } else {
+      nextBandMin.value = results.searchedBandMax;
+      nextBandMax.value = nextBandMin.value + bandSize;
+      if (nextBandMin.value > results.maxDifficulty) sourceExhausted = true;
     }
   }
 </script>
@@ -604,7 +592,7 @@
                     variant="filled"
                     class="sort-mode-select"
                     @click.stop
-                    @change="switchSortMode()"
+                    @change="reloadExampleSentences()"
                   >
                     <template #value="{ value }">
                       <div class="flex items-center gap-1.5 text-gray-500 dark:text-gray-400">
@@ -686,7 +674,15 @@
                     </NuxtLink>
                   </div>
                 </template>
-                <Button v-if="exampleSentences.length > 0" :disabled="!canLoadExampleSentences" @click="loadExampleSentences()">Load more</Button>
+                <Button
+                  v-if="exampleSentences.length > 0 && canLoadExampleSentences"
+                  label="Load more"
+                  :loading="isLoadingExampleSentences"
+                  @click="loadExampleSentences()"
+                />
+                <div v-else-if="exampleSentences.length > 0 && !isLoadingExampleSentences" class="text-sm text-surface-400 py-2">
+                  No more example sentences.
+                </div>
               </AccordionContent>
             </AccordionPanel>
           </Accordion>

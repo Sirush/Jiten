@@ -137,6 +137,9 @@ public class ExampleSentenceQueryService(JitenDbContext context, ISentenceTokenS
 
             collected.AddRange(batch);
 
+            if (batch.Count == remaining)
+                break;
+
             if (batch.Count == 0)
             {
                 // Empty band: jump straight to the band containing the nearest sentence instead of stepping through the gap

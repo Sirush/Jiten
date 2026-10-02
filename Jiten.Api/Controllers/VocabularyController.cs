@@ -500,14 +500,15 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
     [EnableRateLimiting("heavy")]
     [SwaggerOperation(Summary = "Get random example sentences",
                       Description =
-                          "Returns up to three random example sentences for the given word and reading index, excluding already loaded ones.")]
+                          "Returns up to `take` (default 3) random example sentences for the given word and reading index, excluding already loaded ones.")]
     [ProducesResponseType(typeof(List<ExampleSentenceDto>), StatusCodes.Status200OK)]
     public async Task<IResult> GetRandomExampleSentences([FromRoute] int wordId, [FromRoute] int readingIndex,
                                                          [FromBody] List<int> alreadyLoaded, [FromRoute] MediaType? mediaType = null,
-                                                         [FromQuery] List<MediaType>? mediaTypes = null)
+                                                         [FromQuery] List<MediaType>? mediaTypes = null, [FromQuery] int take = 3)
     {
         if (alreadyLoaded.Count > MaxExcludedDeckIds) return Results.BadRequest();
-        return Results.Ok(await exampleSentences.GetRandomAsync(wordId, readingIndex, alreadyLoaded, MediaTypeFilter(mediaType, mediaTypes), 3));
+        return Results.Ok(await exampleSentences.GetRandomAsync(wordId, readingIndex, alreadyLoaded, MediaTypeFilter(mediaType, mediaTypes),
+                                                                Math.Clamp(take, 1, 20)));
     }
 
     [HttpPost("{wordId}/{readingIndex}/example-sentences-by-difficulty/{mediaType?}")]
