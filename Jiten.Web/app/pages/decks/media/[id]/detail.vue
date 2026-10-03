@@ -22,6 +22,12 @@
 
   const showSeoBlocks = computed(() => !authStore.isAuthenticated);
 
+  // Set by the guest Study button's sign-up redirect; read once so a refresh doesn't reopen the dialog.
+  const openStudy = route.query.study === '1';
+  onMounted(() => {
+    if (openStudy) router.replace({ query: { ...route.query, study: undefined } });
+  });
+
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
   const url = computed(() => `media-deck/${route.params.id}/detail`);
 
@@ -32,7 +38,7 @@
     const size = Number(route.query.pageSize);
     return size === 50 || size === 100 ? size : undefined;
   });
-  
+
   const minutesParam = (key: string) => {
     const value = Number(route.query[key]);
     return Number.isFinite(value) && value > 0 ? value : undefined;
@@ -208,8 +214,7 @@
       storedSubdeckStyle.value = value;
       try {
         localStorage.setItem(subdeckStyleKey.value, String(value));
-      } catch {
-      }
+      } catch {}
     },
   });
 
@@ -392,7 +397,7 @@
       </Card>
     </div>
     <div v-else-if="response?.data?.mainDeck">
-      <MediaDeckCard :deck="response.data.mainDeck" title-tag="h1" hide-detail-button @update:deck="updateMainDeck" />
+      <MediaDeckCard :deck="response.data.mainDeck" title-tag="h1" hide-detail-button :open-study="openStudy" @update:deck="updateMainDeck" />
 
       <DeckStudyOverview v-if="showSeoBlocks && response.data.parentDeck == null" :deck="response.data.mainDeck" />
 

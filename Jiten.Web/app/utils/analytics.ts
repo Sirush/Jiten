@@ -1,3 +1,5 @@
+import { signupEventProps, type SignupSource } from '~/utils/firstTouch';
+
 export function trackEvent(name: string, data?: Record<string, string | number | boolean>): void {
   if (import.meta.server) return;
   try {
@@ -30,6 +32,10 @@ export function trackActivation(action: 'review' | 'deck_download'): void {
 const PENDING_SIGNUP_KEY = 'jiten.pendingSignup';
 
 export type SignupMethod = 'email' | 'google';
+
+export function trackSignupCompleted(method: SignupMethod, source: SignupSource | undefined): void {
+  trackEvent('signup_completed', { method, ...signupEventProps(source) });
+}
 
 export function markPendingSignup(method: SignupMethod): void {
   if (import.meta.server) return;

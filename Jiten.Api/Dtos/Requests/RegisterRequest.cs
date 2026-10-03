@@ -16,4 +16,5 @@ public class RegisterRequest
     public required string RecaptchaResponse { get; set; }
     public bool TosAccepted { get; set; }
     public bool ReceiveNewsletter { get; set; }
+    public SignupSourceDto? SignupSource { get; set; }
 }

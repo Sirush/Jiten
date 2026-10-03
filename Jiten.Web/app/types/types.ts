@@ -678,6 +678,7 @@ export interface CompleteGoogleRegistrationRequest {
   username: string;
   tosAccepted: boolean;
   receiveNewsletter: boolean;
+  signupSource?: import('~/utils/firstTouch').SignupSource;
 }
 
 export interface UserMetadata {

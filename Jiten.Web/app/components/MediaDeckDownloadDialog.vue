@@ -138,12 +138,49 @@
     {
       value: DeckFormat.Learn,
       label: 'Learn',
-      desc: authStore.isAuthenticated ? 'Bulk vocabulary update' : 'Bulk vocabulary update (Login required)',
+      desc: authStore.isAuthenticated ? 'Bulk vocabulary update' : 'Mark these words as known (account required)',
       icon: 'pi pi-graduation-cap',
       longDesc: `Mark the selected vocabulary as <b>mastered</b> or <b>blacklisted</b> in your vocabulary tracker. No file is downloaded, the words are applied directly to your account. Both of those options count towards your coverage after you trigger a manual refresh.`,
-      disabled: !authStore.isAuthenticated,
+      disabled: false,
+      locked: !authStore.isAuthenticated,
     },
   ]);
+
+  type LockedOption = 'learn' | 'coverage' | 'exclude_mature' | 'exclude_tracked';
+  const lockedMessages: Record<LockedOption, string> = {
+    learn: 'With a free account, you can mark these words as known. This will allow you to know the coverage (how much you know) on every title.',
+    coverage: 'With a free account, you can get a customised deck with only the words you don\'t know, to reach a target coverage.',
+    exclude_mature: 'With a free account, you can download the deck with only the words you don\'t know.',
+    exclude_tracked: 'With a free account, you can download a deck with only fresh words.',
+  };
+  const lockedOption = ref<LockedOption>('learn');
+  const guestPopover = ref<{ show: (event: Event, target?: HTMLElement) => void } | null>(null);
+  const modePicker = ref<HTMLElement | null>(null);
+
+  function openLocked(option: LockedOption, anchor: HTMLElement) {
+    lockedOption.value = option;
+    trackEvent('guest_locked_option_clicked', { option });
+    setTimeout(() => guestPopover.value?.show({ currentTarget: anchor } as unknown as Event, anchor));
+  }
+
+  function onFormatTile(opt: { value: DeckFormat; disabled: boolean; locked?: boolean }, event: Event) {
+    if (opt.locked) openLocked('learn', event.currentTarget as HTMLElement);
+    else if (!opt.disabled) format.value = opt.value;
+  }
+
+  const { isDismissed, dismiss, authLink } = useGuestPrompt();
+  const guestDownloadResult = ref<{ title: string; count: number | null } | null>(null);
+  const showsGuestDownloadPrompt = computed(() => !authStore.isAuthenticated && !!props.deck && !isStudyDeckMode.value && !isMediaListMode.value);
+
+  function onGuestDownloadSignup() {
+    markGuestPrompt('download_dialog');
+    trackEvent('guest_download_prompt_clicked');
+  }
+
+  function closeGuestDownloadResult() {
+    dismiss('download_dialog');
+    localVisible.value = false;
+  }
 
   const learnStateOptions = [
     { label: 'Mastered (never forget)', value: 'mastered' },
@@ -175,10 +212,9 @@
     { label: 'Manual', value: 'manual', icon: 'pi pi-sliders-h' },
     { label: 'Occurrences', value: 'occurrence', icon: 'pi pi-hashtag' },
     {
-      label: authStore.isAuthenticated ? 'Coverage %' : 'Coverage % (Login req.)',
+      label: authStore.isAuthenticated ? 'Coverage %' : 'Coverage % (account required)',
       value: 'target',
       icon: 'pi pi-chart-pie',
-      disabled: !authStore.isAuthenticated,
     },
   ]);
 
@@ -276,8 +312,20 @@
 
   watch(
     () => props.visible,
-    (newVal) => (localVisible.value = newVal)
+    (newVal) => {
+      localVisible.value = newVal;
+      if (newVal) guestDownloadResult.value = null;
+    }
   );
+
+  // The pickers keep their own selection, so reverting the model alone leaves Coverage % highlighted.
+  const modePickerKey = ref(0);
+  watch(downloadMode, (mode, previous) => {
+    if (mode !== 'target' || authStore.isAuthenticated) return;
+    downloadMode.value = previous;
+    modePickerKey.value++;
+    if (modePicker.value) openLocked('coverage', modePicker.value);
+  });
   watch(localVisible, (newVal) => emit('update:visible', newVal));
 
   watch(
@@ -641,7 +689,12 @@
           }
         }
 
-        localVisible.value = false;
+        if (showsGuestDownloadPrompt.value && !isDismissed('download_dialog')) {
+          guestDownloadResult.value = { title: localiseTitle(props.deck!), count: currentCardAmount.value };
+          trackEvent('guest_download_prompt_shown');
+        } else {
+          localVisible.value = false;
+        }
         const blobUrl = window.URL.createObjectURL(finalBlob);
         const link = document.createElement('a');
         link.href = blobUrl;
@@ -739,11 +792,26 @@
   <Dialog
     v-model:visible="localVisible"
     modal
-    :header="isLearn ? 'Learn Vocabulary' : 'Download Deck'"
+    :header="guestDownloadResult ? 'Deck downloaded' : isLearn ? 'Learn Vocabulary' : 'Download Deck'"
     class="w-[95vw] sm:w-[90vw] md:w-[42rem]"
     :pt="{ content: { class: 'p-0 flex flex-col', style: 'overflow: hidden' } }"
   >
-    <div class="flex flex-col min-h-0">
+    <div v-if="guestDownloadResult" class="p-5 flex flex-col gap-4">
+      <p class="text-gray-800 dark:text-gray-200">
+        <span class="font-semibold">{{ guestDownloadResult.title }}</span
+        ><template v-if="guestDownloadResult.count !== null">, {{ guestDownloadResult.count.toLocaleString() }} words</template>.
+      </p>
+      <p
+        class="rounded-lg border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-950/40 p-4 text-sm leading-relaxed text-gray-800 dark:text-gray-200"
+      >
+        Already know some of these? With a free account, you can filter out the words you already know, so your next downloads only have fresh words.
+      </p>
+      <div class="flex flex-col-reverse sm:flex-row sm:justify-end items-stretch sm:items-center gap-2">
+        <Button label="Not now" text severity="secondary" @click="closeGuestDownloadResult" />
+        <Button as="router-link" :to="authLink('/register')" label="Create an account" @click="onGuestDownloadSignup" />
+      </div>
+    </div>
+    <div v-else class="flex flex-col min-h-0">
       <!-- Scrollable content -->
       <div class="p-5 overflow-y-auto min-h-0 flex flex-col gap-6">
         <!-- Format selection -->
@@ -754,15 +822,23 @@
             <div
               v-for="opt in formatOptions"
               :key="opt.value"
-              class="border rounded-lg p-3 transition-all duration-200 flex flex-col gap-1 items-start relative"
+              class="border rounded-lg p-3 transition-all duration-200 flex flex-col gap-1 items-start relative focus-visible:outline-2 focus-visible:outline-primary-500"
               :class="[
                 opt.disabled
                   ? 'opacity-50 cursor-not-allowed bg-gray-100 dark:bg-gray-900 border-gray-200 dark:border-gray-700'
-                  : format === opt.value
-                    ? 'bg-primary-50 dark:bg-gray-600 border-primary dark:border-gray-700 ring-1 ring-primary cursor-pointer hover:border-gray-400 hover:dark:border-gray-500 hover:shadow-sm'
-                    : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 cursor-pointer hover:border-gray-400 hover:dark:border-gray-500 hover:shadow-sm',
+                  : opt.locked
+                    ? 'border-dashed bg-gray-50 dark:bg-gray-900 border-gray-300 dark:border-gray-600 cursor-pointer hover:border-gray-400 hover:dark:border-gray-500'
+                    : format === opt.value
+                      ? 'bg-primary-50 dark:bg-gray-600 border-primary dark:border-gray-700 ring-1 ring-primary cursor-pointer hover:border-gray-400 hover:dark:border-gray-500 hover:shadow-sm'
+                      : 'bg-white dark:bg-gray-800 border-gray-200 dark:border-gray-700 cursor-pointer hover:border-gray-400 hover:dark:border-gray-500 hover:shadow-sm',
               ]"
-              @click="!opt.disabled && (format = opt.value)"
+              role="button"
+              :tabindex="opt.disabled ? -1 : 0"
+              :aria-disabled="opt.disabled || undefined"
+              :aria-pressed="!opt.locked && !opt.disabled ? format === opt.value : undefined"
+              @click="onFormatTile(opt, $event)"
+              @keydown.enter.prevent="onFormatTile(opt, $event)"
+              @keydown.space.prevent="onFormatTile(opt, $event)"
             >
               <div class="flex items-center gap-2 w-full">
                 <i :class="[opt.icon, !opt.disabled && format === opt.value ? 'text-primary' : 'text-gray-400 dark:text-gray-400']" class="text-lg" />
@@ -774,7 +850,8 @@
                 </span>
               </div>
               <span class="text-[10px] leading-tight text-gray-500 dark:text-gray-400">{{ opt.desc }}</span>
-              <i v-if="!opt.disabled && format === opt.value" class="pi pi-check-circle text-primary absolute top-2 right-2 text-sm" />
+              <i v-if="!opt.disabled && !opt.locked && format === opt.value" class="pi pi-check-circle text-primary absolute top-2 right-2 text-sm" />
+              <i v-else-if="opt.locked" class="pi pi-lock text-gray-500 dark:text-gray-400 absolute top-2 right-2 text-xs" aria-hidden="true" />
             </div>
           </div>
 
@@ -792,26 +869,30 @@
             <div class="text-xs font-bold text-gray-500 dark:text-gray-400 uppercase tracking-widest mb-3">
               {{ isLearn ? 'Learn Strategy' : 'Download Strategy' }}
             </div>
-            <div class="hidden sm:block">
-              <SelectButton
+            <div ref="modePicker">
+              <div class="hidden sm:block">
+                <SelectButton
+                  :key="modePickerKey"
+                  v-model="downloadMode"
+                  :options="modeOptions"
+                  option-value="value"
+                  option-label="label"
+                  option-disabled="disabled"
+                  class="w-full"
+                  :pt="{ button: { class: 'flex-1 text-sm py-2 whitespace-nowrap' } }"
+                />
+              </div>
+              <Select
+                :key="modePickerKey"
                 v-model="downloadMode"
                 :options="modeOptions"
                 option-value="value"
                 option-label="label"
                 option-disabled="disabled"
-                class="w-full"
-                :pt="{ button: { class: 'flex-1 text-sm py-2 whitespace-nowrap' } }"
+                class="w-full sm:!hidden text-sm"
+                size="small"
               />
             </div>
-            <Select
-              v-model="downloadMode"
-              :options="modeOptions"
-              option-value="value"
-              option-label="label"
-              option-disabled="disabled"
-              class="w-full sm:!hidden text-sm"
-              size="small"
-            />
 
             <!-- Target percentage mode -->
             <div
@@ -962,6 +1043,41 @@
                     <template v-if="hasExampleSentences">Remove example sentences.</template>
                     <template v-else>Example sentences are not available for this media type.</template>
                   </div>
+                </div>
+              </div>
+
+              <div
+                v-if="!authStore.isAuthenticated"
+                class="flex items-start gap-3 p-3 rounded-lg border border-transparent hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-primary-500"
+                role="button"
+                tabindex="0"
+                @click="openLocked('exclude_mature', $event.currentTarget as HTMLElement)"
+                @keydown.enter.prevent="openLocked('exclude_mature', $event.currentTarget as HTMLElement)"
+                @keydown.space.prevent="openLocked('exclude_mature', $event.currentTarget as HTMLElement)"
+              >
+                <Checkbox :model-value="false" binary disabled class="mt-1" />
+                <div>
+                  <div class="text-sm font-medium text-gray-800 dark:text-gray-200">
+                    Exclude Mature, Mastered & Blacklisted Vocabulary <span class="font-normal text-gray-600 dark:text-gray-400">(account required)</span>
+                  </div>
+                  <div class="text-xs text-gray-600 dark:text-gray-400">Removes words that are mature (21+ day review interval), mastered, or blacklisted.</div>
+                </div>
+              </div>
+              <div
+                v-if="!authStore.isAuthenticated"
+                class="flex items-start gap-3 p-3 rounded-lg border border-transparent hover:bg-gray-50 hover:dark:bg-gray-800 hover:border-gray-200 hover:dark:border-gray-700 transition-colors cursor-pointer focus-visible:outline-2 focus-visible:outline-primary-500"
+                role="button"
+                tabindex="0"
+                @click="openLocked('exclude_tracked', $event.currentTarget as HTMLElement)"
+                @keydown.enter.prevent="openLocked('exclude_tracked', $event.currentTarget as HTMLElement)"
+                @keydown.space.prevent="openLocked('exclude_tracked', $event.currentTarget as HTMLElement)"
+              >
+                <Checkbox :model-value="false" binary disabled class="mt-1" />
+                <div>
+                  <div class="text-sm font-medium text-gray-800 dark:text-gray-200">
+                    Exclude All Tracked Vocabulary <span class="font-normal text-gray-600 dark:text-gray-400">(account required)</span>
+                  </div>
+                  <div class="text-xs text-gray-600 dark:text-gray-400">Removes all words in your vocabulary list, regardless of their status.</div>
                 </div>
               </div>
 
@@ -1149,6 +1265,8 @@
       </div>
     </div>
   </Dialog>
+
+  <GuestAccountPopover v-if="!authStore.isAuthenticated" ref="guestPopover" :message="lockedMessages[lockedOption]" :prompt="`download_${lockedOption}`" />
 
   <div v-if="downloading" class="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-black/60 backdrop-blur-sm text-white">
     <ProgressSpinner style="width: 50px; height: 50px" stroke-width="6" />

@@ -35,7 +35,8 @@
   const route = useRoute();
   const router = useRouter();
 
-  const loginLink = (plan: Plan) => ({ path: '/login', query: { redirect: `/jiten-plus?plan=${plan}` } });
+  // A guest choosing a plan usually has no account yet; the register page links to login for those who do.
+  const registerLink = (plan: Plan) => ({ path: '/register', query: { redirect: `/jiten-plus?plan=${plan}` } });
 
   // Resumes a checkout intent carried through login via ?plan=; the query is cleared so a refresh doesn't restart it.
   onMounted(async () => {
@@ -118,7 +119,7 @@
           </li>
         </ul>
         <div class="jp-card__cta">
-          <NuxtLink v-if="!auth.isAuthenticated" :to="loginLink('monthly')" class="block">
+          <NuxtLink v-if="!auth.isAuthenticated" :to="registerLink('monthly')" class="block" @click="markGuestPrompt('pricing_plan')">
             <Button label="Choose monthly" severity="secondary" class="w-full" />
           </NuxtLink>
           <NuxtLink v-else-if="isFull" to="/settings/subscription" class="block">
@@ -144,7 +145,7 @@
           </li>
         </ul>
         <div class="jp-card__cta">
-          <NuxtLink v-if="!auth.isAuthenticated" :to="loginLink('yearly')" class="block">
+          <NuxtLink v-if="!auth.isAuthenticated" :to="registerLink('yearly')" class="block" @click="markGuestPrompt('pricing_plan')">
             <Button label="Choose yearly" class="w-full" />
           </NuxtLink>
           <NuxtLink v-else-if="isFull" to="/settings/subscription" class="block">
@@ -183,7 +184,7 @@
             </li>
           </ul>
           <div class="jp-card__cta">
-            <NuxtLink v-if="!auth.isAuthenticated" :to="loginLink('lifetime')" class="block">
+            <NuxtLink v-if="!auth.isAuthenticated" :to="registerLink('lifetime')" class="block" @click="markGuestPrompt('pricing_plan')">
               <Button label="Get lifetime access" severity="warn" class="w-full" />
             </NuxtLink>
             <Button v-else label="Get lifetime access" severity="warn" class="w-full" :loading="checkingOut === 'lifetime'" @click="subscribe('lifetime')" />

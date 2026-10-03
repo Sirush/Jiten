@@ -19,6 +19,9 @@ public class User : IdentityUser
 
     public DateTime? DisplayNameChangedAt { get; set; }
 
+    /// <summary>First page, referrer and UTM source that brought the visitor, captured once at registration.</summary>
+    public string? SignupSourceJson { get; set; }
+
     /// <summary>Last time a password reset email was sent, used to throttle reset requests.</summary>
     public DateTime? LastPasswordResetRequestedAt { get; set; }
 

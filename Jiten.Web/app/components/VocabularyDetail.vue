@@ -38,6 +38,10 @@
       default: () => [],
       required: false,
     },
+    guestPrompt: {
+      type: Boolean,
+      required: false,
+    },
   });
 
   const emit = defineEmits(['mainReadingTextChanged', 'readingSelected']);
@@ -468,6 +472,9 @@
               </ClientOnly>
               <HiddenDefinitionsToggle :word-id="props.wordId" class="mt-2" />
               <CustomMeaning :word-id="props.wordId" editable class="mt-2" />
+              <GuestAccountStrip v-if="props.guestPrompt" surface="word" class="mt-3">
+                Track this word and your knowledge of it in every title.
+              </GuestAccountStrip>
             </div>
           </div>
 

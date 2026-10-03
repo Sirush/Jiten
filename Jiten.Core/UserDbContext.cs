@@ -71,7 +71,10 @@ public class UserDbContext : IdentityDbContext<User>
         modelBuilder.Entity<User>(entity =>
         {
             if (isNpgsql)
+            {
                 entity.Property(e => e.Id).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+                entity.Property(e => e.SignupSourceJson).HasColumnType("jsonb");
+            }
 
             entity.Property(e => e.DisplayName).HasMaxLength(20);
             entity.Property(e => e.NormalizedDisplayName).HasMaxLength(20);

@@ -28,6 +28,8 @@
     lazyCover?: boolean;
     // Guest homepage demo: shows the coverage bars without an authenticated user; hides rating and download to keep the card short.
     demoCoverage?: boolean;
+    /** Opens the study dialog once mounted, for a visitor coming back from sign-up through the guest Study button. */
+    openStudy?: boolean;
   }>();
 
   const emit = defineEmits<{
@@ -96,7 +98,9 @@
   const deckDifficulty = computed(() => props.deck.difficultyRaw ?? props.deck.difficulty);
   const readingSpeed = computed(() => store.readingSpeedFor(deckDifficulty.value));
   const readingSpeedLabel = computed(() =>
-    store.readingSpeedByDifficulty && deckDifficulty.value >= 0 ? `your reading speed for ${getDifficultyName(deckDifficulty.value)} titles` : 'your reading speed'
+    store.readingSpeedByDifficulty && deckDifficulty.value >= 0
+      ? `your reading speed for ${getDifficultyName(deckDifficulty.value)} titles`
+      : 'your reading speed'
   );
   const readingDuration = computed(() => Math.round(props.deck.characterCount / readingSpeed.value));
   const speechSpeed = computed(() => props.deck.speechSpeed ?? 0);
@@ -425,6 +429,21 @@
     if (el) isTitleClipped.value = el.scrollHeight > el.clientHeight + 1;
   };
 
+  const guestStudyPopoverActive = ref(false);
+  const guestStudyPopover = ref<{ show: (event: Event, target?: HTMLElement) => void } | null>(null);
+
+  async function onGuestStudy(event: MouseEvent) {
+    const target = event.currentTarget as HTMLElement;
+    trackEvent('guest_locked_control_clicked', { control: 'study' });
+    guestStudyPopoverActive.value = true;
+    await nextTick();
+    guestStudyPopover.value?.show({ currentTarget: target } as unknown as Event, target);
+  }
+
+  onMounted(() => {
+    if (props.openStudy && authStore.isAuthenticated) showStudyDeckDialog.value = true;
+  });
+
   onMounted(() => {
     if (!props.isCompact) return;
     measureTitleClip();
@@ -525,7 +544,10 @@
                   <i :class="deck.isFavourite ? 'pi pi-star-fill text-yellow-500' : 'pi pi-star utility-icon'" />
                 </button>
               </Tooltip>
-              <Tooltip v-if="authStore.isAuthenticated" :content="isCompact && currentStatus !== DeckStatus.None ? getDeckStatusText(currentStatus) : 'Set status'">
+              <Tooltip
+                v-if="authStore.isAuthenticated"
+                :content="isCompact && currentStatus !== DeckStatus.None ? getDeckStatusText(currentStatus) : 'Set status'"
+              >
                 <button
                   type="button"
                   class="flex items-center gap-1 p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
@@ -662,7 +684,9 @@
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                             <span class="@xl:hidden">Characters</span><span class="hidden @xl:inline">Character count</span>
                           </span>
-                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.characterCount.toLocaleString() }}</span>
+                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
+                            deck.characterCount.toLocaleString()
+                          }}</span>
                         </div>
                         <div v-else-if="statId === 'wordCount'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Word count</span>
@@ -734,7 +758,9 @@
                         </div>
                         <div v-else-if="statId === 'dialogue'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Dialogue</span>
-                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.dialoguePercentage.toFixed(1) }}%</span>
+                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap"
+                            >{{ deck.dialoguePercentage.toFixed(1) }}%</span
+                          >
                         </div>
                         <template v-else-if="statId === 'children'">
                           <router-link
@@ -881,6 +907,16 @@
                           @click="showStudyDeckDialog = true"
                         />
                       </Tooltip>
+                      <Tooltip v-else-if="!demoCoverage" :content="isCompact ? 'Study with SRS (free account)' : ''">
+                        <Button
+                          :label="isCompact ? undefined : 'Study'"
+                          :aria-label="isCompact ? 'Study with SRS (free account)' : undefined"
+                          icon="pi pi-play"
+                          size="small"
+                          class="text-center"
+                          @click="onGuestStudy"
+                        />
+                      </Tooltip>
                       <Tooltip v-if="!demoCoverage" content="Download / Learn">
                         <!-- Label shortens rather than wrapping: a two-line label makes this button taller than its row. -->
                         <Button :icon="isCompact ? 'pi pi-download' : undefined" size="small" class="text-center" @click="showDownloadDialog = true">
@@ -917,6 +953,13 @@
     </div>
 
     <LazyMediaDeckDownloadDialog v-if="showDownloadDialog" :deck="deck" :visible="showDownloadDialog" @update:visible="showDownloadDialog = $event" />
+    <GuestAccountPopover
+      v-if="guestStudyPopoverActive"
+      ref="guestStudyPopover"
+      message="Study the vocabulary in this title with Jiten, an user-friendly SRS experience with extensive customisation, powered by the modern FSRS-7 algorithm."
+      prompt="study_button"
+      :redirect="`/decks/media/${deck.deckId}/detail?study=1`"
+    />
     <LazySrsAddDeckDialog v-if="showStudyDeckDialog" :visible="showStudyDeckDialog" :preselected-deck="deck" @update:visible="showStudyDeckDialog = $event" />
     <LazyReportIssueDialog v-if="showIssueDialog" :visible="showIssueDialog" :deck="deck" @update:visible="showIssueDialog = $event" />
 

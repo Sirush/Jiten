@@ -25,6 +25,7 @@
 
   const words = computed<DeckWord[]>(() => response.value?.words || []);
   const hasMeaningfulParseResults = computed(() => words.value.some((w) => w.wordId !== 0));
+  const distinctWordCount = computed(() => new Set(words.value.filter((w) => w.wordId !== 0).map((w) => `${w.wordId}/${w.readingIndex}`)).size);
 
   const isLikelyEnglish = computed(() => {
     const text = String(searchContent.value).trim();
@@ -365,6 +366,9 @@
     </div>
 
     <template v-if="showParseResults">
+      <GuestAccountStrip v-if="distinctWordCount >= 3" surface="parse" class="mb-3">
+        {{ distinctWordCount.toLocaleString() }} different words in this text. With an account, you can keep track of the ones you already know.
+      </GuestAccountStrip>
       <div class="flex items-center gap-0.5 flex-wrap">
         <span v-for="(word, index) in words" :key="index" class="pr-1.5 font-noto-sans" lang="ja">
           <span

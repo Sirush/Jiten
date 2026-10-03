@@ -243,6 +243,9 @@
             </template>
           </Column>
         </DataTable>
+        <GuestAccountStrip surface="frequency_dictionaries" class="mt-4">
+          With an account, you can easily make study decks based on all those frequencies.
+        </GuestAccountStrip>
         <div class="mt-4 flex flex-col sm:flex-row sm:items-center gap-2">
           <JitenPlusGate feature="freq-list-generate" feature-label="Custom frequency lists" compact>
             <Button as="router-link" to="/jiten-plus/frequency-lists" severity="primary" outlined>
