@@ -382,6 +382,21 @@ public partial class AdminController(
         if (deck == null)
             return NotFound(new { Message = $"No deck found with ID {model.DeckId}." });
 
+        if (model.RequestId is > 0)
+        {
+            var mediaRequest = await dbContext.MediaRequests.FirstOrDefaultAsync(r => r.Id == model.RequestId);
+            if (mediaRequest == null)
+                return BadRequest(new { Message = $"Request #{model.RequestId} does not exist." });
+
+            if (mediaRequest.TargetDeckId is { } targetDeckId && targetDeckId != deck.DeckId && deck.Children.All(c => c.DeckId != targetDeckId))
+                return BadRequest(new { Message = $"Request #{model.RequestId} targets another deck." });
+
+            mediaRequest.FulfilledDeckId = deck.DeckId;
+            mediaRequest.UpdatedAt = DateTime.UtcNow;
+            if (mediaRequest.Status == MediaRequestStatus.Open)
+                mediaRequest.Status = MediaRequestStatus.InProgress;
+        }
+
         // Update basic properties
         deck.MediaType = model.MediaType;
         deck.ReleaseDate = model.ReleaseDate;
@@ -561,8 +576,8 @@ public partial class AdminController(
         if (reparse)
             backgroundJobs.Enqueue<ReparseJob>(job => job.Reparse(deck.DeckId));
 
-        logger.LogInformation("Admin updated deck: DeckId={DeckId}, Title={Title}, Reparse={Reparse}",
-                              deck.DeckId, deck.OriginalTitle, reparse);
+        logger.LogInformation("Admin updated deck: DeckId={DeckId}, Title={Title}, Reparse={Reparse}, RequestId={RequestId}",
+                              deck.DeckId, deck.OriginalTitle, reparse, model.RequestId);
 
         return Ok(new { Message = $"Media deck {deck.DeckId} updated successfully" });
 

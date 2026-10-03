@@ -11,9 +11,8 @@
   import Tag from 'primevue/tag';
   import Toast from 'primevue/toast';
   import { useToast } from 'primevue/usetoast';
-  import JSZip from 'jszip';
   import type { Metadata, DuplicateCheckDeckDto } from '~/types';
-  import type { DuplicateCheckRequestDto, DuplicateCheckResultDto, MediaRequestDto, MediaRequestUploadAdminDto } from '~/types/types';
+  import type { DuplicateCheckRequestDto, DuplicateCheckResultDto, MediaRequestUploadAdminDto } from '~/types/types';
   import { getRequestStatusText } from '~/utils/requestStatusMapper';
   import { MediaType } from '~/types';
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
@@ -37,12 +36,11 @@
   const toast = useToast();
   const route = useRoute();
   const { $api } = useNuxtApp();
-  const { fetchRequest, fetchComments, downloadUploadFile, reviewUpload } = useMediaRequests();
+  const { fetchRequest } = useMediaRequests();
+  const { fulfillingRequest, requestUploads, attachRequest, detachRequest, fetchUploadFiles, markUploadReviewed } = useRequestUploads();
   const localiseTitle = useLocaliseTitle();
 
-  const fulfillingRequest = ref<MediaRequestDto | null>(null);
   const isPrefilling = ref(false);
-  const requestUploads = ref<MediaRequestUploadAdminDto[]>([]);
   const importingUploadId = ref<number | null>(null);
 
   function formatFileSize(bytes: number): string {
@@ -96,22 +94,6 @@
     },
     { deep: true }
   );
-
-  function attachRequest(request: MediaRequestDto) {
-    fulfillingRequest.value = request;
-    requestUploads.value = [];
-    fetchComments(request.id).then((comments) => {
-      if (fulfillingRequest.value?.id !== request.id) return;
-      requestUploads.value = comments
-        .map((c) => c.upload as MediaRequestUploadAdminDto | undefined)
-        .filter((u): u is MediaRequestUploadAdminDto => !!u && !u.fileDeleted);
-    });
-  }
-
-  function detachRequest() {
-    fulfillingRequest.value = null;
-    requestUploads.value = [];
-  }
 
   async function selectMatchingRequest(requestId: number) {
     if (attachingRequestId.value !== null) return;
@@ -339,32 +321,15 @@
     applyAutoNames('detected');
   }
 
-  const ignoredZipEntryRe = /(^|\/)(__MACOSX\/|\.DS_Store$|Thumbs\.db$|desktop\.ini$)/i;
-
-  async function extractUploadFiles(blob: Blob): Promise<File[]> {
-    const zip = await JSZip.loadAsync(await blob.arrayBuffer());
-    const entries = Object.values(zip.files)
-      .filter((entry) => !entry.dir && !ignoredZipEntryRe.test(entry.name))
-      .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
-
-    const files: File[] = [];
-    for (const entry of entries) {
-      const name = entry.name.split('/').pop() || entry.name;
-      files.push(new File([await entry.async('blob')], name, { lastModified: entry.date?.getTime() ?? Date.now() }));
-    }
-    return files;
-  }
-
   async function importUpload(upload: MediaRequestUploadAdminDto) {
     if (!fulfillingRequest.value || importingUploadId.value !== null) return;
     importingUploadId.value = upload.id;
     try {
-      const blob = await downloadUploadFile(fulfillingRequest.value.id, upload.id);
-      if (!blob) {
+      const files = await fetchUploadFiles(upload);
+      if (!files) {
         showToast('error', 'Download failed', 'Could not fetch the uploaded file.');
         return;
       }
-      const files = await extractUploadFiles(blob);
       if (!files.length) {
         showToast('warn', 'Empty upload', 'The archive holds no usable files.');
         return;
@@ -376,9 +341,7 @@
         addFilesAsSubdecks(files);
       }
 
-      if (!upload.adminReviewed && (await reviewUpload(fulfillingRequest.value.id, upload.id, true))) {
-        upload.adminReviewed = true;
-      }
+      await markUploadReviewed(upload);
       showToast('success', 'Files added', files.length === 1 ? files[0].name : `${files.length} files added as subdecks.`);
     } catch (error) {
       console.error('Error importing upload:', error);

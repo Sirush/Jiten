@@ -544,7 +544,14 @@
 
   const isTerminal = computed(() => request.value && (request.value.status === RequestStatus.Completed || request.value.status === RequestStatus.Rejected));
 
-  const canCreateDeck = computed(() => !!request.value && !isTerminal.value && !request.value.fulfilledDeckId);
+  const updateDeckHref = computed(() => {
+    const req = request.value;
+    if (!req || req.kind !== RequestKind.Update || isTerminal.value) return '';
+    const deckId = req.targetDeckId ?? fulfilledDeckId.value;
+    return deckId ? `/dashboard/media/${deckId}?requestId=${req.id}` : '';
+  });
+
+  const canCreateDeck = computed(() => !!request.value && !isTerminal.value && !request.value.fulfilledDeckId && !updateDeckHref.value);
 
   // Syosetsu novels are imported chapter by chapter, so they go through the webnovel page instead
   const createDeckHref = computed(() => {
@@ -805,6 +812,13 @@
               <label class="font-semibold text-sm">Fulfilled Deck (for completion)</label>
               <MediaDeckPicker v-model="fulfilledDeckId" :label="fulfilledDeckLabel" placeholder="Search or select recent deck..." show-recent />
               <small v-if="fulfilledDeckId" class="text-surface-500 dark:text-surface-400">Deck ID: {{ fulfilledDeckId }}</small>
+            </div>
+            <div v-if="updateDeckHref" class="flex flex-col gap-1">
+              <NuxtLink :to="updateDeckHref" class="inline-flex items-center gap-2 w-fit text-primary hover:underline font-medium text-sm">
+                <i class="pi pi-sync" />
+                Update deck from this request
+              </NuxtLink>
+              <small class="text-surface-500 dark:text-surface-400">Deck editor with the attached files ready to add. You come back here once it is updated.</small>
             </div>
             <div v-if="canCreateDeck" class="flex flex-col gap-1">
               <NuxtLink :to="createDeckHref" class="inline-flex items-center gap-2 w-fit text-primary hover:underline font-medium text-sm">

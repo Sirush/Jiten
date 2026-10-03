@@ -24,6 +24,9 @@ public class UpdateMediaRequest
     public List<UpdateMediaRequestTag> Tags { get; set; } = new List<UpdateMediaRequestTag>();
     public List<UpdateMediaRequestSubdeck>? Subdecks { get; set; } = new List<UpdateMediaRequestSubdeck>();
     public List<UpdateMediaRequestRelationship> Relationships { get; set; } = new List<UpdateMediaRequestRelationship>();
+
+    /// <summary>Media request this update fulfils; it is linked to the deck and moved to InProgress.</summary>
+    public int? RequestId { get; set; }
 }
 
 public class UpdateMediaRequestSubdeck
