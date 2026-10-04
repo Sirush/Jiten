@@ -15,7 +15,7 @@ export default defineNuxtPlugin((nuxtApp) => {
   const local = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
   if (local && !config.public.beatOnLocalhost) return;
 
-  beatStart({ userId: () => authStore.user?.id });
+  beatStart({ userId: () => authStore.user?.id, apiBase: config.public.baseURL });
 
   let lastPath = '';
   nuxtApp.hook('page:finish', () => {

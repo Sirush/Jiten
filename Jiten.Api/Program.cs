@@ -892,7 +892,9 @@ builder.Services.AddCors(options =>
             })
             .AllowAnyHeader()
             .AllowAnyMethod()
-            .WithExposedHeaders("Retry-After");
+            .WithExposedHeaders("Retry-After")
+            // Chromium caps preflight caching at 2 hours; origin or header changes take up to this long to reach cached clients.
+            .SetPreflightMaxAge(TimeSpan.FromHours(2));
     });
 });
 
@@ -1194,6 +1196,8 @@ app.Use(async (context, next) =>
     context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
     await next();
 });
+
+app.UseMiddleware<ServerTimingMiddleware>();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

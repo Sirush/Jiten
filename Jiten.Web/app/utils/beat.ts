@@ -1,4 +1,5 @@
 import { isReportableError } from '~/utils/beatErrorFilter';
+import { API_TIMING_SAMPLE_RATE, apiTimingSample } from '~/utils/apiTiming';
 
 type Payload = Record<string, unknown>;
 
@@ -6,6 +7,9 @@ const ENDPOINT = '/api/jr';
 const FLUSH_MS = 1500;
 const IDLE_MS = 60_000;
 const MAX_ERRORS_PER_VIEW = 10;
+const API_FLUSH_MS = 30_000;
+const MAX_API_PER_FLUSH = 30;
+const API_SAMPLE_KEY = 'jr-api';
 
 let enabled = false;
 let queue: Payload[] = [];
@@ -22,6 +26,8 @@ let activeMs = 0;
 let lastInput = 0;
 
 let userIdSource: () => string | undefined = () => undefined;
+
+let apiQueue: Payload[] = [];
 
 function id(): string {
   const bytes = new Uint8Array(6);
@@ -134,6 +140,50 @@ function observeVitals(): void {
   );
 }
 
+/** Decided once per tab so a sampled visit keeps reporting across reloads. */
+function apiTimingSampled(): boolean {
+  try {
+    let decision = sessionStorage.getItem(API_SAMPLE_KEY);
+    if (decision === null) {
+      decision = Math.random() < API_TIMING_SAMPLE_RATE ? '1' : '0';
+      sessionStorage.setItem(API_SAMPLE_KEY, decision);
+    }
+    return decision === '1';
+  } catch {
+    return false;
+  }
+}
+
+function observeApiTimings(apiBase: string): void {
+  if (typeof PerformanceObserver === 'undefined' || !apiTimingSampled()) return;
+  const base = new URL(apiBase, location.href).href;
+  try {
+    const po = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries() as PerformanceResourceTiming[]) {
+        if (apiQueue.length >= MAX_API_PER_FLUSH) return;
+        const sample = apiTimingSample(entry, base, performance.timeOrigin);
+        if (!sample) continue;
+        const item: Payload = { t: 'api', ...sample, p: viewPath, v: viewId };
+        const u = userIdSource();
+        if (u) item.u = u;
+        apiQueue.push(item);
+      }
+    });
+    po.observe({ type: 'resource', buffered: true });
+  } catch {
+    return;
+  }
+  window.setInterval(flushApiTimings, API_FLUSH_MS);
+}
+
+function flushApiTimings(): void {
+  if (apiQueue.length === 0) return;
+  flush();
+  queue = apiQueue;
+  apiQueue = [];
+  flush();
+}
+
 export interface ViewInfo {
   path: string;
   route: string;
@@ -196,11 +246,12 @@ export function beatError(source: 'vue' | 'window' | 'promise', error: unknown):
   push(item);
 }
 
-export function beatStart(options: { userId: () => string | undefined }): void {
+export function beatStart(options: { userId: () => string | undefined; apiBase: string }): void {
   if (enabled) return;
   enabled = true;
   userIdSource = options.userId;
   observeVitals();
+  observeApiTimings(options.apiBase);
   const passive = { passive: true, capture: true } as AddEventListenerOptions;
   for (const type of ['pointerdown', 'keydown', 'scroll', 'touchstart', 'mousemove']) window.addEventListener(type, onInput, passive);
   window.setInterval(idleCheck, 5000);
@@ -210,6 +261,7 @@ export function beatStart(options: { userId: () => string | undefined }): void {
       sendVitals();
       sendLeave();
       flush();
+      flushApiTimings();
     } else {
       onInput();
     }
@@ -218,6 +270,7 @@ export function beatStart(options: { userId: () => string | undefined }): void {
     sendVitals();
     sendLeave();
     flush();
+    flushApiTimings();
   });
   window.addEventListener('error', (e) => beatError('window', e.error ?? e.message));
   window.addEventListener('unhandledrejection', (e) => beatError('promise', e.reason));
