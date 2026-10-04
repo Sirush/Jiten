@@ -293,6 +293,7 @@
     if (type !== MediaType.Novel && type !== MediaType.WebNovel) return false;
     return selectedFiles.value.some((f) => archiveExtensions.includes(f.name.substring(f.name.lastIndexOf('.')).toLowerCase()));
   });
+  const isMangaRequest = computed(() => request.value?.mediaType === MediaType.Manga);
   const isOverUploadLimit = computed(() => totalFileSize.value > maxUploadBytes);
   const hasContent = computed(() => commentText.value.trim().length > 0 || selectedFiles.value.length > 0);
 
@@ -431,7 +432,7 @@
       toast.add({ severity: 'success', summary: reviewed ? 'Marked as reviewed' : 'Unmarked', life: 3000 });
       const comment = comments.value.find((c) => c.upload?.id === uploadId);
       if (comment?.upload) {
-        (comment.upload as any).adminReviewed = reviewed;
+        (comment.upload as MediaRequestUploadAdminDto).adminReviewed = reviewed;
       }
     } else {
       const detail = extractApiError(apiError.value, 'Failed to update review status.');
@@ -716,7 +717,8 @@
             <span>
               No file attached yet.
               <template v-if="fulfilmentRange">Requests with one are usually filled in {{ fulfilmentRange }}.</template>
-              If you have the script, subtitles or ebook, attach it in a comment below.
+              <template v-if="isMangaRequest">If you have the .mokuro file, attach it in a comment below.</template>
+              <template v-else>If you have the script, subtitles or ebook, attach it in a comment below.</template>
             </span>
           </small>
 
@@ -1079,6 +1081,10 @@
               <small class="text-muted-color flex items-start gap-1.5">
                 <i class="pi pi-exclamation-triangle mt-0.5 w-[14px] shrink-0 text-center text-[13px] text-amber-600 dark:text-amber-500" />
                 <span>Do not zip EPUBs - they are automatically optimised when uploaded directly.</span>
+              </small>
+              <small v-if="isMangaRequest" class="text-muted-color flex items-start gap-1.5">
+                <i class="pi pi-exclamation-triangle mt-0.5 w-[14px] shrink-0 text-center text-[13px] text-amber-600 dark:text-amber-500" />
+                <span>Manga must be uploaded as .mokuro files made with <a href="https://github.com/kha-white/mokuro" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline">mokuro</a>. Raw images and CBZ archives can't be used.</span>
               </small>
 
               <input ref="fileInputRef" type="file" :accept="allowedExtensions.join(',')" multiple class="hidden" @change="handleFileSelect" />

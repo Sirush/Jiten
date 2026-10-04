@@ -35,6 +35,7 @@
   );
 
   const isYouTube = computed(() => mediaType.value === MediaType.YouTube);
+  const isManga = computed(() => mediaType.value === MediaType.Manga);
 
   const isAtQuotaLimit = computed(() => quota.value !== null && quota.value.activeCount >= quota.value.limit);
   const showPlusUpsell = computed(() => quota.value !== null && !quota.value.isPlus && quota.value.plusLimit > quota.value.limit);
@@ -140,7 +141,7 @@
       });
       router.push(`/requests/${result.id}`);
     } else {
-      const err = requestError.value as any;
+      const err = requestError.value as { status?: number; data?: { activeCount?: number }; response?: { status?: number; _data?: { activeCount?: number } } } | null;
       const is422 = err?.response?.status === 422 || err?.status === 422;
       const hasActiveCount = err?.data?.activeCount !== undefined || err?.response?._data?.activeCount !== undefined;
       if (is422 && hasActiveCount) {
@@ -314,6 +315,10 @@
                 <template v-else>Requests with a file are fulfilled far faster.</template>
                 <template v-if="awaitingWait"> Requests without a file have been waiting for about {{ awaitingWait }}.</template>
               </span>
+            </small>
+            <small v-if="isManga" class="text-muted-color flex items-start gap-1.5">
+              <i class="pi pi-exclamation-triangle mt-0.5 w-[14px] shrink-0 text-center text-[13px] text-amber-600 dark:text-amber-500" />
+              <span>Manga files must be in <a href="https://github.com/kha-white/mokuro" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline">mokuro</a> format (.mokuro). Raw images and CBZ archives can't be used.</span>
             </small>
             <small class="text-muted-color flex items-start gap-1.5">
               <i class="pi pi-eye mt-0.5 w-[14px] shrink-0 text-center text-[13px]" />
