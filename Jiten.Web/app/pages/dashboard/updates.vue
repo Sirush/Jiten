@@ -9,7 +9,7 @@
   import { debounce } from 'perfect-debounce';
   import type { AdminSiteUpdate } from '~/types';
   import { convertHeifImage, isHeifBlob } from '~/utils/heifImage';
-  import { spliceAsParagraph, toDiscordMarkdown } from '~/utils/siteUpdateMarkdown';
+  import { linkifySelection, spliceAsParagraph, toDiscordMarkdown } from '~/utils/siteUpdateMarkdown';
 
   useHead({ title: 'Site Updates - Jiten' });
 
@@ -91,7 +91,7 @@
     editingId.value = null;
   }
 
-  function discardThen(action: () => void) {
+  function discardThen(action: () => void, keepEditing?: () => void) {
     if (!isDirty.value) return action();
     confirm.require({
       message: 'Discard your unsaved changes to this update?',
@@ -101,8 +101,12 @@
       rejectLabel: 'Keep editing',
       acceptClass: 'p-button-danger',
       accept: action,
+      reject: keepEditing,
+      onHide: keepEditing,
     });
   }
+
+  onBeforeRouteLeave(() => new Promise<boolean>((resolve) => discardThen(() => resolve(true), () => resolve(false))));
 
   function isImageFile(file: File) {
     return file.type.startsWith('image/') || /\.(heic|heif|avif)$/i.test(file.name);
@@ -153,8 +157,19 @@
 
   function onBodyPaste(e: ClipboardEvent) {
     const data = e.clipboardData;
+    if (!data) return;
 
-    if (!data || data.getData('text/plain')) return;
+    const pastedText = data.getData('text/plain');
+    if (pastedText) {
+      const el = bodyInput.value?.$el;
+      const linked = el && linkifySelection(body.value, el.selectionStart, el.selectionEnd, pastedText);
+      if (!linked) return;
+      e.preventDefault();
+      body.value = linked.text;
+      nextTick(() => el.setSelectionRange(linked.cursor, linked.cursor));
+      return;
+    }
+
     const files = Array.from(data.files).filter(isImageFile);
     if (!files.length) return;
     e.preventDefault();
@@ -258,7 +273,7 @@
 <template>
   <div class="container mx-auto p-4">
     <div class="flex items-center mb-6">
-      <Button icon="pi pi-arrow-left" class="p-button-text mr-2" @click="discardThen(() => navigateTo('/dashboard'))" />
+      <Button icon="pi pi-arrow-left" class="p-button-text mr-2" @click="navigateTo('/dashboard')" />
       <h1 class="text-3xl font-bold">Site Updates</h1>
       <Button v-if="!editorOpen" label="New update" icon="pi pi-plus" class="ml-auto" @click="openNew" />
     </div>
@@ -309,14 +324,14 @@
                 @dragover="onBodyDragOver"
                 @drop="onBodyDrop"
               />
-              <small class="text-surface-500 dark:text-surface-400">Paste or drop images into the body to upload them.</small>
+              <small class="text-surface-500 dark:text-surface-400">Paste or drop images into the body to upload them. Paste a link over selected text to link it.</small>
             </div>
 
             <div v-if="showPreview">
               <span class="block text-sm font-medium mb-1">Preview</span>
               <div class="border border-surface-200 dark:border-surface-700 rounded p-3 min-h-40 overflow-x-auto">
                 <Suspense v-if="previewSource.trim()">
-                  <MarkdownBody :source="previewSource" />
+                  <MarkdownBody :source="previewSource" new-tab />
                   <template #fallback>
                     <span class="text-surface-500 dark:text-surface-400 text-sm">Rendering...</span>
                   </template>

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { spliceAsParagraph, toDiscordMarkdown } from '../app/utils/siteUpdateMarkdown';
+import { linkifySelection, spliceAsParagraph, toDiscordMarkdown } from '../app/utils/siteUpdateMarkdown';
 
 describe('toDiscordMarkdown', () => {
   it('collapses image tags to bare URLs', () => {
@@ -9,9 +9,47 @@ describe('toDiscordMarkdown', () => {
     );
   });
 
-  it('leaves links and other markdown untouched', () => {
-    const body = '## Heading\n\n- [link](https://jiten.moe) and **bold**';
+  it('leaves absolute links and other markdown untouched', () => {
+    const body = '## Heading\n\n- [link](https://jiten.moe) and **bold**, [mail](mailto:a@b.c), [cdn](//cdn.x/a)';
     expect(toDiscordMarkdown('T', body)).toBe(`**T**\n\n${body}`);
+  });
+
+  it('absolutises relative link targets', () => {
+    const body = '[a](/decks/1) [b](decks/2 "t") [c](#update-3) [d](</x y>)\n\n[r]: /ref\n  [s]: <rel>';
+    expect(toDiscordMarkdown('T', body)).toBe(
+      '**T**\n\n[a](https://jiten.moe/decks/1) [b](https://jiten.moe/decks/2 "t") [c](https://jiten.moe/updates#update-3) [d](<https://jiten.moe/x%20y>)\n\n[r]: https://jiten.moe/ref\n  [s]: <https://jiten.moe/rel>',
+    );
+  });
+
+  it('absolutises a link wrapped around an image', () => {
+    expect(toDiscordMarkdown('T', '[![](https://cdn.x/a.webp)](/decks/1)')).toBe('**T**\n\n[https://cdn.x/a.webp](https://jiten.moe/decks/1)');
+  });
+
+  it('leaves code untouched', () => {
+    const body = 'See `[a](/x)` and\n\n```\n[b](/y)\n[r]: /z\n```\n\n[c](/w)';
+    expect(toDiscordMarkdown('T', body)).toBe(`**T**\n\n${body.replace('[c](/w)', '[c](https://jiten.moe/w)')}`);
+  });
+});
+
+describe('linkifySelection', () => {
+  it('wraps the selection in a link when a URL is pasted', () => {
+    expect(linkifySelection('see this deck', 9, 13, ' https://jiten.moe/decks/1 ')).toEqual({
+      text: 'see this [deck](https://jiten.moe/decks/1)',
+      cursor: 42,
+    });
+  });
+
+  it('brackets URLs containing parentheses', () => {
+    expect(linkifySelection('x', 0, 1, 'https://en.wikipedia.org/wiki/A_(b)')?.text).toBe('[x](<https://en.wikipedia.org/wiki/A_(b)>)');
+  });
+
+  it('pastes normally otherwise', () => {
+    expect(linkifySelection('abc', 1, 1, 'https://x.com')).toBeNull();
+    expect(linkifySelection('abc', 0, 3, 'not a url')).toBeNull();
+    expect(linkifySelection('abc', 0, 3, 'https://x.com and more')).toBeNull();
+    expect(linkifySelection('abc', 0, 3, 'javascript:alert(1)')).toBeNull();
+    expect(linkifySelection('a\n\nb', 0, 4, 'https://x.com')).toBeNull();
+    expect(linkifySelection('a  b', 1, 3, 'https://x.com')).toBeNull();
   });
 });
 
