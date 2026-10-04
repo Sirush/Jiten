@@ -255,7 +255,7 @@ public class DifficultyComputationJob(
         }
 
         var avgDifficulty = (decimal)Deck.WeightedByCharacters(childrenWithDifficulty, c => (double)c.DeckDifficulty!.Difficulty);
-        var maxPeak = childrenWithDifficulty.Max(c => c.DeckDifficulty!.Peak);
+        var avgPeak = (decimal)Deck.WeightedByCharacters(childrenWithDifficulty, c => (double)c.DeckDifficulty!.Peak);
 
         var progression = ComputeParentProgression(childrenWithDifficulty);
         var aggregatedDeciles = ComputeAggregatedDeciles(childrenWithDifficulty);
@@ -264,7 +264,7 @@ public class DifficultyComputationJob(
         if (existingDifficulty != null)
         {
             existingDifficulty.Difficulty = Math.Round(avgDifficulty, 2);
-            existingDifficulty.Peak = Math.Round(maxPeak, 2);
+            existingDifficulty.Peak = Math.Round(avgPeak, 2);
             existingDifficulty.Deciles = aggregatedDeciles;
             existingDifficulty.Progression = progression;
             existingDifficulty.LastUpdated = DateTimeOffset.UtcNow;
@@ -275,7 +275,7 @@ public class DifficultyComputationJob(
             {
                 DeckId = parent.DeckId,
                 Difficulty = Math.Round(avgDifficulty, 2),
-                Peak = Math.Round(maxPeak, 2),
+                Peak = Math.Round(avgPeak, 2),
                 LastUpdated = DateTimeOffset.UtcNow
             };
             newDifficulty.Deciles = aggregatedDeciles;
@@ -317,7 +317,7 @@ public class DifficultyComputationJob(
                 continue;
 
             var segmentDifficulty = (decimal)Deck.WeightedByCharacters(childrenInSegment, c => (double)c.DeckDifficulty!.Difficulty);
-            var segmentPeak = childrenInSegment.Max(c => c.DeckDifficulty!.Peak);
+            var segmentPeak = (decimal)Deck.WeightedByCharacters(childrenInSegment, c => (double)c.DeckDifficulty!.Peak);
 
             segments.Add(new ProgressionSegment
             {
