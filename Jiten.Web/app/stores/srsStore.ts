@@ -189,6 +189,7 @@ export const useSrsStore = defineStore('srs', () => {
     showKeybinds: true,
     showElapsedTime: true,
     enableSwipeGesture: true,
+    swipeVibration: true,
     countFailedReviews: true,
     autoPlayWord: true,
     autoPlaySentence: true,

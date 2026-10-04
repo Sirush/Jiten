@@ -1457,6 +1457,15 @@
             </Tooltip>
           </label>
         </div>
+        <div class="flex items-center gap-2">
+          <ToggleSwitch v-model="form.swipeVibration" input-id="swipeVibration" :disabled="!form.enableSwipeGesture" />
+          <label for="swipeVibration" class="text-sm" :class="form.enableSwipeGesture ? 'cursor-pointer' : 'text-surface-400 dark:text-surface-500'">
+            Vibrate on swipe
+            <Tooltip content="Buzz once when a swipe passes the grading point. Android only." placement="right">
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+        </div>
       </div>
 
       <Divider />

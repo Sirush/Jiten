@@ -1574,6 +1574,7 @@ export interface StudySettingsDto {
   showKeybinds: boolean;
   showElapsedTime: boolean;
   enableSwipeGesture: boolean;
+  swipeVibration: boolean;
   countFailedReviews: boolean;
   showCardStatus: boolean;
   showFuriganaOnFront: boolean;

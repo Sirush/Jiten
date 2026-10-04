@@ -318,6 +318,7 @@ public class StudyTests(JitenWebApplicationFactory factory)
 
         var body = await getResponse.Content.ReadFromJsonAsync<JsonElement>();
         body.GetProperty("newCardsPerDay").GetInt32().Should().Be(20);
+        body.GetProperty("swipeVibration").GetBoolean().Should().BeTrue();
 
         // Update
         var update = new HttpRequestMessage(HttpMethod.Put, "/api/srs/study-settings")
@@ -328,6 +329,7 @@ public class StudyTests(JitenWebApplicationFactory factory)
                 maxReviewsPerDay = 100,
                 gradingButtons = 2,
                 interleaving = "newFirst",
+                swipeVibration = false,
 
                 reviewFrom = "allTracked"
             });
@@ -341,6 +343,7 @@ public class StudyTests(JitenWebApplicationFactory factory)
         var body2 = await get2Response.Content.ReadFromJsonAsync<JsonElement>();
         body2.GetProperty("newCardsPerDay").GetInt32().Should().Be(10);
         body2.GetProperty("gradingButtons").GetInt32().Should().Be(2);
+        body2.GetProperty("swipeVibration").GetBoolean().Should().BeFalse();
     }
 
     [Fact]
