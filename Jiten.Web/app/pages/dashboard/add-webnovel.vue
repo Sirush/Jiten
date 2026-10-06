@@ -33,6 +33,7 @@
     isOnHiatus: boolean;
     isOneShot: boolean;
     isR15: boolean;
+    isAdultOnly: boolean;
     firstPublishedAt: string | null;
     lastUpdatedAt: string | null;
     estimatedSubdecks: number;
@@ -202,7 +203,8 @@
             <Tag v-else value="Ongoing" severity="info" />
             <Tag v-if="preview.isOnHiatus" value="On hiatus" severity="warn" />
             <Tag v-if="preview.isOneShot" value="One-shot" severity="secondary" />
-            <Tag v-if="preview.isR15" value="R15" severity="danger" />
+            <Tag v-if="preview.isAdultOnly" value="R18" severity="danger" />
+            <Tag v-else-if="preview.isR15" value="R15" severity="danger" />
             <Tag v-if="preview.genre" :value="preview.genre" severity="secondary" />
           </div>
 

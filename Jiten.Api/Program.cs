@@ -15,6 +15,7 @@ using Jiten.Api.Authentication;
 using Jiten.Core;
 using Jiten.Parser;
 using Jiten.Core.Data.Authentication;
+using Jiten.Core.Data.WebNovel;
 using Jiten.Core.WebNovel;
 using Jiten.Core.YouTube;
 using Microsoft.Extensions.Options;
@@ -143,6 +144,9 @@ builder.Services.AddHttpClient(SyosetuSource.HttpClientName, client =>
        });
 
 builder.Services.AddSingleton<IWebNovelSource, SyosetuSource>();
+builder.Services.AddSingleton<IWebNovelSource>(sp => new SyosetuSource(sp.GetRequiredService<IHttpClientFactory>(),
+                                                                        sp.GetRequiredService<ILogger<SyosetuSource>>(),
+                                                                        WebNovelProvider.SyosetuNovel18));
 builder.Services.AddSingleton<IWebNovelSourceResolver, WebNovelSourceResolver>();
 
 builder.Services.Configure<YtDlpOptions>(builder.Configuration.GetSection("YtDlp"));
