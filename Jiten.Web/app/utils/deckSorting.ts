@@ -26,6 +26,7 @@ export const deckSortMeta: Record<string, DeckSortMeta> = {
   uKanjiOnce: { default: SortOrder.Ascending, asc: 'Fewest first', desc: 'Most first' },
   releaseDate: { default: SortOrder.Descending, asc: 'Oldest first', desc: 'Newest first' },
   addedDate: { default: SortOrder.Descending, asc: 'Oldest first', desc: 'Newest first' },
+  finishedDate: { default: SortOrder.Descending, asc: 'Oldest first', desc: 'Newest first' },
   charCount: { default: SortOrder.Ascending, asc: 'Shortest first', desc: 'Longest first' },
   dialoguePercentage: { default: SortOrder.Descending, asc: 'Least dialogue', desc: 'Most dialogue' },
   speechSpeed: { default: SortOrder.Ascending, asc: 'Slowest first', desc: 'Fastest first' },
@@ -54,6 +55,7 @@ export const deckSortLabels: Record<string, string> = {
   communityVotes: 'Community Ratings',
   releaseDate: 'Release Date',
   addedDate: 'Added Date',
+  finishedDate: 'Date Finished',
   charCount: 'Character Count',
   dialoguePercentage: 'Dialogue Percentage',
   speechSpeed: 'Speech Speed',
@@ -82,6 +84,7 @@ export const deckSortOrdering = [
   'communityVotes',
   'releaseDate',
   'addedDate',
+  'finishedDate',
 ];
 
 export interface DeckSortOption {
@@ -173,6 +176,7 @@ const deckSortValues: Record<string, (deck: Deck) => number | string> = {
   communityVotes: (d) => d.distinctVoterCount,
   releaseDate: (d) => new Date(d.releaseDate).getTime(),
   addedDate: (d) => new Date(d.creationDate).getTime(),
+  finishedDate: (d) => d.listEntry?.lastCompletedOn ?? '',
   sentenceLength: (d) => d.averageSentenceLength,
   dialoguePercentage: (d) => d.dialoguePercentage,
   speechSpeed: (d) => d.speechSpeed,
@@ -193,6 +197,8 @@ function isMissing(deck: Deck, key: string): boolean {
   switch (key) {
     case 'releaseDate':
       return new Date(deck.releaseDate).getTime() < UNSET_RELEASE_DATE_CUTOFF;
+    case 'finishedDate':
+      return !deck.listEntry?.lastCompletedOn;
     case 'dialoguePercentage':
       return deck.hideDialoguePercentage;
     case 'sentenceLength':

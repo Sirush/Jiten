@@ -863,6 +863,15 @@
     describeRequest.value && describeResponse.value?.query === describeRequest.value ? describeResponse.value.results : []
   );
 
+  const updateDescribedDeck = (updatedDeck: Deck) => {
+    const current = describeResponse.value;
+    if (!current) return;
+    describeResponse.value = {
+      ...current,
+      results: current.results.map((r) => (r.deck.deckId === updatedDeck.deckId ? { ...r, deck: updatedDeck } : r)),
+    };
+  };
+
   const describeDecks = computed(() => {
     const shown = new Set(isDescribeMode.value ? [] : (response.value?.data ?? []).map((d) => d.deckId));
     return describeResults.value.map((r) => r.deck).filter((d) => !shown.has(d.deckId));
@@ -1269,6 +1278,7 @@
           :deck="deck"
           :lazy-cover="index >= 3"
           :class="index >= 3 ? '[content-visibility:auto] [contain-intrinsic-size:auto_30rem] p-1 -m-1' : ''"
+          @update:deck="updateDescribedDeck"
         />
       </div>
 

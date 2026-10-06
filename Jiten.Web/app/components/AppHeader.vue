@@ -164,11 +164,13 @@
             :class="route.path.startsWith('/srs') ? 'font-semibold !text-purple-200' : '!text-white'"
           >
             Study
-            <span
-              v-if="totalDue > 0"
-              class="inline-flex items-center justify-center min-w-[1.1rem] rounded-full bg-white/15 px-1 py-0.5 text-[10px] font-semibold leading-none tabular-nums text-purple-100"
-              >{{ dueBadge }}</span
-            >
+            <ClientOnly>
+              <span
+                v-if="totalDue > 0"
+                class="inline-flex items-center justify-center min-w-[1.1rem] rounded-full bg-white/15 px-1 py-0.5 text-[10px] font-semibold leading-none tabular-nums text-purple-100"
+                >{{ dueBadge }}</span
+              >
+            </ClientOnly>
           </nuxt-link>
           <nuxt-link to="/frequency-dictionaries" :class="route.path === '/frequency-dictionaries' ? 'font-semibold !text-purple-200' : '!text-white'"
             >Tools</nuxt-link
@@ -277,11 +279,13 @@
               @click="mobileMenuOpen = false"
             >
               Study
-              <span
-                v-if="totalDue > 0"
-                class="inline-flex items-center justify-center min-w-[1.1rem] rounded-full bg-white/15 px-1 py-0.5 text-[10px] font-semibold leading-none tabular-nums text-purple-100"
-                >{{ dueBadge }}</span
-              >
+              <ClientOnly>
+                <span
+                  v-if="totalDue > 0"
+                  class="inline-flex items-center justify-center min-w-[1.1rem] rounded-full bg-white/15 px-1 py-0.5 text-[10px] font-semibold leading-none tabular-nums text-purple-100"
+                  >{{ dueBadge }}</span
+                >
+              </ClientOnly>
             </nuxt-link>
             <nuxt-link
               v-if="auth.isAuthenticated"

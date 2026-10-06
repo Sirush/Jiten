@@ -1,6 +1,7 @@
 <script setup lang="ts">
-  import { type Deck, MediaType } from '~/types';
+  import { type Deck, DeckStatus, MediaType } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { listEntryFacts } from '~/utils/mediaListEntry';
   import Card from 'primevue/card';
   import { useAuthStore } from '~/stores/authStore';
   import { useJitenStore } from '~/stores/jitenStore';
@@ -14,7 +15,17 @@
     // Set by list views for below-the-fold rows; lets the browser skip
     // layout/paint until the row nears the viewport.
     lazyRender?: boolean;
+    logProgress?: boolean;
   }>();
+
+  const showProgressButton = computed(() => props.logProgress && props.deck.status === DeckStatus.Ongoing);
+
+  const listEntryLine = computed(() => {
+    const entry = props.deck.listEntry;
+    if (!entry) return [];
+    const shown = showProgressButton.value ? { ...entry, charactersRead: null, unitCount: null } : entry;
+    return listEntryFacts(shown, props.deck.mediaType, props.deck.characterCount, { showUnknownDate: false });
+  });
 
   const showDownloadDialog = ref(false);
   const difficultyRef = ref<{ tooltip: string }>();
@@ -48,8 +59,14 @@
         <div class="flex flex-row flex-wrap items-center gap-y-2">
           <!-- Title and Media Type -->
           <div class="flex-grow min-w-0 basis-full sm:basis-0">
-            <div class="font-bold truncate max-w-100" :title="localiseTitle(deck)" v-bind="japaneseTextAttrs(localiseTitle(deck))">{{ localiseTitle(deck) }}</div>
-            <div class="text-xs text-gray-500 dark:text-gray-400">{{ getMediaTypeText(deck.mediaType) }}</div>
+            <div class="font-bold truncate max-w-100" :title="localiseTitle(deck)" v-bind="japaneseTextAttrs(localiseTitle(deck))">
+              {{ localiseTitle(deck) }}
+            </div>
+            <div class="flex flex-wrap items-center gap-x-3 text-xs text-gray-500 dark:text-gray-400">
+              <span>{{ getMediaTypeText(deck.mediaType) }}</span>
+              <span v-for="fact in listEntryLine" :key="fact" class="text-gray-600 dark:text-gray-300">{{ fact }}</span>
+              <MediaListProgressButton v-if="showProgressButton" :deck="deck" class="-my-1 -ml-2" />
+            </div>
           </div>
 
           <!-- Key Stats -->

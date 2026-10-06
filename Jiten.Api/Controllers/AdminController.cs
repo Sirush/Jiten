@@ -501,13 +501,15 @@ public partial class AdminController(
         // Update subdecks if provided
         var newChildDecks = new List<Deck>();
         var updatedChildIdsWithText = new List<int>();
+        var removedSubdeckIds = new List<int>();
         if (model.Subdecks != null && model.Subdecks.Count != 0)
         {
             var existingSubdeckIds = deck.Children.Select(d => d.DeckId).ToHashSet();
             var newSubdeckIds = model.Subdecks.Where(d => d.DeckId > 0).Select(d => d.DeckId).ToHashSet();
 
             // Remove subdecks that are no longer present
-            var subdecksToRemove = deck.Children.Where(d => !newSubdeckIds.Contains(d.DeckId));
+            var subdecksToRemove = deck.Children.Where(d => !newSubdeckIds.Contains(d.DeckId)).ToList();
+            removedSubdeckIds.AddRange(subdecksToRemove.Select(d => d.DeckId));
             dbContext.RemoveRange(subdecksToRemove);
 
             // Update existing subdecks and add new ones
@@ -560,6 +562,12 @@ public partial class AdminController(
         }
 
         await dbContext.SaveChangesAsync();
+
+        if (removedSubdeckIds.Count > 0)
+        {
+            await userContext.UserDeckPreferences.Where(p => removedSubdeckIds.Contains(p.DeckId)).ExecuteDeleteAsync();
+            await userContext.UserMediaListEntries.Where(r => removedSubdeckIds.Contains(r.DeckId)).ExecuteDeleteAsync();
+        }
 
         // Children whose text was added or replaced need a parse even without a full-deck
         // reparse; existing children are reparsed in place so their DeckId (and with it user

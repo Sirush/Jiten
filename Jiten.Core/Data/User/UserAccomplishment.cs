@@ -14,6 +14,10 @@ public class UserAccomplishment
     public int CompletedUnitCount { get; set; }
 
     public long TotalCharacterCount { get; set; }
+
+    /// <summary>Characters the user entered on in-progress and dropped media list entries; not part of TotalCharacterCount.</summary>
+    public long UnfinishedCharacterCount { get; set; }
+
     public long TotalWordCount { get; set; }
     public int UniqueWordCount { get; set; }
     public int UniqueWordUsedOnceCount { get; set; }

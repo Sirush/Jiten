@@ -11,6 +11,15 @@
   const { $api } = useNuxtApp();
   const toast = useToast();
 
+  interface ImportedHistoryRow {
+    state: number;
+    startedOn: string | null;
+    finishedOn: string | null;
+    charactersRead: number | null;
+    isCurrent: boolean;
+    seriesEntry?: number | null;
+  }
+
   interface PreviewRow {
     deckId: number;
     originalTitle: string;
@@ -21,6 +30,12 @@
     externalStatus: string;
     mappedStatus: DeckStatus;
     finishedAt: string | null;
+    startedOn?: string | null;
+    completedOn?: string | null;
+    repeatCount?: number | null;
+    charactersRead?: number | null;
+    history?: ImportedHistoryRow[] | null;
+    volumes?: { deckId: number; status: DeckStatus; history: ImportedHistoryRow[] | null }[] | null;
     progress: number | null;
     subdeckCount: number | null;
     currentStatus: DeckStatus | null;
@@ -375,6 +390,9 @@
       return true;
     })
   );
+  const historyRowCount = computed(
+    () => applyRows.value.filter((r) => r.startedOn || r.completedOn || r.repeatCount || r.charactersRead || r.history?.length || r.volumes?.length).length
+  );
 
   const excludedRows = computed(() => allRows.value.filter((row) => !row.isIgnored && !isRowIncluded(row)));
   const conflictRows = computed(() => allRows.value.filter((row) => isConflict(row)));
@@ -498,8 +516,20 @@
           overwriteExisting: true,
           entries: applyRows.value.map((r) => {
             const units = importProgress.value ? progressUnits(r) : 0;
-            const base = { deckId: r.deckId, status: r.mappedStatus, isFavourite: !!r.isFavourite };
-            return units > 0 ? { ...base, progress: units, overwriteSubdecks: rowResolution(r) === 'overwrite' } : base;
+            const volumes = importProgress.value && r.volumes?.length ? r.volumes : null;
+            const base = {
+              deckId: r.deckId,
+              status: r.mappedStatus,
+              isFavourite: !!r.isFavourite,
+              startedOn: r.startedOn ?? null,
+              finishedOn: r.completedOn ?? null,
+              repeatCount: r.repeatCount ?? null,
+              charactersRead: r.charactersRead ?? null,
+              history: r.history ?? null,
+              volumes,
+            };
+            if (units === 0 && !volumes) return base;
+            return { ...base, progress: units > 0 ? units : null, overwriteSubdecks: rowResolution(r) === 'overwrite' };
           }),
         },
       });
@@ -634,6 +664,16 @@
                 >.
               </span>
             </div>
+
+            <p v-if="historyRowCount > 0" class="text-xs text-gray-500 dark:text-gray-400">
+              <template v-if="historyRowCount === 1">
+                1 title has dates, repeat counts or character counts. They'll be added to your history unless the title already has one on Jiten.
+              </template>
+              <template v-else>
+                {{ historyRowCount }} titles have dates, repeat counts or character counts. They'll be added to your history, except on titles that already have
+                one on Jiten.
+              </template>
+            </p>
 
             <div class="flex flex-wrap items-center gap-3 border-t border-surface-200 pt-3 dark:border-surface-700">
               <span class="text-xs font-bold text-gray-500 dark:text-gray-400">In case of conflict</span>

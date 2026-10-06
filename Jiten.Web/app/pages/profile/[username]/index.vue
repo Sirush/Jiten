@@ -267,16 +267,22 @@
                 {{ formatNumber(completedDisplay?.value ?? selectedAccomplishment.completedDeckCount) }}
               </div>
               <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ completedDisplay?.label ?? 'Completed' }}</div>
-              <div v-if="completedDisplay?.sub" class="text-xs text-gray-400 dark:text-gray-400 mt-0.5 tabular-nums">{{ completedDisplay.sub }}</div>
+              <div v-if="completedDisplay?.sub" class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 tabular-nums">{{ completedDisplay.sub }}</div>
             </template>
           </Card>
 
           <Card class="text-center">
             <template #content>
               <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
-                {{ formatNumber(selectedAccomplishment.totalCharacterCount) }}
+                {{ formatNumber(selectedAccomplishment.totalCharacterCount + (selectedAccomplishment.unfinishedCharacterCount ?? 0)) }}
               </div>
-              <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Characters</div>
+              <template v-if="selectedAccomplishment.unfinishedCharacterCount > 0">
+                <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Characters read</div>
+                <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 tabular-nums">
+                  {{ formatNumber(selectedAccomplishment.totalCharacterCount) }} in completed titles
+                </div>
+              </template>
+              <div v-else class="text-sm text-gray-500 dark:text-gray-400 mt-1">Characters</div>
             </template>
           </Card>
 

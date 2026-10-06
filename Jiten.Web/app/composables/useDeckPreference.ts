@@ -1,14 +1,4 @@
-import type { Deck, DeckStatus } from '~/types';
-
-interface SetStatusResponse {
-  deckId: number;
-  status: DeckStatus;
-  isFavourite: boolean;
-  isIgnored: boolean;
-  parentDeckId: number | null;
-  parentStatus: DeckStatus | null;
-  allChildrenCompleted: boolean;
-}
+import type { Deck } from '~/types';
 
 export function useDeckPreference(deck: () => Deck, onUpdate: (updated: Deck) => void) {
   const { $api } = useNuxtApp();
@@ -22,6 +12,7 @@ export function useDeckPreference(deck: () => Deck, onUpdate: (updated: Deck) =>
         body: { isFavourite: newFavouriteState },
       });
       onUpdate({ ...d, isFavourite: newFavouriteState });
+      publishMediaListChange({ deckId: d.deckId, isFavourite: newFavouriteState });
     } catch (error) {
       console.error('Failed to toggle favourite:', error);
     }
@@ -56,20 +47,5 @@ export function useDeckPreference(deck: () => Deck, onUpdate: (updated: Deck) =>
     }
   };
 
-  const setStatus = async (status: DeckStatus): Promise<SetStatusResponse | null> => {
-    try {
-      const d = deck();
-      const response = await $api<SetStatusResponse>(`/user/deck-preferences/${d.deckId}/status`, {
-        method: 'POST',
-        body: { status },
-      });
-      onUpdate({ ...d, status });
-      return response;
-    } catch (error) {
-      console.error('Failed to set status:', error);
-      return null;
-    }
-  };
-
-  return { toggleFavourite, toggleIgnore, cancelIgnore, setStatus };
+  return { toggleFavourite, toggleIgnore, cancelIgnore };
 }

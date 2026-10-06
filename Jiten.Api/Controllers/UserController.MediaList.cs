@@ -124,6 +124,9 @@ public partial class UserController
                                      externalStatus = kv.Value.ExternalStatus,
                                      mappedStatus = kv.Value.MappedStatus,
                                      finishedAt = kv.Value.FinishedAt,
+                                     startedOn = kv.Value.StartedOn,
+                                     completedOn = kv.Value.CompletedOn,
+                                     repeatCount = kv.Value.RepeatCount,
                                      progress = kv.Value.Progress,
                                      subdeckCount = subdeckCounts.TryGetValue(deck.DeckId, out var subdecks) ? subdecks : (int?)null,
                                      currentStatus,
@@ -182,12 +185,23 @@ public partial class UserController
         var entries = valid.Select(e => (e.DeckId, e.Status)).ToList();
         var invalid = request.Entries.Count - entries.Count;
 
-        var subdecks = await ResolveProgressSubdecksAsync(valid);
+        var subdecks = await ResolveProgressSubdecksAsync(valid.Where(e => e.Volumes is not { Count: > 0 }).ToList());
+        var (volumes, oversizedVolumes) = await ResolveImportedVolumesAsync(valid, MaxProgressSubdecksPerRequest - subdecks.Keep.Count - subdecks.Overwrite.Count);
+        var oversizedDecks = subdecks.OversizedDecks + oversizedVolumes;
 
-        var outcome = await DeckPreferenceHelper.ApplyStatusesAsync(userContext, userId, entries,
-                                                                    request.OverwriteExisting, skipIgnored: true);
+        var historyDeckIds = valid.Select(e => e.DeckId).Concat(volumes.SelectMany(v => v.Volumes.Select(e => e.DeckId))).ToList();
+        var decksWithHistory = (await userContext.UserMediaListEntries
+                                                 .Where(r => r.UserId == userId && historyDeckIds.Contains(r.DeckId))
+                                                 .Select(r => r.DeckId)
+                                                 .Distinct()
+                                                 .ToListAsync()).ToHashSet();
 
-        var completedTransition = outcome.CompletedTransition;
+        var outcome = await DeckPreferenceHelper.ApplyStatusesAsync(userContext, jitenContext, userId, entries,
+                                                                    request.OverwriteExisting, skipIgnored: true, newEntry: true);
+
+        var importedRows = new Dictionary<ImportedMediaListEntry, UserMediaListEntry>(ReferenceEqualityComparer.Instance);
+        var historyImported = await ApplyImportedHistoryAsync(userId, valid, outcome.Preferences, decksWithHistory, importedRows);
+        var totalsChanged = outcome.TotalsChanged || historyImported > 0;
         var subdecksCompleted = 0;
         var favourited = 0;
 
@@ -205,21 +219,40 @@ public partial class UserController
             if (children.Count == 0)
                 continue;
 
-            var childOutcome = await DeckPreferenceHelper.ApplyStatusesAsync(userContext, userId, children, overwrite, skipIgnored: true);
+            var childOutcome = await DeckPreferenceHelper.ApplyStatusesAsync(userContext, jitenContext, userId, children, overwrite, skipIgnored: true,
+                                                                             newEntry: true);
             subdecksCompleted += childOutcome.Added + childOutcome.Updated;
-            completedTransition |= childOutcome.CompletedTransition;
+            totalsChanged |= childOutcome.TotalsChanged;
+        }
+
+        foreach (var (series, volumeEntries, overwrite) in volumes)
+        {
+            var volumeOutcome = await DeckPreferenceHelper.ApplyStatusesAsync(userContext, jitenContext, userId,
+                                                                              volumeEntries.Select(v => (v.DeckId, v.Status)).ToList(), overwrite,
+                                                                              skipIgnored: true, newEntry: true);
+
+            // A volume row names the series pass it was read under by its position in the series' own exported history.
+            UserMediaListEntry? SeriesEntryAt(int? index) =>
+                index is { } i && series.History is { } seriesHistory && i >= 0 && i < seriesHistory.Count
+                    ? importedRows.GetValueOrDefault(seriesHistory[i])
+                    : null;
+
+            var volumeHistory = await ApplyImportedHistoryAsync(userId, volumeEntries, volumeOutcome.Preferences, decksWithHistory, importedRows,
+                                                                SeriesEntryAt);
+            subdecksCompleted += volumeOutcome.Added + volumeOutcome.Updated;
+            totalsChanged |= volumeOutcome.TotalsChanged || volumeHistory > 0;
         }
 
         await userContext.SaveChangesAsync();
         await smartDeckDirty.MarkDirty(userId);
 
-        if (completedTransition)
+        if (totalsChanged)
             backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserAccomplishments(userId));
 
         logger.LogInformation("Media list import applied: UserId={UserId}, Added={Added}, Updated={Updated}, Skipped={Skipped}, " +
                               "Favourited={Favourited}, Subdecks={Subdecks}, OversizedDecks={OversizedDecks}",
                               userId, outcome.Added, outcome.Updated, outcome.SkippedIgnored + outcome.SkippedExisting + invalid,
-                              favourited, subdecksCompleted, subdecks.OversizedDecks);
+                              favourited, subdecksCompleted, oversizedDecks);
 
         return Results.Ok(new
                           {
@@ -228,11 +261,172 @@ public partial class UserController
                               unchanged = outcome.Unchanged,
                               skippedIgnored = outcome.SkippedIgnored,
                               skippedExisting = outcome.SkippedExisting,
+                              skippedFull = outcome.SkippedFull,
                               invalid,
                               favourited,
                               subdecksCompleted,
-                              oversizedDecks = subdecks.OversizedDecks,
+                              oversizedDecks,
                           });
+    }
+
+    /// <summary>Volume rows of a Jiten export, kept to the children of the title they were exported under and to the unit progress limits.</summary>
+    private async Task<(List<(MediaListImportEntry Series, List<MediaListImportEntry> Volumes, bool Overwrite)> Volumes, int OversizedDecks)>
+        ResolveImportedVolumesAsync(IReadOnlyCollection<MediaListImportEntry> entries, int budget)
+    {
+        var withVolumes = entries.Where(e => e.Volumes is { Count: > 0 }).ToList();
+        if (withVolumes.Count == 0)
+            return ([], 0);
+
+        var rootIds = withVolumes.Select(e => e.DeckId).ToList();
+        var parentOf = await jitenContext.Decks.AsNoTracking()
+                                         .Where(d => d.ParentDeckId != null && rootIds.Contains(d.ParentDeckId.Value))
+                                         .ToDictionaryAsync(d => d.DeckId, d => d.ParentDeckId!.Value);
+
+        var result = new List<(MediaListImportEntry, List<MediaListImportEntry>, bool)>();
+        var oversized = 0;
+        foreach (var entry in withVolumes)
+        {
+            var volumes = entry.Volumes!.Where(v => parentOf.GetValueOrDefault(v.DeckId) == entry.DeckId && Enum.IsDefined(v.Status) &&
+                                                    v.Status != DeckStatus.None)
+                               .DistinctBy(v => v.DeckId)
+                               .Select(v => new MediaListImportEntry { DeckId = v.DeckId, Status = v.Status, History = v.History })
+                               .ToList();
+            if (volumes.Count > MaxProgressSubdecksPerDeck)
+            {
+                oversized++;
+                continue;
+            }
+
+            volumes = volumes.Take(Math.Max(budget, 0)).ToList();
+            budget -= volumes.Count;
+            if (volumes.Count > 0)
+                result.Add((entry, volumes, entry.OverwriteSubdecks));
+        }
+
+        return (result, oversized);
+    }
+
+    /// <summary>Known states only, at most one pass in progress (the flagged one, else the last), and no more than a full history.</summary>
+    private static List<ImportedMediaListEntry> ImportableRows(IReadOnlyCollection<ImportedMediaListEntry>? history)
+    {
+        var rows = history?.Where(r => Enum.IsDefined(r.State)).ToList() ?? [];
+        var inProgress = rows.Where(r => r.State == MediaListEntryState.InProgress).ToList();
+        if (inProgress.Count > 1)
+        {
+            var kept = inProgress.LastOrDefault(r => r.IsCurrent) ?? inProgress[^1];
+            rows = rows.Where(r => r.State != MediaListEntryState.InProgress || ReferenceEquals(r, kept)).ToList();
+        }
+
+        return rows.Take(MediaListEntryHelper.MaxEntriesPerDeck).ToList();
+    }
+
+    /// <summary>Fills the entries the status import just opened; a title that already had history keeps it untouched, so re-importing never duplicates.</summary>
+    /// <param name="importedRows">Collects every row turned into an entry, so volume rows can find the series entry they point at.</param>
+    /// <param name="seriesEntryAt">Resolves a volume row's link to a series row, for titles imported as volumes of a series.</param>
+    private async Task<int> ApplyImportedHistoryAsync(string userId, IReadOnlyCollection<MediaListImportEntry> entries,
+                                                    IReadOnlyDictionary<int, UserDeckPreference> preferences, IReadOnlySet<int> decksWithHistory,
+                                                    Dictionary<ImportedMediaListEntry, UserMediaListEntry> importedRows,
+                                                    Func<int?, UserMediaListEntry?>? seriesEntryAt = null)
+    {
+        var candidates = entries
+                         .Where(e => !decksWithHistory.Contains(e.DeckId) &&
+                                     preferences.TryGetValue(e.DeckId, out var p) && !p.IsIgnored && p.Status == e.Status)
+                         .ToList();
+        if (candidates.Count == 0)
+            return 0;
+
+        static DateOnly? Clean(DateOnly? date) => date is { } d && MediaListEntryHelper.IsAllowedDate(d) ? d : null;
+        static int? Characters(int? value) => value is > 0 and <= MediaListEntryHelper.MaxCharactersRead ? value : null;
+        // Sources accept a start after the finish; the finish date is the one totals and sorting rely on, so the start gives way.
+        static DateOnly? StartBefore(DateOnly? startedOn, DateOnly? finishedOn) => startedOn > finishedOn ? null : startedOn;
+
+        var imported = 0;
+        foreach (var entry in candidates)
+        {
+            var preference = preferences[entry.DeckId];
+            var current = preference.CurrentEntry;
+
+            var rows = ImportableRows(entry.History);
+            if (rows.Count > 0)
+            {
+                var expectedState = MediaListEntryHelper.EntryStateFor(entry.Status);
+                UserMediaListEntry? flagged = null, latestMatching = null;
+                foreach (var item in rows)
+                {
+                    var finishedOn = item.State == MediaListEntryState.InProgress ? null : Clean(item.FinishedOn);
+                    var historyEntry = new UserMediaListEntry
+                                       {
+                                           UserId = userId, DeckId = entry.DeckId, State = item.State, StartedOn = StartBefore(Clean(item.StartedOn), finishedOn),
+                                           FinishedOn = finishedOn, CharactersRead = Characters(item.CharactersRead),
+                                           SeriesEntry = seriesEntryAt?.Invoke(item.SeriesEntry)
+                                       };
+                    userContext.UserMediaListEntries.Add(historyEntry);
+                    importedRows[item] = historyEntry;
+                    imported++;
+
+                    if (item.IsCurrent && MediaListEntryHelper.CanBeCurrent(entry.Status, item.State))
+                        flagged = historyEntry;
+                    if (expectedState == item.State)
+                        latestMatching = historyEntry;
+                }
+
+                // Status changes act on the current pass, so it must be one the status can point at; with none, the pass the import opened stays.
+                var chosen = flagged ?? latestMatching;
+                if (expectedState != null && chosen == null)
+                    continue;
+
+                if (current != null)
+                    userContext.UserMediaListEntries.Remove(current);
+                preference.CurrentEntry = chosen;
+                continue;
+            }
+
+            var repeats = Math.Min(entry.RepeatCount ?? 0, MediaListEntryHelper.MaxEntriesPerDeck - 1);
+            // A finished title dropped or planned for a reread: the source's dates and count describe its last completion.
+            var describesLastCompletion = repeats > 0 && entry.Status is DeckStatus.Dropped or DeckStatus.Planning;
+
+            // Dropping a title records no pass of its own, but a source that dates the drop or counts its progress describes one.
+            if (current == null && entry.Status == DeckStatus.Dropped && !describesLastCompletion &&
+                ((Clean(entry.StartedOn) ?? Clean(entry.FinishedOn)) != null || Characters(entry.CharactersRead) != null))
+            {
+                current = new UserMediaListEntry { UserId = userId, DeckId = entry.DeckId, State = MediaListEntryState.Dropped };
+                userContext.UserMediaListEntries.Add(current);
+                preference.CurrentEntry = current;
+            }
+
+            if (current != null)
+            {
+                if (current.State != MediaListEntryState.InProgress)
+                    current.FinishedOn ??= Clean(entry.FinishedOn);
+                current.StartedOn ??= StartBefore(Clean(entry.StartedOn), current.FinishedOn);
+                current.CharactersRead ??= Characters(entry.CharactersRead);
+                imported++;
+            }
+
+            if (repeats == 0)
+                continue;
+
+            UserMediaListEntry? lastRepeat = null;
+            for (var i = 0; i < repeats; i++)
+            {
+                lastRepeat = new UserMediaListEntry { UserId = userId, DeckId = entry.DeckId, State = MediaListEntryState.Completed };
+                userContext.UserMediaListEntries.Add(lastRepeat);
+                imported++;
+            }
+
+            if (describesLastCompletion)
+            {
+                lastRepeat!.FinishedOn = Clean(entry.FinishedOn);
+                lastRepeat.StartedOn = StartBefore(Clean(entry.StartedOn), lastRepeat.FinishedOn);
+                lastRepeat.CharactersRead = Characters(entry.CharactersRead);
+                // Kept current like a completion is when the title is dropped or planned for a reread after finishing it.
+                preference.CurrentEntry ??= lastRepeat;
+            }
+            else if (entry.Status == DeckStatus.Ongoing)
+                lastRepeat!.FinishedOn = Clean(entry.FinishedOn);
+        }
+
+        return imported;
     }
 
     private sealed record ProgressSubdecks(
@@ -302,19 +496,20 @@ public partial class UserController
             return Results.BadRequest(new { message = $"Too many decks in one request (max {MaxBulkPreferenceDecks})." });
 
         int affected, skipped;
-        var completedTransition = false;
+        var totalsChanged = false;
 
         if (request.Status.HasValue)
         {
             if (!Enum.IsDefined(request.Status.Value))
                 return Results.BadRequest(new { message = "Unknown status." });
 
-            var outcome = await DeckPreferenceHelper.ApplyStatusesAsync(userContext, userId,
+            // Bulk changes leave dates unknown, since they mostly catalogue past reading, and never reopen a completion.
+            var outcome = await DeckPreferenceHelper.ApplyStatusesAsync(userContext, jitenContext, userId,
                                                                         deckIds.Select(id => (id, request.Status.Value)).ToList(),
-                                                                        overwriteExisting: true, skipIgnored: true);
+                                                                        overwriteExisting: true, skipIgnored: true, newEntry: true);
             affected = outcome.Added + outcome.Updated;
-            skipped = outcome.Unchanged + outcome.SkippedIgnored;
-            completedTransition = outcome.CompletedTransition;
+            skipped = outcome.Unchanged + outcome.SkippedIgnored + outcome.SkippedFull;
+            totalsChanged = outcome.TotalsChanged;
         }
         else
         {
@@ -329,21 +524,15 @@ public partial class UserController
             {
                 foreach (var preference in preferences.Values)
                 {
-                    if (preference.IsFavourite || preference.IsIgnored)
-                    {
-                        if (preference.Status == DeckStatus.None) continue;
-                        completedTransition |= preference.Status == DeckStatus.Completed;
-                        preference.Status = DeckStatus.None;
-                    }
-                    else
-                    {
-                        completedTransition |= preference.Status == DeckStatus.Completed;
-                        userContext.UserDeckPreferences.Remove(preference);
-                    }
+                    if (preference.Status == DeckStatus.None && (preference.IsFavourite || preference.IsIgnored))
+                        continue;
 
+                    MediaListEntryHelper.ClearStatus(userContext, preference);
                     affected++;
                 }
 
+                await MediaListEntryHelper.RemoveReadsAsync(userContext, userId, preferences.Keys.ToList());
+                totalsChanged |= affected > 0;
                 skipped = deckIds.Count - affected;
             }
             else
@@ -385,13 +574,17 @@ public partial class UserController
         await userContext.SaveChangesAsync();
         await smartDeckDirty.MarkDirty(userId);
 
-        if (completedTransition)
+        if (totalsChanged)
             backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserAccomplishments(userId));
 
         logger.LogInformation("Bulk deck preferences: UserId={UserId}, Decks={Decks}, Affected={Affected}, Skipped={Skipped}",
                               userId, deckIds.Count, affected, skipped);
 
-        return Results.Ok(new { affected, skipped });
+        var listEntries = request.Status is { } newStatus && newStatus != DeckStatus.None
+            ? await MediaListEntryHelper.BuildSummariesAsync(userContext, jitenContext, userId, deckIds)
+            : null;
+
+        return Results.Ok(new { affected, skipped, listEntries });
     }
 
     /// <summary>
@@ -440,19 +633,51 @@ public partial class UserController
         var list = await BuildMediaListAsync(userId);
 
         var childIds = list.SelectMany(e => e.Display.Children.Select(c => c.DeckId)).ToList();
-        var completedChildIds = childIds.Count == 0
-            ? []
-            : (await userContext.UserDeckPreferences
-                                .AsNoTracking()
-                                .Where(p => p.UserId == userId && p.Status == DeckStatus.Completed && childIds.Contains(p.DeckId))
-                                .Select(p => p.DeckId)
-                                .ToListAsync()).ToHashSet();
+        var completedChildIds = await MediaListEntryHelper.CompletedDeckIdsAsync(userContext, userId, childIds);
+
+        var exportedIds = list.Select(e => e.Display.DeckId).Concat(childIds).ToList();
+        var entriesByDeck = (await userContext.UserMediaListEntries
+                                            .AsNoTracking()
+                                            .Where(r => r.UserId == userId && exportedIds.Contains(r.DeckId))
+                                            .ToListAsync())
+                          .GroupBy(r => r.DeckId)
+                          .ToDictionary(g => g.Key, g => g.ToList());
+        var childPreferences = await userContext.UserDeckPreferences
+                                                .AsNoTracking()
+                                                .Where(p => p.UserId == userId && childIds.Contains(p.DeckId) && p.Status != DeckStatus.None)
+                                                .ToDictionaryAsync(p => p.DeckId, p => p.Status);
+        var currentEntryIds = (await userContext.UserDeckPreferences
+                                               .AsNoTracking()
+                                               .Where(p => p.UserId == userId && exportedIds.Contains(p.DeckId) && p.CurrentEntryId != null)
+                                               .Select(p => p.CurrentEntryId!.Value)
+                                               .ToListAsync()).ToHashSet();
+
+        List<UserMediaListEntry> Ordered(int deckId) =>
+            (entriesByDeck.GetValueOrDefault(deckId) ?? []).OrderBy(r => r.StartedOn ?? r.FinishedOn ?? DateOnly.MinValue).ThenBy(r => r.Id).ToList();
+
+        // A volume entry names the series entry it was read under by its position in the series' exported history; ids mean nothing elsewhere.
+        Dictionary<long, int> Positions(int deckId) => Ordered(deckId).Select((r, i) => (r.Id, i)).ToDictionary(x => x.Id, x => x.i);
+
+        static int? PositionOf(long? entryId, IReadOnlyDictionary<long, int>? positions) =>
+            entryId is { } id && positions != null && positions.TryGetValue(id, out var position) ? position : null;
+
+        List<object> History(int deckId, IReadOnlyDictionary<long, int>? seriesPositions = null) =>
+            Ordered(deckId)
+            .Select(r => (object)new
+                                 {
+                                     state = r.State.ToString(), startedOn = r.StartedOn, finishedOn = r.FinishedOn, charactersRead = r.CharactersRead,
+                                     isCurrent = currentEntryIds.Contains(r.Id), seriesEntry = PositionOf(r.SeriesEntryId, seriesPositions)
+                                 })
+            .ToList();
 
         var entries = list
                       .OrderBy(e => e.Display.OriginalTitle)
                       .Select(e =>
                       {
                           var completedUnits = e.Display.Children.Count(c => completedChildIds.Contains(c.DeckId));
+                          var deckEntries = entriesByDeck.GetValueOrDefault(e.Display.DeckId) ?? [];
+                          var listEntry = deckEntries.Count > 0 ? MediaListEntryHelper.Summarise(deckEntries, currentEntryIds) : null;
+                          var seriesPositions = Positions(e.Display.DeckId);
                           return new
                                  {
                                      deckId = e.Display.DeckId,
@@ -465,6 +690,19 @@ public partial class UserController
                                      isFavourite = e.IsFavourite,
                                      jitenUrl = $"https://jiten.moe/decks/media/{e.Display.DeckId}",
                                      externalLinks = e.Display.Links.Select(l => l.Url).ToList(),
+                                     startedOn = listEntry?.StartedOn,
+                                     finishedOn = listEntry?.FinishedOn,
+                                     timesCompleted = listEntry?.CompletedCount ?? 0,
+                                     charactersRead = listEntry?.CharactersRead,
+                                     history = History(e.Display.DeckId),
+                                     volumes = e.Display.Children
+                                                .Where(c => childPreferences.ContainsKey(c.DeckId))
+                                                .Select(c => new
+                                                             {
+                                                                 deckId = c.DeckId, status = childPreferences[c.DeckId].ToString(),
+                                                                 history = History(c.DeckId, seriesPositions)
+                                                             })
+                                                .ToList(),
                                  };
                       })
                       .ToList();
@@ -476,7 +714,8 @@ public partial class UserController
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine("DeckId,OriginalTitle,RomajiTitle,EnglishTitle,MediaType,Status,Progress,IsFavourite,JitenUrl,ExternalLinks");
+        sb.AppendLine("DeckId,OriginalTitle,RomajiTitle,EnglishTitle,MediaType,Status,Progress,IsFavourite,JitenUrl,ExternalLinks," +
+                      "StartedOn,FinishedOn,TimesCompleted,CharactersRead");
         foreach (var e in entries)
         {
             sb.AppendLine(string.Join(',',
@@ -489,7 +728,11 @@ public partial class UserController
                                       e.progress?.ToString() ?? string.Empty,
                                       e.isFavourite.ToString(),
                                       CsvField(e.jitenUrl),
-                                      CsvField(string.Join(" | ", e.externalLinks))));
+                                      CsvField(string.Join(" | ", e.externalLinks)),
+                                      e.startedOn?.ToString("yyyy-MM-dd") ?? string.Empty,
+                                      e.finishedOn?.ToString("yyyy-MM-dd") ?? string.Empty,
+                                      e.timesCompleted.ToString(),
+                                      e.charactersRead?.ToString() ?? string.Empty));
         }
 
         var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();

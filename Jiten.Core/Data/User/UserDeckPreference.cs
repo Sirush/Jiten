@@ -9,4 +9,8 @@ public class UserDeckPreference
     public bool IsIgnored { get; set; }
 
     public DateTime UpdatedAt { get; set; }
+
+    /// <summary>The entry that status changes act on; past entries added by hand never take this over.</summary>
+    public long? CurrentEntryId { get; set; }
+    public UserMediaListEntry? CurrentEntry { get; set; }
 }

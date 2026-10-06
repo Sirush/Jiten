@@ -681,6 +681,7 @@ public class ComputationJob(
 
     private static readonly object AccomplishmentComputeLock = new();
     private static readonly HashSet<string> AccomplishmentComputingUserIds = new();
+    private static readonly HashSet<string> AccomplishmentRerunUserIds = new();
     private const int GLOBAL_MEDIA_TYPE_KEY = -1;
 
     internal sealed record CompletedDeckInfo(int DeckId, int? ParentDeckId, MediaType MediaType, int CharacterCount, int WordCount);
@@ -704,119 +705,274 @@ public class ComputationJob(
         return (effectiveDecks, unitCounts);
     }
 
+    /// <summary>One completed entry; SeriesEntryId links a volume's completion to the series pass it was read on.</summary>
+    internal sealed record CompletedEntry(long Id, int? CharactersRead, long? SeriesEntryId = null);
+
+    /// <summary>Each completed entry adds the deck again, its typed count replacing Jiten's characters; a series with completed volumes uses its tally.</summary>
+    internal static (long Characters, long Words) SumCompletedReading(IEnumerable<CompletedDeckInfo> decks,
+                                                                      IReadOnlyDictionary<int, List<CompletedEntry>> completedEntriesByDeck,
+                                                                      IReadOnlyDictionary<int, SeriesTotals>? seriesTotals = null)
+    {
+        long characters = 0, words = 0;
+        foreach (var deck in decks)
+        {
+            if (seriesTotals?.GetValueOrDefault(deck.DeckId) is { } totals)
+            {
+                characters += totals.Characters;
+                words += totals.Words;
+                continue;
+            }
+
+            var passes = completedEntriesByDeck.TryGetValue(deck.DeckId, out var entries) && entries.Count > 0
+                ? entries.Select(e => e.CharactersRead).ToList()
+                : [null];
+            words += (long)deck.WordCount * passes.Count;
+            characters += passes.Sum(c => c ?? (long)deck.CharacterCount);
+        }
+
+        return (characters, words);
+    }
+
+    /// <summary>A completed series' reading, its completed passes and the volume reads outside them included; Standalone is the latter alone.</summary>
+    internal sealed record SeriesTotals(long Characters, long Words, long StandaloneCharacters);
+
+    internal sealed record UnfinishedDeckInfo(int DeckId, int? ParentDeckId, MediaType MediaType, bool HasChildren);
+
+    /// <summary>Typed unfinished counts per deck; a series' own count only stands for what goes beyond the volumes already counted as completed.</summary>
+    internal static Dictionary<int, (MediaType MediaType, long Characters)> ResolveUnfinishedCharacters(
+        IReadOnlyList<UnfinishedDeckInfo> unfinishedDecks, IReadOnlyDictionary<int, long> unfinishedByDeck,
+        IReadOnlyList<CompletedDeckInfo> completedDecks, IReadOnlyDictionary<int, List<CompletedEntry>> completedEntriesByDeck,
+        IReadOnlySet<int> completedRootIds, IReadOnlySet<int> rereadRootIds, IReadOnlyDictionary<int, SeriesTotals> seriesTotals)
+    {
+        // A completed series counts its volumes whole, so their partial counts drop out unless the series is being read again.
+        var settledRootIds = completedRootIds.Where(id => !rereadRootIds.Contains(id)).ToHashSet();
+        var result = unfinishedDecks.Where(d => d.ParentDeckId is not { } p || !settledRootIds.Contains(p))
+                                    .ToDictionary(d => d.DeckId, d => (d.MediaType, unfinishedByDeck[d.DeckId]));
+
+        foreach (var series in unfinishedDecks.Where(d => d.HasChildren && !settledRootIds.Contains(d.DeckId)))
+        {
+            var completedVolumes = completedRootIds.Contains(series.DeckId)
+                ? seriesTotals.GetValueOrDefault(series.DeckId)?.StandaloneCharacters ?? 0
+                : SumCompletedReading(completedDecks.Where(c => c.ParentDeckId == series.DeckId), completedEntriesByDeck).Characters;
+            var partialVolumes = unfinishedDecks.Where(d => d.ParentDeckId == series.DeckId).Select(d => d.DeckId).ToList();
+            var partial = partialVolumes.Sum(id => unfinishedByDeck[id]);
+            foreach (var id in partialVolumes)
+                result.Remove(id);
+
+            result[series.DeckId] = (series.MediaType, Math.Max(Math.Max(unfinishedByDeck[series.DeckId] - completedVolumes, partial), 0));
+        }
+
+        return result;
+    }
+
+    /// <summary>Totals of each completed series that has completed volumes, through <see cref="MediaListEntryHelper.TallySeries"/>.</summary>
+    internal static Dictionary<int, SeriesTotals> ResolveSeriesTotals(IReadOnlyList<CompletedDeckInfo> allCompletedDecks,
+                                                                     IReadOnlyDictionary<int, List<CompletedEntry>> completedEntriesByDeck)
+    {
+        var result = new Dictionary<int, SeriesTotals>();
+        var volumesBySeries = allCompletedDecks.Where(d => d.ParentDeckId != null).GroupBy(d => d.ParentDeckId!.Value).ToDictionary(g => g.Key, g => g.ToList());
+
+        foreach (var series in allCompletedDecks.Where(d => d.ParentDeckId == null && volumesBySeries.ContainsKey(d.DeckId)))
+        {
+            var volumes = volumesBySeries[series.DeckId].ToDictionary(v => v.DeckId);
+            // A series marked Completed before entries existed counts as one untyped pass.
+            var passes = completedEntriesByDeck.GetValueOrDefault(series.DeckId) is { Count: > 0 } seriesEntries
+                ? seriesEntries
+                : [new CompletedEntry(0, null)];
+            var completions = volumes.Values
+                                     .SelectMany(v => (completedEntriesByDeck.GetValueOrDefault(v.DeckId) ?? []).Select(e => (Volume: v, Entry: e)))
+                                     .OrderBy(c => c.Entry.Id)
+                                     .Select(c => new VolumeCompletion(c.Volume.DeckId, c.Volume.CharacterCount, c.Entry.CharactersRead, c.Entry.SeriesEntryId))
+                                     .ToList();
+
+            var tally = MediaListEntryHelper.TallySeries(series.CharacterCount, passes.Select(p => p.Id).ToList(), completions);
+            // A typed series count stands for everything read on that pass, volumes included.
+            var passCharacters = passes.Sum(p => p.CharactersRead ?? tally.PassCharacters[p.Id]);
+            result[series.DeckId] = new SeriesTotals(passCharacters + tally.StandaloneCharacters,
+                                                     (long)series.WordCount * passes.Count + tally.StandaloneDeckIds.Sum(id => (long)volumes[id].WordCount),
+                                                     tally.StandaloneCharacters);
+        }
+
+        return result;
+    }
+
     [Queue(CoverageQueues.Incremental)]
     public async Task ComputeUserAccomplishments(string userId)
     {
         lock (AccomplishmentComputeLock)
         {
+            // The run in flight may have read the user's list before the change behind this request, so it runs once more.
             if (!AccomplishmentComputingUserIds.Add(userId))
             {
+                AccomplishmentRerunUserIds.Add(userId);
                 return;
             }
         }
 
-        try
+        while (true)
         {
-            await using var context = await contextFactory.CreateDbContextAsync();
-            await using var userContext = await userContextFactory.CreateDbContextAsync();
-
-            var completedDeckIds = await userContext.UserDeckPreferences
-                                                    .Where(udp => udp.UserId == userId && udp.Status == DeckStatus.Completed)
-                                                    .Select(udp => udp.DeckId)
-                                                    .ToListAsync();
-
-            if (completedDeckIds.Count == 0)
+            try
             {
-                await userContext.UserAccomplishments
-                                 .Where(ua => ua.UserId == userId)
-                                 .ExecuteDeleteAsync();
-                return;
+                await ComputeAccomplishmentsAsync(userId);
+            }
+            catch
+            {
+                lock (AccomplishmentComputeLock)
+                {
+                    AccomplishmentComputingUserIds.Remove(userId);
+                    AccomplishmentRerunUserIds.Remove(userId);
+                }
+
+                throw;
             }
 
-            // Load all completed decks (both parents and children)
-            var allCompletedDecks = await context.Decks
-                                                 .AsNoTracking()
-                                                 .Where(d => completedDeckIds.Contains(d.DeckId))
-                                                 .Select(d => new CompletedDeckInfo(d.DeckId, d.ParentDeckId, d.MediaType, d.CharacterCount,
-                                                                                    d.WordCount))
-                                                 .ToListAsync();
-
-            var completedRootIds = allCompletedDecks.Where(d => d.ParentDeckId == null).Select(d => d.DeckId).ToList();
-
-            var childCounts = completedRootIds.Count == 0
-                ? new Dictionary<int, int>()
-                : await context.Decks
-                               .AsNoTracking()
-                               .Where(d => d.ParentDeckId != null && completedRootIds.Contains(d.ParentDeckId.Value))
-                               .GroupBy(d => d.ParentDeckId!.Value)
-                               .Select(g => new { ParentDeckId = g.Key, Count = g.Count() })
-                               .ToDictionaryAsync(g => g.ParentDeckId, g => g.Count);
-
-            var (completedDecks, unitCounts) = ResolveCompletedUnits(allCompletedDecks, childCounts);
-
-            // Clear accomplishments if no effective decks remain
-            if (completedDecks.Count == 0)
+            lock (AccomplishmentComputeLock)
             {
-                // Delete existing accomplishments
-                await userContext.UserAccomplishments
-                                 .Where(ua => ua.UserId == userId)
-                                 .ExecuteDeleteAsync();
-                return;
+                if (!AccomplishmentRerunUserIds.Remove(userId))
+                {
+                    AccomplishmentComputingUserIds.Remove(userId);
+                    return;
+                }
             }
+        }
+    }
 
-            var usedDeckIds = completedDecks.Select(d => d.DeckId).ToList();
-            var usedMediaTypes = completedDecks.Select(d => d.MediaType).Distinct().ToList();
+    private async Task ComputeAccomplishmentsAsync(string userId)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync();
+        await using var userContext = await userContextFactory.CreateDbContextAsync();
 
-            var uniqueWordCounts = await ComputeUniqueWordCounts(context, usedDeckIds, usedMediaTypes);
-            var uniqueWordUsedOnceCounts = await ComputeUniqueWordUsedOnceCounts(context, usedDeckIds, usedMediaTypes);
-            var uniqueKanjiCounts = await ComputeUniqueKanjiCounts(context, usedDeckIds, usedMediaTypes);
+        var statusCompletedIds = await userContext.UserDeckPreferences
+                                                  .Where(udp => udp.UserId == userId && udp.Status == DeckStatus.Completed)
+                                                  .Select(udp => udp.DeckId)
+                                                  .ToListAsync();
 
-            var accomplishments = new List<UserAccomplishment>();
-            var now = DateTimeOffset.UtcNow;
+        var entries = await userContext.UserMediaListEntries
+                                     .AsNoTracking()
+                                     .Where(r => r.UserId == userId)
+                                     .OrderBy(r => r.Id)
+                                     .Select(r => new { r.Id, r.DeckId, r.State, r.CharactersRead, r.SeriesEntryId })
+                                     .ToListAsync();
 
-            // CompletedDeckCount counts whole works (roots only); completed children of an unfinished parent feed units and totals but not the headline count.
-            accomplishments.Add(new UserAccomplishment
-                                {
-                                    UserId = userId, MediaType = null, CompletedDeckCount = completedDecks.Count(d => d.ParentDeckId == null),
-                                    CompletedUnitCount = completedDecks.Sum(d => unitCounts[d.DeckId]),
-                                    TotalCharacterCount = completedDecks.Sum(d => (long)d.CharacterCount),
-                                    TotalWordCount = completedDecks.Sum(d => (long)d.WordCount),
-                                    UniqueWordCount = uniqueWordCounts.GetValueOrDefault(GLOBAL_MEDIA_TYPE_KEY, 0),
-                                    UniqueWordUsedOnceCount = uniqueWordUsedOnceCounts.GetValueOrDefault(GLOBAL_MEDIA_TYPE_KEY, 0),
-                                    UniqueKanjiCount = uniqueKanjiCounts.GetValueOrDefault(GLOBAL_MEDIA_TYPE_KEY, 0), LastComputedAt = now
-                                });
+        // A title counts as completed once any of its entries was, so reading it again keeps it in the totals.
+        var completedEntriesByDeck = entries.Where(r => r.State == MediaListEntryState.Completed)
+                                        .GroupBy(r => r.DeckId)
+                                        .ToDictionary(g => g.Key, g => g.Select(r => new CompletedEntry(r.Id, r.CharactersRead, r.SeriesEntryId)).ToList());
+        var completedDeckIds = statusCompletedIds.Union(completedEntriesByDeck.Keys).ToList();
 
-            // By media type
-            foreach (var mediaType in usedMediaTypes)
-            {
-                var typeDecks = completedDecks.Where(d => d.MediaType == mediaType).ToList();
-                accomplishments.Add(new UserAccomplishment
-                                    {
-                                        UserId = userId, MediaType = mediaType, CompletedDeckCount = typeDecks.Count(d => d.ParentDeckId == null),
-                                        CompletedUnitCount = typeDecks.Sum(d => unitCounts[d.DeckId]),
-                                        TotalCharacterCount = typeDecks.Sum(d => (long)d.CharacterCount),
-                                        TotalWordCount = typeDecks.Sum(d => (long)d.WordCount),
-                                        UniqueWordCount = uniqueWordCounts.GetValueOrDefault((int)mediaType, 0),
-                                        UniqueWordUsedOnceCount = uniqueWordUsedOnceCounts.GetValueOrDefault((int)mediaType, 0),
-                                        UniqueKanjiCount = uniqueKanjiCounts.GetValueOrDefault((int)mediaType, 0), LastComputedAt = now
-                                    });
-            }
+        var unfinishedByDeck = entries.Where(r => r.State != MediaListEntryState.Completed && r.CharactersRead != null)
+                                    .GroupBy(r => r.DeckId)
+                                    .ToDictionary(g => g.Key, g => g.Sum(r => (long)r.CharactersRead!.Value));
 
-            // Delete existing accomplishments and insert new ones
+        if (completedDeckIds.Count == 0 && unfinishedByDeck.Count == 0)
+        {
             await userContext.UserAccomplishments
                              .Where(ua => ua.UserId == userId)
                              .ExecuteDeleteAsync();
+            return;
+        }
 
-            await userContext.UserAccomplishments.AddRangeAsync(accomplishments);
-            await userContext.SaveChangesAsync();
-        }
-        finally
+        // Load all completed decks (both parents and children)
+        var allCompletedDecks = await context.Decks
+                                             .AsNoTracking()
+                                             .Where(d => completedDeckIds.Contains(d.DeckId))
+                                             .Select(d => new CompletedDeckInfo(d.DeckId, d.ParentDeckId, d.MediaType, d.CharacterCount,
+                                                                                d.WordCount))
+                                             .ToListAsync();
+
+        var completedRootIds = allCompletedDecks.Where(d => d.ParentDeckId == null).Select(d => d.DeckId).ToList();
+
+        var childCounts = completedRootIds.Count == 0
+            ? new Dictionary<int, int>()
+            : await context.Decks
+                           .AsNoTracking()
+                           .Where(d => d.ParentDeckId != null && completedRootIds.Contains(d.ParentDeckId.Value))
+                           .GroupBy(d => d.ParentDeckId!.Value)
+                           .Select(g => new { ParentDeckId = g.Key, Count = g.Count() })
+                           .ToDictionaryAsync(g => g.ParentDeckId, g => g.Count);
+
+        var (completedDecks, unitCounts) = ResolveCompletedUnits(allCompletedDecks, childCounts);
+
+        var unfinishedDeckIds = unfinishedByDeck.Keys.ToList();
+        var unfinishedDecks = await context.Decks
+                                           .AsNoTracking()
+                                           .Where(d => unfinishedDeckIds.Contains(d.DeckId))
+                                           .Select(d => new UnfinishedDeckInfo(d.DeckId, d.ParentDeckId, d.MediaType, d.Children.Any()))
+                                           .ToListAsync();
+
+        var seriesTotals = ResolveSeriesTotals(allCompletedDecks, completedEntriesByDeck);
+        var rereadRootIds = completedRootIds.Count == 0
+            ? []
+            : (await userContext.UserDeckPreferences
+                                .AsNoTracking()
+                                .Where(p => p.UserId == userId && completedRootIds.Contains(p.DeckId) &&
+                                            p.CurrentEntry!.State == MediaListEntryState.InProgress)
+                                .Select(p => p.DeckId)
+                                .ToListAsync()).ToHashSet();
+        var unfinished = ResolveUnfinishedCharacters(unfinishedDecks, unfinishedByDeck, completedDecks, completedEntriesByDeck,
+                                                     completedRootIds.ToHashSet(), rereadRootIds, seriesTotals);
+
+        long UnfinishedFor(MediaType? mediaType) =>
+            unfinished.Values.Where(u => mediaType == null || u.MediaType == mediaType).Sum(u => u.Characters);
+
+        if (completedDecks.Count == 0 && unfinished.Count == 0)
         {
-            lock (AccomplishmentComputeLock)
-            {
-                AccomplishmentComputingUserIds.Remove(userId);
-            }
+            await userContext.UserAccomplishments
+                             .Where(ua => ua.UserId == userId)
+                             .ExecuteDeleteAsync();
+            return;
         }
+
+        var usedDeckIds = completedDecks.Select(d => d.DeckId).ToList();
+        var usedMediaTypes = completedDecks.Select(d => d.MediaType).Distinct().ToList();
+
+        var uniqueWordCounts = usedDeckIds.Count == 0 ? [] : await ComputeUniqueWordCounts(context, usedDeckIds, usedMediaTypes);
+        var uniqueWordUsedOnceCounts = usedDeckIds.Count == 0 ? [] : await ComputeUniqueWordUsedOnceCounts(context, usedDeckIds, usedMediaTypes);
+        var uniqueKanjiCounts = usedDeckIds.Count == 0 ? [] : await ComputeUniqueKanjiCounts(context, usedDeckIds, usedMediaTypes);
+
+        var accomplishments = new List<UserAccomplishment>();
+        var now = DateTimeOffset.UtcNow;
+
+        var (globalCharacters, globalWords) = SumCompletedReading(completedDecks, completedEntriesByDeck, seriesTotals);
+
+        // CompletedDeckCount counts whole works (roots only); completed children of an unfinished parent feed units and totals but not the headline count.
+        accomplishments.Add(new UserAccomplishment
+                            {
+                                UserId = userId, MediaType = null, CompletedDeckCount = completedDecks.Count(d => d.ParentDeckId == null),
+                                CompletedUnitCount = completedDecks.Sum(d => unitCounts[d.DeckId]),
+                                TotalCharacterCount = globalCharacters,
+                                TotalWordCount = globalWords,
+                                UnfinishedCharacterCount = UnfinishedFor(null),
+                                UniqueWordCount = uniqueWordCounts.GetValueOrDefault(GLOBAL_MEDIA_TYPE_KEY, 0),
+                                UniqueWordUsedOnceCount = uniqueWordUsedOnceCounts.GetValueOrDefault(GLOBAL_MEDIA_TYPE_KEY, 0),
+                                UniqueKanjiCount = uniqueKanjiCounts.GetValueOrDefault(GLOBAL_MEDIA_TYPE_KEY, 0), LastComputedAt = now
+                            });
+
+        // By media type
+        foreach (var mediaType in usedMediaTypes.Union(unfinished.Values.Select(u => u.MediaType)).Distinct())
+        {
+            var typeDecks = completedDecks.Where(d => d.MediaType == mediaType).ToList();
+            var (typeCharacters, typeWords) = SumCompletedReading(typeDecks, completedEntriesByDeck, seriesTotals);
+            accomplishments.Add(new UserAccomplishment
+                                {
+                                    UserId = userId, MediaType = mediaType, CompletedDeckCount = typeDecks.Count(d => d.ParentDeckId == null),
+                                    CompletedUnitCount = typeDecks.Sum(d => unitCounts[d.DeckId]),
+                                    TotalCharacterCount = typeCharacters,
+                                    TotalWordCount = typeWords,
+                                    UnfinishedCharacterCount = UnfinishedFor(mediaType),
+                                    UniqueWordCount = uniqueWordCounts.GetValueOrDefault((int)mediaType, 0),
+                                    UniqueWordUsedOnceCount = uniqueWordUsedOnceCounts.GetValueOrDefault((int)mediaType, 0),
+                                    UniqueKanjiCount = uniqueKanjiCounts.GetValueOrDefault((int)mediaType, 0), LastComputedAt = now
+                                });
+        }
+
+        // Delete existing accomplishments and insert new ones
+        await userContext.UserAccomplishments
+                         .Where(ua => ua.UserId == userId)
+                         .ExecuteDeleteAsync();
+
+        await userContext.UserAccomplishments.AddRangeAsync(accomplishments);
+        await userContext.SaveChangesAsync();
     }
 
     private async Task<Dictionary<int, int>> ComputeUniqueWordCounts(

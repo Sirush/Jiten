@@ -96,6 +96,12 @@ public partial class UserController
                                      externalStatus = kv.Value.SourceStatus,
                                      mappedStatus = kv.Value.MappedStatus,
                                      finishedAt = (DateOnly?)null,
+                                     startedOn = kv.Value.StartedOn,
+                                     completedOn = kv.Value.FinishedOn,
+                                     repeatCount = RepeatsBeforeFromTimesCompleted(kv.Value.TimesCompleted, kv.Value.MappedStatus),
+                                     charactersRead = kv.Value.CharactersRead,
+                                     history = kv.Value.History,
+                                     volumes = kv.Value.Volumes,
                                      progress = kv.Value.Progress,
                                      subdeckCount = subdeckCounts.TryGetValue(deck.DeckId, out var subdecks) ? subdecks : (int?)null,
                                      currentStatus,
@@ -131,6 +137,13 @@ public partial class UserController
                               unmatched,
                               counts = new { total = parsed.Entries.Count, matched = matched.Count, unmatched = unmatched.Count, conflicts },
                           });
+    }
+
+    /// <summary>A completed title's count includes the entry the status opens; any other title's completions all came before it.</summary>
+    private static int? RepeatsBeforeFromTimesCompleted(int timesCompleted, DeckStatus status)
+    {
+        var before = status == DeckStatus.Completed ? timesCompleted - 1 : timesCompleted;
+        return before > 0 ? before : null;
     }
 
     private static string FileLabel(string? fileName)
