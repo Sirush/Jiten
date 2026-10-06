@@ -128,7 +128,7 @@
 </script>
 
 <template>
-  <div class="flex flex-col items-center justify-center p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-lg max-w-md mx-auto w-full">
+  <div class="flex flex-col items-center justify-center px-5 pt-6 sm:px-8 sm:pt-8 bg-white dark:bg-gray-800 rounded-2xl shadow-lg max-w-md mx-auto w-full overflow-clip">
     <div class="text-2xl font-bold mb-2">Session Complete</div>
 
     <!-- All caught up -->
@@ -317,7 +317,9 @@
       {{ forecastText }}
     </div>
 
-    <div class="flex gap-3 w-full">
+    <div
+      class="sticky bottom-0 flex gap-3 w-[calc(100%+2.5rem)] sm:w-[calc(100%+4rem)] -mx-5 sm:-mx-8 px-5 sm:px-8 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-8 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+    >
       <Button label="Study More" severity="secondary" class="flex-1" @click="emit('studyMore')" />
       <Button label="Done" class="flex-1" @click="emit('close')" />
     </div>
