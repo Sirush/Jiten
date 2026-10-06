@@ -25,6 +25,10 @@ describe('convertToRubyWithFurigana', () => {
   it('drops the reading but keeps the ruby base when hidden', () => {
     expect(convertToRubyWithFurigana('猫[ねこ]', false)).toBe('<ruby lang="ja">猫</ruby>');
   });
+
+  it('drops the reading of an iteration mark when hidden', () => {
+    expect(convertToRubyWithFurigana('死[し] 屍[し] 累々[るいるい]', false)).toBe('<ruby lang="ja">死</ruby> <ruby lang="ja">屍</ruby> <ruby lang="ja">累々</ruby>');
+  });
 });
 
 describe('isKnownForFurigana', () => {
