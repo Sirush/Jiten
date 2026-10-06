@@ -133,22 +133,19 @@
     }
   };
 
-  // immediate so the listener attaches on the first open too: this component mounts
-  // lazily with visible already true, so a lazy watcher would miss that first value
-  // and leave the very first tooltip un-dismissable by an outside tap.
   watch(
     () => props.visible,
     (visible) => {
       if (visible && props.isMobile) {
-        requestAnimationFrame(() => document.addEventListener('click', handleClickOutside));
+        document.addEventListener('pointerdown', handleClickOutside, true);
       } else {
-        document.removeEventListener('click', handleClickOutside);
+        document.removeEventListener('pointerdown', handleClickOutside, true);
       }
     },
     { immediate: true }
   );
 
   onBeforeUnmount(() => {
-    document.removeEventListener('click', handleClickOutside);
+    document.removeEventListener('pointerdown', handleClickOutside, true);
   });
 </script>
