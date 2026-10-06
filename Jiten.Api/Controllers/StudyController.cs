@@ -169,7 +169,10 @@ public partial class StudyController(
 
         if (studyDecks.Any(sd => sd.DeckType == StudyDeckType.GlobalDynamic))
         {
-            extraWordIds = wordSetStates.Keys.Select(k => k.Item1).Distinct().ToList();
+            extraWordIds = wordSetStates.Keys.Select(k => k.Item1)
+                                        .Concat(redundantTiersByPair.Keys.Select(k => k.Item1))
+                                        .Distinct()
+                                        .ToList();
             var cardRankWordIds = cardStateMap.Keys.Select(k => k.Item1).Distinct().Union(extraWordIds).ToList();
             var precomputeGate = new SemaphoreSlim(MaxConcurrentDeckQueries);
 
