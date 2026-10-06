@@ -2,7 +2,7 @@ using System.Buffers.Binary;
 
 namespace Jiten.Core.Data.FSRS;
 
-public readonly record struct PackedReview(FsrsRating Rating, DateTime ReviewDateTime, int? ReviewDuration);
+public readonly record struct PackedReview(FsrsRating Rating, DateTime ReviewDateTime, int? ReviewDuration, FsrsState? State = null);
 
 /// <param name="ReviewCount">True number of reviews, which exceeds the entries in <paramref name="Logs"/> when truncated.</param>
 public readonly record struct PackResult(byte[]? Logs, DateTime? FirstReview, int ReviewCount, bool Truncated);
@@ -23,9 +23,12 @@ public static class ReviewLogPacker
     private const ushort NullDuration = 0xFFFF;
     private const ushort MaxDurationDs = 0xFFFE;
     private const byte FlagTruncated = 0x01;
+    // The rating byte's high nibble holds the review state plus one, so 0 reads back as unknown on older blobs.
+    private const byte RatingMask = 0x0F;
+    private const int StateShift = 4;
 
     public static PackResult Pack(IEnumerable<FsrsReviewLog> logs, bool markTruncated = false)
-        => Pack(logs.Select(l => new PackedReview(l.Rating, l.ReviewDateTime, l.ReviewDuration)), markTruncated);
+        => Pack(logs.Select(l => new PackedReview(l.Rating, l.ReviewDateTime, l.ReviewDuration, l.State)), markTruncated);
 
     /// <param name="markTruncated">Set when the caller already knows history is missing from <paramref name="reviews"/>.</param>
     public static PackResult Pack(IEnumerable<PackedReview> reviews, bool markTruncated = false)
@@ -62,7 +65,7 @@ public static class ReviewLogPacker
                 continue;
             }
 
-            entries.Add(((uint)deltaSeconds, rating, EncodeDuration(review.ReviewDuration)));
+            entries.Add(((uint)deltaSeconds, (byte)(rating | EncodeState(review.State) << StateShift), EncodeDuration(review.ReviewDuration)));
         }
 
         if (entries.Count == 0)
@@ -115,13 +118,19 @@ public static class ReviewLogPacker
                 throw new InvalidDataException($"Review log blob entry {i} goes backwards in time.");
             previousDelta = delta;
 
-            var rating = blob[offset + 4];
+            var ratingByte = blob[offset + 4];
+            var rating = ratingByte & RatingMask;
             if (rating is < (byte)FsrsRating.Again or > (byte)FsrsRating.Easy)
                 throw new InvalidDataException($"Review log blob entry {i} has invalid rating {rating}.");
 
+            var stateCode = ratingByte >> StateShift;
+            if (stateCode > (int)FsrsState.Relearning + 1)
+                throw new InvalidDataException($"Review log blob entry {i} has invalid state {stateCode - 1}.");
+
             var durationDs = BinaryPrimitives.ReadUInt16LittleEndian(blob.AsSpan(offset + 5));
             result.Add(new PackedReview((FsrsRating)rating, basis.AddSeconds(delta),
-                                        durationDs == NullDuration ? null : durationDs * 100));
+                                        durationDs == NullDuration ? null : durationDs * 100,
+                                        stateCode == 0 ? null : (FsrsState)(stateCode - 1)));
 
             offset += EntrySize;
         }
@@ -130,6 +139,9 @@ public static class ReviewLogPacker
     }
 
     public static bool IsTruncated(byte[]? blob) => blob is { Length: >= HeaderSize } && (blob[1] & FlagTruncated) != 0;
+
+    private static int EncodeState(FsrsState? state)
+        => state is >= FsrsState.New and <= FsrsState.Relearning ? (int)state.Value + 1 : 0;
 
     private static ushort EncodeDuration(int? durationMs)
     {

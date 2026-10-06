@@ -32,6 +32,9 @@ public class FsrsReviewLog
     /// </summary>
     public int? ReviewDuration { get; set; }
 
+    /// <summary>The card's state when it was answered; null on logs written before it was recorded.</summary>
+    public FsrsState? State { get; set; }
+
     public FsrsReviewLog()
     {
     }

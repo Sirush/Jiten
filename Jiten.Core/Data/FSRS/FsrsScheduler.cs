@@ -143,7 +143,7 @@ public class FsrsScheduler
 
         ProcessCardReview(updatedCard, rating, reviewDateTime.Value, daysSinceLastReview);
 
-        var reviewLog = new FsrsReviewLog(updatedCard.CardId, rating, reviewDateTime.Value, reviewDuration);
+        var reviewLog = new FsrsReviewLog(updatedCard.CardId, rating, reviewDateTime.Value, reviewDuration) { State = card.State };
 
         return (updatedCard, reviewLog);
     }

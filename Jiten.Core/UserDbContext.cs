@@ -315,6 +315,7 @@ public class UserDbContext : IdentityDbContext<User>
                   .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(r => new { r.CardId, r.ReviewDateTime }).IsUnique();
+            entity.Property(r => r.State).HasConversion<short?>();
         });
 
         modelBuilder.Entity<FsrsCardArchive>(entity =>

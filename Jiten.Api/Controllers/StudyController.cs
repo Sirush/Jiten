@@ -3349,7 +3349,7 @@ public partial class StudyController(
     private const int WorkloadMaxSimCards = 8000;
     private const int WorkloadMaxNewCardsPerDay = 200;
     // Time model: per-maturity seconds/review are learned from the user's own review durations (ms, capped
-    // to drop AFK outliers), bucketed by inter-review gap exactly like RetentionCalculator. Below the
+    // to drop AFK outliers), bucketed by maturity exactly like RetentionCalculator. Below the
     // per-bucket sample floor we fall back to the user's overall average, then to neutral defaults that
     // encode the usual shape (mature recall fastest, first exposures slowest).
     private const double WorkloadDefaultLearningSeconds = 8.0;
@@ -3503,8 +3503,8 @@ public partial class StudyController(
 
     /// <summary>
     /// Learns average seconds-per-review, split by maturity (learning / young / mature), from the user's
-    /// own review-duration history. Maturity is taken from the inter-review gap exactly like
-    /// <see cref="RetentionCalculator"/>. A sparse bucket falls back to the user's overall average, and a
+    /// own review-duration history, bucketed by <see cref="RetentionCalculator.Category"/>. A sparse bucket
+    /// falls back to the user's overall average, and a
     /// fresh user to neutral defaults, so the curve is always populated.
     /// </summary>
     private async Task<(double LearningSeconds, double YoungSeconds, double MatureSeconds)> ComputeReviewSecondsModel(string userId)
@@ -3523,15 +3523,8 @@ public partial class StudyController(
                 var s = Math.Min(entry.DurationMs!.Value / 1000.0, WorkloadReviewSecondsCap);
                 if (s > 0)
                 {
-                    // 0 = learning (first review or <1d gap), 1 = young, 2 = mature.
-                    int category;
-                    if (previous is not { } prev)
-                        category = 0;
-                    else
-                    {
-                        var gap = (entry.ReviewUtc - prev).TotalDays;
-                        category = gap < 1 ? 0 : gap >= RetentionCalculator.MatureThresholdDays ? 2 : 1;
-                    }
+                    var category = RetentionCalculator.Category(
+                        entry.State, previous is { } prev ? (entry.ReviewUtc - prev).TotalDays : null);
 
                     switch (category)
                     {
@@ -3684,7 +3677,7 @@ public partial class StudyController(
 
         var entries = (await CardArchiveService.LoadAllReviewsAsync(userContext, userId))
             .Select(r => new RetentionCalculator.ReviewEntry(
-                        r.CardId, r.ReviewUtc, r.Rating == FsrsRating.Again, (int)r.Rating, r.DurationMs));
+                        r.CardId, r.ReviewUtc, r.Rating == FsrsRating.Again, (int)r.Rating, r.DurationMs, r.State));
 
         var result = RetentionCalculator.Compute(entries, offsetHours, now);
 

@@ -725,7 +725,7 @@ public partial class UserController(
         => processedPairs.TryGetValue((card.WordId, card.ReadingIndex), out var processed)
             ? processed.AllReviewLogs
                        .Where(l => l.Rating is >= FsrsRating.Again and <= FsrsRating.Easy)
-                       .Select(l => new PackedReview(l.Rating, l.ReviewDateTime, l.ReviewDuration))
+                       .Select(l => new PackedReview(l.Rating, l.ReviewDateTime, l.ReviewDuration, l.State))
                        .ToList()
             : [];
 
@@ -765,7 +765,8 @@ public partial class UserController(
                             {
                                 Rating = l.Rating,
                                 ReviewDateTime = DateTimeOffset.FromUnixTimeSeconds(l.ReviewDateTime).UtcDateTime,
-                                ReviewDuration = l.ReviewDuration
+                                ReviewDuration = l.ReviewDuration,
+                                State = l.State
                             }).ToList();
 
     private static int CountLapsesFromLogs(List<FsrsReviewLogExportDto> logs, FsrsScheduler scheduler)
@@ -911,7 +912,7 @@ public partial class UserController(
             var reviews = dto.ReviewLogs
                              .Select(l => new PackedReview(l.Rating,
                                                            DateTimeOffset.FromUnixTimeSeconds(l.ReviewDateTime).UtcDateTime,
-                                                           l.ReviewDuration));
+                                                           l.ReviewDuration, l.State));
             var packed = ReviewLogPacker.Pack(reviews);
 
             var incoming = new FsrsCardArchive
@@ -1927,7 +1928,7 @@ public partial class UserController(
                     mergedLogs.Add(new FsrsReviewLog
                                    {
                                        CardId = card.CardId, Rating = log.Rating, ReviewDateTime = log.ReviewDateTime,
-                                       ReviewDuration = log.ReviewDuration,
+                                       ReviewDuration = log.ReviewDuration, State = log.State,
                                    });
                 }
 
@@ -2522,7 +2523,8 @@ public partial class UserController(
                                                                    Rating = r.Rating, ReviewDateTime =
                                                                        new DateTimeOffset(r.ReviewDateTime)
                                                                            .ToUnixTimeSeconds(),
-                                                                   ReviewDuration = r.ReviewDuration
+                                                                   ReviewDuration = r.ReviewDuration,
+                                                                   State = r.State
                                                                }).ToList(),
                                     Text = FormText(c.WordId, c.ReadingIndex), Reading = FormReading(c.WordId, c.ReadingIndex)
                                 }).ToList(),
@@ -2549,7 +2551,8 @@ public partial class UserController(
                                                                                 {
                                                                                     Rating = r.Rating,
                                                                                     ReviewDateTime = new DateTimeOffset(r.ReviewDateTime).ToUnixTimeSeconds(),
-                                                                                    ReviewDuration = r.ReviewDuration
+                                                                                    ReviewDuration = r.ReviewDuration,
+                                                                                    State = r.State
                                                                                 }).ToList(),
                                                Text = FormText(a.WordId, a.ReadingIndex), Reading = FormReading(a.WordId, a.ReadingIndex),
                                                CoveringText = a.CoveringReadingIndex.HasValue
@@ -2876,7 +2879,7 @@ public partial class UserController(
                                                                          l.Rating,
                                                                          DateTimeOffset.FromUnixTimeSeconds(l.ReviewDateTime)
                                                                                        .UtcDateTime,
-                                                                         l.ReviewDuration))
+                                                                         l.ReviewDuration, l.State))
                                                              .ToList());
         var archivedRedundant = redundantBackup.Archived;
         if (archivedRedundant > 0)
@@ -2958,7 +2961,7 @@ public partial class UserController(
                                                         Rating = logDto.Rating, ReviewDateTime = DateTimeOffset
                                                             .FromUnixTimeSeconds(logDto.ReviewDateTime)
                                                             .UtcDateTime,
-                                                        ReviewDuration = logDto.ReviewDuration,
+                                                        ReviewDuration = logDto.ReviewDuration, State = logDto.State,
                                                     });
                     }
 
@@ -2987,7 +2990,8 @@ public partial class UserController(
                                                                                       Rating = l.Rating, ReviewDateTime = DateTimeOffset
                                                                                           .FromUnixTimeSeconds(l.ReviewDateTime)
                                                                                           .UtcDateTime,
-                                                                                      ReviewDuration = l.ReviewDuration
+                                                                                      ReviewDuration = l.ReviewDuration,
+                                                                                      State = l.State
                                                                                   }).ToList()
                                   };
 

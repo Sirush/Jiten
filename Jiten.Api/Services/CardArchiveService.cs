@@ -6,10 +6,10 @@ using Microsoft.EntityFrameworkCore;
 namespace Jiten.Api.Services;
 
 /// <summary>An archived review. PseudoCardId is negative, so it never collides with a live FsrsCard.CardId.</summary>
-public readonly record struct ArchivedReview(long PseudoCardId, DateTime ReviewUtc, FsrsRating Rating, int? DurationMs);
+public readonly record struct ArchivedReview(long PseudoCardId, DateTime ReviewUtc, FsrsRating Rating, int? DurationMs, FsrsState? State = null);
 
 /// <summary>A review from either source. CardId is negative for one that came out of the archive.</summary>
-public readonly record struct UserReview(long CardId, DateTime ReviewUtc, FsrsRating Rating, int? DurationMs);
+public readonly record struct UserReview(long CardId, DateTime ReviewUtc, FsrsRating Rating, int? DurationMs, FsrsState? State = null);
 
 /// <summary>
 /// Writes removed cards to <see cref="FsrsCardArchive"/>
@@ -38,7 +38,7 @@ public static class CardArchiveService
 
         var entries = cards.Select(c => (Card: c, Reviews: (IReadOnlyList<PackedReview>)
                                             (logsByCard.GetValueOrDefault(c.CardId) ?? [])
-                                            .Select(l => new PackedReview(l.Rating, l.ReviewDateTime, l.ReviewDuration))
+                                            .Select(l => new PackedReview(l.Rating, l.ReviewDateTime, l.ReviewDuration, l.State))
                                             .ToList()))
                            .ToList();
 
@@ -203,7 +203,7 @@ public static class CardArchiveService
         {
             var (reviews, _) = ReadReviews(row.Logs, row.FirstReview);
             foreach (var review in reviews)
-                result.Add(new ArchivedReview(-row.ArchiveId, review.ReviewDateTime, review.Rating, review.ReviewDuration));
+                result.Add(new ArchivedReview(-row.ArchiveId, review.ReviewDateTime, review.Rating, review.ReviewDuration, review.State));
         }
 
         return result;
@@ -218,16 +218,16 @@ public static class CardArchiveService
                             .AsNoTracking()
                             .Where(l => l.Card.UserId == userId
                                         && l.Rating >= FsrsRating.Again && l.Rating <= FsrsRating.Easy)
-                            .Select(l => new { l.CardId, l.ReviewDateTime, l.Rating, l.ReviewDuration })
+                            .Select(l => new { l.CardId, l.ReviewDateTime, l.Rating, l.ReviewDuration, l.State })
                             .ToListAsync();
 
         var archived = await LoadArchivedReviewsAsync(ctx, userId);
 
         var all = new List<UserReview>(live.Count + archived.Count);
         foreach (var l in live)
-            all.Add(new UserReview(l.CardId, l.ReviewDateTime, l.Rating, l.ReviewDuration));
+            all.Add(new UserReview(l.CardId, l.ReviewDateTime, l.Rating, l.ReviewDuration, l.State));
         foreach (var a in archived)
-            all.Add(new UserReview(a.PseudoCardId, a.ReviewUtc, a.Rating, a.DurationMs));
+            all.Add(new UserReview(a.PseudoCardId, a.ReviewUtc, a.Rating, a.DurationMs, a.State));
 
         all.Sort(static (x, y) => x.CardId != y.CardId
                      ? x.CardId.CompareTo(y.CardId)

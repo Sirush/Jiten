@@ -155,7 +155,8 @@ public static class CardRestoreService
                                     {
                                         Rating = review.Rating,
                                         ReviewDateTime = review.ReviewDateTime,
-                                        ReviewDuration = review.ReviewDuration
+                                        ReviewDuration = review.ReviewDuration,
+                                        State = review.State
                                     });
 
             ctx.FsrsCardArchives.Remove(row);
@@ -186,7 +187,8 @@ public static class CardRestoreService
                                 {
                                     Rating = review.Rating,
                                     ReviewDateTime = review.ReviewDateTime,
-                                    ReviewDuration = review.ReviewDuration
+                                    ReviewDuration = review.ReviewDuration,
+                                    State = review.State
                                 });
 
         if (row.HistoryMerged)
@@ -215,7 +217,8 @@ public static class CardRestoreService
                           CardId = card.CardId,
                           Rating = review.Rating,
                           ReviewDateTime = review.ReviewDateTime,
-                          ReviewDuration = review.ReviewDuration
+                          ReviewDuration = review.ReviewDuration,
+                          State = review.State
                       };
             added.Add(log);
             card.ReviewLogs.Add(log);

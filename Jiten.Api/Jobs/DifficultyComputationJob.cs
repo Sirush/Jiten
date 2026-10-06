@@ -23,7 +23,8 @@ public class DifficultyComputationJob(
         [property: JsonPropertyName("deciles")] Dictionary<string, decimal>? Deciles,
         [property: JsonPropertyName("progression")] List<ProgressionItem>? Progression,
         [property: JsonPropertyName("sentences")] int Sentences,
-        [property: JsonPropertyName("level_counts")] Dictionary<string, int>? LevelCounts);
+        [property: JsonPropertyName("level_counts")] Dictionary<string, int>? LevelCounts,
+        [property: JsonPropertyName("error")] string? Error);
 
     private record ProgressionItem(
         [property: JsonPropertyName("segment")] int Segment,
@@ -198,6 +199,13 @@ public class DifficultyComputationJob(
 
         var mediaType = GetApiMediaType(deck.MediaType);
         var response = await CallRunPodApi(deck.RawText.RawText, mediaType);
+
+        // The handler reports unscorable text as an error output, which no retry can change.
+        if (response?.Error != null)
+        {
+            logger.LogWarning("RunPod could not score deck {DeckId}: {Error}", deck.DeckId, response.Error);
+            return;
+        }
 
         if (response == null || !response.Difficulty.HasValue)
         {

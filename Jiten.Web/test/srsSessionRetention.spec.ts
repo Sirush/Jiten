@@ -87,19 +87,30 @@ describe('session retention', () => {
     expect(store.sessionStats.retention).toEqual({ total: 1, passed: 0 });
   });
 
-  it('counts a relearning card carried over from an earlier day', async () => {
-    const store = await start([card(1, FsrsState.Relearning)]);
+  it('counts a step carried over from an earlier day, but not a same-day step', async () => {
+    const store = await start([card(1, FsrsState.Relearning), card(2, FsrsState.Learning, 10 * 60_000)]);
     await grade(store, FsrsRating.Again);
+    await grade(store, FsrsRating.Good);
 
     expect(store.sessionStats.retention).toEqual({ total: 1, passed: 0 });
   });
 
-  it('ignores a card already reviewed less than a day ago', async () => {
-    const store = await start([card(1, FsrsState.Learning, 10 * 60_000), card(2, FsrsState.Review, 2 * 60 * 60_000)]);
+  it('ignores the next learning step of an overdue step answered this session', async () => {
+    const overdue = card(1, FsrsState.Learning);
+    overdue.intervalPreview = { againSeconds: 60, hardSeconds: 300, goodSeconds: 600, easySeconds: 86400 * 4, goodIsStep: true } as StudyCardDto['intervalPreview'];
+    const store = await start([overdue]);
     await grade(store, FsrsRating.Good);
+    expect(store.currentCard?.wordId).toBe(1);
     await grade(store, FsrsRating.Good);
 
-    expect(store.sessionStats.retention).toEqual({ total: 0, passed: 0 });
+    expect(store.sessionStats.retention).toEqual({ total: 1, passed: 1 });
+  });
+
+  it('counts a review card due less than a day after its last review', async () => {
+    const store = await start([card(1, FsrsState.Review, 6 * 60 * 60_000)]);
+    await grade(store, FsrsRating.Good);
+
+    expect(store.sessionStats.retention).toEqual({ total: 1, passed: 1 });
   });
 
   it('undo takes the answer back out', async () => {
