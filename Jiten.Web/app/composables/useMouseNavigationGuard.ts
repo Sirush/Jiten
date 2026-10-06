@@ -1,32 +1,30 @@
-/** Prevent browser back/forward while a mouse binding is active. */
-export function useMouseNavigationGuard(isActive: () => boolean): () => void {
-  let lockedUrl: string | null = null;
+const GUARD_STATE_KEY = 'jitenMouseNavigationGuard';
 
-  function sync() {
-    if (!isActive()) {
-      lockedUrl = null;
-      return;
-    }
-    if (lockedUrl !== null) return;
-    lockedUrl = window.location.href;
-    window.history.pushState({ ...window.history.state, jitenMouseBinding: true }, '', lockedUrl);
+function onGuardEntry(): boolean {
+  return window.history.state?.[GUARD_STATE_KEY] === true;
+}
+
+/** Keeps a same-URL history entry on top for mouse back to land on, for browsers that navigate despite preventDefault (Vivaldi on Linux). */
+export function useMouseNavigationGuard(isActive: () => boolean) {
+  // Reusing an existing guard entry keeps remounts and repeated arming from stacking duplicates.
+  function arm() {
+    if (!isActive() || onGuardEntry()) return;
+    window.history.pushState({ ...window.history.state, [GUARD_STATE_KEY]: true }, '', window.location.href);
   }
 
-  function handlePopState() {
-    if (!isActive()) return;
-    sync();
-    if (lockedUrl !== null) window.history.pushState({ ...window.history.state, jitenMouseBinding: true }, '', lockedUrl);
+  /** Drops an unused guard entry. Calling it while a mouse back navigation is pending would navigate twice. */
+  function release() {
+    if (onGuardEntry()) window.history.back();
   }
 
   onMounted(() => {
-    window.addEventListener('popstate', handlePopState);
-    sync();
+    window.addEventListener('popstate', arm);
+    arm();
   });
 
   onUnmounted(() => {
-    window.removeEventListener('popstate', handlePopState);
-    lockedUrl = null;
+    window.removeEventListener('popstate', arm);
   });
 
-  return sync;
+  return { arm, release };
 }

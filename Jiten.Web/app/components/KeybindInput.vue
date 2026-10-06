@@ -14,17 +14,17 @@
 
   const listening = ref(false);
   const btnRef = ref<HTMLButtonElement>();
-  const syncMouseNavigationGuard = useMouseNavigationGuard(() => listening.value);
-
+  const mouseNavigationGuard = useMouseNavigationGuard(() => listening.value);
 
   function toggleListening() {
     listening.value = !listening.value;
-    syncMouseNavigationGuard();
+    if (listening.value) mouseNavigationGuard.arm();
+    else mouseNavigationGuard.release();
   }
 
+  // Blur can come from a back/forward press outside the button, so the guard entry is left for that navigation to consume.
   function stopListening() {
     listening.value = false;
-    syncMouseNavigationGuard();
   }
 
   function handleKeydown(e: KeyboardEvent) {
@@ -34,6 +34,7 @@
 
     if (e.key === 'Escape') {
       listening.value = false;
+      mouseNavigationGuard.release();
       return;
     }
 
@@ -41,11 +42,16 @@
 
     emit('update:modelValue', normalizeKey(e));
     listening.value = false;
+    mouseNavigationGuard.release();
   }
 
   // Chromium navigates back/forward on mouseup, so the release after a capture must be swallowed too.
   let swallowRelease = false;
   let swallowContextMenu = false;
+
+  function isNavigationButton(button: number) {
+    return button === 3 || button === 4;
+  }
 
   function handleMousedown(e: MouseEvent) {
     if (!listening.value) return;
@@ -57,7 +63,7 @@
     swallowContextMenu = e.button === 2;
     emit('update:modelValue', token);
     listening.value = false;
-    syncMouseNavigationGuard();
+    if (!isNavigationButton(e.button)) mouseNavigationGuard.release();
   }
 
   function handleMouseup(e: MouseEvent) {

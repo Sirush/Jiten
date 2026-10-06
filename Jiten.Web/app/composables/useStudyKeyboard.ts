@@ -276,8 +276,8 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
     if (isMouseButtonBound(2)) e.preventDefault();
   }
 
-  const syncMouseNavigationGuard = useMouseNavigationGuard(() => isMouseButtonBound(3) || isMouseButtonBound(4));
-  const stopHistoryLockWatch = watch(() => store.studySettings.keybinds, syncMouseNavigationGuard, { deep: true });
+  const { arm: armMouseNavigationGuard } = useMouseNavigationGuard(() => isMouseButtonBound(3) || isMouseButtonBound(4));
+  const stopHistoryLockWatch = watch(() => store.studySettings.keybinds, () => armMouseNavigationGuard(), { deep: true });
 
   onMounted(() => {
     window.addEventListener('keydown', handleInput);
@@ -294,7 +294,6 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
     window.removeEventListener('auxclick', suppressBoundDefault);
     window.removeEventListener('contextmenu', handleContextMenu);
     stopHistoryLockWatch();
-    lockedUrl = null;
     stopBatchWatch();
   });
 
