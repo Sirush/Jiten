@@ -100,10 +100,10 @@
           class="absolute inset-0 bg-black bg-opacity-80 text-white p-2 flex flex-col transition-opacity duration-200"
           :class="showOverlay ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'"
         >
-          <div class="font-bold mb-2 truncate" v-bind="japaneseTextAttrs(localiseTitle(deck))">{{ localiseTitle(deck) }}</div>
+          <div class="shrink-0 font-bold text-sm leading-tight mb-1 truncate" v-bind="japaneseTextAttrs(localiseTitle(deck))">{{ localiseTitle(deck) }}</div>
           <div class="text-xs mb-1">{{ getMediaTypeText(deck.mediaType) }}</div>
 
-          <div class="text-xs space-y-1 mt-auto">
+          <div class="text-xs space-y-0.5 mt-auto">
             <div v-if="isAudioVisual && deck.speechDuration > 0" class="flex justify-between">
               <span>Durat.:</span>
               <span class="tabular-nums">{{ formattedSpeechDuration }}</span>
