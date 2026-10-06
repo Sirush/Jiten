@@ -57,6 +57,7 @@ public partial class AdminController
                 info.IsOnHiatus,
                 info.IsOneShot,
                 info.IsR15,
+                info.IsAdultOnly,
                 FirstPublishedAt = info.FirstPublishedAt?.UtcDateTime,
                 LastUpdatedAt = info.LastUpdatedAt?.UtcDateTime,
                 EstimatedSubdecks = EstimateSubdecks(info.TotalCharacters)

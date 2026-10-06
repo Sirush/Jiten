@@ -207,6 +207,9 @@ public class CliOptions
             HelpText = "Resolve comma-separated word[reading] pairs the way an Anki import does, e.g. \"性質[たち]\".")]
     public string? ResolveReading { get; set; }
 
+    [Option(longName: "romanize-test", Required = false, HelpText = "Romanise a title the way the add-media form's auto-romanise button does.")]
+    public string? RomanizeTest { get; set; }
+
     [Option(longName: "deconjugate-test", Required = false, HelpText = "Show all deconjugation results for a word.")]
     public string? DeconjugateTest { get; set; }
 

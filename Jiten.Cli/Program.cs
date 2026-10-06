@@ -4,6 +4,7 @@ using Jiten.Cli;
 using Jiten.Cli.Commands;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Parser.Romanization;
 using Microsoft.EntityFrameworkCore;
 
 // ReSharper disable MethodSupportsCancellation
@@ -288,6 +289,11 @@ public class Program
         if (options.RunFormTests)
         {
             await diagnosticCommands.RunFormTests(options);
+        }
+
+        if (options.RomanizeTest != null)
+        {
+            Console.WriteLine(await TitleRomanizer.RomanizeAsync(context.ContextFactory, options.RomanizeTest));
         }
 
         if (options.DeconjugateTest != null)
