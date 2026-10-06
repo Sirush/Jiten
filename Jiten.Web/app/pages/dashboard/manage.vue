@@ -85,6 +85,7 @@
     accomplishments: false,
     kanjiGrids: false,
     difficulties: false,
+    algorithmAdjustments: false,
     difficultyVotes: false,
     speechSpeed: false,
     lapseRecount: false,
@@ -689,6 +690,45 @@
     }
   };
 
+  const confirmRecomputeAlgorithmAdjustments = () => {
+    confirm.require({
+      message:
+        'Are you sure you want to recompute the algorithm adjustment of every deck? This changes the displayed difficulty of all decks. It uses stored model scores and does not call the external API.',
+      header: 'Confirmation',
+      icon: 'pi pi-exclamation-triangle',
+      acceptClass: 'p-button-primary',
+      rejectClass: 'p-button-secondary',
+      accept: () => recomputeAlgorithmAdjustments(),
+      reject: () => {},
+    });
+  };
+
+  const recomputeAlgorithmAdjustments = async () => {
+    try {
+      isLoading.value.algorithmAdjustments = true;
+      await $api('/admin/recompute-algorithm-adjustments', {
+        method: 'POST',
+      });
+
+      toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: 'Queued algorithm adjustment recomputation',
+        life: 5000,
+      });
+    } catch (error) {
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: 'Failed to queue algorithm adjustment recomputation',
+        life: 5000,
+      });
+      console.error('Error recomputing algorithm adjustments:', error);
+    } finally {
+      isLoading.value.algorithmAdjustments = false;
+    }
+  };
+
   const recomputeDifficultyVotes = async () => {
     try {
       isLoading.value.difficultyVotes = true;
@@ -1288,6 +1328,27 @@
               :disabled="isLoading.difficulties"
               :loading="isLoading.difficulties"
               @click="confirmReaggregateParentDifficulties"
+            />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
+        <template #title>Recompute Algorithm Adjustments</template>
+        <template #content>
+          <p class="mb-4">
+            Recompute the kanji and length correction applied on top of the model difficulty, for every deck. Run it after changing the correction constants, then
+            recompute difficulty votes. Does not call the external API.
+          </p>
+
+          <div class="flex justify-center">
+            <Button
+              label="Recompute Algorithm Adjustments"
+              icon="pi pi-sliders-h"
+              class="p-button-warning"
+              :disabled="isLoading.algorithmAdjustments"
+              :loading="isLoading.algorithmAdjustments"
+              @click="confirmRecomputeAlgorithmAdjustments"
             />
           </div>
         </template>

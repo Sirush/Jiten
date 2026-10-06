@@ -26,7 +26,7 @@ public partial class AdminController
 
         var stored = await dbContext.DeckDifficulties.AsNoTracking()
             .Where(dd => deckIds.Contains(dd.DeckId))
-            .Select(dd => new { dd.DeckId, dd.Difficulty, dd.UserAdjustment, dd.NEffective })
+            .Select(dd => new { dd.DeckId, Difficulty = dd.Difficulty + dd.AlgorithmAdjustment, dd.UserAdjustment, dd.NEffective })
             .ToDictionaryAsync(x => x.DeckId);
 
         var titles = await dbContext.Decks.AsNoTracking()

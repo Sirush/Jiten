@@ -1,8 +1,10 @@
 using Hangfire;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Difficulty;
 using Jiten.Parser;
 using Microsoft.EntityFrameworkCore;
+using System.Linq.Expressions;
 using System.Text.Json.Serialization;
 
 namespace Jiten.Api.Jobs;
@@ -215,30 +217,28 @@ public class DifficultyComputationJob(
                 Peak = Math.Round(p.Peak!.Value, 2)
             }).ToList();
 
-        var existingDifficulty = await context.DeckDifficulties.FindAsync(deck.DeckId);
-        if (existingDifficulty != null)
+        var deckDifficulty = await context.DeckDifficulties.FindAsync(deck.DeckId);
+        if (deckDifficulty == null)
         {
-            existingDifficulty.Difficulty = Math.Round(response.Difficulty.Value, 2);
-            existingDifficulty.Peak = Math.Round(response.Peak ?? response.Difficulty.Value, 2);
-            existingDifficulty.Deciles = roundedDeciles;
-            existingDifficulty.Progression = roundedProgression;
-            existingDifficulty.LastUpdated = DateTimeOffset.UtcNow;
-        }
-        else
-        {
-            var newDifficulty = new DeckDifficulty
-            {
-                DeckId = deck.DeckId,
-                Difficulty = Math.Round(response.Difficulty.Value, 2),
-                Peak = Math.Round(response.Peak ?? response.Difficulty.Value, 2),
-                LastUpdated = DateTimeOffset.UtcNow
-            };
-            newDifficulty.Deciles = roundedDeciles;
-            newDifficulty.Progression = roundedProgression;
-            await context.DeckDifficulties.AddAsync(newDifficulty);
+            deckDifficulty = new DeckDifficulty { DeckId = deck.DeckId };
+            await context.DeckDifficulties.AddAsync(deckDifficulty);
         }
 
-        deck.Difficulty = (float)Math.Round(response.Difficulty.Value, 2);
+        deckDifficulty.Difficulty = Math.Round(response.Difficulty.Value, 2);
+        deckDifficulty.Peak = Math.Round(response.Peak ?? response.Difficulty.Value, 2);
+        deckDifficulty.Deciles = roundedDeciles;
+        deckDifficulty.Progression = roundedProgression;
+        deckDifficulty.LastUpdated = DateTimeOffset.UtcNow;
+
+        // A child keeps its root's adjustment until the parent is re-aggregated; its own counts would rate it too easy.
+        var adjustment = deck.ParentDeckId == null
+            ? AlgorithmAdjustmentCalculator.Compute(deck.MediaType, deckDifficulty.Difficulty, deck.UniqueKanjiCount, deck.CharacterCount)
+            : await context.DeckDifficulties
+                           .Where(dd => dd.DeckId == deck.ParentDeckId)
+                           .Select(dd => dd.AlgorithmAdjustment)
+                           .FirstOrDefaultAsync();
+        SetAlgorithmAdjustment(deck, deckDifficulty, adjustment);
+
         await context.SaveChangesAsync();
     }
 
@@ -260,34 +260,106 @@ public class DifficultyComputationJob(
         var progression = ComputeParentProgression(childrenWithDifficulty);
         var aggregatedDeciles = ComputeAggregatedDeciles(childrenWithDifficulty);
 
-        var existingDifficulty = await context.DeckDifficulties.FindAsync(parent.DeckId);
-        if (existingDifficulty != null)
+        var parentDifficulty = await context.DeckDifficulties.FindAsync(parent.DeckId);
+        if (parentDifficulty == null)
         {
-            existingDifficulty.Difficulty = Math.Round(avgDifficulty, 2);
-            existingDifficulty.Peak = Math.Round(avgPeak, 2);
-            existingDifficulty.Deciles = aggregatedDeciles;
-            existingDifficulty.Progression = progression;
-            existingDifficulty.LastUpdated = DateTimeOffset.UtcNow;
-        }
-        else
-        {
-            var newDifficulty = new DeckDifficulty
-            {
-                DeckId = parent.DeckId,
-                Difficulty = Math.Round(avgDifficulty, 2),
-                Peak = Math.Round(avgPeak, 2),
-                LastUpdated = DateTimeOffset.UtcNow
-            };
-            newDifficulty.Deciles = aggregatedDeciles;
-            newDifficulty.Progression = progression;
-            await context.DeckDifficulties.AddAsync(newDifficulty);
+            parentDifficulty = new DeckDifficulty { DeckId = parent.DeckId };
+            await context.DeckDifficulties.AddAsync(parentDifficulty);
         }
 
-        parent.Difficulty = (float)Math.Round(avgDifficulty, 2);
+        parentDifficulty.Difficulty = Math.Round(avgDifficulty, 2);
+        parentDifficulty.Peak = Math.Round(avgPeak, 2);
+        parentDifficulty.Deciles = aggregatedDeciles;
+        parentDifficulty.Progression = progression;
+        parentDifficulty.LastUpdated = DateTimeOffset.UtcNow;
+
+        ApplyRootAlgorithmAdjustment(parent, parentDifficulty, childrenWithDifficulty);
+
         await context.SaveChangesAsync();
 
         logger.LogInformation("Aggregated parent deck {DeckId} difficulty to {Difficulty} with {SegmentCount} progression segments (from {Count} children)",
             parent.DeckId, avgDifficulty, progression.Count, childrenWithDifficulty.Count);
+    }
+
+    /// <summary>Works from the stored model scores, so no deck is reparsed or rescored.</summary>
+    [Queue("stats")]
+    [AutomaticRetry(Attempts = 1)]
+    public async Task RecomputeAlgorithmAdjustments()
+    {
+        const int rootChunkSize = 5000;
+        await using var context = await contextFactory.CreateDbContextAsync();
+
+        var roots = await context.Decks
+            .AsNoTracking()
+            .Where(d => d.ParentDeckId == null && d.DeckDifficulty != null)
+            .Select(d => new { d.DeckId, d.MediaType, d.DeckDifficulty!.Difficulty, d.UniqueKanjiCount, d.CharacterCount })
+            .ToListAsync();
+
+        // Adjustments are rounded to 0.01, so grouping roots by value keeps the number of UPDATE statements in the hundreds.
+        var rootsByAdjustment = roots.GroupBy(
+            r => AlgorithmAdjustmentCalculator.Compute(r.MediaType, r.Difficulty, r.UniqueKanjiCount, r.CharacterCount),
+            r => r.DeckId);
+
+        var updatedDifficulties = 0;
+        var updatedDecks = 0;
+        foreach (var group in rootsByAdjustment)
+        {
+            var adjustment = group.Key;
+            var adjusted = AdjustedDifficulty(adjustment);
+
+            foreach (var rootIds in group.Chunk(rootChunkSize))
+            {
+                updatedDifficulties += await context.DeckDifficulties
+                    .Where(dd => rootIds.Contains(dd.DeckId) ||
+                                 (dd.Deck.ParentDeckId != null && rootIds.Contains(dd.Deck.ParentDeckId.Value)))
+                    .Where(dd => dd.AlgorithmAdjustment != adjustment)
+                    .ExecuteUpdateAsync(s => s.SetProperty(dd => dd.AlgorithmAdjustment, adjustment));
+
+                // EF 9 setters cannot follow a reference navigation, so the score comes from a correlated subquery.
+                updatedDecks += await context.Decks
+                    .Where(d => rootIds.Contains(d.DeckId) || (d.ParentDeckId != null && rootIds.Contains(d.ParentDeckId.Value)))
+                    .Where(d => context.DeckDifficulties.Any(dd => dd.DeckId == d.DeckId))
+                    .Where(d => d.Difficulty != context.DeckDifficulties.Where(dd => dd.DeckId == d.DeckId).Select(adjusted).First())
+                    .ExecuteUpdateAsync(s => s.SetProperty(
+                        d => d.Difficulty,
+                        d => context.DeckDifficulties.Where(dd => dd.DeckId == d.DeckId).Select(adjusted).First()));
+            }
+        }
+
+        logger.LogInformation(
+            "Recomputed algorithm adjustment for {Roots} root decks ({Difficulties} adjustments and {Decks} deck scores changed)",
+            roots.Count, updatedDifficulties, updatedDecks);
+    }
+
+    /// <summary>SQL form of <see cref="AlgorithmAdjustmentCalculator.Apply"/>; double arithmetic because SQLite cannot compare decimals.</summary>
+    private static Expression<Func<DeckDifficulty, float>> AdjustedDifficulty(decimal adjustment)
+    {
+        var shift = (double)adjustment;
+        const double min = (double)AlgorithmAdjustmentCalculator.MinDifficulty;
+        const double max = (double)AlgorithmAdjustmentCalculator.MaxDifficulty;
+
+        return dd => (float)((double)dd.Difficulty + shift < min
+            ? min
+            : (double)dd.Difficulty + shift > max
+                ? max
+                : (double)dd.Difficulty + shift);
+    }
+
+    private static void ApplyRootAlgorithmAdjustment(Deck root, DeckDifficulty rootDifficulty, IEnumerable<Deck> childrenWithDifficulty)
+    {
+        var adjustment = AlgorithmAdjustmentCalculator.Compute(
+            root.MediaType, rootDifficulty.Difficulty, root.UniqueKanjiCount, root.CharacterCount);
+
+        SetAlgorithmAdjustment(root, rootDifficulty, adjustment);
+        foreach (var child in childrenWithDifficulty)
+            SetAlgorithmAdjustment(child, child.DeckDifficulty!, adjustment);
+    }
+
+    /// <summary>Deck.Difficulty is the filterable copy of the algorithmic score: raw model score plus adjustment.</summary>
+    private static void SetAlgorithmAdjustment(Deck deck, DeckDifficulty deckDifficulty, decimal adjustment)
+    {
+        deckDifficulty.AlgorithmAdjustment = adjustment;
+        deck.Difficulty = (float)AlgorithmAdjustmentCalculator.Apply(deckDifficulty.Difficulty, adjustment);
     }
 
     private static List<ProgressionSegment> ComputeParentProgression(List<Deck> childrenWithDifficulty)

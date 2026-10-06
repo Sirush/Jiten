@@ -1,4 +1,5 @@
 using System;
+using Jiten.Api.Helpers;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Microsoft.EntityFrameworkCore;
@@ -13,10 +14,7 @@ public static class DifficultyRankingSync
         string userId,
         MediaTypeGroup group)
     {
-        var completedDeckIds = await userContext.UserDeckPreferences
-            .Where(p => p.UserId == userId && p.Status == DeckStatus.Completed)
-            .Select(p => p.DeckId)
-            .ToListAsync();
+        var completedDeckIds = await MediaListEntryHelper.CompletedDeckIds(userContext, userId).ToListAsync();
 
         if (completedDeckIds.Count == 0)
             return;

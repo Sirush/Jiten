@@ -875,6 +875,15 @@ public partial class AdminController(
         return Ok(new { Message = $"Queued difficulty reaggregation for {parentDecks.Count} parent decks", Count = parentDecks.Count });
     }
 
+    [HttpPost("recompute-algorithm-adjustments")]
+    public IActionResult RecomputeAlgorithmAdjustments()
+    {
+        backgroundJobs.Enqueue<DifficultyComputationJob>(job => job.RecomputeAlgorithmAdjustments());
+
+        logger.LogInformation("Admin queued algorithm adjustment recomputation");
+        return Ok(new { Message = "Queued algorithm adjustment recomputation" });
+    }
+
     /// <summary>
     /// Reaggregate a single parent deck's difficulty from its children
     /// </summary>

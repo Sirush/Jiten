@@ -1,4 +1,5 @@
 using Jiten.Api.Dtos;
+using Jiten.Api.Helpers;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
@@ -57,12 +58,7 @@ public class DifficultyVoteController(
         if (deckA.ParentDeckId != null || deckB.ParentDeckId != null)
             return Results.BadRequest("Difficulty comparisons are only available for parent decks, not subdecks.");
 
-        var completedBothDecks = await userContext.UserDeckPreferences
-            .Where(p => p.UserId == userId && p.Status == DeckStatus.Completed
-                && (p.DeckId == request.DeckAId || p.DeckId == request.DeckBId))
-            .Select(p => p.DeckId)
-            .Distinct()
-            .CountAsync() == 2;
+        var completedBothDecks = (await MediaListEntryHelper.CompletedDeckIdsAsync(userContext, userId, [request.DeckAId, request.DeckBId])).Count == 2;
 
         if (!completedBothDecks)
             return Results.Problem("You must have completed both decks to vote.", statusCode: 403);
@@ -131,8 +127,7 @@ public class DifficultyVoteController(
         if (!deckExists)
             return Results.NotFound("Deck not found or is a subdeck.");
 
-        var hasCompleted = await userContext.UserDeckPreferences
-            .AnyAsync(p => p.UserId == userId && p.DeckId == request.DeckId && p.Status == DeckStatus.Completed);
+        var hasCompleted = await MediaListEntryHelper.CompletedDeckIds(userContext, userId, [request.DeckId]).AnyAsync();
         if (!hasCompleted)
             return Results.Problem("You must have completed this deck to rate it.", statusCode: 403);
 
@@ -201,10 +196,7 @@ public class DifficultyVoteController(
 
         count = Math.Clamp(count, 1, 10);
 
-        var completedDeckIds = await userContext.UserDeckPreferences
-            .Where(p => p.UserId == userId && p.Status == DeckStatus.Completed)
-            .Select(p => p.DeckId)
-            .ToListAsync();
+        var completedDeckIds = await MediaListEntryHelper.CompletedDeckIds(userContext, userId).ToListAsync();
 
         var parentDeckIds = await context.Decks.AsNoTracking()
             .Where(d => completedDeckIds.Contains(d.DeckId) && d.ParentDeckId == null)
@@ -561,10 +553,7 @@ public class DifficultyVoteController(
         if (string.IsNullOrEmpty(userId))
             return Results.Unauthorized();
 
-        var completedDeckIds = await userContext.UserDeckPreferences
-            .Where(p => p.UserId == userId && p.Status == DeckStatus.Completed)
-            .Select(p => p.DeckId)
-            .ToListAsync();
+        var completedDeckIds = await MediaListEntryHelper.CompletedDeckIds(userContext, userId).ToListAsync();
 
         var ratedDeckIds = await context.DifficultyRatings.AsNoTracking()
             .Where(r => r.UserId == userId)
@@ -626,10 +615,7 @@ public class DifficultyVoteController(
         if (string.IsNullOrEmpty(userId))
             return Results.Unauthorized();
 
-        var completedDeckIds = await userContext.UserDeckPreferences
-            .Where(p => p.UserId == userId && p.Status == DeckStatus.Completed)
-            .Select(p => p.DeckId)
-            .ToListAsync();
+        var completedDeckIds = await MediaListEntryHelper.CompletedDeckIds(userContext, userId).ToListAsync();
 
         if (completedDeckIds.Count == 0)
             return Results.Ok(new CompletedDecksResponse());
