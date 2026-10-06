@@ -4,22 +4,28 @@
   import { computed, ref } from 'vue';
   import { useToast } from 'primevue/usetoast';
 
-  const props = defineProps<{
-    exampleSentence: ExampleSentence;
-    showSource?: boolean;
-    wordId?: number;
-    readingIndex?: number;
-    // The user already has the max number of custom sentences for this word — disable the create paths.
-    atLimit?: boolean;
-    // Marked text of the custom sentences already saved for this word, so a sentence saved in an
-    // earlier visit still shows as starred.
-    savedTexts?: string[];
-    // Defaults to the site-wide furigana preference.
-    furiganaMode?: SentenceFuriganaMode;
-    hiddenWordId?: number;
-    /** The sentence's own word is known, so the i+N badge counts from i+0. */
-    targetKnown?: boolean;
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      exampleSentence: ExampleSentence;
+      showSource?: boolean;
+      showActions?: boolean;
+      /** Source and actions hidden by showSource/showActions can be shown per sentence on demand. */
+      revealable?: boolean;
+      wordId?: number;
+      readingIndex?: number;
+      // The user already has the max number of custom sentences for this word — disable the create paths.
+      atLimit?: boolean;
+      // Marked text of the custom sentences already saved for this word, so a sentence saved in an
+      // earlier visit still shows as starred.
+      savedTexts?: string[];
+      // Defaults to the site-wide furigana preference.
+      furiganaMode?: SentenceFuriganaMode;
+      hiddenWordId?: number;
+      /** The sentence's own word is known, so the i+N badge counts from i+0. */
+      targetKnown?: boolean;
+    }>(),
+    { showActions: true }
+  );
 
   const emit = defineEmits<{
     favourited: [];
@@ -38,6 +44,12 @@
   const isRevealed = computed(() => store.displayAllNsfw || revealedLocally.value);
 
   const stateHex = useWordStateHex();
+
+  const hasSource = computed(() => props.exampleSentence.sourceDeck != null);
+  const canReveal = computed(() => props.revealable && (!props.showActions || (!props.showSource && hasSource.value)));
+  const detailsRevealed = ref(false);
+  const actionsVisible = computed(() => props.showActions || detailsRevealed.value);
+  const sourceVisible = computed(() => props.showSource || detailsRevealed.value);
 
   const formattedText = computed(() => {
     const { text, wordPosition, wordLength, furigana, words } = props.exampleSentence;
@@ -144,9 +156,9 @@
           <span v-if="exampleSentence.isIPlusOne || exampleSentence.unknownCount != null" class="h-5 inline-flex items-center">
             <IPlusOneBadge :unknown="exampleSentence.unknownCount ?? 0" :target-known="targetKnown" />
           </span>
-          <TtsButton :text="exampleSentence.text" :sentence-id="exampleSentence.sentenceId" type="sentence" size="sm" />
+          <TtsButton v-if="actionsVisible" :text="exampleSentence.text" :sentence-id="exampleSentence.sentenceId" type="sentence" size="sm" />
           <button
-            v-if="canEdit"
+            v-if="canEdit && actionsVisible"
             class="inline-flex items-center justify-center transition-colors"
             :class="
               favourited ? 'text-yellow-500' : atLimit ? 'text-surface-300 dark:text-surface-400 cursor-not-allowed' : 'text-surface-400 hover:text-yellow-500'
@@ -158,7 +170,7 @@
             <i class="pi text-sm" :class="favourited ? 'pi-star-fill' : 'pi-star'" />
           </button>
           <button
-            v-if="canEdit"
+            v-if="canEdit && actionsVisible"
             class="inline-flex items-center justify-center transition-colors"
             :class="atLimit ? 'text-surface-300 dark:text-surface-400 cursor-not-allowed' : 'text-surface-400 hover:text-primary-500 cursor-pointer'"
             :disabled="atLimit"
@@ -167,6 +179,7 @@
           >
             <i class="pi pi-pencil text-sm" />
           </button>
+          <SentenceDetailsToggle v-if="canReveal" v-model="detailsRevealed" />
         </div>
         <div
           class="transition-filter duration-200"
@@ -190,7 +203,7 @@
           </div>
         </div>
       </blockquote>
-      <div v-if="showSource" class="flex items-center mb-2">
+      <div v-if="sourceVisible && hasSource" class="flex items-center mb-2">
         <span class="text-xs italic mr-2 ml-4">Source:</span>
         <div class="inline-flex items-center text-xs flex-wrap">
           <NuxtLink

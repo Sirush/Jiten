@@ -72,6 +72,11 @@
   });
 
   const editingExample = ref(false);
+  const detailsRevealed = ref(false);
+  const exampleHasSource = computed(() => !!(cardExample.value?.isCustom ? cardExample.value.customSource : cardExample.value?.sourceDeck));
+  const canRevealDetails = computed(() => !opts.value.showActions || (!opts.value.showSource && exampleHasSource.value));
+  const actionsVisible = computed(() => opts.value.showActions || detailsRevealed.value);
+  const sourceVisible = computed(() => opts.value.showSource || detailsRevealed.value);
   const favouriting = ref(false);
   const exampleIsCustom = computed(() => !!cardExample.value?.isCustom);
   // Custom examples encode a negated UserExampleSentenceId in sentenceId (see BuildCustomStudyExample).
@@ -152,6 +157,7 @@
     () => (card.value ? `${card.value.wordId}-${card.value.readingIndex}` : ''),
     () => {
       editingExample.value = false;
+      detailsRevealed.value = false;
     }
   );
 </script>
@@ -163,10 +169,13 @@
       :class="{ 'blur-md select-none cursor-pointer': blurred }"
       @click.stop="revealExample(side)"
     >
-      <div v-if="opts.showActions" class="float-right ml-2 mt-0.5 flex items-center gap-1">
-        <i class="pi pi-volume-up text-sm text-surface-400" />
-        <i class="pi pi-star text-sm text-surface-400" />
-        <i class="pi pi-pencil text-sm text-surface-400" />
+      <div class="float-right ml-2 mt-0.5 flex items-center gap-1">
+        <template v-if="opts.showActions">
+          <i class="pi pi-volume-up text-sm text-surface-400" />
+          <i class="pi pi-star text-sm text-surface-400" />
+          <i class="pi pi-pencil text-sm text-surface-400" />
+        </template>
+        <i v-if="!opts.showActions || !opts.showSource" class="pi pi-ellipsis-v text-[0.65rem] text-surface-400" />
       </div>
       <div class="leading-relaxed" :class="sizeClass" lang="ja" v-html="previewHtml" />
     </blockquote>
@@ -195,11 +204,11 @@
           @click.stop="revealExample(side)"
         >
           <!-- Floated so long sentences wrap under the actions instead of staying in a narrow column. -->
-          <div v-if="cardExample?.isIPlusOne || opts.showActions" class="float-right ml-2 mt-0.5 flex items-center gap-1">
+          <div v-if="cardExample?.isIPlusOne || actionsVisible || canRevealDetails" class="float-right ml-2 mt-0.5 flex items-center gap-1">
             <span v-if="cardExample?.isIPlusOne" class="h-5 inline-flex items-center"><IPlusOneBadge /></span>
-            <div v-if="opts.showActions" class="flex items-center gap-1" :class="{ 'pointer-events-none': blurred }">
+            <div v-if="actionsVisible || canRevealDetails" class="flex items-center gap-1" :class="{ 'pointer-events-none': blurred }">
               <TtsButton
-                v-if="cardExample"
+                v-if="cardExample && actionsVisible"
                 :text="cardExample.text"
                 :sentence-id="cardExample.isCustom ? undefined : cardExample.sentenceId"
                 :custom-sentence-id="cardExample.isCustom ? -cardExample.sentenceId : undefined"
@@ -207,7 +216,7 @@
                 size="sm"
               />
               <button
-                v-if="authStore.isAuthenticated && cardExample"
+                v-if="authStore.isAuthenticated && cardExample && actionsVisible"
                 class="inline-flex items-center justify-center transition-colors"
                 :class="exampleIsCustom ? 'text-yellow-500' : 'text-surface-400 hover:text-yellow-500'"
                 :disabled="exampleIsCustom || favouriting"
@@ -218,7 +227,7 @@
                 <i class="pi text-sm" :class="exampleIsCustom ? 'pi-star-fill' : 'pi-star'" />
               </button>
               <button
-                v-if="authStore.isAuthenticated && cardExample"
+                v-if="authStore.isAuthenticated && cardExample && actionsVisible"
                 class="inline-flex items-center justify-center text-surface-400 hover:text-primary-500 transition-colors cursor-pointer"
                 title="Edit sentence"
                 @pointerdown.stop
@@ -226,11 +235,12 @@
               >
                 <i class="pi pi-pencil text-sm" />
               </button>
+              <SentenceDetailsToggle v-if="canRevealDetails" v-model="detailsRevealed" />
             </div>
           </div>
           <div class="leading-relaxed" :class="sizeClass" lang="ja" v-html="exampleSentenceHtml" />
         </blockquote>
-        <template v-if="opts.showSource">
+        <template v-if="sourceVisible">
           <div v-if="cardExample?.isCustom && cardExample.customSource" class="flex items-center mt-1">
             <span class="text-xs italic mr-2 ml-4">Source:</span>
             <span class="text-xs">{{ cardExample.customSource }}</span>
@@ -268,9 +278,11 @@
       <div v-if="extraSentencesExpanded" class="mt-2 space-y-2">
         <ExampleSentenceEntry
           v-for="(sentence, i) in extraSentences"
-          :key="i"
+          :key="`${card?.wordId}-${card?.readingIndex}-${i}`"
           :example-sentence="sentence"
-          :show-source="true"
+          :show-source="opts.showSource"
+          :show-actions="opts.showActions"
+          revealable
           :furigana-mode="furiganaMode"
           :hidden-word-id="hiddenWordId"
         />
