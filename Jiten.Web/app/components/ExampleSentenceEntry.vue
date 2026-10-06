@@ -140,21 +140,14 @@
     />
     <template v-else>
       <blockquote class="relative inline-block border-l-4 border-primary-500 pl-5 pr-3 py-3 bg-gray-50 dark:bg-gray-900 rounded-r shadow-sm overflow-hidden">
-        <div class="flex items-start gap-2">
-          <div
-            class="transition-filter duration-200 flex-1"
-            lang="ja"
-            :class="[sentenceSizeClass(store.sentenceSize), { 'blur-sm': isNsfw && !isRevealed }]"
-            @click="handleReveal"
-            v-html="formattedText"
-          />
-          <span v-if="exampleSentence.isIPlusOne || exampleSentence.unknownCount != null" class="mt-0.5 h-5 shrink-0 inline-flex items-center">
+        <div class="float-right ml-2 mt-0.5 flex items-center gap-2">
+          <span v-if="exampleSentence.isIPlusOne || exampleSentence.unknownCount != null" class="h-5 inline-flex items-center">
             <IPlusOneBadge :unknown="exampleSentence.unknownCount ?? 0" :target-known="targetKnown" />
           </span>
-          <TtsButton :text="exampleSentence.text" :sentence-id="exampleSentence.sentenceId" type="sentence" size="sm" class="mt-0.5 shrink-0" />
+          <TtsButton :text="exampleSentence.text" :sentence-id="exampleSentence.sentenceId" type="sentence" size="sm" />
           <button
             v-if="canEdit"
-            class="inline-flex items-center justify-center transition-colors mt-0.5 shrink-0"
+            class="inline-flex items-center justify-center transition-colors"
             :class="
               favourited ? 'text-yellow-500' : atLimit ? 'text-surface-300 dark:text-surface-400 cursor-not-allowed' : 'text-surface-400 hover:text-yellow-500'
             "
@@ -166,7 +159,7 @@
           </button>
           <button
             v-if="canEdit"
-            class="inline-flex items-center justify-center transition-colors mt-0.5 shrink-0"
+            class="inline-flex items-center justify-center transition-colors"
             :class="atLimit ? 'text-surface-300 dark:text-surface-400 cursor-not-allowed' : 'text-surface-400 hover:text-primary-500 cursor-pointer'"
             :disabled="atLimit"
             :title="atLimit ? sentenceLimitMessage : 'Edit sentence'"
@@ -175,6 +168,13 @@
             <i class="pi pi-pencil text-sm" />
           </button>
         </div>
+        <div
+          class="transition-filter duration-200"
+          lang="ja"
+          :class="[sentenceSizeClass(store.sentenceSize), { 'blur-sm': isNsfw && !isRevealed }]"
+          @click="handleReveal"
+          v-html="formattedText"
+        />
         <div
           v-if="isNsfw && !isRevealed"
           class="absolute top-0 left-0 w-full h-full flex items-center justify-center cursor-pointer z-10"

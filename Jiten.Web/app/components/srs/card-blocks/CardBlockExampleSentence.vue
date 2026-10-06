@@ -163,15 +163,12 @@
       :class="{ 'blur-md select-none cursor-pointer': blurred }"
       @click.stop="revealExample(side)"
     >
-      <div class="flex items-start gap-2">
-        <div class="leading-relaxed flex-1" :class="sizeClass" lang="ja" v-html="previewHtml" />
-        <!-- Inert stand-ins for the real action buttons, so the toggle is demonstrable on sample data. -->
-        <div v-if="opts.showActions" class="flex items-center gap-1 mt-0.5 shrink-0">
-          <i class="pi pi-volume-up text-sm text-surface-400" />
-          <i class="pi pi-star text-sm text-surface-400" />
-          <i class="pi pi-pencil text-sm text-surface-400" />
-        </div>
+      <div v-if="opts.showActions" class="float-right ml-2 mt-0.5 flex items-center gap-1">
+        <i class="pi pi-volume-up text-sm text-surface-400" />
+        <i class="pi pi-star text-sm text-surface-400" />
+        <i class="pi pi-pencil text-sm text-surface-400" />
       </div>
+      <div class="leading-relaxed" :class="sizeClass" lang="ja" v-html="previewHtml" />
     </blockquote>
     <div v-if="opts.showSource" class="flex items-center mt-1">
       <span class="text-xs italic mr-2 ml-4">Source:</span>
@@ -197,10 +194,10 @@
           :class="[cardExample?.isCustom ? 'border-yellow-500' : 'border-primary-500', { 'blur-md select-none cursor-pointer': blurred }]"
           @click.stop="revealExample(side)"
         >
-          <div class="flex items-start gap-2">
-            <div class="leading-relaxed flex-1" :class="sizeClass" lang="ja" v-html="exampleSentenceHtml" />
-            <span v-if="cardExample?.isIPlusOne" class="mt-0.5 h-5 shrink-0 inline-flex items-center"><IPlusOneBadge /></span>
-            <div v-if="opts.showActions" class="flex items-center gap-1 mt-0.5 shrink-0" :class="{ 'pointer-events-none': blurred }">
+          <!-- Floated so long sentences wrap under the actions instead of staying in a narrow column. -->
+          <div v-if="cardExample?.isIPlusOne || opts.showActions" class="float-right ml-2 mt-0.5 flex items-center gap-1">
+            <span v-if="cardExample?.isIPlusOne" class="h-5 inline-flex items-center"><IPlusOneBadge /></span>
+            <div v-if="opts.showActions" class="flex items-center gap-1" :class="{ 'pointer-events-none': blurred }">
               <TtsButton
                 v-if="cardExample"
                 :text="cardExample.text"
@@ -231,6 +228,7 @@
               </button>
             </div>
           </div>
+          <div class="leading-relaxed" :class="sizeClass" lang="ja" v-html="exampleSentenceHtml" />
         </blockquote>
         <template v-if="opts.showSource">
           <div v-if="cardExample?.isCustom && cardExample.customSource" class="flex items-center mt-1">
