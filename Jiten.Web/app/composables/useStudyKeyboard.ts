@@ -1,6 +1,7 @@
 import type { StudyKeybinds } from '~/types';
 import { FsrsRating } from '~/types';
 import { useSrsStore } from '~/stores/srsStore';
+import { useMouseNavigationGuard } from '~/composables/useMouseNavigationGuard';
 
 export const DEFAULT_KEYBINDS: StudyKeybinds = {
   grade1: '1',
@@ -275,6 +276,9 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
     if (isMouseButtonBound(2)) e.preventDefault();
   }
 
+  const { arm: armMouseNavigationGuard } = useMouseNavigationGuard(() => isMouseButtonBound(3) || isMouseButtonBound(4));
+  const stopHistoryLockWatch = watch(() => store.studySettings.keybinds, () => armMouseNavigationGuard(), { deep: true });
+
   onMounted(() => {
     window.addEventListener('keydown', handleInput);
     window.addEventListener('mousedown', handleInput);
@@ -289,6 +293,7 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
     window.removeEventListener('mouseup', suppressBoundDefault);
     window.removeEventListener('auxclick', suppressBoundDefault);
     window.removeEventListener('contextmenu', handleContextMenu);
+    stopHistoryLockWatch();
     stopBatchWatch();
   });
 

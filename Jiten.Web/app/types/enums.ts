@@ -154,6 +154,12 @@ export enum DeckStatus {
   Dropped = 4,
 }
 
+export enum MediaListEntryState {
+  InProgress = 0,
+  Completed = 1,
+  Dropped = 2,
+}
+
 export enum FsrsState {
   New = 0,
   Learning = 1,

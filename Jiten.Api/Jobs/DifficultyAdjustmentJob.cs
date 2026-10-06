@@ -72,7 +72,7 @@ public class DifficultyAdjustmentJob(
 
         var decks = await context.DeckDifficulties
                                  .Where(dd => referencedDeckIds.Contains(dd.DeckId))
-                                 .Select(dd => new { dd.DeckId, dd.Difficulty })
+                                 .Select(dd => new { dd.DeckId, Difficulty = dd.Difficulty + dd.AlgorithmAdjustment })
                                  .ToListAsync();
         var deckInputs = decks
                          .Where(dd => deckTypeMap.ContainsKey(dd.DeckId))

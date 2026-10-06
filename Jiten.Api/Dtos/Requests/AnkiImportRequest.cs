@@ -38,4 +38,5 @@ public class AnkiReviewLogImport
     public FsrsRating Rating { get; set; }
     public DateTime ReviewDateTime { get; set; }
     public int? ReviewDuration { get; set; }
+    public FsrsState? State { get; set; }
 }

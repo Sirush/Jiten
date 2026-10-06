@@ -1,4 +1,5 @@
 using Jiten.Api.Dtos;
+using Jiten.Api.Helpers;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
@@ -29,10 +30,7 @@ public class DifficultyRankingController(
         if (string.IsNullOrEmpty(userId))
             return Results.Unauthorized();
 
-        var completedDeckIds = await userContext.UserDeckPreferences
-            .Where(p => p.UserId == userId && p.Status == DeckStatus.Completed)
-            .Select(p => p.DeckId)
-            .ToListAsync();
+        var completedDeckIds = await MediaListEntryHelper.CompletedDeckIds(userContext, userId).ToListAsync();
 
         if (completedDeckIds.Count == 0)
             return Results.Ok(Array.Empty<DifficultyRankingSectionDto>());
@@ -132,8 +130,7 @@ public class DifficultyRankingController(
         if (deck.ParentDeckId != null)
             return Results.BadRequest("Difficulty rankings are only available for parent decks, not subdecks.");
 
-        var completed = await userContext.UserDeckPreferences
-            .AnyAsync(p => p.UserId == userId && p.DeckId == request.DeckId && p.Status == DeckStatus.Completed);
+        var completed = await MediaListEntryHelper.CompletedDeckIds(userContext, userId, [request.DeckId]).AnyAsync();
         if (!completed)
             return Results.Problem("You must have completed this deck to rank it.", statusCode: 403);
 

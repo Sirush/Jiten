@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { displayKeyName, mouseToken, normalizeKey } from '~/composables/useStudyKeyboard';
+  import { useMouseNavigationGuard } from '~/composables/useMouseNavigationGuard';
 
   const props = defineProps<{
     modelValue: string;
@@ -13,12 +14,15 @@
 
   const listening = ref(false);
   const btnRef = ref<HTMLButtonElement>();
-
+  const mouseNavigationGuard = useMouseNavigationGuard(() => listening.value);
 
   function toggleListening() {
     listening.value = !listening.value;
+    if (listening.value) mouseNavigationGuard.arm();
+    else mouseNavigationGuard.release();
   }
 
+  // Blur can come from a back/forward press outside the button, so the guard entry is left for that navigation to consume.
   function stopListening() {
     listening.value = false;
   }
@@ -30,6 +34,7 @@
 
     if (e.key === 'Escape') {
       listening.value = false;
+      mouseNavigationGuard.release();
       return;
     }
 
@@ -37,11 +42,16 @@
 
     emit('update:modelValue', normalizeKey(e));
     listening.value = false;
+    mouseNavigationGuard.release();
   }
 
   // Chromium navigates back/forward on mouseup, so the release after a capture must be swallowed too.
   let swallowRelease = false;
   let swallowContextMenu = false;
+
+  function isNavigationButton(button: number) {
+    return button === 3 || button === 4;
+  }
 
   function handleMousedown(e: MouseEvent) {
     if (!listening.value) return;
@@ -53,12 +63,20 @@
     swallowContextMenu = e.button === 2;
     emit('update:modelValue', token);
     listening.value = false;
+    if (!isNavigationButton(e.button)) mouseNavigationGuard.release();
   }
 
   function handleMouseup(e: MouseEvent) {
     if (!swallowRelease && !listening.value) return;
     if (!mouseToken(e.button)) return;
     e.preventDefault();
+    swallowRelease = false;
+  }
+
+  function handleAuxclick(e: MouseEvent) {
+    if (!swallowRelease || !mouseToken(e.button)) return;
+    e.preventDefault();
+    e.stopPropagation();
     swallowRelease = false;
   }
 
@@ -69,11 +87,13 @@
 
   onMounted(() => {
     window.addEventListener('mouseup', handleMouseup, true);
+    window.addEventListener('auxclick', handleAuxclick, true);
     window.addEventListener('contextmenu', handleContextMenu, true);
   });
 
   onUnmounted(() => {
     window.removeEventListener('mouseup', handleMouseup, true);
+    window.removeEventListener('auxclick', handleAuxclick, true);
     window.removeEventListener('contextmenu', handleContextMenu, true);
   });
 </script>

@@ -11,6 +11,9 @@
   import { useToast } from 'primevue/usetoast';
   import { LinkType } from '~/types';
   import type { Deck, DeckDetail, DeckRelationship, DeckRelationshipType, Link, MediaType, MediaSuggestion, Tag, Genre } from '~/types';
+  import type { MediaRequestUploadAdminDto } from '~/types/types';
+  import Message from 'primevue/message';
+  import { formatBytes } from '~/utils/formatBytes';
   import { debounce } from 'perfect-debounce';
   import AutoComplete from 'primevue/autocomplete';
   import PrimeTag from 'primevue/tag';
@@ -309,19 +312,23 @@
     subdeck.autoDetected = false;
   }
 
+  function appendFilesAsSubdecks(files: File[]) {
+    for (const file of sortFilesNaturally(files)) {
+      const newSubdeckNumber = subdecks.value.length + 1;
+      subdecks.value.push({
+        id: nextSubdeckId++,
+        originalTitle: `${subdeckDefaultName.value} ${newSubdeckNumber}`,
+        file: file,
+        difficultyOverride: -1,
+      });
+    }
+    applyAutoNames('detected');
+    showSubdeckPage(subdecks.value.length - 1);
+  }
+
   function handleNewSubdeckFileUpload(event: { files: File[] }) {
     if (event.files && event.files.length > 0) {
-      for (const file of sortFilesNaturally(event.files)) {
-        const newSubdeckNumber = subdecks.value.length + 1;
-        subdecks.value.push({
-          id: nextSubdeckId++,
-          originalTitle: `${subdeckDefaultName.value} ${newSubdeckNumber}`,
-          file: file,
-          difficultyOverride: -1,
-        });
-      }
-      applyAutoNames('detected');
-      showSubdeckPage(subdecks.value.length - 1);
+      appendFilesAsSubdecks(event.files);
       // Explicitly clear the FileUpload component's selection
       if (newSubdeckUploaderRef.value) {
         newSubdeckUploaderRef.value.clear();
@@ -376,6 +383,91 @@
       `${files.length} file(s) staged: ${keptCount} in-place, ${appendedCount} appended${deletedCount > 0 ? `, ${deletedCount} to delete` : ''}. Click Update to apply.`
     );
   }
+
+  const { fetchRequest } = useMediaRequests();
+  const { fulfillingRequest, requestUploads, attachRequest, detachRequest, fetchUploadFiles, markUploadReviewed } = useRequestUploads();
+
+  // Archives above this size wait for an explicit click instead of downloading on page load
+  const AUTO_LOAD_UPLOAD_MAX_BYTES = 25 * 1024 * 1024;
+
+  type UploadFilesState = { status: 'idle' | 'loading' | 'error' } | { status: 'loaded'; files: { file: File; selected: boolean }[] };
+  const uploadFiles = ref<Record<number, UploadFilesState>>({});
+
+  const stagedFiles = computed(() => new Set([parentTextFile.value, ...subdecks.value.map((sd) => sd.file)].filter((f): f is File => !!f)));
+  const isStaged = (file: File) => stagedFiles.value.has(file);
+
+  function loadedFiles(uploadId: number) {
+    const state = uploadFiles.value[uploadId];
+    return state?.status === 'loaded' ? state.files : [];
+  }
+
+  const selectedRequestFiles = computed(() =>
+    requestUploads.value.flatMap((upload) =>
+      loadedFiles(upload.id)
+        .filter((f) => f.selected && !isStaged(f.file))
+        .map((f) => ({ upload, file: f.file }))
+    )
+  );
+
+  const canUseAsMainFile = computed(() => selectedRequestFiles.value.length === 1 && !subdecks.value.length && !parentTextFile.value);
+
+  async function loadUploadFiles(upload: MediaRequestUploadAdminDto) {
+    if (uploadFiles.value[upload.id]?.status === 'loading') return;
+    uploadFiles.value[upload.id] = { status: 'loading' };
+    try {
+      const files = await fetchUploadFiles(upload);
+      uploadFiles.value[upload.id] = files ? { status: 'loaded', files: files.map((file) => ({ file, selected: true })) } : { status: 'error' };
+    } catch (error) {
+      console.error('Error reading upload:', error);
+      uploadFiles.value[upload.id] = { status: 'error' };
+    }
+  }
+
+  function setUploadSelection(uploadId: number, selected: boolean) {
+    for (const f of loadedFiles(uploadId)) f.selected = selected;
+  }
+
+  async function stageSelectedRequestFiles(asMainFile: boolean) {
+    const picked = selectedRequestFiles.value;
+    if (!picked.length) return;
+
+    if (asMainFile) parentTextFile.value = picked[0].file;
+    else appendFilesAsSubdecks(picked.map((p) => p.file));
+
+    showToast(
+      'success',
+      'Files staged',
+      asMainFile ? `${picked[0].file.name} replaces the text file. Click Update to apply.` : `${picked.length} file(s) added as new subdecks. Click Update to apply.`
+    );
+    await Promise.all([...new Set(picked.map((p) => p.upload))].map(markUploadReviewed));
+  }
+
+  function unlinkRequest() {
+    detachRequest();
+    uploadFiles.value = {};
+  }
+
+  onMounted(async () => {
+    const raw = route.query.requestId;
+    const requestId = Number(Array.isArray(raw) ? raw[0] : raw);
+    if (!Number.isInteger(requestId) || requestId <= 0) return;
+
+    const request = await fetchRequest(requestId);
+    if (!request) {
+      showToast('warn', 'Request not found', `Request #${requestId} could not be loaded.`);
+      return;
+    }
+    if (request.targetDeckId && request.targetDeckId !== Number(mediaId)) {
+      showToast('warn', 'Request not linked', `Request #${requestId} targets another deck.`);
+      return;
+    }
+
+    await attachRequest(request);
+    for (const upload of requestUploads.value) {
+      if (upload.fileSize <= AUTO_LOAD_UPLOAD_MAX_BYTES) loadUploadFiles(upload);
+      else uploadFiles.value[upload.id] = { status: 'idle' };
+    }
+  });
 
   function addSubdeck() {
     const newSubdeckNumber = subdecks.value.length + 1;
@@ -841,12 +933,17 @@
         }
       }
 
+      if (fulfillingRequest.value) {
+        formData.append('requestId', String(fulfillingRequest.value.id));
+      }
+
       const data = await $api('admin/update-deck', {
         method: 'POST',
         body: formData,
       });
 
       showToast('success', 'Success', 'Media updated successfully!');
+      if (fulfillingRequest.value) navigateTo(`/requests/${fulfillingRequest.value.id}`);
     } catch (error) {
       console.error('Error updating media:', error);
       showToast('error', 'Update Error', 'An error occurred while updating. Please try again.');
@@ -883,6 +980,78 @@
         <div class="flex items-center mb-4">
           <h2 class="text-xl font-semibold">Edit {{ getMediaTypeText(selectedMediaType!) }}</h2>
         </div>
+
+        <Message v-if="fulfillingRequest" severity="info" :closable="false" class="mb-6">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span>
+              Fulfilling request #{{ fulfillingRequest.id }}:
+              <NuxtLink :to="`/requests/${fulfillingRequest.id}`" target="_blank" class="underline">{{ fulfillingRequest.title }}</NuxtLink>
+            </span>
+            <Button label="Unlink" icon="pi pi-times" size="small" severity="secondary" text class="ml-auto" @click="unlinkRequest" />
+          </div>
+          <p v-if="fulfillingRequest.description" class="mt-2 text-sm whitespace-pre-line break-words">{{ fulfillingRequest.description }}</p>
+        </Message>
+
+        <Card v-if="fulfillingRequest && requestUploads.length" class="mb-6">
+          <template #title>Files attached to the request</template>
+          <template #content>
+            <div class="flex flex-col gap-3">
+              <div v-for="upload in requestUploads" :key="upload.id" class="p-3 rounded border border-surface-200 dark:border-surface-700 text-sm">
+                <div class="flex items-center gap-3 flex-wrap">
+                  <i class="pi pi-paperclip text-xs" aria-hidden="true" />
+                  <span class="font-medium break-all">{{ upload.fileName }}</span>
+                  <span class="text-muted-color">{{ formatBytes(upload.fileSize) }}</span>
+                  <PrimeTag v-if="upload.adminReviewed" value="Reviewed" severity="success" class="text-xs" />
+                  <span v-if="upload.uploaderName" class="text-xs text-muted-color">by {{ upload.uploaderName }}</span>
+                  <div v-if="loadedFiles(upload.id).length > 1" class="ml-auto flex gap-1">
+                    <Button label="All" size="small" severity="secondary" text @click="setUploadSelection(upload.id, true)" />
+                    <Button label="None" size="small" severity="secondary" text @click="setUploadSelection(upload.id, false)" />
+                  </div>
+                </div>
+
+                <p v-if="uploadFiles[upload.id]?.status === 'loading'" class="mt-2 text-muted-color" role="status">
+                  <i class="pi pi-spin pi-spinner mr-1" aria-hidden="true" />
+                  Reading archive...
+                </p>
+                <div v-else-if="uploadFiles[upload.id]?.status === 'loaded'" class="mt-2 flex flex-col gap-1">
+                  <p v-if="!loadedFiles(upload.id).length" class="text-muted-color">The archive holds no usable files.</p>
+                  <label
+                    v-for="(entry, index) in loadedFiles(upload.id)"
+                    :key="index"
+                    class="flex items-center gap-2 min-h-8 px-1 rounded"
+                    :class="isStaged(entry.file) ? 'text-muted-color' : 'cursor-pointer hover:bg-surface-100 dark:hover:bg-surface-800'"
+                  >
+                    <Checkbox v-model="entry.selected" binary :disabled="isStaged(entry.file)" />
+                    <span class="break-all">{{ entry.file.name }}</span>
+                    <span class="text-xs text-muted-color shrink-0">{{ formatBytes(entry.file.size) }}</span>
+                    <PrimeTag v-if="isStaged(entry.file)" value="Staged" severity="secondary" class="text-xs" />
+                  </label>
+                </div>
+                <div v-else class="mt-2 flex items-center gap-2 flex-wrap">
+                  <span v-if="uploadFiles[upload.id]?.status === 'error'" class="text-red-600 dark:text-red-400">The archive could not be read.</span>
+                  <Button
+                    :label="uploadFiles[upload.id]?.status === 'error' ? 'Retry' : 'Load files'"
+                    icon="pi pi-download"
+                    size="small"
+                    severity="secondary"
+                    @click="loadUploadFiles(upload)"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div class="mt-4 flex items-center gap-2 flex-wrap">
+              <Button
+                :label="selectedRequestFiles.length ? `Add ${selectedRequestFiles.length} as new subdecks` : 'Add as new subdecks'"
+                icon="pi pi-plus"
+                :disabled="!selectedRequestFiles.length"
+                @click="stageSelectedRequestFiles(false)"
+              />
+              <Button v-if="canUseAsMainFile" label="Use as main file" icon="pi pi-file" severity="secondary" @click="stageSelectedRequestFiles(true)" />
+            </div>
+            <p class="mt-3 text-sm text-muted-color">Nothing is applied until you click Update.</p>
+          </template>
+        </Card>
 
         <!-- Only renders for decks tracked as webnovels -->
         <WebNovelSyncPanel :deck-id="Number(mediaId)" />

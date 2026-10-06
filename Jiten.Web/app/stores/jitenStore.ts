@@ -120,8 +120,7 @@ function createLocalStorageState<T>(key: string, defaultValue: T): Ref<T> {
         if (sameSetting(next, state.value)) return;
         state.value = next;
         settingChangedInOtherTab();
-      } catch {
-      }
+      } catch {}
     };
     window.addEventListener('storage', (event) => {
       if (event.key === storageKey) adopt(event.newValue);
@@ -208,10 +207,7 @@ export const useJitenStore = defineStore('jiten', () => {
   // Media types left out of the All tab; the browse URL carries the same list once set.
 
   const difficultyPalette = createCookieState<DifficultyPalette>('difficulty-palette', 'default');
-  const difficultyValueDisplayStyle = createCookieState<DifficultyValueDisplayStyle>(
-    'difficulty-value-display-style',
-    DifficultyValueDisplayStyle.ZeroToFive
-  );
+  const difficultyValueDisplayStyle = createCookieState<DifficultyValueDisplayStyle>('difficulty-value-display-style', DifficultyValueDisplayStyle.ZeroToFive);
 
   // Migrate users from removed "1 to 6" option (value 0) to "0 to 5" (value 1)
   if ((difficultyValueDisplayStyle.value as number) === 0) {
@@ -259,6 +255,9 @@ export const useJitenStore = defineStore('jiten', () => {
   const customDictionaryFontSize = createLocalStorageState<number>('custom-dictionary-font-size', DEFAULT_DICTIONARY_FONT_SIZE);
 
   const ttsVolume = createLocalStorageState<number>('tts-volume', DEFAULT_TTS_VOLUME);
+
+  // Surfaces where a guest closed the account prompt; they stay closed in this browser.
+  const dismissedGuestPrompts = createLocalStorageState<string[]>('dismissed-guest-prompts', []);
   const watchPrefs = createLocalStorageState<WatchPrefs>('watch-prefs', { ...DEFAULT_WATCH_PREFS });
 
   const coverageVersion = ref(0);
@@ -276,6 +275,7 @@ export const useJitenStore = defineStore('jiten', () => {
 
   return {
     getKnownWordIds,
+    dismissedGuestPrompts,
 
     titleLanguage,
     headwordFurigana,

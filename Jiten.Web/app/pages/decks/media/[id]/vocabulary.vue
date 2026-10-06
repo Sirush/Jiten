@@ -159,6 +159,9 @@
       {{ title }}
       <span class="hidden md:inline">- Vocabulary List</span>
     </h1>
+    <GuestAccountStrip v-if="response?.data?.deck?.uniqueWordCount" surface="deck_vocabulary">
+      {{ response.data.deck.uniqueWordCount.toLocaleString() }} words in this title. You can find the ones you don't know with an account.
+    </GuestAccountStrip>
     <VocabularyFilters
       v-model:sort-by="sortBy"
       v-model:sort-descending="sortDescending"

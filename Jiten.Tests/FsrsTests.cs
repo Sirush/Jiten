@@ -391,6 +391,44 @@ public class FsrsTests
     }
 
     [Fact]
+    public void Fuzz_DueAfter_TrimsTheWindowSoTheDueDateLandsAfterTheCutoff()
+    {
+        // Interval 30 → window [27, 33]; an empty balancer would happily take day 27.
+        var cutoff = BalancerAnchor.AddDays(29.5);
+        var balancer = new DictionaryFsrsLoadBalancer();
+        for (var day = 30; day <= 33; day++)
+            balancer.Register(BalancerAnchor.AddDays(day));
+
+        var balanced = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, BalancerAnchor, balancer, dueAfter: cutoff);
+        Assert.InRange(balanced.Days, 30, 33);
+
+        for (var i = 0; i < 50; i++)
+        {
+            var random = FsrsHelper.ApplyFuzzing(TimeSpan.FromDays(30), 36500, BalancerAnchor, dueAfter: cutoff);
+            Assert.True(BalancerAnchor + random > cutoff);
+        }
+    }
+
+    [Fact]
+    public void Scheduler_FuzzCutoff_KeepsTheExactIntervalWhenItIsAlreadyDue()
+    {
+        var parameters = FsrsConstants.DefaultParameters;
+        var exactScheduler = new FsrsScheduler(parameters: parameters, enableFuzzing: false);
+        var reviewed = BalancerAnchor.AddDays(-400);
+        var card = new FsrsCard("u", 1, 0, state: FsrsState.Review, stability: 60, difficulty: 5, due: reviewed, lastReview: reviewed.AddDays(-60));
+
+        var exactDue = exactScheduler.ReviewCard(card, FsrsRating.Good, reviewed).UpdatedCard.Due;
+        Assert.True(exactDue < BalancerAnchor);
+
+        for (var i = 0; i < 20; i++)
+        {
+            var fuzzed = new FsrsScheduler(parameters: parameters, enableFuzzing: true, loadBalancer: new DictionaryFsrsLoadBalancer(),
+                                           fuzzCutoff: BalancerAnchor);
+            Assert.Equal(exactDue, fuzzed.ReviewCard(card, FsrsRating.Good, reviewed).UpdatedCard.Due);
+        }
+    }
+
+    [Fact]
     public void Fuzz_FractionalInterval_StaysWithinTheMaximumInterval()
     {
         for (var i = 0; i < 50; i++)

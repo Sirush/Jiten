@@ -101,6 +101,7 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
                                                   status
                                                   progress
                                                   progressVolumes
+                                                  repeat
                                                   completedAt { year month day }
                                                   startedAt { year month day }
                                                   media { id title { native romaji } }
@@ -176,8 +177,13 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
                         title ??= titleEl.TryGetProperty("romaji", out var romaji) ? romaji.GetString() : null;
                     }
 
-                    // Users often leave the finished date unset; the start date is the next best signal.
-                    var finishedAt = ReadAnilistFuzzyDate(entry, "completedAt") ?? ReadAnilistFuzzyDate(entry, "startedAt");
+                    var startedOn = ReadAnilistFuzzyDate(entry, "startedAt");
+                    var completedOn = ReadAnilistFuzzyDate(entry, "completedAt");
+                    // Users often leave the finished date unset; the start date is the next best signal for the cutoff filter.
+                    var finishedAt = completedOn ?? startedOn;
+                    int? repeat = entry.TryGetProperty("repeat", out var repeatEl) && repeatEl.ValueKind == JsonValueKind.Number
+                                      ? repeatEl.GetInt32()
+                                      : null;
 
                     // Manga chapter counts never map to Jiten subdecks, which are volumes.
                     var progressField = type == "ANIME" ? "progress" : "progressVolumes";
@@ -188,7 +194,8 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
                         progress = null;
 
                     entries.Add(new ExternalListEntry(id.ToString(), title ?? $"AniList #{id}",
-                                                      $"https://anilist.co/{urlSegment}/{id}", status, mapped, finishedAt, progress));
+                                                      $"https://anilist.co/{urlSegment}/{id}", status, mapped, finishedAt, progress,
+                                                      startedOn, completedOn, RepeatsBeforeFromAnilist(repeat, mapped)));
                 }
             }
 
@@ -202,6 +209,14 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
                       .ToList();
 
         return new ExternalListFetchResult(deduped, null);
+    }
+
+    /// <summary>AniList's repeat excludes the first completion; a completed title's own entry is one of them, any other status came after all.</summary>
+    private static int? RepeatsBeforeFromAnilist(int? repeat, DeckStatus mapped)
+    {
+        if (repeat is not > 0)
+            return null;
+        return mapped == DeckStatus.Completed ? repeat : repeat + 1;
     }
 
     private static DateOnly? ReadAnilistFuzzyDate(JsonElement entry, string property)
@@ -309,12 +324,15 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
                     title ??= vn.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
                 }
 
-                // Users often leave the finished date unset; start date, then vote date, are the next best signals.
-                var finishedAt = ReadVndbDate(item, "finished") ?? ReadVndbDate(item, "started");
+                var startedOn = ReadVndbDate(item, "started");
+                var completedOn = ReadVndbDate(item, "finished");
+                // Users often leave the finished date unset; start date, then vote date, are the next best signals for the cutoff filter.
+                var finishedAt = completedOn ?? startedOn;
                 if (finishedAt == null && item.TryGetProperty("voted", out var voted) && voted.ValueKind == JsonValueKind.Number)
                     finishedAt = DateOnly.FromDateTime(DateTimeOffset.FromUnixTimeSeconds(voted.GetInt64()).UtcDateTime);
 
-                entries.Add(new ExternalListEntry(vnId, title ?? $"VNDB {vnId}", $"https://vndb.org/{vnId}", label, mapped, finishedAt));
+                entries.Add(new ExternalListEntry(vnId, title ?? $"VNDB {vnId}", $"https://vndb.org/{vnId}", label, mapped, finishedAt,
+                                                  StartedOn: startedOn, CompletedOn: completedOn));
             }
 
             var more = doc.RootElement.TryGetProperty("more", out var moreEl) && moreEl.ValueKind == JsonValueKind.True;

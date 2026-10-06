@@ -382,6 +382,21 @@ public partial class AdminController(
         if (deck == null)
             return NotFound(new { Message = $"No deck found with ID {model.DeckId}." });
 
+        if (model.RequestId is > 0)
+        {
+            var mediaRequest = await dbContext.MediaRequests.FirstOrDefaultAsync(r => r.Id == model.RequestId);
+            if (mediaRequest == null)
+                return BadRequest(new { Message = $"Request #{model.RequestId} does not exist." });
+
+            if (mediaRequest.TargetDeckId is { } targetDeckId && targetDeckId != deck.DeckId && deck.Children.All(c => c.DeckId != targetDeckId))
+                return BadRequest(new { Message = $"Request #{model.RequestId} targets another deck." });
+
+            mediaRequest.FulfilledDeckId = deck.DeckId;
+            mediaRequest.UpdatedAt = DateTime.UtcNow;
+            if (mediaRequest.Status == MediaRequestStatus.Open)
+                mediaRequest.Status = MediaRequestStatus.InProgress;
+        }
+
         // Update basic properties
         deck.MediaType = model.MediaType;
         deck.ReleaseDate = model.ReleaseDate;
@@ -486,13 +501,15 @@ public partial class AdminController(
         // Update subdecks if provided
         var newChildDecks = new List<Deck>();
         var updatedChildIdsWithText = new List<int>();
+        var removedSubdeckIds = new List<int>();
         if (model.Subdecks != null && model.Subdecks.Count != 0)
         {
             var existingSubdeckIds = deck.Children.Select(d => d.DeckId).ToHashSet();
             var newSubdeckIds = model.Subdecks.Where(d => d.DeckId > 0).Select(d => d.DeckId).ToHashSet();
 
             // Remove subdecks that are no longer present
-            var subdecksToRemove = deck.Children.Where(d => !newSubdeckIds.Contains(d.DeckId));
+            var subdecksToRemove = deck.Children.Where(d => !newSubdeckIds.Contains(d.DeckId)).ToList();
+            removedSubdeckIds.AddRange(subdecksToRemove.Select(d => d.DeckId));
             dbContext.RemoveRange(subdecksToRemove);
 
             // Update existing subdecks and add new ones
@@ -546,6 +563,12 @@ public partial class AdminController(
 
         await dbContext.SaveChangesAsync();
 
+        if (removedSubdeckIds.Count > 0)
+        {
+            await userContext.UserDeckPreferences.Where(p => removedSubdeckIds.Contains(p.DeckId)).ExecuteDeleteAsync();
+            await userContext.UserMediaListEntries.Where(r => removedSubdeckIds.Contains(r.DeckId)).ExecuteDeleteAsync();
+        }
+
         // Children whose text was added or replaced need a parse even without a full-deck
         // reparse; existing children are reparsed in place so their DeckId (and with it user
         // progress/preferences) is preserved.
@@ -561,8 +584,8 @@ public partial class AdminController(
         if (reparse)
             backgroundJobs.Enqueue<ReparseJob>(job => job.Reparse(deck.DeckId));
 
-        logger.LogInformation("Admin updated deck: DeckId={DeckId}, Title={Title}, Reparse={Reparse}",
-                              deck.DeckId, deck.OriginalTitle, reparse);
+        logger.LogInformation("Admin updated deck: DeckId={DeckId}, Title={Title}, Reparse={Reparse}, RequestId={RequestId}",
+                              deck.DeckId, deck.OriginalTitle, reparse, model.RequestId);
 
         return Ok(new { Message = $"Media deck {deck.DeckId} updated successfully" });
 
@@ -850,6 +873,15 @@ public partial class AdminController(
 
         logger.LogInformation("Admin queued difficulty reaggregation for {Count} parent decks", parentDecks.Count);
         return Ok(new { Message = $"Queued difficulty reaggregation for {parentDecks.Count} parent decks", Count = parentDecks.Count });
+    }
+
+    [HttpPost("recompute-algorithm-adjustments")]
+    public IActionResult RecomputeAlgorithmAdjustments()
+    {
+        backgroundJobs.Enqueue<DifficultyComputationJob>(job => job.RecomputeAlgorithmAdjustments());
+
+        logger.LogInformation("Admin queued algorithm adjustment recomputation");
+        return Ok(new { Message = "Queued algorithm adjustment recomputation" });
     }
 
     /// <summary>

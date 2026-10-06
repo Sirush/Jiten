@@ -1,24 +1,15 @@
 namespace Jiten.Core.Data.FSRS;
 
-/// <summary>
-/// Computes measured ("true") retention from review history.
-///
-/// A review only counts toward retention when at least one full day has elapsed
-/// since that card's previous review. This filters out same-day learning and
-/// relearning steps as well as new-card first exposures, leaving the reviews that
-/// actually test recall — the same approach Anki uses for its true-retention stat,
-/// derived from the log sequence since we do not persist the pre-review state.
-///
-/// Pass = any rating other than Again. Maturity is taken from the elapsed interval:
-/// young is 1–20 days, mature is 21 days or more.
-/// </summary>
+/// <summary>Measured ("true") retention: a review that tests recall passes unless rated Again; mature is 21+ days since the previous review.</summary>
 public static class RetentionCalculator
 {
     public const int MatureThresholdDays = 21;
 
     /// <param name="Rating">FSRS rating 1..4 (Again..Easy). Only used for the answer-button and per-period grade tallies.</param>
     /// <param name="DurationMs">Review duration in milliseconds, when recorded.</param>
-    public readonly record struct ReviewEntry(long CardId, DateTime ReviewUtc, bool IsAgain, int Rating = 0, int? DurationMs = null);
+    /// <param name="State">The card's state as it was answered; null on logs that predate recording it.</param>
+    public readonly record struct ReviewEntry(long CardId, DateTime ReviewUtc, bool IsAgain, int Rating = 0, int? DurationMs = null,
+                                              FsrsState? State = null);
 
     public record RetentionBucket(int Total, int Passed)
     {
@@ -124,6 +115,19 @@ public static class RetentionCalculator
                 .ToList();
     }
 
+    /// <summary>0 = learning, 1 = young, 2 = mature, from the card's state as answered and the days since its previous review.</summary>
+    /// <param name="elapsedDays">Null for the card's first review.</param>
+    public static int Category(FsrsState? state, double? elapsedDays)
+    {
+        var isReview = state is { } s ? TestsRecall(s, elapsedDays) : elapsedDays >= 1;
+        return !isReview ? 0 : elapsedDays >= MatureThresholdDays ? 2 : 1;
+    }
+
+    /// <summary>A Review-state answer counts at any gap; a learning or relearning step only once it is a day overdue.</summary>
+    private static bool TestsRecall(FsrsState state, double? elapsedDays)
+        => elapsedDays != null
+           && (state == FsrsState.Review || state is FsrsState.Learning or FsrsState.Relearning && elapsedDays >= 1);
+
     /// <param name="logs">All review logs for the user (any order).</param>
     /// <param name="offsetHours">User-local timezone offset, for day/month bucketing.</param>
     /// <param name="nowUtc">Current time, defining the trailing 30/90-day windows.</param>
@@ -150,7 +154,6 @@ public static class RetentionCalculator
         var localToday = nowUtc.AddHours(offsetHours).Date;
         int todayRetentionTotal = 0, todayRetentionPassed = 0;
 
-        // First qualifying review per (card, local day) only.
         var seenPerDay = new HashSet<(long, long)>();
 
         var materialized = logs as IReadOnlyCollection<ReviewEntry> ?? logs.ToList();
@@ -169,18 +172,16 @@ public static class RetentionCalculator
                 if (in90) hourly90.AddReview(localTime.Hour);
                 if (in30) hourly30.AddReview(localTime.Hour);
 
+                var elapsedDays = previous is { } prev ? (entry.ReviewUtc - prev).TotalDays : (double?)null;
+                // Logs without a recorded state need a full day's gap, and count once per card per local day.
+                var isRecallTest = entry.State is { } state
+                    ? TestsRecall(state, elapsedDays)
+                    : elapsedDays >= 1 && seenPerDay.Add((entry.CardId, localDate.Ticks));
+
                 var ratingIndex = entry.Rating is >= 1 and <= 4 ? entry.Rating - 1 : -1;
                 if (ratingIndex >= 0)
                 {
-                    // 0 = learning (first review or <1d gap), 1 = young, 2 = mature.
-                    int category;
-                    if (previous is not { } p2)
-                        category = 0;
-                    else
-                    {
-                        var gap = (entry.ReviewUtc - p2).TotalDays;
-                        category = gap < 1 ? 0 : gap >= MatureThresholdDays ? 2 : 1;
-                    }
+                    var category = Category(entry.State, elapsedDays);
 
                     btnAll.Add(category, ratingIndex);
                     if (in90) btn90.Add(category, ratingIndex);
@@ -190,30 +191,26 @@ public static class RetentionCalculator
                     PeriodBucket(weekly, WeekKey(localDate)).Grades[ratingIndex]++;
                 }
 
-                if (previous is { } prev)
+                if (isRecallTest)
                 {
-                    var elapsedDays = (entry.ReviewUtc - prev).TotalDays;
-                    if (elapsedDays >= 1 && seenPerDay.Add((entry.CardId, localDate.Ticks)))
+                    var passed = !entry.IsAgain;
+                    var mature = elapsedDays >= MatureThresholdDays;
+
+                    all.Add(passed, mature);
+                    if (in30) last30.Add(passed, mature);
+                    if (in90) last90.Add(passed, mature);
+
+                    PeriodBucket(monthly, MonthKey(localDate)).Add(passed, mature);
+                    PeriodBucket(weekly, WeekKey(localDate)).Add(passed, mature);
+
+                    hourlyAll.AddRetention(localTime.Hour, passed);
+                    if (in90) hourly90.AddRetention(localTime.Hour, passed);
+                    if (in30) hourly30.AddRetention(localTime.Hour, passed);
+
+                    if (localDate == localToday)
                     {
-                        var passed = !entry.IsAgain;
-                        var mature = elapsedDays >= MatureThresholdDays;
-
-                        all.Add(passed, mature);
-                        if (in30) last30.Add(passed, mature);
-                        if (in90) last90.Add(passed, mature);
-
-                        PeriodBucket(monthly, MonthKey(localDate)).Add(passed, mature);
-                        PeriodBucket(weekly, WeekKey(localDate)).Add(passed, mature);
-
-                        hourlyAll.AddRetention(localTime.Hour, passed);
-                        if (in90) hourly90.AddRetention(localTime.Hour, passed);
-                        if (in30) hourly30.AddRetention(localTime.Hour, passed);
-
-                        if (localDate == localToday)
-                        {
-                            todayRetentionTotal++;
-                            if (passed) todayRetentionPassed++;
-                        }
+                        todayRetentionTotal++;
+                        if (passed) todayRetentionPassed++;
                     }
                 }
 

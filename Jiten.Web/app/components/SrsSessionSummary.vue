@@ -128,7 +128,7 @@
 </script>
 
 <template>
-  <div class="flex flex-col items-center justify-center p-8 bg-white dark:bg-gray-800 rounded-2xl shadow-lg max-w-md mx-auto w-full">
+  <div class="flex flex-col items-center justify-center px-5 pt-6 sm:px-8 sm:pt-8 bg-white dark:bg-gray-800 rounded-2xl shadow-lg max-w-md mx-auto w-full overflow-clip">
     <div class="text-2xl font-bold mb-2">Session Complete</div>
 
     <!-- All caught up -->
@@ -172,9 +172,17 @@
         <div class="text-[clamp(1.1rem,6vw,1.875rem)] font-bold text-blue-600 dark:text-blue-400">
           {{ retentionPct != null ? `${retentionPct}%` : '—' }}
         </div>
-        <div class="text-sm text-gray-500 dark:text-gray-400">Retention</div>
+        <div class="text-sm text-gray-500 dark:text-gray-400">
+          Retention
+          <Tooltip
+            content="Counts cards that came due for review, plus learning cards last seen a day or more ago. Same-day learning steps and repeats after Again are not counted."
+            placement="top"
+          >
+            <i class="pi pi-info-circle text-xs text-surface-400 ml-0.5 cursor-help" />
+          </Tooltip>
+        </div>
         <div class="text-[11px] text-gray-400 dark:text-gray-500">
-          {{ retention.total > 0 ? `${retention.total} review card${retention.total === 1 ? '' : 's'}` : 'No review cards' }}
+          {{ retention.total > 0 ? `${retention.passed} of ${retention.total} recalled` : 'No cards due for a recall check' }}
         </div>
       </div>
       <div class="text-center">
@@ -184,30 +192,30 @@
     </div>
 
     <!-- Grade Distribution -->
-    <div v-if="cardsReviewed > 0" class="w-full mb-6">
+    <div v-if="totalReviews > 0" class="w-full mb-6">
       <div class="flex h-3 rounded-full overflow-hidden">
         <div
           v-if="gradeCounts.again > 0"
           class="bg-red-500"
-          :style="{ width: `${(gradeCounts.again / cardsReviewed) * 100}%` }"
+          :style="{ width: `${(gradeCounts.again / totalReviews) * 100}%` }"
           :title="`Again: ${gradeCounts.again}`"
         />
         <div
           v-if="gradeCounts.hard > 0"
           class="bg-orange-400"
-          :style="{ width: `${(gradeCounts.hard / cardsReviewed) * 100}%` }"
+          :style="{ width: `${(gradeCounts.hard / totalReviews) * 100}%` }"
           :title="`Hard: ${gradeCounts.hard}`"
         />
         <div
           v-if="gradeCounts.good > 0"
           class="bg-green-500"
-          :style="{ width: `${(gradeCounts.good / cardsReviewed) * 100}%` }"
+          :style="{ width: `${(gradeCounts.good / totalReviews) * 100}%` }"
           :title="`Good: ${gradeCounts.good}`"
         />
         <div
           v-if="gradeCounts.easy > 0"
           class="bg-blue-500"
-          :style="{ width: `${(gradeCounts.easy / cardsReviewed) * 100}%` }"
+          :style="{ width: `${(gradeCounts.easy / totalReviews) * 100}%` }"
           :title="`Easy: ${gradeCounts.easy}`"
         />
       </div>
@@ -231,7 +239,6 @@
       </div>
     </div>
 
-    <NuxtLink to="/srs/stats#retention" class="mb-6 text-sm text-primary-600 dark:text-primary-400 hover:underline">See your retention over time</NuxtLink>
 
     <!-- Leeches -->
     <div v-if="leeches.length > 0" class="w-full mb-6">
@@ -310,7 +317,9 @@
       {{ forecastText }}
     </div>
 
-    <div class="flex gap-3 w-full">
+    <div
+      class="sticky bottom-0 flex gap-3 w-[calc(100%+2.5rem)] sm:w-[calc(100%+4rem)] -mx-5 sm:-mx-8 px-5 sm:px-8 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:pb-8 border-t border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800"
+    >
       <Button label="Study More" severity="secondary" class="flex-1" @click="emit('studyMore')" />
       <Button label="Done" class="flex-1" @click="emit('close')" />
     </div>

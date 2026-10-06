@@ -4,6 +4,7 @@ interface SwipeGestureOptions {
   elementRef: Ref<HTMLElement | null>;
   isEnabled: ComputedRef<boolean>;
   isBusy: ComputedRef<boolean>;
+  hapticFeedback?: ComputedRef<boolean>;
   onSwipeComplete: (direction: 'left' | 'right') => void;
   threshold?: number;
 }
@@ -106,7 +107,7 @@ export function useSwipeGesture(options: SwipeGestureOptions) {
     const pastThreshold = Math.abs(dx) >= threshold;
     if (pastThreshold && !hapticFired) {
       hapticFired = true;
-      navigator.vibrate?.(15);
+      if (options.hapticFeedback?.value ?? true) navigator.vibrate?.(15);
     } else if (!pastThreshold) {
       hapticFired = false;
     }

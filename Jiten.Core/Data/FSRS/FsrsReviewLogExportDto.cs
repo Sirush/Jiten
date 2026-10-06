@@ -13,4 +13,8 @@ public class FsrsReviewLogExportDto
     [JsonPropertyName("d")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public int? ReviewDuration { get; set; }
+
+    [JsonPropertyName("s")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public FsrsState? State { get; set; }
 }

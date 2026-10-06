@@ -6,6 +6,7 @@
   import { extractSentenceFromField } from '~/utils/ankiSentenceExtract';
   import { base64ToBytes, extractAudioRef, extractImageRef } from '~/utils/ankiMediaExtract';
   import type { MediaConflictMode, MediaKind } from '~/composables/useAnkiMediaImport';
+  import { FsrsState } from '~/types/enums';
 
   const props = withDefaults(defineProps<{ mediaOnly?: boolean }>(), { mediaOnly: false });
 
@@ -95,7 +96,10 @@
     clearMediaPreview('audio');
   });
 
-  type KeptReview = { Rating: number; ReviewDateTime: Date; ReviewDuration: number };
+  type KeptReview = { Rating: number; ReviewDateTime: Date; ReviewDuration: number; State?: FsrsState };
+
+  // Anki revlog types 0-2; filtered-deck, manual and rescheduled entries stay unknown.
+  const ANKI_REVLOG_STATE: Record<number, FsrsState> = { 0: FsrsState.Learning, 1: FsrsState.Review, 2: FsrsState.Relearning };
   type CardReviews = { kept: KeptReview[]; lastReview: Date | null };
   let selectedFieldName = '';
   let selectedReadingFieldName = '';
@@ -160,13 +164,14 @@
     // results by the integer cid from the DB but then re-looks them up by the exact values we passed,
     // so passing strings makes every lookup miss and returns empty reviews for every card. We call via
     // the raw ankiInvoke because yanki-connect's typings declare string[] (which triggers that bug).
-    const chunkReviews = (await ankiInvoke('getReviewsOfCards', { cards: chunkCardIds })) as Record<string, Array<{ ease: number; id: number; time: number }>>;
+    const chunkReviews = (await ankiInvoke('getReviewsOfCards', { cards: chunkCardIds })) as Record<string, Array<{ ease: number; id: number; time: number; type: number }>>;
     for (const [cardIdStr, reviews] of Object.entries(chunkReviews)) {
       if (!reviews || reviews.length === 0) continue;
       const mapped: KeptReview[] = reviews.map((r) => ({
         Rating: r.ease,
         ReviewDateTime: new Date(r.id),
         ReviewDuration: r.time,
+        State: ANKI_REVLOG_STATE[r.type],
       }));
       mapped.sort((a, b) => a.ReviewDateTime.getTime() - b.ReviewDateTime.getTime());
       // The window MUST start at the card's first review: the optimiser builds its first training entry at
@@ -657,6 +662,7 @@
           Rating: r.Rating,
           ReviewDateTime: r.ReviewDateTime.toISOString(),
           ReviewDuration: r.ReviewDuration,
+          State: r.State,
         })),
     };
   };

@@ -232,6 +232,7 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
 
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         userDb.UserDeckPreferences.RemoveRange(userDb.UserDeckPreferences);
+        userDb.UserMediaListEntries.RemoveRange(userDb.UserMediaListEntries);
         userDb.DeckDownloads.RemoveRange(userDb.DeckDownloads);
         userDb.UserProfiles.RemoveRange(userDb.UserProfiles);
         userDb.UserStudyDeckWords.RemoveRange(userDb.UserStudyDeckWords);

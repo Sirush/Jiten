@@ -269,7 +269,7 @@ public class RoadmapDataLoader(
                                            .Select(p => new { p.DeckId, p.Status, p.IsIgnored })
                                            .ToListAsync(ct);
 
-        var completed = preferences.Where(p => p.Status == DeckStatus.Completed).Select(p => p.DeckId).ToHashSet();
+        var completed = (await MediaListEntryHelper.CompletedDeckIds(userContext, userId).ToListAsync(ct)).ToHashSet();
         var ongoing = preferences.Where(p => p.Status == DeckStatus.Ongoing).Select(p => p.DeckId).ToHashSet();
         var dropped = preferences.Where(p => p.Status == DeckStatus.Dropped).Select(p => p.DeckId).ToHashSet();
         var ignored = preferences.Where(p => p.IsIgnored).Select(p => p.DeckId).ToHashSet();
@@ -367,7 +367,7 @@ public class RoadmapDataLoader(
                                            .Select(p => new { p.DeckId, p.Status, p.IsIgnored })
                                            .ToListAsync(ct);
 
-        var completed = preferences.Where(p => p.Status == DeckStatus.Completed).Select(p => p.DeckId).ToHashSet();
+        var completed = (await MediaListEntryHelper.CompletedDeckIds(userContext, userId).ToListAsync(ct)).ToHashSet();
         var ongoing = preferences.Where(p => p.Status == DeckStatus.Ongoing).Select(p => p.DeckId).ToHashSet();
         var dropped = preferences.Where(p => p.Status == DeckStatus.Dropped).Select(p => p.DeckId).ToHashSet();
         var ignored = preferences.Where(p => p.IsIgnored).Select(p => p.DeckId).ToHashSet();
@@ -760,10 +760,7 @@ public class RoadmapDataLoader(
         await using var userContext = await userFactory.CreateDbContextAsync(ct);
         await using var jiten = await jitenFactory.CreateDbContextAsync(ct);
 
-        var completedIds = await userContext.UserDeckPreferences.AsNoTracking()
-                                            .Where(p => p.UserId == userId && p.Status == DeckStatus.Completed)
-                                            .Select(p => p.DeckId)
-                                            .ToListAsync(ct);
+        var completedIds = await MediaListEntryHelper.CompletedDeckIds(userContext, userId).ToListAsync(ct);
 
         if (completedIds.Count == 0)
             return (null, null, null, null);

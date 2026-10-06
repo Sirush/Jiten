@@ -15,12 +15,8 @@
 <template>
   <Tooltip :content="tooltip">
     <span
-      class="text-xs px-1.5 py-0.5 rounded font-medium leading-none cursor-help select-none"
-      :class="
-        unknown === 0
-          ? 'bg-green-100 dark:bg-green-900/40 text-green-700 dark:text-green-300'
-          : 'bg-surface-100 dark:bg-surface-800 text-surface-600 dark:text-surface-300'
-      "
+      class="text-[0.7rem] font-semibold leading-none tabular-nums cursor-help select-none"
+      :class="unknown === 0 ? 'text-green-700 dark:text-green-400' : 'text-surface-500 dark:text-surface-400'"
       :aria-label="`${label}: ${tooltip}`"
     >
       {{ label }}

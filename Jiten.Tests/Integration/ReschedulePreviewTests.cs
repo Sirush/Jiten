@@ -76,6 +76,64 @@ public class ReschedulePreviewTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task ApplyWithReschedule_MatchesThePreviewTodayAndThisWeek()
+    {
+        await SeedStraddlingCards();
+
+        var preview = await PostOk("/api/srs/settings/reschedule-preview", new { desiredRetentions = Array.Empty<double>() });
+        var option = preview.GetProperty("options")[0];
+        var predictedToday = option.GetProperty("due").GetInt32();
+        var predictedWeek = option.GetProperty("upcoming").GetInt32();
+        predictedToday.Should().BeGreaterThan(0);
+        predictedWeek.Should().BeGreaterThan(0);
+
+        await PostOk("/api/srs/settings/apply", new { desiredRetention = 0.9, reschedule = true });
+
+        var summary = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/srs/due-summary").WithUser(TestUsers.UserA));
+        (await summary.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("reviewsDue").GetInt32().Should().Be(predictedToday);
+
+        var dues = await LoadDues();
+        var applied = DateTime.UtcNow;
+        dues.Values.Count(due => due > applied && due <= applied.AddDays(7)).Should().Be(predictedWeek);
+    }
+
+    [Fact]
+    public async Task LoadBalancing_NeverMovesACardIntoToday()
+    {
+        await SeedStraddlingCards();
+
+        var exact = await PreviewDueWithLoadBalancing(false);
+        var balanced = await PreviewDueWithLoadBalancing(true);
+
+        exact.Should().BeGreaterThan(0);
+        balanced.Should().Be(exact);
+    }
+
+    private async Task<int> PreviewDueWithLoadBalancing(bool loadBalancing)
+    {
+        var settings = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Put, "/api/srs/study-settings")
+                                                .WithUser(TestUsers.UserA)
+                                                .WithJsonContent(new { newCardsPerDay = 0, maxReviewsPerDay = 200, gradingButtons = 4, interleaving = "mixed", loadBalancing }));
+        settings.StatusCode.Should().Be(HttpStatusCode.OK);
+        var preview = await PostOk("/api/srs/settings/reschedule-preview", new { desiredRetentions = Array.Empty<double>() });
+        return preview.GetProperty("options")[0].GetProperty("due").GetInt32();
+    }
+
+    /// <summary>Exact due dates spread across the days around today.</summary>
+    private async Task SeedStraddlingCards()
+    {
+        var now = DateTime.UtcNow;
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        for (var i = 0; i < 120; i++)
+        {
+            var last = now.AddDays(-i * 0.4);
+            userDb.FsrsCards.Add(Card(700000 + i, FsrsState.Review, now.AddDays(30), last.AddDays(-6), last.AddDays(-3), last));
+        }
+        await userDb.SaveChangesAsync();
+    }
+
+    [Fact]
     public async Task ApplyWithoutReschedule_SavesRetentionOnly()
     {
         await SeedCards();

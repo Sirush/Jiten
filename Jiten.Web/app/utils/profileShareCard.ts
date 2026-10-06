@@ -1,6 +1,7 @@
 import type { KnowledgeGrowth, ProfileVocabularyStats, StudyHeatmapResponse, UserAccomplishment } from '~/types';
 import { drawCoverImage, fitCanvasText, type ExportPalette } from '~/utils/imageExport';
 import { formatBucketDated } from '~/utils/journeyFormat';
+import { formatCharacters } from '~/utils/mediaListEntry';
 import { getCompletedDisplay } from '~/utils/mediaTypeMapper';
 
 const SCALE = 2;
@@ -122,7 +123,12 @@ export function drawProfileShareCard(options: ProfileShareCardOptions): HTMLCanv
     acc && completed
       ? [
           { label: completed.sub ? `${completed.label} (${completed.sub})` : completed.label, value: completed.value },
-          { label: 'Characters', value: acc.totalCharacterCount },
+          acc.unfinishedCharacterCount > 0
+            ? {
+                label: `Characters read (${formatCharacters(acc.totalCharacterCount)} completed)`,
+                value: acc.totalCharacterCount + acc.unfinishedCharacterCount,
+              }
+            : { label: 'Characters', value: acc.totalCharacterCount },
           { label: 'Words', value: acc.totalWordCount },
           { label: 'Unique words', value: acc.uniqueWordCount },
           { label: '1-occurrence', value: acc.uniqueWordUsedOnceCount },

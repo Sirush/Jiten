@@ -388,4 +388,83 @@ public class RetentionCalculatorTests
         result.ReviewTime.Last90.Count.Should().Be(2);
         result.ReviewTime.Last30.Count.Should().Be(1);
     }
+
+    private static RetentionCalculator.ReviewEntry InState(long cardId, DateTime when, int rating, FsrsState? state) =>
+        new(cardId, when, rating == 1, rating, State: state);
+
+    [Fact]
+    public void RecordedState_CountsSubDayReviews_AndSkipsSteps()
+    {
+        var day = Now.AddDays(-3);
+        var logs = new[]
+        {
+            InState(1, day, 3, FsrsState.Learning),
+            InState(1, day.AddMinutes(10), 3, FsrsState.Learning),
+            InState(1, day.AddHours(6), 1, FsrsState.Review),
+            InState(1, day.AddHours(6).AddMinutes(10), 3, FsrsState.Relearning),
+            InState(1, day.AddHours(14), 3, FsrsState.Review),
+        };
+
+        var result = RetentionCalculator.Compute(logs, offsetHours: 0, nowUtc: Now);
+
+        result.AllTime.Overall.Total.Should().Be(2);
+        result.AllTime.Overall.Passed.Should().Be(1);
+        result.AllTime.Young.Total.Should().Be(2);
+        result.AnswerButtons.All.Learning.Sum().Should().Be(3);
+        result.AnswerButtons.All.Young.Should().Equal(1, 0, 1, 0);
+    }
+
+    [Fact]
+    public void RecordedState_StepAnsweredADayOrMoreLater_Counts()
+    {
+        var logs = new[]
+        {
+            InState(1, Now.AddDays(-30), 1, FsrsState.Learning),
+            InState(1, Now.AddDays(-8), 3, FsrsState.Learning),
+            InState(1, Now.AddDays(-8).AddMinutes(10), 3, FsrsState.Learning),
+            InState(2, Now.AddDays(-200), 3, FsrsState.Review),
+            InState(2, Now.AddDays(-20), 1, FsrsState.Review),
+            InState(2, Now.AddDays(-2), 3, FsrsState.Relearning),
+        };
+
+        var result = RetentionCalculator.Compute(logs, offsetHours: 0, nowUtc: Now);
+
+        result.AllTime.Overall.Total.Should().Be(3);
+        result.AllTime.Overall.Passed.Should().Be(2);
+        result.AllTime.Mature.Total.Should().Be(2);
+        result.AnswerButtons.All.Learning.Sum().Should().Be(3);
+    }
+
+    [Fact]
+    public void RecordedState_ReviewAfterLongGap_IsMature()
+    {
+        var logs = new[]
+        {
+            InState(1, Now.AddDays(-40), 3, FsrsState.Learning),
+            InState(1, Now.AddDays(-10), 3, FsrsState.Review),
+        };
+
+        var result = RetentionCalculator.Compute(logs, offsetHours: 0, nowUtc: Now);
+
+        result.AllTime.Mature.Total.Should().Be(1);
+        result.AllTime.Young.Total.Should().Be(0);
+    }
+
+    [Fact]
+    public void UnrecordedState_KeepsTheFullDayRule()
+    {
+        var day = Now.AddDays(-5);
+        var logs = new[]
+        {
+            InState(1, day, 3, null),
+            InState(1, day.AddHours(6), 3, null),
+            InState(1, day.AddDays(2), 3, null),
+            InState(1, day.AddDays(2).AddHours(1), 1, FsrsState.Review),
+        };
+
+        var result = RetentionCalculator.Compute(logs, offsetHours: 0, nowUtc: Now);
+
+        result.AllTime.Overall.Total.Should().Be(2);
+        result.AllTime.Overall.Passed.Should().Be(1);
+    }
 }

@@ -22,6 +22,9 @@
   const communityUrl = useRuntimeConfig().public.communityUrl as string;
 
   const route = useRoute();
+  const isAuthPage = computed(() => ['/login', '/register', '/google-registration', '/confirm-email'].includes(route.path));
+  const { authLink } = useGuestPrompt();
+  const registerLink = computed(() => (isAuthPage.value ? { path: '/register' } : authLink('/register')));
   watch(
     () => route.fullPath,
     () => {
@@ -161,11 +164,13 @@
             :class="route.path.startsWith('/srs') ? 'font-semibold !text-purple-200' : '!text-white'"
           >
             Study
-            <span
-              v-if="totalDue > 0"
-              class="inline-flex items-center justify-center min-w-[1.1rem] rounded-full bg-white/15 px-1 py-0.5 text-[10px] font-semibold leading-none tabular-nums text-purple-100"
-              >{{ dueBadge }}</span
-            >
+            <ClientOnly>
+              <span
+                v-if="totalDue > 0"
+                class="inline-flex items-center justify-center min-w-[1.1rem] rounded-full bg-white/15 px-1 py-0.5 text-[10px] font-semibold leading-none tabular-nums text-purple-100"
+                >{{ dueBadge }}</span
+              >
+            </ClientOnly>
           </nuxt-link>
           <nuxt-link to="/frequency-dictionaries" :class="route.path === '/frequency-dictionaries' ? 'font-semibold !text-purple-200' : '!text-white'"
             >Tools</nuxt-link
@@ -190,7 +195,7 @@
           <Button
             v-if="!auth.isAuthenticated"
             as="router-link"
-            to="/register"
+            :to="registerLink"
             size="small"
             class="!bg-white !text-indigo-900 !border-white hover:!bg-purple-100 !font-semibold whitespace-nowrap"
             >Create an account</Button
@@ -228,6 +233,13 @@
 
         <!-- Mobile: search + bell + hamburger -->
         <div class="min-[900px]:hidden flex items-center gap-1">
+          <NuxtLink
+            v-if="!auth.isAuthenticated && !isAuthPage"
+            :to="registerLink"
+            class="mr-1 inline-flex items-center min-h-11 px-3 rounded-md bg-white !text-indigo-900 text-sm font-semibold !no-underline whitespace-nowrap focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-indigo-900"
+            @click="markGuestPrompt('header_mobile')"
+            >Sign up</NuxtLink
+          >
           <button
             type="button"
             class="inline-flex items-center justify-center p-2 rounded text-white hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-white"
@@ -267,11 +279,13 @@
               @click="mobileMenuOpen = false"
             >
               Study
-              <span
-                v-if="totalDue > 0"
-                class="inline-flex items-center justify-center min-w-[1.1rem] rounded-full bg-white/15 px-1 py-0.5 text-[10px] font-semibold leading-none tabular-nums text-purple-100"
-                >{{ dueBadge }}</span
-              >
+              <ClientOnly>
+                <span
+                  v-if="totalDue > 0"
+                  class="inline-flex items-center justify-center min-w-[1.1rem] rounded-full bg-white/15 px-1 py-0.5 text-[10px] font-semibold leading-none tabular-nums text-purple-100"
+                  >{{ dueBadge }}</span
+                >
+              </ClientOnly>
             </nuxt-link>
             <nuxt-link
               v-if="auth.isAuthenticated"
@@ -355,7 +369,7 @@
                 >Log in</nuxt-link
               >
               <nuxt-link
-                to="/register"
+                :to="registerLink"
                 class="mx-3 my-2 py-2 px-3 rounded-md bg-white text-center !text-indigo-900 font-semibold"
                 @click="mobileMenuOpen = false"
                 >Create an account</nuxt-link

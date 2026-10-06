@@ -54,17 +54,19 @@
   async function completeRegistration() {
     if (!canComplete.value) return;
 
+    const signupSource = currentSignupSource();
     const registrationData: CompleteGoogleRegistrationRequest = {
       tempToken: tempToken.value,
       username: username.value.trim(),
       tosAccepted: acceptedTerms.value,
       receiveNewsletter: acceptedEmailConsent.value,
+      signupSource,
     };
 
     const success = await authStore.completeGoogleRegistration(registrationData);
 
     if (success) {
-      trackEvent('signup_completed', { method: 'google' });
+      trackSignupCompleted('google', signupSource);
       trackEvent('signup_activated', { method: 'google' });
       router.push(safeRedirectPath(route.query.redirect) ?? '/');
     }

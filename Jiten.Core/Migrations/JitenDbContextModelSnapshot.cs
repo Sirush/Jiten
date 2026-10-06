@@ -302,6 +302,12 @@ namespace Jiten.Core.Migrations
                         .HasColumnType("numeric(4,3)")
                         .HasDefaultValue(0m);
 
+                    b.Property<decimal>("AlgorithmAdjustment")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(4, 2)
+                        .HasColumnType("numeric(4,2)")
+                        .HasDefaultValue(0m);
+
                     b.Property<string>("DecilesJson")
                         .IsRequired()
                         .HasColumnType("jsonb");

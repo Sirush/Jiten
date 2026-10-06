@@ -293,6 +293,7 @@
     if (type !== MediaType.Novel && type !== MediaType.WebNovel) return false;
     return selectedFiles.value.some((f) => archiveExtensions.includes(f.name.substring(f.name.lastIndexOf('.')).toLowerCase()));
   });
+  const isMangaRequest = computed(() => request.value?.mediaType === MediaType.Manga);
   const isOverUploadLimit = computed(() => totalFileSize.value > maxUploadBytes);
   const hasContent = computed(() => commentText.value.trim().length > 0 || selectedFiles.value.length > 0);
 
@@ -431,7 +432,7 @@
       toast.add({ severity: 'success', summary: reviewed ? 'Marked as reviewed' : 'Unmarked', life: 3000 });
       const comment = comments.value.find((c) => c.upload?.id === uploadId);
       if (comment?.upload) {
-        (comment.upload as any).adminReviewed = reviewed;
+        (comment.upload as MediaRequestUploadAdminDto).adminReviewed = reviewed;
       }
     } else {
       const detail = extractApiError(apiError.value, 'Failed to update review status.');
@@ -544,7 +545,14 @@
 
   const isTerminal = computed(() => request.value && (request.value.status === RequestStatus.Completed || request.value.status === RequestStatus.Rejected));
 
-  const canCreateDeck = computed(() => !!request.value && !isTerminal.value && !request.value.fulfilledDeckId);
+  const updateDeckHref = computed(() => {
+    const req = request.value;
+    if (!req || req.kind !== RequestKind.Update || isTerminal.value) return '';
+    const deckId = req.targetDeckId ?? fulfilledDeckId.value;
+    return deckId ? `/dashboard/media/${deckId}?requestId=${req.id}` : '';
+  });
+
+  const canCreateDeck = computed(() => !!request.value && !isTerminal.value && !request.value.fulfilledDeckId && !updateDeckHref.value);
 
   // Syosetsu novels are imported chapter by chapter, so they go through the webnovel page instead
   const createDeckHref = computed(() => {
@@ -709,7 +717,8 @@
             <span>
               No file attached yet.
               <template v-if="fulfilmentRange">Requests with one are usually filled in {{ fulfilmentRange }}.</template>
-              If you have the script, subtitles or ebook, attach it in a comment below.
+              <template v-if="isMangaRequest">If you have the .mokuro file, attach it in a comment below.</template>
+              <template v-else>If you have the script, subtitles or ebook, attach it in a comment below.</template>
             </span>
           </small>
 
@@ -805,6 +814,13 @@
               <label class="font-semibold text-sm">Fulfilled Deck (for completion)</label>
               <MediaDeckPicker v-model="fulfilledDeckId" :label="fulfilledDeckLabel" placeholder="Search or select recent deck..." show-recent />
               <small v-if="fulfilledDeckId" class="text-surface-500 dark:text-surface-400">Deck ID: {{ fulfilledDeckId }}</small>
+            </div>
+            <div v-if="updateDeckHref" class="flex flex-col gap-1">
+              <NuxtLink :to="updateDeckHref" class="inline-flex items-center gap-2 w-fit text-primary hover:underline font-medium text-sm">
+                <i class="pi pi-sync" />
+                Update deck from this request
+              </NuxtLink>
+              <small class="text-surface-500 dark:text-surface-400">Deck editor with the attached files ready to add. You come back here once it is updated.</small>
             </div>
             <div v-if="canCreateDeck" class="flex flex-col gap-1">
               <NuxtLink :to="createDeckHref" class="inline-flex items-center gap-2 w-fit text-primary hover:underline font-medium text-sm">
@@ -1065,6 +1081,10 @@
               <small class="text-muted-color flex items-start gap-1.5">
                 <i class="pi pi-exclamation-triangle mt-0.5 w-[14px] shrink-0 text-center text-[13px] text-amber-600 dark:text-amber-500" />
                 <span>Do not zip EPUBs - they are automatically optimised when uploaded directly.</span>
+              </small>
+              <small v-if="isMangaRequest" class="text-muted-color flex items-start gap-1.5">
+                <i class="pi pi-exclamation-triangle mt-0.5 w-[14px] shrink-0 text-center text-[13px] text-amber-600 dark:text-amber-500" />
+                <span>Manga must be uploaded as .mokuro files made with <a href="https://github.com/kha-white/mokuro" target="_blank" rel="noopener noreferrer" class="text-primary hover:underline">mokuro</a>. Raw images and CBZ archives can't be used.</span>
               </small>
 
               <input ref="fileInputRef" type="file" :accept="allowedExtensions.join(',')" multiple class="hidden" @change="handleFileSelect" />

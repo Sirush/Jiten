@@ -30,6 +30,7 @@ public class UserDbContext : IdentityDbContext<User>
     public DbSet<UserSettings> UserSettings { get; set; }
     public DbSet<ApiKey> ApiKeys { get; set; }
     public DbSet<UserDeckPreference> UserDeckPreferences { get; set; }
+    public DbSet<UserMediaListEntry> UserMediaListEntries { get; set; }
     public DbSet<DeckDownload> DeckDownloads { get; set; }
     public DbSet<UserFsrsSettings> UserFsrsSettings { get; set; }
 
@@ -71,7 +72,10 @@ public class UserDbContext : IdentityDbContext<User>
         modelBuilder.Entity<User>(entity =>
         {
             if (isNpgsql)
+            {
                 entity.Property(e => e.Id).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+                entity.Property(e => e.SignupSourceJson).HasColumnType("jsonb");
+            }
 
             entity.Property(e => e.DisplayName).HasMaxLength(20);
             entity.Property(e => e.NormalizedDisplayName).HasMaxLength(20);
@@ -242,6 +246,33 @@ public class UserDbContext : IdentityDbContext<User>
             entity.HasIndex(udp => new { udp.UserId, udp.IsFavourite }).HasDatabaseName("IX_UserDeckPreference_UserId_IsFavourite");
             entity.HasIndex(udp => new { udp.UserId, udp.Status }).HasDatabaseName("IX_UserDeckPreference_UserId_Status");
             entity.HasIndex(udp => new { udp.UserId, udp.IsIgnored }).HasDatabaseName("IX_UserDeckPreference_UserId_IsIgnored");
+
+            entity.HasOne(udp => udp.CurrentEntry)
+                  .WithMany()
+                  .HasForeignKey(udp => udp.CurrentEntryId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<UserMediaListEntry>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            if (isNpgsql)
+                entity.Property(r => r.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            entity.Property(r => r.State).IsRequired();
+            entity.Property(r => r.CreatedAt).IsRequired();
+            entity.Property(r => r.UpdatedAt).IsRequired();
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(r => r.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(r => r.SeriesEntry)
+                  .WithMany()
+                  .HasForeignKey(r => r.SeriesEntryId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(r => new { r.UserId, r.DeckId }).HasDatabaseName("IX_UserMediaListEntry_UserId_DeckId");
         });
 
         modelBuilder.Entity<DeckDownload>(entity =>
@@ -284,6 +315,7 @@ public class UserDbContext : IdentityDbContext<User>
                   .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(r => new { r.CardId, r.ReviewDateTime }).IsUnique();
+            entity.Property(r => r.State).HasConversion<short?>();
         });
 
         modelBuilder.Entity<FsrsCardArchive>(entity =>
@@ -721,6 +753,15 @@ public class UserDbContext : IdentityDbContext<User>
                 entry.Entity.UpdatedAt = DateTime.UtcNow;
             else if (entry.State == EntityState.Modified && SignalStrengthened(entry))
                 entry.Entity.UpdatedAt = DateTime.UtcNow;
+        }
+
+        var entryNow = DateTime.UtcNow;
+        foreach (var entry in ChangeTracker.Entries<UserMediaListEntry>())
+        {
+            if (entry.State == EntityState.Added && entry.Entity.CreatedAt == default)
+                entry.Entity.CreatedAt = entryNow;
+            if (entry.State is EntityState.Added or EntityState.Modified)
+                entry.Entity.UpdatedAt = entryNow;
         }
 
         var userEntities = ChangeTracker.Entries()

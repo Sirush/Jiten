@@ -196,6 +196,17 @@
   const deckOp = ref();
   const loadingDecks = ref(false);
 
+  const guestPopoverActive = ref(false);
+  const guestPopover = ref<{ show: (event: Event, target?: HTMLElement) => void } | null>(null);
+
+  const onGuestPlusClick = async (e: MouseEvent) => {
+    const target = e.currentTarget as HTMLElement;
+    trackEvent('guest_locked_control_clicked', { control: 'mark_known' });
+    guestPopoverActive.value = true;
+    await nextTick();
+    guestPopover.value?.show({ currentTarget: target } as unknown as Event, target);
+  };
+
   const onPlusClick = async (e: MouseEvent) => {
     if (e.ctrlKey) blacklistWord();
     else if (e.shiftKey || quickMasterVocabulary.value) masterWord();
@@ -459,6 +470,17 @@
             </NuxtLink>
           </div>
         </Popover>
+      </template>
+      <template v-else>
+        <Tooltip content="Mark as known (free account)">
+          <Button icon="pi pi-plus" size="small" text severity="success" aria-label="Mark as known" @click="onGuestPlusClick" />
+        </Tooltip>
+        <GuestAccountPopover
+          v-if="guestPopoverActive"
+          ref="guestPopover"
+          message="Mark the words you know and Jiten shows your coverage (how much you know) on every media."
+          prompt="mark_known"
+        />
       </template>
     </span>
     <template #fallback>

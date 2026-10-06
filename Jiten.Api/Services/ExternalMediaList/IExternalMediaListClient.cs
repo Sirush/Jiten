@@ -15,7 +15,10 @@ public record ExternalListEntry(
     string ExternalStatus,
     DeckStatus MappedStatus,
     DateOnly? FinishedAt,
-    int? Progress = null);
+    int? Progress = null,
+    DateOnly? StartedOn = null,
+    DateOnly? CompletedOn = null,
+    int? RepeatCount = null);
 
 public record ExternalListFetchResult(List<ExternalListEntry> Entries, string? Error)
 {

@@ -60,6 +60,10 @@ public class DeckDto : IDeckCoverageTarget
     public DeckStatus? Status { get; set; }
     public bool? IsFavourite { get; set; }
     public bool? IsIgnored { get; set; }
+
+    /// <summary>Media list entries of the list owner (media list) or the viewer (deck page); null elsewhere.</summary>
+    public Helpers.MediaListEntrySummary? ListEntry { get; set; }
+
     public int DistinctVoterCount { get; set; }
     public decimal UserAdjustment { get; set; }
     public decimal AdjustmentConfidence { get; set; }

@@ -44,6 +44,12 @@
 
   const route = useRoute();
   const isStudyMode = computed(() => route.path === '/srs/study');
+  const historyDeck = useHistoryDialogDeck();
+  const ratingRequest = useRatingRequest();
+  const ratingDialogUsed = ref(false);
+  watch(ratingRequest, (request) => {
+    if (request) ratingDialogUsed.value = true;
+  });
   const studyHeaderVisible = ref(false);
 
   watch(isStudyMode, () => {
@@ -90,6 +96,9 @@
     <LazyConfirmDialog />
     <ClientOnly>
       <UpdateAvailablePrompt v-if="!isStudyMode" />
+      <LazyCompletionRatingDialog v-if="ratingDialogUsed" />
+      <LazyMediaListHistoryDialog v-if="historyDeck" :key="historyDeck.deckId" />
+      <MediaListUndoToast />
     </ClientOnly>
   </div>
 </template>

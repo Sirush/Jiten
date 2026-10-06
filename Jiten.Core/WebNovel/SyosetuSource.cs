@@ -39,9 +39,9 @@ public partial class SyosetuSource : IWebNovelSource, IBatchPollableSource
     private readonly IHttpClientFactory _httpClientFactory;
     private readonly ILogger<SyosetuSource> _logger;
 
-    private readonly SemaphoreSlim _throttle = new(1, 1);
-    private DateTimeOffset _lastRequest = DateTimeOffset.MinValue;
-    private int _requestCount;
+    private static readonly SemaphoreSlim _throttle = new(1, 1);
+    private static DateTimeOffset _lastRequest = DateTimeOffset.MinValue;
+    private static int _requestCount;
 
     public WebNovelProvider Provider { get; }
 
@@ -92,7 +92,7 @@ public partial class SyosetuSource : IWebNovelSource, IBatchPollableSource
     {
         // gzip=5 and of= keep the response small; docs ask for both on bulk queries
         var url = $"{ApiUrl}?out=json&gzip=5&lim={ncodes.Count}" +
-                  "&of=t-n-w-s-g-k-gf-gl-nt-e-ga-l-ir-ist" +
+                  $"&of=t-n-w-s-{(IsNovel18 ? "ng" : "g")}-k-gf-gl-nt-e-ga-l-ir-ist" +
                   $"&ncode={string.Join('-', ncodes)}";
 
         var json = await FetchGzipJsonAsync(url, ct);
@@ -123,7 +123,8 @@ public partial class SyosetuSource : IWebNovelSource, IBatchPollableSource
             Title = GetString(e, "title") ?? string.Empty,
             Author = GetString(e, "writer"),
             Synopsis = GetString(e, "story")?.Trim(),
-            Genre = GenreLabel(GetInt(e, "genre")),
+            // The R18 API has no genre field; nocgenre names the imprint instead
+            Genre = IsNovel18 ? NocGenreLabel(GetInt(e, "nocgenre")) : GenreLabel(GetInt(e, "genre")),
             FirstPublishedAt = ParseJst(GetString(e, "general_firstup")),
             LastUpdatedAt = ParseJst(GetString(e, "general_lastup")),
             EpisodeCount = GetInt(e, "general_all_no"),
@@ -421,6 +422,15 @@ public partial class SyosetuSource : IWebNovelSource, IBatchPollableSource
         9904 => "リプレイ〔その他〕",
         9999 => "その他〔その他〕",
         9801 => "ノンジャンル〔ノンジャンル〕",
+        _ => null
+    };
+
+    private static string? NocGenreLabel(int code) => code switch
+    {
+        1 => "ノクターンノベルズ(男性向け)",
+        2 => "ムーンライトノベルズ(女性向け)",
+        3 => "ムーンライトノベルズ(BL)",
+        4 => "ミッドナイトノベルズ(大人向け)",
         _ => null
     };
 

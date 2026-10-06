@@ -4,6 +4,7 @@
   import HomeWhatsNewStrip from './HomeWhatsNewStrip.vue';
   import HomePollCard from './HomePollCard.vue';
   import HomePlusBlock from './HomePlusBlock.vue';
+  import HomeStaleOngoing from './HomeStaleOngoing.vue';
   import { homeStrips } from './homeStrips';
 
   useHead({ title: 'Jiten' });
@@ -25,6 +26,7 @@
       <div class="order-3 flex flex-col gap-4">
         <ClientOnly>
           <LegalUpdateBanner />
+          <HomeStaleOngoing />
         </ClientOnly>
 
         <div

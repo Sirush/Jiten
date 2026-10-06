@@ -130,14 +130,8 @@ public class SrsRecomputeJob(
         logger.LogInformation("Recomputed FSRS-{Version} memory states for user {UserId}", (int)scheduler.Version, userId);
     }
 
-    /// <summary>
-    /// How many cards a full reschedule would leave due at each retention, without saving. Fuzz and load
-    /// balancing are skipped: they shift a due date by a few percent of its interval, not across today's cutoff.
-    /// </summary>
-    /// <param name="reviewScope">
-    /// Given the due cards, returns the keys the study page serves; null when every card counts. Mirrors
-    /// "review from study decks only", so the numbers match the due count the user sees.
-    /// </param>
+    /// <summary>Due counts a reschedule would leave today and over the next week, without saving; the week is approximate when load balancing is off.</summary>
+    /// <param name="reviewScope">Filters to the cards the study page serves under "review from study decks only"; null counts every card.</param>
     public async Task<ReschedulePreviewResponse> PreviewDueCounts(string userId, double[] parameters, IReadOnlyList<double> desiredRetentions,
                                                                   Func<List<(int WordId, byte ReadingIndex)>, Task<HashSet<long>>>? reviewScope = null)
     {
@@ -145,14 +139,19 @@ public class SrsRecomputeJob(
         var studySettings = FsrsSettingsHelper.GetStudySettings(await FsrsSettingsHelper.LoadAsync(userContext, userId));
         var now = DateTime.UtcNow;
         var window = SrsDueWindow.At(now, studySettings);
+        var weekCutoff = window.Review.AddDays(UpcomingDays);
         var todayStart = FsrsSettingsHelper.LocalDayStartUtc(now, studySettings.Timezone);
 
+        var offsetHours = FsrsSettingsHelper.ResolveOffsetHours(now, studySettings.Timezone);
+        var easyDays = FsrsSettingsHelper.BuildEasyDaysPolicy(studySettings, now);
         var schedulers = desiredRetentions
-                         .Select(retention => FsrsSettingsHelper.CreateScheduler(studySettings, parameters, retention, enableFuzzing: false))
+                         .Select(retention => CreateRescheduler(studySettings, parameters, retention, now,
+                                                                studySettings.LoadBalancing ? new DictionaryFsrsLoadBalancer(offsetHours: offsetHours) : null,
+                                                                easyDays, enableFuzzing: studySettings.LoadBalancing))
                          .ToList();
-        var replayScheduler = schedulers[0];
+        var replayScheduler = FsrsSettingsHelper.CreateScheduler(studySettings, parameters, desiredRetentions[0], enableFuzzing: false);
 
-        // Bit 0: due now; bit i + 1: due after rescheduling at desiredRetentions[i].
+        // Bit 0: due now; bit i + 1: due after rescheduling at desiredRetentions[i]. The same layout shifted by UpcomingShift marks the following week.
         var dueMasks = new Dictionary<(int WordId, byte ReadingIndex), int>();
         var lastCardId = 0L;
 
@@ -178,7 +177,7 @@ public class SrsRecomputeJob(
 
             foreach (var card in cards)
             {
-                var mask = CountsAsDueReview(window, now, todayStart, card.State, card.Due, card.LastReview) ? 1 : 0;
+                var mask = DueBucketBit(window, weekCutoff, now, todayStart, card.State, card.Due, card.LastReview);
 
                 // Replay keeps these states, and they never come due.
                 if (card.State is not (FsrsState.Mastered or FsrsState.Blacklisted or FsrsState.Suspended))
@@ -190,8 +189,7 @@ public class SrsRecomputeJob(
                     for (var i = 0; i < schedulers.Count; i++)
                     {
                         var (state, due, lastReview) = placements?[i] ?? (card.State, card.Due, card.LastReview);
-                        if (CountsAsDueReview(window, now, todayStart, state, due, lastReview))
-                            mask |= 1 << (i + 1);
+                        mask |= DueBucketBit(window, weekCutoff, now, todayStart, state, due, lastReview) << (i + 1);
                     }
                 }
 
@@ -204,6 +202,7 @@ public class SrsRecomputeJob(
 
         var served = reviewScope == null ? null : await reviewScope(dueMasks.Keys.ToList());
         var counts = new int[schedulers.Count + 1];
+        var upcoming = new int[schedulers.Count + 1];
         foreach (var (key, mask) in dueMasks)
         {
             if (served != null && !served.Contains(WordFormHelper.EncodeWordKey(key.WordId, key.ReadingIndex)))
@@ -212,15 +211,43 @@ public class SrsRecomputeJob(
             {
                 if ((mask & (1 << bit)) != 0)
                     counts[bit]++;
+                if ((mask & (1 << (bit + UpcomingShift))) != 0)
+                    upcoming[bit]++;
             }
         }
 
         return new ReschedulePreviewResponse
         {
             CurrentDue = counts[0],
-            Options = desiredRetentions.Select((retention, i) => new ReschedulePreviewOption { DesiredRetention = retention, Due = counts[i + 1] })
+            CurrentUpcoming = upcoming[0],
+            UpcomingDays = UpcomingDays,
+            Options = desiredRetentions.Select((retention, i) => new ReschedulePreviewOption
+                                       {
+                                           DesiredRetention = retention, Due = counts[i + 1], Upcoming = upcoming[i + 1]
+                                       })
                                        .ToList()
         };
+    }
+
+    /// <summary>Schedules a reschedule's surviving placement; <see cref="PreviewDueCounts"/> builds the same one so its counts match.</summary>
+    /// <remarks>The fuzz cutoff stops fuzz anchored at a past review from landing cards on days already gone, which would add to today's due count.</remarks>
+    private static FsrsScheduler CreateRescheduler(StudySettingsDto studySettings, double[] parameters, double desiredRetention, DateTime utcNow,
+                                                   IFsrsLoadBalancer? balancer, EasyDaysPolicy? easyDays, bool enableFuzzing)
+        => FsrsSettingsHelper.CreateScheduler(studySettings, parameters, desiredRetention, enableFuzzing, balancer, easyDays,
+                                              SrsDueWindow.ReviewCutoff(utcNow, studySettings));
+
+    private const int UpcomingDays = 7;
+    private const int UpcomingShift = 16;
+
+    /// <summary>1 when the card is due now, 1 shifted by <see cref="UpcomingShift"/> when it comes due later in the week, else 0.</summary>
+    private static int DueBucketBit(SrsDueWindow window, DateTime weekCutoff, DateTime utcNow, DateTime todayStart,
+                                    FsrsState state, DateTime due, DateTime? lastReview)
+    {
+        if (state is not (FsrsState.Learning or FsrsState.Review or FsrsState.Relearning))
+            return 0;
+        if (CountsAsDueReview(window, utcNow, todayStart, state, due, lastReview))
+            return 1;
+        return due <= weekCutoff ? 1 << UpcomingShift : 0;
     }
 
     /// <summary>Mirrors the study page: a Review card graded today waits for its real due time even inside the day-boundary cutoff.</summary>
@@ -251,8 +278,7 @@ public class SrsRecomputeJob(
         }
 
         var studySettings = FsrsSettingsHelper.GetStudySettings(await FsrsSettingsHelper.LoadAsync(userContext, userId));
-        var scheduler = FsrsSettingsHelper.CreateScheduler(studySettings, parameters, desiredRetention, enableFuzzing: true,
-                                                           balancer, easyDays);
+        var scheduler = CreateRescheduler(studySettings, parameters, desiredRetention, DateTime.UtcNow, balancer, easyDays, enableFuzzing: true);
         // Replay scheduler for historical reviews: their due dates are superseded by the next review,
         // so fuzzing/balancing them would only register phantom load in the balancer's histogram.
         // Stability/difficulty depend solely on log timestamps, so skipping fuzz changes nothing else

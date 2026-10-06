@@ -186,6 +186,9 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<string>("SecurityStamp")
                         .HasColumnType("text");
 
+                    b.Property<string>("SignupSourceJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<bool>("StripeCancelAtPeriodEnd")
                         .HasColumnType("boolean");
 
@@ -682,6 +685,9 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<int?>("ReviewDuration")
                         .HasColumnType("integer");
 
+                    b.Property<short?>("State")
+                        .HasColumnType("smallint");
+
                     b.HasKey("ReviewLogId");
 
                     b.HasIndex("CardId", "ReviewDateTime")
@@ -1052,6 +1058,9 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<long>("TotalWordCount")
                         .HasColumnType("bigint");
 
+                    b.Property<long>("UnfinishedCharacterCount")
+                        .HasColumnType("bigint");
+
                     b.Property<int>("UniqueKanjiCount")
                         .HasColumnType("integer");
 
@@ -1134,6 +1143,9 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<int>("DeckId")
                         .HasColumnType("integer");
 
+                    b.Property<long?>("CurrentEntryId")
+                        .HasColumnType("bigint");
+
                     b.Property<bool>("IsFavourite")
                         .HasColumnType("boolean");
 
@@ -1147,6 +1159,8 @@ namespace Jiten.Core.Migrations.UserDb
                         .HasColumnType("timestamp with time zone");
 
                     b.HasKey("UserId", "DeckId");
+
+                    b.HasIndex("CurrentEntryId");
 
                     b.HasIndex("UserId")
                         .HasDatabaseName("IX_UserDeckPreference_UserId");
@@ -1218,6 +1232,54 @@ namespace Jiten.Core.Migrations.UserDb
                         .HasDatabaseName("IX_UserLegalDocumentState_UserId_Document_Version");
 
                     b.ToTable("UserLegalDocumentStates", "user");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.UserMediaListEntry", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int?>("CharactersRead")
+                        .HasColumnType("integer");
+
+                    b.Property<float?>("CoverageAtFinish")
+                        .HasColumnType("real");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("FinishedOn")
+                        .HasColumnType("date");
+
+                    b.Property<long?>("SeriesEntryId")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateOnly?>("StartedOn")
+                        .HasColumnType("date");
+
+                    b.Property<int>("State")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SeriesEntryId");
+
+                    b.HasIndex("UserId", "DeckId")
+                        .HasDatabaseName("IX_UserMediaListEntry_UserId_DeckId");
+
+                    b.ToTable("UserMediaListEntries", "user");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.UserMetadata", b =>
@@ -1649,11 +1711,18 @@ namespace Jiten.Core.Migrations.UserDb
 
             modelBuilder.Entity("Jiten.Core.Data.UserDeckPreference", b =>
                 {
+                    b.HasOne("Jiten.Core.Data.UserMediaListEntry", "CurrentEntry")
+                        .WithMany()
+                        .HasForeignKey("CurrentEntryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Jiten.Core.Data.Authentication.User", null)
                         .WithMany()
                         .HasForeignKey("UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+
+                    b.Navigation("CurrentEntry");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.UserKanjiGrid", b =>
@@ -1663,6 +1732,22 @@ namespace Jiten.Core.Migrations.UserDb
                         .HasForeignKey("Jiten.Core.Data.UserKanjiGrid", "UserId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.UserMediaListEntry", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.UserMediaListEntry", "SeriesEntry")
+                        .WithMany()
+                        .HasForeignKey("SeriesEntryId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("SeriesEntry");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.UserMetadata", b =>

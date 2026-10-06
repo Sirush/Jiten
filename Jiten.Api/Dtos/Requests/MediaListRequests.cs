@@ -23,6 +23,41 @@ public class MediaListImportEntry
     public bool OverwriteSubdecks { get; set; }
 
     public bool IsFavourite { get; set; }
+
+    /// <summary>Reading history from the source; only applied to titles that had none before the import.</summary>
+    public DateOnly? StartedOn { get; set; }
+    public DateOnly? FinishedOn { get; set; }
+    public int? CharactersRead { get; set; }
+
+    /// <summary>Completions before the entry the status refers to, from the source's repeat count.</summary>
+    public int? RepeatCount { get; set; }
+
+    /// <summary>Full history from a Jiten JSON export; replaces the single-entry fields when present.</summary>
+    public List<ImportedMediaListEntry>? History { get; set; }
+
+    /// <summary>Volumes from a Jiten JSON export with their own status and history; replaces Progress when present.</summary>
+    public List<ImportedVolume>? Volumes { get; set; }
+}
+
+public class ImportedVolume
+{
+    public int DeckId { get; set; }
+    public DeckStatus Status { get; set; }
+    public List<ImportedMediaListEntry>? History { get; set; }
+}
+
+public class ImportedMediaListEntry
+{
+    public MediaListEntryState State { get; set; }
+    public DateOnly? StartedOn { get; set; }
+    public DateOnly? FinishedOn { get; set; }
+    public int? CharactersRead { get; set; }
+
+    /// <summary>The entry the exported status referred to.</summary>
+    public bool IsCurrent { get; set; }
+
+    /// <summary>On a volume row, the position in its series' history of the series entry it was read under.</summary>
+    public int? SeriesEntry { get; set; }
 }
 
 /// <summary>Exactly one operation per call: Status, IsFavourite, or Remove.</summary>

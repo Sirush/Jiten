@@ -117,19 +117,14 @@ public static class FsrsWorkloadSimulator
 
         while (clock <= horizonEnd && iterations++ < PerCardSafetyCap)
         {
-            // Maturity from the inter-review gap (days since the card's previous review), matching
-            // RetentionCalculator's stats exactly. card.LastReview holds the previous review instant here
-            // (the real one before the sim starts; the simulated one on later iterations).
-            if (card.LastReview is not { } prev)
+            // card.LastReview holds the previous review instant here (the real one before the sim starts; the
+            // simulated one on later iterations).
+            var gap = card.LastReview is { } prev ? (clock - EnsureUtc(prev)).TotalDays : (double?)null;
+            switch (RetentionCalculator.Category(card.State, gap))
             {
-                learning++;
-            }
-            else
-            {
-                var gap = (clock - EnsureUtc(prev)).TotalDays;
-                if (gap < 1) learning++;
-                else if (gap >= RetentionCalculator.MatureThresholdDays) mature++;
-                else young++;
+                case 0: learning++; break;
+                case 2: mature++; break;
+                default: young++; break;
             }
 
             // Draw pass/fail from the card's actual retrievability at review time (its position on the

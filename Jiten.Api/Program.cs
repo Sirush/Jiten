@@ -15,6 +15,7 @@ using Jiten.Api.Authentication;
 using Jiten.Core;
 using Jiten.Parser;
 using Jiten.Core.Data.Authentication;
+using Jiten.Core.Data.WebNovel;
 using Jiten.Core.WebNovel;
 using Jiten.Core.YouTube;
 using Microsoft.Extensions.Options;
@@ -143,6 +144,9 @@ builder.Services.AddHttpClient(SyosetuSource.HttpClientName, client =>
        });
 
 builder.Services.AddSingleton<IWebNovelSource, SyosetuSource>();
+builder.Services.AddSingleton<IWebNovelSource>(sp => new SyosetuSource(sp.GetRequiredService<IHttpClientFactory>(),
+                                                                        sp.GetRequiredService<ILogger<SyosetuSource>>(),
+                                                                        WebNovelProvider.SyosetuNovel18));
 builder.Services.AddSingleton<IWebNovelSourceResolver, WebNovelSourceResolver>();
 
 builder.Services.Configure<YtDlpOptions>(builder.Configuration.GetSection("YtDlp"));
@@ -892,7 +896,9 @@ builder.Services.AddCors(options =>
             })
             .AllowAnyHeader()
             .AllowAnyMethod()
-            .WithExposedHeaders("Retry-After");
+            .WithExposedHeaders("Retry-After")
+            // Chromium caps preflight caching at 2 hours; origin or header changes take up to this long to reach cached clients.
+            .SetPreflightMaxAge(TimeSpan.FromHours(2));
     });
 });
 
@@ -1194,6 +1200,8 @@ app.Use(async (context, next) =>
     context.Response.Headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains";
     await next();
 });
+
+app.UseMiddleware<ServerTimingMiddleware>();
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

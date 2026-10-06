@@ -112,7 +112,7 @@
                     @click="shareUpdate(update)"
                   />
                 </div>
-                <MarkdownBody :source="update.bodyMarkdown" />
+                <MarkdownBody :source="update.bodyMarkdown" new-tab />
               </div>
             </article>
           </template>

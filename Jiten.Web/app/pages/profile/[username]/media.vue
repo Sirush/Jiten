@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { type Deck, DisplayStyle, DeckStatus, MediaType, DeckDownloadType, DeckOrder, SortOrder } from '~/types';
+  import { type Deck, type MediaListEntrySummary, DisplayStyle, DeckStatus, MediaType, DeckDownloadType, DeckOrder, SortOrder } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
   import { useDisplayStyleStore } from '~/stores/displayStyleStore';
   import { storeToRefs } from 'pinia';
@@ -9,6 +9,7 @@
   import { LazyHydrateMediaDeckCard, LazyHydrateMediaDeckCompactView, LazyHydrateMediaDeckTableView } from '~/utils/lazyHydratedComponents';
   import { coverUrl } from '~/utils/coverImage';
   import { useConfirm } from 'primevue/useconfirm';
+  import { formatReadDate, mediaWords } from '~/utils/mediaListEntry';
 
   const route = useRoute();
   const router = useRouter();
@@ -86,6 +87,7 @@
       'releaseDate',
       'addedDate',
     ];
+    if ((decks.value ?? []).some((d) => d.listEntry?.lastCompletedOn)) general.push('finishedDate');
     // Coverage is always the viewer's own, even when browsing someone else's list.
     if (auth.isAuthenticated) general.push('uCoverage', 'coverage', 'uTotalCoverage', 'totalCoverage');
     if (types.some((t) => sentenceLengthTypes.includes(t))) general.push('sentenceLength');
@@ -142,9 +144,19 @@
 
   const sortedDecks = computed(() => sortDecks(filteredDecks.value, sortBy.value, sortOrder.value));
 
+  const heldStatuses = reactive(new Map<number, DeckStatus | undefined>());
+  function holdInTab(deckId: number, open: boolean) {
+    if (open) heldStatuses.set(deckId, decks.value?.find((d) => d.deckId === deckId)?.status);
+    else heldStatuses.delete(deckId);
+  }
+
   const groups = computed(() =>
     statusOrder
-      .map((s) => ({ status: s, label: getDeckStatusText(s), decks: sortedDecks.value.filter((d) => d.status === s) }))
+      .map((s) => ({
+        status: s,
+        label: getDeckStatusText(s),
+        decks: sortedDecks.value.filter((d) => (heldStatuses.has(d.deckId) ? heldStatuses.get(d.deckId) : d.status) === s),
+      }))
       .filter((g) => g.decks.length > 0)
   );
 
@@ -161,11 +173,10 @@
     },
   });
 
-  // Keep the local list in sync when a card mutates its own status/favourite, so it re-buckets across tabs.
   function updateDeckInList(updated: Deck) {
     if (!decks.value) return;
-    const i = decks.value.findIndex((d) => d.deckId === updated.deckId);
-    if (i !== -1) decks.value[i] = updated;
+    const replaced = replaceDeck(decks.value, updated);
+    if (replaced !== decks.value) decks.value = replaced;
   }
 
   // ---- Bulk edit mode (own profile only) ----
@@ -205,10 +216,12 @@
     { label: 'Clear status', command: () => bulkSetStatus(DeckStatus.None) },
   ]);
 
-  async function runBulk(deckIds: number[], body: Record<string, unknown>): Promise<{ affected: number; skipped: number } | null> {
+  type BulkResult = { affected: number; skipped: number; listEntries?: Record<number, MediaListEntrySummary> | null };
+
+  async function runBulk(deckIds: number[], body: Record<string, unknown>): Promise<BulkResult | null> {
     bulkBusy.value = true;
     try {
-      return await $api<{ affected: number; skipped: number }>('user/deck-preferences/bulk', {
+      return await $api<BulkResult>('user/deck-preferences/bulk', {
         method: 'POST',
         body: { deckIds, ...body },
       });
@@ -220,13 +233,32 @@
     }
   }
 
-  async function bulkSetStatus(status: DeckStatus) {
+  function bulkSetStatus(status: DeckStatus) {
+    if (status !== DeckStatus.None) {
+      void applyBulkStatus(status);
+      return;
+    }
+    confirm.require({
+      message: `Clear the status of ${selected.value.length} titles? Their dates and character counts will be deleted too.`,
+      header: 'Clear status',
+      icon: 'pi pi-exclamation-triangle',
+      acceptLabel: 'Clear',
+      rejectLabel: 'Cancel',
+      acceptProps: { severity: 'danger' },
+      rejectProps: { severity: 'secondary' },
+      accept: () => applyBulkStatus(status),
+    });
+  }
+
+  async function applyBulkStatus(status: DeckStatus) {
     const ids = new Set(selected.value);
     const result = await runBulk(selected.value, { status });
     if (!result || !decks.value) return;
 
     decks.value =
-      status === DeckStatus.None ? decks.value.filter((d) => !ids.has(d.deckId)) : decks.value.map((d) => (ids.has(d.deckId) ? { ...d, status } : d));
+      status === DeckStatus.None
+        ? decks.value.filter((d) => !ids.has(d.deckId))
+        : decks.value.map((d) => (ids.has(d.deckId) ? { ...d, status, listEntry: result.listEntries?.[d.deckId] ?? null } : d));
 
     selected.value = [];
     toast.add({ severity: 'success', summary: 'Status updated', detail: `${result.affected} titles updated.`, life: 4000 });
@@ -249,7 +281,7 @@
 
   function bulkRemove() {
     confirm.require({
-      message: `Remove ${selected.value.length} titles from your list? Their status will be cleared.`,
+      message: `Remove ${selected.value.length} titles from your list? Their status, dates and character counts will be cleared.`,
       header: 'Remove from list',
       icon: 'pi pi-exclamation-triangle',
       acceptLabel: 'Remove',
@@ -289,16 +321,46 @@
     }
   }
 
-  // ---- Per-row actions menu ----
-  const rowMenuOpenFor = ref<number | null>(null);
+  const canLogProgress = (deck: Deck) => deck.status === DeckStatus.Ongoing;
 
-  function toggleRowMenu(deckId: number) {
-    rowMenuOpenFor.value = rowMenuOpenFor.value === deckId ? null : deckId;
+  onMediaListChange((change) => {
+    const deck = isOwnProfile.value ? decks.value?.find((d) => d.deckId === change.deckId) : undefined;
+    if (!deck) return;
+    const updated = applyMediaListChange(deck, change);
+    if (updated === deck) return;
+    if (updated.status !== deck.status) selected.value = selected.value.filter((id) => id !== deck.deckId);
+    updateDeckInList(updated);
+  });
+
+  // ---- Per-row actions menu ----
+  const historyDeck = useHistoryDialogDeck();
+
+  const rowMenuOpenFor = ref<number | null>(null);
+  const rowMenuDeck = computed(() => decks.value?.find((d) => d.deckId === rowMenuOpenFor.value) ?? null);
+  const rowFlow = useStatusFlow(() => rowMenuDeck.value!, { close: closeRowMenu, isOpen: () => rowMenuOpenFor.value != null });
+
+  const { menu: rowMenu, rememberTrigger: rememberRowTrigger, restoreFocus: restoreRowFocus, focusList: focusRowMenu } = useMenuFocus();
+
+  function toggleRowMenu(deckId: number, event: Event) {
+    if (rowMenuOpenFor.value === deckId) return closeRowMenu();
+    closeRowMenu();
+    rememberRowTrigger(event);
+    rowMenuOpenFor.value = deckId;
+    holdInTab(deckId, true);
+    void focusRowMenu();
   }
 
   function closeRowMenu() {
+    if (rowMenuOpenFor.value == null) return;
+    restoreRowFocus();
+    holdInTab(rowMenuOpenFor.value, false);
     rowMenuOpenFor.value = null;
+    rowFlow.reset();
   }
+
+  watch(rowFlow.step, (step) => {
+    if (step === 'list' && rowMenuOpenFor.value != null) void focusRowMenu();
+  });
 
   watch([() => activeGroup.value?.status, editMode], closeRowMenu);
 
@@ -309,27 +371,31 @@
     { status: DeckStatus.Dropped, icon: 'pi pi-times-circle' },
   ];
 
+  function openRowHistory(deck: Deck) {
+    closeRowMenu();
+    historyDeck.value = deck;
+  }
+
   function getRowActions(deck: Deck) {
-    const actions: { label: string; icon: string; action: () => void; severity?: string }[] = statusActionMeta
+    const actions: { label: string; icon: string; action: () => void; severity?: string; keepOpen?: boolean; isStatus?: boolean }[] = statusActionMeta
       .filter((m) => m.status !== deck.status)
-      .map((m) => ({ label: `Move to ${getDeckStatusText(m.status)}`, icon: m.icon, action: () => setDeckStatus(deck, m.status) }));
+      .map((m) => ({
+        label: `Move to ${getDeckStatusText(m.status)}`,
+        icon: m.icon,
+        action: () => rowFlow.choose(m.status),
+        keepOpen: true,
+        isStatus: true,
+      }));
 
     actions.push({
       label: deck.isFavourite ? 'Unfavourite' : 'Favourite',
       icon: deck.isFavourite ? 'pi pi-star-fill' : 'pi pi-star',
       action: () => toggleDeckFavourite(deck),
     });
+    actions.push({ label: mediaWords(deck.mediaType).historyTitle, icon: 'pi pi-history', action: () => openRowHistory(deck) });
     actions.push({ label: 'Remove from list', icon: 'pi pi-trash', severity: 'danger', action: () => confirmRemoveDeck(deck) });
 
     return actions;
-  }
-
-  async function setDeckStatus(deck: Deck, status: DeckStatus) {
-    const result = await runBulk([deck.deckId], { status });
-    if (!result || !decks.value) return;
-
-    decks.value = decks.value.map((d) => (d.deckId === deck.deckId ? { ...d, status } : d));
-    selected.value = selected.value.filter((id) => id !== deck.deckId);
   }
 
   async function toggleDeckFavourite(deck: Deck) {
@@ -342,7 +408,7 @@
 
   function confirmRemoveDeck(deck: Deck) {
     confirm.require({
-      message: `Remove "${localiseTitle(deck)}" from your list?`,
+      message: `Remove "${localiseTitle(deck)}" from your list? Its dates and character counts will be deleted too.`,
       header: 'Remove from list',
       icon: 'pi pi-exclamation-triangle',
       acceptLabel: 'Remove',
@@ -558,8 +624,14 @@
               <img :src="coverUrl(deck.coverName)" alt="" class="h-12 w-8 flex-none rounded-xs object-cover" loading="lazy" />
               <div class="min-w-0 flex-1">
                 <div class="truncate font-medium" v-bind="japaneseTextAttrs(localiseTitle(deck))">{{ localiseTitle(deck) }}</div>
-                <div class="text-xs text-surface-500 dark:text-surface-400">{{ getMediaTypeText(deck.mediaType) }}</div>
+                <div class="flex flex-wrap gap-x-3 text-xs text-surface-500 dark:text-surface-400">
+                  <span>{{ getMediaTypeText(deck.mediaType) }}</span>
+                  <span v-if="deck.status === DeckStatus.Ongoing && deck.listEntry?.startedOn">Started {{ formatReadDate(deck.listEntry.startedOn) }}</span>
+                </div>
               </div>
+              <span v-if="canLogProgress(deck)" class="shrink-0" @click.prevent.stop>
+                <MediaListProgressButton :deck="deck" />
+              </span>
               <i v-if="deck.isFavourite" class="pi pi-star-fill text-sm text-amber-400" aria-hidden="true" />
               <Tag
                 v-if="deck.status != null && deck.status !== DeckStatus.None"
@@ -567,27 +639,44 @@
                 :severity="editStatusSeverity[deck.status]"
                 class="shrink-0 !text-xs"
               />
-              <div class="relative shrink-0" @click.prevent.stop>
-                <Button icon="pi pi-ellipsis-v" text rounded size="small" severity="secondary" class="!w-8 !h-8" @click="toggleRowMenu(deck.deckId)" />
+              <div class="relative shrink-0" @click.prevent.stop @keydown.escape="closeRowMenu">
+                <Button
+                  icon="pi pi-ellipsis-v"
+                  text
+                  rounded
+                  size="small"
+                  severity="secondary"
+                  class="!w-8 !h-8"
+                  :aria-label="`Actions for ${localiseTitle(deck)}`"
+                  aria-haspopup="menu"
+                  :aria-expanded="rowMenuOpenFor === deck.deckId"
+                  @click="toggleRowMenu(deck.deckId, $event)"
+                />
 
                 <Transition name="fade">
                   <div
                     v-if="rowMenuOpenFor === deck.deckId"
+                    :ref="(el) => (rowMenu = el as HTMLElement | null)"
                     class="absolute right-0 top-full mt-1 z-30 min-w-52 w-max max-w-[calc(100vw-1rem)] rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-lg py-1"
                   >
-                    <button
-                      v-for="action in getRowActions(deck)"
-                      :key="action.label"
-                      class="w-full flex items-center gap-2 px-3 py-2 text-sm whitespace-nowrap hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors text-left cursor-pointer"
-                      :class="action.severity === 'danger' ? 'text-red-600 dark:text-red-400' : ''"
-                      @click="
-                        action.action();
-                        closeRowMenu();
-                      "
-                    >
-                      <i :class="action.icon" class="text-xs" />
-                      {{ action.label }}
-                    </button>
+                    <div :class="{ 'p-1': rowFlow.step.value !== 'list' && rowFlow.step.value !== 'progress' }">
+                      <StatusFlowSteps :deck="deck" :flow="rowFlow" back-label="Back to actions" @open-history="openRowHistory(deck)">
+                        <button
+                          v-for="action in getRowActions(deck)"
+                          :key="action.label"
+                          class="w-full flex items-center gap-2 px-3 py-2 text-sm whitespace-nowrap hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors text-left cursor-pointer disabled:opacity-50 disabled:cursor-default"
+                          :class="action.severity === 'danger' ? 'text-red-600 dark:text-red-400' : ''"
+                          :disabled="action.isStatus && rowFlow.busy.value"
+                          @click="
+                            action.action();
+                            if (!action.keepOpen) closeRowMenu();
+                          "
+                        >
+                          <i :class="action.icon" class="text-xs" />
+                          {{ action.label }}
+                        </button>
+                      </StatusFlowSteps>
+                    </div>
                   </div>
                 </Transition>
               </div>
@@ -604,7 +693,9 @@
               :deck="deck"
               :lazy-cover="index >= 3"
               :class="index >= 3 ? '[content-visibility:auto] [contain-intrinsic-size:auto_30rem] p-1 -m-1' : ''"
+              :read-only-list="!isOwnProfile"
               @update:deck="updateDeckInList"
+              @status-menu="holdInTab(deck.deckId, $event)"
             />
           </div>
 
@@ -615,7 +706,13 @@
 
           <!-- Table view -->
           <div v-else-if="displayStyle === DisplayStyle.Table" class="flex flex-col gap-0.5">
-            <LazyHydrateMediaDeckTableView v-for="(deck, index) in activeGroup.decks" :key="deck.deckId" :deck="deck" :lazy-render="index >= 12" />
+            <LazyHydrateMediaDeckTableView
+              v-for="(deck, index) in activeGroup.decks"
+              :key="deck.deckId"
+              :deck="deck"
+              :lazy-render="index >= 12"
+              :log-progress="isOwnProfile"
+            />
           </div>
         </template>
       </template>

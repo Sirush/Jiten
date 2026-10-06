@@ -1,5 +1,6 @@
 import type {
   ComparisonOutcome,
+  MediaListEntryState,
   DeckRelationshipType,
   DeckStatus,
   FsrsRating,
@@ -16,6 +17,63 @@ import type {
   RequestStatus,
   WordSetStateType,
 } from '~/types';
+
+/** Dates are yyyy-MM-dd calendar days; null means unknown. entryId and the per-pass fields are null when no entry is current. */
+export interface MediaListEntrySummary {
+  entryId: number | null;
+  state: MediaListEntryState | null;
+  startedOn: string | null;
+  finishedOn: string | null;
+  charactersRead: number | null;
+  completedCount: number;
+  entryCount: number;
+  /** Volumes or episodes of a series that tracks them, with how many are completed. */
+  unitCount?: number | null;
+  completedUnits?: number | null;
+  /** Characters a series' volumes or episodes add up to; the series counts this until it has a typed count of its own. */
+  volumeCharacters?: number | null;
+  /** Latest dated completion, whatever the current entry is. */
+  lastCompletedOn?: string | null;
+}
+
+export interface MediaListEntry {
+  id: number;
+  state: MediaListEntryState;
+  startedOn: string | null;
+  finishedOn: string | null;
+  charactersRead: number | null;
+  coverageAtFinish: number | null;
+  isCurrent: boolean;
+}
+
+/** A title's status and full history before a change; sent back to `user/media-list/restore` to undo it. */
+export interface MediaListSnapshot {
+  deckId: number;
+  status: DeckStatus;
+  entries: {
+    id: number | null;
+    state: MediaListEntryState;
+    startedOn: string | null;
+    finishedOn: string | null;
+    charactersRead: number | null;
+    isCurrent: boolean;
+    seriesEntryId: number | null;
+  }[];
+}
+
+export interface MediaListEntriesResponse {
+  deckId: number;
+  status: DeckStatus;
+  /** Set when the change moved the status of the series the deck belongs to. */
+  parentDeckId?: number | null;
+  parentStatus?: DeckStatus | null;
+  /** Set when the change left every volume of the series completed while the series is not. */
+  allChildrenCompleted?: boolean;
+  summary: MediaListEntrySummary | null;
+  entries: MediaListEntry[];
+  /** Set on deletions: the title and its series as they were before. */
+  previous?: MediaListSnapshot[] | null;
+}
 
 export interface Deck {
   deckId: number;
@@ -72,6 +130,8 @@ export interface Deck {
   status?: DeckStatus;
   isFavourite?: boolean;
   isIgnored?: boolean;
+  /** Media list entry of the list owner (media list) or the viewer (deck page); absent elsewhere. */
+  listEntry?: MediaListEntrySummary | null;
   distinctVoterCount: number;
   userAdjustment: number;
   adjustmentConfidence: number;
@@ -397,10 +457,14 @@ export interface FsrsParametersResponse {
 export interface ReschedulePreviewOption {
   desiredRetention: number;
   due: number;
+  upcoming: number;
 }
 
 export interface ReschedulePreviewResponse {
   currentDue: number;
+  // Cards not due now that come due within upcomingDays after today's cutoff.
+  currentUpcoming: number;
+  upcomingDays: number;
   // The first option is always the saved desired retention.
   options: ReschedulePreviewOption[];
 }
@@ -678,6 +742,7 @@ export interface CompleteGoogleRegistrationRequest {
   username: string;
   tosAccepted: boolean;
   receiveNewsletter: boolean;
+  signupSource?: import('~/utils/firstTouch').SignupSource;
 }
 
 export interface UserMetadata {
@@ -833,6 +898,8 @@ export interface UserAccomplishment {
   completedDeckCount: number;
   completedUnitCount: number;
   totalCharacterCount: number;
+  /** Characters entered on in-progress and dropped entries; not part of totalCharacterCount. */
+  unfinishedCharacterCount: number;
   totalWordCount: number;
   uniqueWordCount: number;
   uniqueWordUsedOnceCount: number;
@@ -1573,6 +1640,7 @@ export interface StudySettingsDto {
   showKeybinds: boolean;
   showElapsedTime: boolean;
   enableSwipeGesture: boolean;
+  swipeVibration: boolean;
   countFailedReviews: boolean;
   showCardStatus: boolean;
   showFuriganaOnFront: boolean;

@@ -69,6 +69,17 @@ public class DerivationRedundancyTests(JitenWebApplicationFactory factory)
             await jitenDb.SaveChangesAsync();
         }
 
+        await jitenDb.WordFormFrequencies.ExecuteDeleteAsync();
+        jitenDb.WordFormFrequencies.AddRange(
+            new JmDictWordFormFrequency
+            {
+                WordId = Tsuyoi, ReadingIndex = 0, FrequencyRank = 1, UsedInMediaAmount = 1, ObservedFrequency = 0.1
+            },
+            new JmDictWordFormFrequency
+            {
+                WordId = Tsuyosa, ReadingIndex = 0, FrequencyRank = 2, UsedInMediaAmount = 1, ObservedFrequency = 0.1
+            });
+
         await jitenDb.WordDerivations.ExecuteDeleteAsync();
         jitenDb.WordDerivations.AddRange([
             ..FormClosure(Tsuyoi, Tsuyosa, DerivationCategory.SaNominal),
@@ -512,6 +523,35 @@ public class DerivationRedundancyTests(JitenWebApplicationFactory factory)
         await SeedStaticStudyDeck((Tsuyosa, 0));
 
         (await GetNewCards()).Should().Contain((Tsuyosa, (byte)0));
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData("[\"adj-i\"]")]
+    public async Task FrequencyDeckOverview_CountsDerivationCoveredFormsAsTracked(string? posFilter)
+    {
+        await SetCategories(SaKey);
+        await SeedCard(Tsuyoi, 0, FsrsState.Mastered);
+
+        var add = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks")
+                                          .WithUser(TestUsers.UserA)
+                                          .WithJsonContent(new
+                                          {
+                                              deckType = (int)StudyDeckType.GlobalDynamic, name = "Top 2", order = 2,
+                                              minGlobalFrequency = 1, maxGlobalFrequency = 2, posFilter
+                                          }));
+        add.EnsureSuccessStatusCode();
+        var deckId = (await add.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("userStudyDeckId").GetInt32();
+
+        var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/srs/study-decks")
+                                                   .WithUser(TestUsers.UserA));
+        response.EnsureSuccessStatusCode();
+        var deck = (await response.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray()
+                                                                            .Single(d => d.GetProperty("userStudyDeckId").GetInt32() == deckId);
+
+        deck.GetProperty("totalWords").GetInt32().Should().Be(2);
+        deck.GetProperty("unseenCount").GetInt32().Should().Be(0);
+        deck.GetProperty("masteredCount").GetInt32().Should().Be(2);
     }
 
     [Fact]

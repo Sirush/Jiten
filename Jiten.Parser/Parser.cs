@@ -717,6 +717,9 @@ namespace Jiten.Parser
             return fallback;
         }
 
+        /// <summary>JMdict entries with their forms, served from the parser's cache. Requires a prior ParseText call.</summary>
+        public static Task<Dictionary<int, JmDictWord>> GetWordsAsync(IEnumerable<int> wordIds) => GetWordsWithCache(wordIds, null);
+
         public static async Task<List<DeckWord>> ParseText(IDbContextFactory<JitenDbContext> contextFactory, string text,
                                                            bool preserveStopToken = false,
                                                            ParserDiagnostics? diagnostics = null)

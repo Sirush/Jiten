@@ -16,6 +16,7 @@
   import { deckHasStatData, isDefaultMediaCardStatColumns, mediaCardStatColumns, type MediaCardStatId } from '~/utils/mediaCardStats';
   import { DEFAULT_MEDIA_CARD_SECTION_LAYOUT, type MediaCardSectionId } from '~/utils/mediaCardSections';
   import { getDifficultyName } from '~/utils/difficultyColours';
+  import { entryProgressLabel, listEntryFacts, mediaWords } from '~/utils/mediaListEntry';
 
   const props = defineProps<{
     deck: Deck;
@@ -28,11 +29,14 @@
     lazyCover?: boolean;
     // Guest homepage demo: shows the coverage bars without an authenticated user; hides rating and download to keep the card short.
     demoCoverage?: boolean;
+    /** Opens the study dialog once mounted, for a visitor coming back from sign-up through the guest Study button. */
+    openStudy?: boolean;
+    readOnlyList?: boolean;
   }>();
 
   const emit = defineEmits<{
     'update:deck': [deck: Deck];
-    'parent-status-changed': [parentDeckId: number, status: DeckStatus];
+    'status-menu': [open: boolean];
   }>();
 
   const showDownloadDialog = ref(false);
@@ -40,11 +44,10 @@
   const showIssueDialog = ref(false);
   const isDescriptionExpanded = ref(false);
   const showIgnoreOverlay = ref(false);
-  const showCompletionDialog = ref(false);
-  const completionSuggestions = ref<import('~/types/types').ComparisonSuggestionDto[]>([]);
-  const completionComparisonIndex = ref(0);
+  const historyDeck = useHistoryDialogDeck();
   const menu = ref();
   const statusPopover = ref();
+  const statusPillTooltip = ref<{ hide: () => void }>();
   const difficultyRef = ref<{ tooltip: string }>();
   // A string ref inside the stat v-for would collect an array; the function form keeps the single instance.
   const setDifficultyRef = (el: unknown) => {
@@ -96,7 +99,9 @@
   const deckDifficulty = computed(() => props.deck.difficultyRaw ?? props.deck.difficulty);
   const readingSpeed = computed(() => store.readingSpeedFor(deckDifficulty.value));
   const readingSpeedLabel = computed(() =>
-    store.readingSpeedByDifficulty && deckDifficulty.value >= 0 ? `your reading speed for ${getDifficultyName(deckDifficulty.value)} titles` : 'your reading speed'
+    store.readingSpeedByDifficulty && deckDifficulty.value >= 0
+      ? `your reading speed for ${getDifficultyName(deckDifficulty.value)} titles`
+      : 'your reading speed'
   );
   const readingDuration = computed(() => Math.round(props.deck.characterCount / readingSpeed.value));
   const speechSpeed = computed(() => props.deck.speechSpeed ?? 0);
@@ -159,7 +164,6 @@
     toggleFavourite,
     toggleIgnore: _toggleIgnore,
     cancelIgnore: _cancelIgnore,
-    setStatus,
   } = useDeckPreference(
     () => props.deck,
     (updated) => emit('update:deck', updated)
@@ -177,35 +181,13 @@
     showIgnoreOverlay.value = false;
   };
 
-  const { fetchSuggestions, fetchRating } = useDifficultyVotes();
-  const completionVoteTimestamps = ref<number[]>([]);
-  const existingRating = ref<number | null>(null);
-  const showCalibrationBanner = ref(false);
-  let calibrationTimer: ReturnType<typeof setTimeout> | undefined;
+  const { openRatingDialog } = useCompletionFollowUp();
 
-  watch(showCompletionDialog, (newVal, oldVal) => {
-    if (oldVal && !newVal && Math.random() < 0.25) {
-      showCalibrationBanner.value = true;
-      clearTimeout(calibrationTimer);
-      calibrationTimer = setTimeout(() => {
-        showCalibrationBanner.value = false;
-      }, 8000);
-    }
+  onMediaListChange((change) => {
+    if (props.readOnlyList) return;
+    const updated = applyMediaListChange(props.deck, change);
+    if (updated !== props.deck) emit('update:deck', updated);
   });
-
-  const ratingDeckId = ref(props.deck.deckId);
-
-  const openRatingDialog = async (deckId?: number) => {
-    ratingDeckId.value = deckId ?? props.deck.deckId;
-    existingRating.value = null;
-    showCompletionDialog.value = true;
-    completionComparisonIndex.value = 0;
-    const [rating, suggestions] = await Promise.all([fetchRating(ratingDeckId.value), fetchSuggestions(ratingDeckId.value)]);
-    existingRating.value = rating;
-    completionSuggestions.value = suggestions
-      .slice(0, 2)
-      .map((pair) => (pair.deckA.id === ratingDeckId.value ? pair : { deckA: pair.deckB, deckB: pair.deckA }));
-  };
 
   const { $api } = useNuxtApp();
 
@@ -253,63 +235,6 @@
     }
   };
 
-  const completeParentDeck = async (parentDeckId: number) => {
-    await $api(`/user/deck-preferences/${parentDeckId}/status`, {
-      method: 'POST',
-      body: { status: DeckStatus.Completed },
-    });
-    emit('parent-status-changed', parentDeckId, DeckStatus.Completed);
-    if (authStore.isAuthenticated) {
-      const rating = await fetchRating(parentDeckId);
-      if (rating == null) openRatingDialog(parentDeckId);
-    }
-  };
-
-  const handleMarkCompleted = async () => {
-    const response = await setStatus(DeckStatus.Completed);
-    if (response && props.deck.parentDeckId) showUnitReport();
-
-    if (response?.parentDeckId != null && response.parentStatus != null) {
-      emit('parent-status-changed', response.parentDeckId, response.parentStatus);
-    }
-
-    if (response?.allChildrenCompleted && response.parentDeckId != null) {
-      confirm.require({
-        message: 'All entries in this series are completed. Mark the series as completed too?',
-        header: 'Complete Series',
-        icon: 'pi pi-check-circle',
-        acceptLabel: 'Yes, complete it',
-        rejectLabel: "No, it's still ongoing",
-        rejectProps: { severity: 'secondary' },
-        accept: () => completeParentDeck(response.parentDeckId!),
-      });
-      return;
-    }
-
-    if (authStore.isAuthenticated && !props.deck.parentDeckId) {
-      const rating = await fetchRating(props.deck.deckId);
-      if (rating == null) openRatingDialog();
-    }
-  };
-
-  // Fire-and-forget: the status change already happened, the report is a bonus and free users get nothing back.
-  async function showUnitReport() {
-    if (!isPlusUser.value) return;
-    await smartDeck.fetchStatus();
-    if (!smartDeck.exists.value) return;
-    const report = await smartDeck.fetchUnitReport(props.deck.deckId);
-    if (!report) return;
-    toast.add({ severity: 'info', summary: 'Smart Deck', detail: smartDeck.unitReportSentence(report, localiseTitle(props.deck)), life: 6000 });
-  }
-
-  const completionCurrentPair = computed(() =>
-    completionComparisonIndex.value < completionSuggestions.value.length ? completionSuggestions.value[completionComparisonIndex.value] : null
-  );
-
-  const advanceCompletion = () => {
-    completionComparisonIndex.value++;
-  };
-
   const menuItems = computed(() => [
     {
       label: props.deck.isIgnored ? 'Unignore' : 'Ignore',
@@ -319,10 +244,14 @@
     {
       label: 'Rate difficulty',
       icon: 'pi pi-gauge',
-      visible: props.deck.status === DeckStatus.Completed && !props.deck.parentDeckId,
-      command: () => {
-        openRatingDialog();
-      },
+      visible: !props.readOnlyList && (props.deck.status === DeckStatus.Completed || !!props.deck.listEntry?.completedCount) && !props.deck.parentDeckId,
+      command: () => openRatingDialog(props.deck.deckId, localiseTitle(props.deck)),
+    },
+    {
+      label: mediaWords(props.deck.mediaType).historyTitle,
+      icon: 'pi pi-history',
+      visible: !props.readOnlyList && canOpenHistory.value,
+      command: () => openHistory(),
     },
     {
       label: 'Refresh coverage',
@@ -363,7 +292,7 @@
     {
       label: 'Include in Smart Deck',
       icon: 'pi pi-plus-circle',
-      visible: smartMenuVisible.value && smartSourceState.value === 'none' && props.deck.status !== DeckStatus.Ongoing,
+      visible: smartMenuVisible.value && !props.readOnlyList && smartSourceState.value === 'none' && props.deck.status !== DeckStatus.Ongoing,
       command: () => applySmartAction('include'),
     },
   ]);
@@ -372,14 +301,60 @@
 
   const currentStatus = computed(() => props.deck.status ?? DeckStatus.None);
 
-  const toggleStatusPopover = (event: Event) => statusPopover.value?.toggle(event);
-
-  const chooseStatus = async (status: DeckStatus) => {
-    statusPopover.value?.hide();
-    if (status === currentStatus.value) return;
-    if (status === DeckStatus.Completed) await handleMarkCompleted();
-    else await setStatus(status);
+  const statusPopoverOpen = ref(false);
+  const { menu: statusMenu, rememberTrigger, restoreFocus, focusList } = useMenuFocus();
+  const toggleStatusPopover = (event: Event, hideTooltip: () => void) => {
+    hideTooltip();
+    rememberTrigger(event);
+    statusPopover.value?.toggle(event);
   };
+
+  const onStatusPopoverShow = () => {
+    statusPillTooltip.value?.hide();
+    statusPopoverOpen.value = true;
+    emit('status-menu', true);
+    void focusList();
+  };
+
+  const onStatusPopoverHide = () => {
+    restoreFocus();
+    statusFlow.reset();
+    statusPopoverOpen.value = false;
+    emit('status-menu', false);
+  };
+
+  const statusFlow = useStatusFlow(() => props.deck, { close: () => statusPopover.value?.hide(), isOpen: () => statusPopoverOpen.value });
+  watch(statusFlow.step, (step) => {
+    if (step === 'list' && statusPopoverOpen.value) void focusList();
+  });
+
+  const progressLabel = computed(() => entryProgressLabel(props.deck.listEntry, props.deck.characterCount));
+  const showLogProgress = computed(() => currentStatus.value === DeckStatus.Ongoing);
+
+  const listEntryLine = computed(() =>
+    props.deck.listEntry && currentStatus.value !== DeckStatus.None ? listEntryFacts(props.deck.listEntry, props.deck.mediaType, props.deck.characterCount) : []
+  );
+
+  const canOpenHistory = computed(() => currentStatus.value !== DeckStatus.None || !!props.deck.listEntry);
+
+  const openHistory = () => {
+    statusPopover.value?.hide();
+    historyDeck.value = props.deck;
+  };
+
+  const statusTooltip = computed(() => {
+    if (currentStatus.value === DeckStatus.None) return 'Set status';
+    const fact = listEntryLine.value[0];
+    if (!props.isCompact) return fact ?? 'Set status';
+    const status = getDeckStatusText(currentStatus.value);
+    return fact ? `${status}, ${fact.charAt(0).toLowerCase()}${fact.slice(1)}` : status;
+  });
+
+  const statusButtonLabel = computed(() => {
+    if (currentStatus.value === DeckStatus.None) return 'Set status';
+    const status = `Status: ${getDeckStatusText(currentStatus.value)}`;
+    return currentStatus.value === DeckStatus.Ongoing && progressLabel.value ? `${status}, ${progressLabel.value}` : status;
+  });
 
   const statusColor = computed(() => {
     if (!props.deck.status || props.deck.status === DeckStatus.None) return '';
@@ -424,6 +399,21 @@
     const el = titleBoxRef.value;
     if (el) isTitleClipped.value = el.scrollHeight > el.clientHeight + 1;
   };
+
+  const guestStudyPopoverActive = ref(false);
+  const guestStudyPopover = ref<{ show: (event: Event, target?: HTMLElement) => void } | null>(null);
+
+  async function onGuestStudy(event: MouseEvent) {
+    const target = event.currentTarget as HTMLElement;
+    trackEvent('guest_locked_control_clicked', { control: 'study' });
+    guestStudyPopoverActive.value = true;
+    await nextTick();
+    guestStudyPopover.value?.show({ currentTarget: target } as unknown as Event, target);
+  }
+
+  onMounted(() => {
+    if (props.openStudy && authStore.isAuthenticated) showStudyDeckDialog.value = true;
+  });
 
   onMounted(() => {
     if (!props.isCompact) return;
@@ -514,7 +504,7 @@
               <div v-if="authStore.isAuthenticated && deck.isIgnored" class="flex items-center pr-1.5">
                 <i class="pi pi-eye-slash text-gray-800 dark:text-gray-300 text-lg" />
               </div>
-              <Tooltip v-if="authStore.isAuthenticated" :content="deck.isFavourite ? 'Remove from favourites' : 'Add to favourites'">
+              <Tooltip v-if="authStore.isAuthenticated && !readOnlyList" :content="deck.isFavourite ? 'Remove from favourites' : 'Add to favourites'">
                 <button
                   type="button"
                   class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
@@ -525,17 +515,29 @@
                   <i :class="deck.isFavourite ? 'pi pi-star-fill text-yellow-500' : 'pi pi-star utility-icon'" />
                 </button>
               </Tooltip>
-              <Tooltip v-if="authStore.isAuthenticated" :content="isCompact && currentStatus !== DeckStatus.None ? getDeckStatusText(currentStatus) : 'Set status'">
+              <Tooltip
+                v-if="authStore.isAuthenticated && !readOnlyList"
+                ref="statusPillTooltip"
+                v-slot="{ hide }"
+                :content="statusPopoverOpen ? '' : statusTooltip"
+              >
                 <button
                   type="button"
                   class="flex items-center gap-1 p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                   aria-haspopup="true"
-                  :aria-label="currentStatus === DeckStatus.None ? 'Set status' : `Status: ${getDeckStatusText(currentStatus)}`"
-                  @click="toggleStatusPopover"
+                  :aria-expanded="statusPopoverOpen"
+                  :aria-label="statusButtonLabel"
+                  @click="toggleStatusPopover($event, hide)"
                 >
                   <i :class="['pi', currentStatus === DeckStatus.None ? 'pi-flag utility-icon' : `pi-flag-fill ${statusColor}`]" />
                   <span v-if="!isCompact && currentStatus !== DeckStatus.None" :class="['text-sm font-bold leading-none', statusColor]">
                     {{ getDeckStatusText(currentStatus) }}
+                  </span>
+                  <span
+                    v-if="currentStatus === DeckStatus.Ongoing && progressLabel"
+                    class="text-xs font-semibold leading-none tabular-nums text-gray-600 dark:text-gray-300"
+                  >
+                    {{ progressLabel }}
                   </span>
                 </button>
               </Tooltip>
@@ -662,7 +664,9 @@
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                             <span class="@xl:hidden">Characters</span><span class="hidden @xl:inline">Character count</span>
                           </span>
-                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.characterCount.toLocaleString() }}</span>
+                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
+                            deck.characterCount.toLocaleString()
+                          }}</span>
                         </div>
                         <div v-else-if="statId === 'wordCount'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Word count</span>
@@ -734,7 +738,9 @@
                         </div>
                         <div v-else-if="statId === 'dialogue'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Dialogue</span>
-                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.dialoguePercentage.toFixed(1) }}%</span>
+                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap"
+                            >{{ deck.dialoguePercentage.toFixed(1) }}%</span
+                          >
                         </div>
                         <template v-else-if="statId === 'children'">
                           <router-link
@@ -881,6 +887,16 @@
                           @click="showStudyDeckDialog = true"
                         />
                       </Tooltip>
+                      <Tooltip v-else-if="!demoCoverage" :content="isCompact ? 'Study with SRS (free account)' : ''">
+                        <Button
+                          :label="isCompact ? undefined : 'Study'"
+                          :aria-label="isCompact ? 'Study with SRS (free account)' : undefined"
+                          icon="pi pi-play"
+                          size="small"
+                          class="text-center"
+                          @click="onGuestStudy"
+                        />
+                      </Tooltip>
                       <Tooltip v-if="!demoCoverage" content="Download / Learn">
                         <!-- Label shortens rather than wrapping: a two-line label makes this button taller than its row. -->
                         <Button :icon="isCompact ? 'pi pi-download' : undefined" size="small" class="text-center" @click="showDownloadDialog = true">
@@ -917,6 +933,13 @@
     </div>
 
     <LazyMediaDeckDownloadDialog v-if="showDownloadDialog" :deck="deck" :visible="showDownloadDialog" @update:visible="showDownloadDialog = $event" />
+    <GuestAccountPopover
+      v-if="guestStudyPopoverActive"
+      ref="guestStudyPopover"
+      message="Study the vocabulary in this title with Jiten, an user-friendly SRS experience with extensive customisation, powered by the modern FSRS-7 algorithm."
+      prompt="study_button"
+      :redirect="`/decks/media/${deck.deckId}/detail?study=1`"
+    />
     <LazySrsAddDeckDialog v-if="showStudyDeckDialog" :visible="showStudyDeckDialog" :preselected-deck="deck" @update:visible="showStudyDeckDialog = $event" />
     <LazyReportIssueDialog v-if="showIssueDialog" :visible="showIssueDialog" :deck="deck" @update:visible="showIssueDialog = $event" />
 
@@ -934,74 +957,49 @@
         </a>
       </template>
     </TieredMenu>
-    <Popover v-if="authStore.isAuthenticated" ref="statusPopover" :pt="{ content: { class: 'p-1' } }">
-      <div class="flex flex-col min-w-36" role="menu" aria-label="Set status">
-        <button
-          v-for="option in statusOptions"
-          :key="option"
-          type="button"
-          role="menuitemradio"
-          :aria-checked="option === currentStatus"
-          class="flex items-center justify-between gap-3 px-3 py-1.5 rounded text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer"
-          :class="option === currentStatus ? 'font-bold' : ''"
-          @click="chooseStatus(option)"
-        >
-          <span>{{ getDeckStatusText(option) }}</span>
-          <i v-if="option === currentStatus" class="pi pi-check text-xs" />
-        </button>
+    <Popover v-if="authStore.isAuthenticated" ref="statusPopover" :pt="{ content: { class: 'p-1' } }" @show="onStatusPopoverShow" @hide="onStatusPopoverHide">
+      <div ref="statusMenu">
+        <StatusFlowSteps :deck="deck" :flow="statusFlow" @open-history="openHistory">
+          <div class="flex flex-col min-w-36">
+            <template v-if="canOpenHistory">
+              <div v-if="listEntryLine.length" class="flex flex-col gap-0.5 px-3 pt-1.5 pb-1 text-xs tabular-nums text-gray-600 dark:text-gray-300">
+                <span v-for="fact in listEntryLine" :key="fact">{{ fact }}</span>
+              </div>
+              <button
+                type="button"
+                class="flex items-center justify-between gap-3 px-3 py-1.5 rounded text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:bg-gray-100 dark:focus-visible:bg-gray-700 transition-colors cursor-pointer"
+                :class="showLogProgress ? 'font-semibold text-primary-700 dark:text-primary-300' : ''"
+                @click="showLogProgress ? statusFlow.goTo('progress') : openHistory()"
+              >
+                <span class="flex items-center gap-2">
+                  <i :class="['pi text-xs', showLogProgress ? 'pi-pen-to-square' : 'pi-history']" aria-hidden="true" />
+                  {{ showLogProgress ? 'Log progress' : mediaWords(deck.mediaType).historyTitle }}
+                </span>
+                <i class="pi pi-chevron-right text-[10px]" aria-hidden="true" />
+              </button>
+              <div class="my-1 border-t border-gray-200 dark:border-gray-700" role="separator" />
+            </template>
+            <div class="flex flex-col" role="menu" aria-label="Set status">
+              <button
+                v-for="option in statusOptions"
+                :key="option"
+                type="button"
+                role="menuitemradio"
+                :aria-checked="option === currentStatus"
+                class="flex items-center justify-between gap-3 px-3 py-1.5 rounded text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default"
+                :class="option === currentStatus ? 'font-bold' : ''"
+                :disabled="statusFlow.busy.value"
+                @click="statusFlow.choose(option)"
+              >
+                <span>{{ getDeckStatusText(option) }}</span>
+                <i v-if="option === currentStatus" class="pi pi-check text-xs" />
+              </button>
+            </div>
+          </div>
+        </StatusFlowSteps>
       </div>
     </Popover>
     <LoadingOverlay :visible="isRefreshingCoverage" message="Refreshing coverage…" />
-
-    <Dialog
-      v-if="showCompletionDialog"
-      v-model:visible="showCompletionDialog"
-      modal
-      header="Rate Difficulty"
-      class="w-full"
-      style="max-width: 40rem"
-      :closable="true"
-    >
-      <div class="flex flex-col gap-6">
-        <div>
-          <p class="text-sm text-muted-color mb-2">
-            How difficult did you find <strong>{{ ratingDeckId === deck.deckId ? localiseTitle(deck) : 'this series' }}</strong
-            >?
-          </p>
-          <LazyDifficultyRating :deck-id="ratingDeckId" :current-rating="existingRating" @rated="() => {}" />
-        </div>
-
-        <template v-if="completionSuggestions.length > 0">
-          <Divider />
-          <div v-if="completionCurrentPair">
-            <p class="text-sm text-muted-color mb-2">Compare with other media you've completed:</p>
-            <LazyDifficultyComparison
-              :deck-a="completionCurrentPair.deckA"
-              :deck-b="completionCurrentPair.deckB"
-              :vote-timestamps="completionVoteTimestamps"
-              @voted="advanceCompletion"
-              @skipped="advanceCompletion"
-            />
-          </div>
-          <div v-else class="flex flex-col items-center gap-3 py-6">
-            <i class="pi pi-check-circle text-green-500 text-4xl" />
-            <p class="text-sm text-muted-color text-center">
-              Thanks for helping refine the difficulties! <br />
-              <NuxtLink to="/ratings" target="_blank" class="text-primary-500 hover:underline font-semibold"> Compare more media → </NuxtLink>
-            </p>
-          </div>
-        </template>
-
-        <div class="flex justify-end items-center pt-2">
-          <Button label="Done" severity="secondary" @click="showCompletionDialog = false" />
-        </div>
-      </div>
-    </Dialog>
-
-    <Message v-if="showCalibrationBanner" severity="info" :closable="true" class="mt-2" @close="showCalibrationBanner = false">
-      Help refine the difficulties -
-      <NuxtLink to="/ratings" class="font-semibold underline" target="_blank">compare more media</NuxtLink>
-    </Message>
   </div>
 </template>
 

@@ -149,10 +149,11 @@
       if (recaptchaEnabled && !recaptchaResponse.value) {
         throw new Error('Please complete the reCAPTCHA.');
       }
-      await $api('/auth/register', { method: 'POST', body: { ...form, recaptchaResponse: recaptchaResponse.value || '' } });
+      const signupSource = currentSignupSource();
+      await $api('/auth/register', { method: 'POST', body: { ...form, recaptchaResponse: recaptchaResponse.value || '', signupSource } });
       registeredEmail.value = form.email.trim();
       registered.value = true;
-      trackEvent('signup_completed', { method: 'email' });
+      trackSignupCompleted('email', signupSource);
       markPendingSignup('email');
     } catch (err) {
       const data = (err as { response?: { _data?: { message?: string; errors?: string[] } } }).response?._data;

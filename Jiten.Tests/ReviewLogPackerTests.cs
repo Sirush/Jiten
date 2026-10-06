@@ -173,4 +173,40 @@ public class ReviewLogPackerTests
         ReviewLogPacker.IsTruncated(packed.Logs).Should().BeTrue();
         ReviewLogPacker.Unpack(packed.Logs!, packed.FirstReview!.Value).Should().HaveCount(3);
     }
+
+    [Fact]
+    public void RoundTrip_PreservesReviewState()
+    {
+        var reviews = new[]
+        {
+            new PackedReview(FsrsRating.Good, Base, 1000, FsrsState.Learning),
+            new PackedReview(FsrsRating.Again, Base.AddDays(1), 1000, FsrsState.Review),
+            new PackedReview(FsrsRating.Good, Base.AddDays(1).AddMinutes(10), 1000, FsrsState.Relearning),
+            new PackedReview(FsrsRating.Easy, Base.AddDays(3), 1000),
+        };
+
+        var packed = ReviewLogPacker.Pack(reviews);
+        var unpacked = ReviewLogPacker.Unpack(packed.Logs!, packed.FirstReview!.Value);
+
+        unpacked.Select(r => r.State).Should().Equal(FsrsState.Learning, FsrsState.Review, FsrsState.Relearning, null);
+        unpacked.Select(r => r.Rating).Should().Equal(FsrsRating.Good, FsrsRating.Again, FsrsRating.Good, FsrsRating.Easy);
+    }
+
+    [Fact]
+    public void Unpack_BlobWithoutState_ReadsStateAsUnknown()
+    {
+        var packed = ReviewLogPacker.Pack(Series(3));
+
+        ReviewLogPacker.Unpack(packed.Logs!, packed.FirstReview!.Value).Should().OnlyContain(r => r.State == null);
+    }
+
+    [Fact]
+    public void Unpack_InvalidState_Throws()
+    {
+        var packed = ReviewLogPacker.Pack(Series(3));
+        packed.Logs![8 + 4] = (byte)(packed.Logs[8 + 4] | 0x70);
+
+        var act = () => ReviewLogPacker.Unpack(packed.Logs, packed.FirstReview!.Value);
+        act.Should().Throw<InvalidDataException>().WithMessage("*state 6*");
+    }
 }

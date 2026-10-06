@@ -17,6 +17,7 @@ using Jiten.Core.Data;
 using Jiten.Core.Data.Billing;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.JMDict;
+using Jiten.Core.Difficulty;
 using Jiten.Core.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -63,6 +64,12 @@ public class MediaDeckController(
         public Deck Deck { get; set; } = null!;
         public int Occurrences { get; set; }
     }
+    private async Task ApplyViewerListEntriesAsync(List<DeckDto> dtos)
+    {
+        if (currentUserService.IsAuthenticated)
+            await MediaListEntryHelper.ApplyListEntriesAsync(userContext, context, currentUserService.UserId!, dtos);
+    }
+
     /// <summary>Fills ChildrenDeckCount with one grouped count instead of loading every child row.</summary>
     private async Task ApplyChildDeckCountsAsync(List<DeckDto> dtos)
     {
@@ -1118,6 +1125,7 @@ public class MediaDeckController(
         }
 
         await ApplyChildDeckCountsAsync(dtos);
+        await ApplyViewerListEntriesAsync(dtos);
         return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset ?? 0);
     }
 
@@ -1221,6 +1229,7 @@ public class MediaDeckController(
             coverages.ApplyTo(dtos);
 
             await ApplyChildDeckCountsAsync(dtos);
+            await ApplyViewerListEntriesAsync(dtos);
             return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset);
         }
         else
@@ -1254,6 +1263,7 @@ public class MediaDeckController(
             coverages.ApplyTo(dtos);
 
             await ApplyChildDeckCountsAsync(dtos);
+            await ApplyViewerListEntriesAsync(dtos);
             return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset);
         }
     }
@@ -1554,6 +1564,7 @@ public class MediaDeckController(
         }
 
         await ApplyChildDeckCountsAsync(dtos);
+        await ApplyViewerListEntriesAsync(dtos);
         return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset);
     }
 
@@ -1919,10 +1930,7 @@ public class MediaDeckController(
 
         if (hideCompleted && currentUserService.IsAuthenticated)
         {
-            var completedIds = await userContext.UserDeckPreferences.AsNoTracking()
-                                                .Where(p => p.UserId == currentUserService.UserId && p.Status == DeckStatus.Completed)
-                                                .Select(p => p.DeckId)
-                                                .ToListAsync();
+            var completedIds = await MediaListEntryHelper.CompletedDeckIds(userContext, currentUserService.UserId!).ToListAsync();
             if (completedIds.Count > 0)
                 subDecks = subDecks.Where(d => !completedIds.Contains(d.DeckId));
         }
@@ -2057,6 +2065,8 @@ public class MediaDeckController(
                     subdeckDto.IsIgnored = pref.IsIgnored;
                 }
             }
+
+            await MediaListEntryHelper.ApplyListEntriesAsync(userContext, context, userId, [mainDeckDto, ..subdeckDtos]);
         }
 
         var parentDeckDto = parentDeck != null ? new DeckDto(parentDeck) : null;
@@ -2850,12 +2860,16 @@ public class MediaDeckController(
         if (difficulty == null)
             return NotFound();
 
+        // Stored values are on the raw model scale; clients get them on the same scale as the deck difficulty.
+        decimal Shifted(decimal value) => AlgorithmAdjustmentCalculator.Apply(value, difficulty.AlgorithmAdjustment);
+
         return new DeckDifficultyDto
                {
-                   Difficulty = difficulty.Difficulty, Peak = difficulty.Peak, Deciles = difficulty.Deciles,
+                   Difficulty = Shifted(difficulty.Difficulty), Peak = Shifted(difficulty.Peak),
+                   Deciles = difficulty.Deciles.ToDictionary(kvp => kvp.Key, kvp => Shifted(kvp.Value)),
                    Progression = difficulty.Progression.Select(p => new ProgressionSegmentDto
                                                                     {
-                                                                        Segment = p.Segment, Difficulty = p.Difficulty, Peak = p.Peak,
+                                                                        Segment = p.Segment, Difficulty = Shifted(p.Difficulty), Peak = Shifted(p.Peak),
                                                                         ChildStartOrder = p.ChildStartOrder, ChildEndOrder = p.ChildEndOrder
                                                                     }).ToList(),
                    LastUpdated = difficulty.LastUpdated,

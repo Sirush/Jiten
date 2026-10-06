@@ -43,6 +43,9 @@ public class DeckDifficulty
     /// <summary>Zero while the votes fail the confidence gate, i.e. they are recorded but not yet applied.</summary>
     public decimal AdjustmentConfidence { get; set; }
 
+    /// <summary>Shift from the raw model score to the algorithmic score; child decks carry their root deck's value.</summary>
+    public decimal AlgorithmAdjustment { get; set; }
+
     public DateTimeOffset LastUpdated { get; set; } = DateTimeOffset.UtcNow;
 
     [JsonIgnore]

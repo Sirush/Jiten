@@ -725,7 +725,7 @@ public partial class UserController(
         => processedPairs.TryGetValue((card.WordId, card.ReadingIndex), out var processed)
             ? processed.AllReviewLogs
                        .Where(l => l.Rating is >= FsrsRating.Again and <= FsrsRating.Easy)
-                       .Select(l => new PackedReview(l.Rating, l.ReviewDateTime, l.ReviewDuration))
+                       .Select(l => new PackedReview(l.Rating, l.ReviewDateTime, l.ReviewDuration, l.State))
                        .ToList()
             : [];
 
@@ -765,7 +765,8 @@ public partial class UserController(
                             {
                                 Rating = l.Rating,
                                 ReviewDateTime = DateTimeOffset.FromUnixTimeSeconds(l.ReviewDateTime).UtcDateTime,
-                                ReviewDuration = l.ReviewDuration
+                                ReviewDuration = l.ReviewDuration,
+                                State = l.State
                             }).ToList();
 
     private static int CountLapsesFromLogs(List<FsrsReviewLogExportDto> logs, FsrsScheduler scheduler)
@@ -911,7 +912,7 @@ public partial class UserController(
             var reviews = dto.ReviewLogs
                              .Select(l => new PackedReview(l.Rating,
                                                            DateTimeOffset.FromUnixTimeSeconds(l.ReviewDateTime).UtcDateTime,
-                                                           l.ReviewDuration));
+                                                           l.ReviewDuration, l.State));
             var packed = ReviewLogPacker.Pack(reviews);
 
             var incoming = new FsrsCardArchive
@@ -1927,7 +1928,7 @@ public partial class UserController(
                     mergedLogs.Add(new FsrsReviewLog
                                    {
                                        CardId = card.CardId, Rating = log.Rating, ReviewDateTime = log.ReviewDateTime,
-                                       ReviewDuration = log.ReviewDuration,
+                                       ReviewDuration = log.ReviewDuration, State = log.State,
                                    });
                 }
 
@@ -2290,12 +2291,32 @@ public partial class UserController(
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
-        var outcome = await DeckPreferenceHelper.ApplyStatusesAsync(userContext, userId, [(deckId, request.Status)],
-                                                                    overwriteExisting: true, skipIgnored: false);
+        if (request.Date is { } requested && !MediaListEntryHelper.IsAllowedDate(requested))
+            return Results.BadRequest(new { message = DateOutOfRangeMessage });
+
+        DateOnly? date = request.DateUnknown ? null : request.Date ?? DateOnly.FromDateTime(DateTime.UtcNow);
+        var deck = await jitenContext.Decks.AsNoTracking()
+                                     .Where(d => d.DeckId == deckId)
+                                     .Select(d => new
+                                                  {
+                                                      d.ParentDeckId,
+                                                      Parent = d.ParentDeck == null
+                                                          ? null
+                                                          : new { d.ParentDeck.OriginalTitle, d.ParentDeck.RomajiTitle, d.ParentDeck.EnglishTitle }
+                                                  })
+                                     .FirstOrDefaultAsync();
+        var previous = await TakeSnapshotsAsync(userId, deck?.ParentDeckId is { } seriesDeckId ? [deckId, seriesDeckId] : [deckId]);
+        var outcome = await DeckPreferenceHelper.ApplyStatusesAsync(userContext, jitenContext, userId, [(deckId, request.Status)],
+                                                                    overwriteExisting: true, skipIgnored: false,
+                                                                    date, request.NewEntry, request.UndoCompletion);
+        if (outcome.SkippedFull > 0)
+            return Results.BadRequest(new { message = MediaListEntryHelper.HistoryFullMessage });
+
         var preference = outcome.Preferences[deckId];
+        await SnapshotCoverageAtFinishAsync(userId, [preference.CurrentEntry]);
         await userContext.SaveChangesAsync();
 
-        if (outcome.CompletedTransition)
+        if (outcome.TotalsChanged)
         {
             backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserAccomplishments(userId));
         }
@@ -2304,14 +2325,10 @@ public partial class UserController(
         int? parentDeckId = null;
         DeckStatus? parentStatus = null;
         bool allChildrenCompleted = false;
-        var deck = await jitenContext.Decks.AsNoTracking()
-                                     .Where(d => d.DeckId == deckId)
-                                     .Select(d => new { d.ParentDeckId })
-                                     .FirstOrDefaultAsync();
 
         if (deck?.ParentDeckId != null)
         {
-            var result = await UpdateParentDeckStatus(userId, deck.ParentDeckId.Value, request.Status);
+            var result = await UpdateParentDeckStatus(userId, deck.ParentDeckId.Value, request.Status, date, changedVolumeIds: [deckId]);
             parentDeckId = result.ParentDeckId;
             parentStatus = result.ParentStatus;
             allChildrenCompleted = result.AllChildrenCompleted;
@@ -2321,66 +2338,88 @@ public partial class UserController(
 
         await smartDeckDirty.MarkDirty(userId);
 
-        return Results.Ok(new { preference.DeckId, preference.Status, preference.IsFavourite, preference.IsIgnored, parentDeckId, parentStatus, allChildrenCompleted });
+        var listEntry = preference.Status == DeckStatus.None
+            ? null
+            : (await MediaListEntryHelper.BuildSummariesAsync(userContext, jitenContext, userId, [deckId], [deckId])).GetValueOrDefault(deckId);
+
+        return Results.Ok(new
+                          {
+                              preference.DeckId, preference.Status, preference.IsFavourite, preference.IsIgnored, listEntry, parentDeckId, parentStatus,
+                              allChildrenCompleted, parent = allChildrenCompleted ? deck?.Parent : null, previous
+                          });
     }
 
-    private async Task<(int? ParentDeckId, DeckStatus? ParentStatus, bool AllChildrenCompleted)> UpdateParentDeckStatus(string userId, int parentDeckId, DeckStatus childNewStatus)
+    /// <summary>Coverage is only meaningful for a completion recorded on the day; a back-dated one would show today's knowledge.</summary>
+    private async Task SnapshotCoverageAtFinishAsync(string userId, IEnumerable<UserMediaListEntry?> entries)
+    {
+        var earliest = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(-1);
+        var finished = entries.OfType<UserMediaListEntry>()
+                              .Where(e => e is { State: MediaListEntryState.Completed, CoverageAtFinish: null, FinishedOn: { } finishedOn } &&
+                                          finishedOn >= earliest)
+                              .ToList();
+        if (finished.Count == 0)
+            return;
+
+        var coverage = await UserCoverageChunkHelper.GetCoverage(userContext, userId, finished.Select(e => e.DeckId).Distinct().ToList());
+        foreach (var entry in finished)
+        {
+            if (coverage.MatureCoverage.TryGetValue(entry.DeckId, out var mature))
+                entry.CoverageAtFinish = Math.Min(mature + coverage.YoungCoverage.GetValueOrDefault(entry.DeckId), 100f);
+        }
+    }
+
+    /// <param name="changedVolumeIds">Volumes whose change prompted this; when it starts a series pass, their current entries belong to it.</param>
+    private async Task<(int? ParentDeckId, DeckStatus? ParentStatus, bool AllChildrenCompleted)> UpdateParentDeckStatus(
+        string userId, int parentDeckId, DeckStatus childNewStatus, DateOnly? date, bool setOnSeries = false,
+        IReadOnlyCollection<int>? changedVolumeIds = null)
     {
         var siblingIds = await jitenContext.Decks.AsNoTracking()
                                            .Where(d => d.ParentDeckId == parentDeckId)
                                            .Select(d => d.DeckId)
                                            .ToListAsync();
 
-        var siblingStatuses = await userContext.UserDeckPreferences
-                                               .Where(p => p.UserId == userId && siblingIds.Contains(p.DeckId))
-                                               .ToDictionaryAsync(p => p.DeckId, p => p.Status);
-
         var parentPref = await userContext.UserDeckPreferences
+                                          .Include(p => p.CurrentEntry)
                                           .FirstOrDefaultAsync(p => p.UserId == userId && p.DeckId == parentDeckId);
 
         var previousParentStatus = parentPref?.Status ?? DeckStatus.None;
+        var allCompleted = (await MediaListEntryHelper.CompletedUnitIdsAsync(userContext, userId, parentDeckId, siblingIds)).Count == siblingIds.Count;
+        var newParentStatus = MediaListEntryHelper.ResolveSeriesStatus(previousParentStatus, allCompleted, childNewStatus, setOnSeries);
+        var allChildrenCompleted = allCompleted && newParentStatus is not (DeckStatus.Completed or DeckStatus.Dropped);
 
-        var allCompleted = siblingIds.All(id =>
-            siblingStatuses.TryGetValue(id, out var status) && status == DeckStatus.Completed);
+        if (newParentStatus == previousParentStatus)
+            return (null, null, allChildrenCompleted);
 
-        DeckStatus? newParentStatus = null;
-        var allChildrenCompleted = false;
+        if (parentPref != null && MediaListEntryHelper.StartsEntry(parentPref, newParentStatus, newEntry: false) &&
+            (await MediaListEntryHelper.FullHistoryDeckIdsAsync(userContext, userId, [parentDeckId])).Count > 0)
+            return (null, null, allChildrenCompleted);
 
-        if (allCompleted)
+        if (parentPref == null)
         {
-            if (previousParentStatus is DeckStatus.None or DeckStatus.Planning or DeckStatus.Ongoing)
-            {
-                allChildrenCompleted = true;
-                if (previousParentStatus is DeckStatus.None or DeckStatus.Planning)
-                    newParentStatus = DeckStatus.Ongoing;
-            }
-        }
-        else if (childNewStatus is DeckStatus.Completed or DeckStatus.Ongoing or DeckStatus.Dropped)
-        {
-            if (previousParentStatus is DeckStatus.None or DeckStatus.Planning)
-                newParentStatus = DeckStatus.Ongoing;
+            parentPref = new UserDeckPreference { UserId = userId, DeckId = parentDeckId };
+            userContext.UserDeckPreferences.Add(parentPref);
         }
 
-        if (newParentStatus != null && newParentStatus != previousParentStatus)
+        var previousEntry = parentPref.CurrentEntry;
+        MediaListEntryHelper.ApplyStatus(userContext, parentPref, newParentStatus, date, newEntry: false);
+        parentPref.Status = newParentStatus;
+        if (parentPref.CurrentEntry is { State: MediaListEntryState.InProgress } startedPass && startedPass != previousEntry && changedVolumeIds is { Count: > 0 })
         {
-            if (parentPref == null)
-            {
-                parentPref = new UserDeckPreference { UserId = userId, DeckId = parentDeckId };
-                userContext.UserDeckPreferences.Add(parentPref);
-            }
-
-            parentPref.Status = newParentStatus.Value;
-            await userContext.SaveChangesAsync();
-
-            if (previousParentStatus == DeckStatus.Completed || newParentStatus == DeckStatus.Completed)
-            {
-                backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserAccomplishments(userId));
-            }
-
-            return (parentDeckId, newParentStatus, allChildrenCompleted);
+            var volumeEntries = await userContext.UserDeckPreferences
+                                                 .Where(p => p.UserId == userId && changedVolumeIds.Contains(p.DeckId) && p.CurrentEntry != null &&
+                                                             p.CurrentEntry.SeriesEntryId == null)
+                                                 .Select(p => p.CurrentEntry!)
+                                                 .ToListAsync();
+            foreach (var volumeEntry in volumeEntries)
+                volumeEntry.SeriesEntry = startedPass;
         }
 
-        return (null, null, allChildrenCompleted);
+        await userContext.SaveChangesAsync();
+
+        if (previousParentStatus == DeckStatus.Completed)
+            backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserAccomplishments(userId));
+
+        return (parentDeckId, newParentStatus, allChildrenCompleted);
     }
 
     /// <summary>
@@ -2398,9 +2437,11 @@ public partial class UserController(
         if (preference == null)
             return Results.Ok(new { deleted = false });
 
+        await MediaListEntryHelper.RemoveReadsAsync(userContext, userId, [deckId]);
         userContext.UserDeckPreferences.Remove(preference);
         await userContext.SaveChangesAsync();
         await smartDeckDirty.MarkDirty(userId);
+        backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserAccomplishments(userId));
 
         return Results.Ok(new { deleted = true });
     }
@@ -2482,7 +2523,8 @@ public partial class UserController(
                                                                    Rating = r.Rating, ReviewDateTime =
                                                                        new DateTimeOffset(r.ReviewDateTime)
                                                                            .ToUnixTimeSeconds(),
-                                                                   ReviewDuration = r.ReviewDuration
+                                                                   ReviewDuration = r.ReviewDuration,
+                                                                   State = r.State
                                                                }).ToList(),
                                     Text = FormText(c.WordId, c.ReadingIndex), Reading = FormReading(c.WordId, c.ReadingIndex)
                                 }).ToList(),
@@ -2509,7 +2551,8 @@ public partial class UserController(
                                                                                 {
                                                                                     Rating = r.Rating,
                                                                                     ReviewDateTime = new DateTimeOffset(r.ReviewDateTime).ToUnixTimeSeconds(),
-                                                                                    ReviewDuration = r.ReviewDuration
+                                                                                    ReviewDuration = r.ReviewDuration,
+                                                                                    State = r.State
                                                                                 }).ToList(),
                                                Text = FormText(a.WordId, a.ReadingIndex), Reading = FormReading(a.WordId, a.ReadingIndex),
                                                CoveringText = a.CoveringReadingIndex.HasValue
@@ -2836,7 +2879,7 @@ public partial class UserController(
                                                                          l.Rating,
                                                                          DateTimeOffset.FromUnixTimeSeconds(l.ReviewDateTime)
                                                                                        .UtcDateTime,
-                                                                         l.ReviewDuration))
+                                                                         l.ReviewDuration, l.State))
                                                              .ToList());
         var archivedRedundant = redundantBackup.Archived;
         if (archivedRedundant > 0)
@@ -2918,7 +2961,7 @@ public partial class UserController(
                                                         Rating = logDto.Rating, ReviewDateTime = DateTimeOffset
                                                             .FromUnixTimeSeconds(logDto.ReviewDateTime)
                                                             .UtcDateTime,
-                                                        ReviewDuration = logDto.ReviewDuration,
+                                                        ReviewDuration = logDto.ReviewDuration, State = logDto.State,
                                                     });
                     }
 
@@ -2947,7 +2990,8 @@ public partial class UserController(
                                                                                       Rating = l.Rating, ReviewDateTime = DateTimeOffset
                                                                                           .FromUnixTimeSeconds(l.ReviewDateTime)
                                                                                           .UtcDateTime,
-                                                                                      ReviewDuration = l.ReviewDuration
+                                                                                      ReviewDuration = l.ReviewDuration,
+                                                                                      State = l.State
                                                                                   }).ToList()
                                   };
 
@@ -3032,7 +3076,7 @@ public partial class UserController(
                                                .OrderBy(ua => ua.MediaType)
                                                .ToListAsync();
 
-        return Results.Ok(accomplishments);
+        return Results.Ok(isOwnProfile ? accomplishments : HideEntryTotals(accomplishments));
     }
 
     /// <summary>
@@ -3063,8 +3107,20 @@ public partial class UserController(
 
         if (accomplishment == null)
             return Results.NotFound();
+        if (isOwnProfile)
+            return Results.Ok(accomplishment);
 
-        return Results.Ok(accomplishment);
+        var visible = HideEntryTotals([accomplishment]);
+        return visible.Count == 0 ? Results.NotFound() : Results.Ok(visible[0]);
+    }
+
+    /// <summary>Counts typed on unfinished media list entries are private; other viewers see completed titles only. Expects untracked rows.</summary>
+    private static List<UserAccomplishment> HideEntryTotals(IEnumerable<UserAccomplishment> accomplishments)
+    {
+        var visible = accomplishments.Where(a => a.CompletedUnitCount > 0).ToList();
+        foreach (var accomplishment in visible)
+            accomplishment.UnfinishedCharacterCount = 0;
+        return visible;
     }
 
     /// <summary>
@@ -3110,12 +3166,7 @@ public partial class UserController(
 
         pageSize = Math.Clamp(pageSize, 1, 100);
 
-        // Get all completed deck IDs for the user
-        var userCompletedDeckIds = await userContext.UserDeckPreferences
-                                                    .AsNoTracking()
-                                                    .Where(udp => udp.UserId == targetUserId && udp.Status == DeckStatus.Completed)
-                                                    .Select(udp => udp.DeckId)
-                                                    .ToListAsync();
+        var userCompletedDeckIds = await MediaListEntryHelper.CompletedDeckIds(userContext, targetUserId).ToListAsync();
 
         // Load completed decks with parent relationship
         var allCompletedDecks = await jitenContext.Decks
@@ -3403,8 +3454,16 @@ public partial class UserController(
 
         var entries = await BuildMediaListAsync(userId);
 
+        // Dates and character counts stay private even on a public list.
+        var listEntries = userService.UserId == userId
+            ? await MediaListEntryHelper.BuildSummariesAsync(userContext, jitenContext, userId, entries.Select(e => e.Display.DeckId).ToList(),
+                                                             entries.Where(e => e.Display.Children.Count > 0).Select(e => e.Display.DeckId).ToList())
+            : new Dictionary<int, MediaListEntrySummary>();
         var dtos = entries
-                   .Select(e => new DeckDto(e.Display) { Status = e.Status, IsFavourite = e.IsFavourite })
+                   .Select(e => new DeckDto(e.Display)
+                                {
+                                    Status = e.Status, IsFavourite = e.IsFavourite, ListEntry = listEntries.GetValueOrDefault(e.Display.DeckId)
+                                })
                    .OrderBy(d => d.OriginalTitle)
                    .ToList();
 
@@ -3760,7 +3819,7 @@ public partial class UserController(
                                                .OrderBy(ua => ua.MediaType)
                                                .ToListAsync();
 
-        return Results.Ok(accomplishments);
+        return Results.Ok(isOwnProfile ? accomplishments : HideEntryTotals(accomplishments));
     }
 
     /// <summary>
@@ -3808,12 +3867,7 @@ public partial class UserController(
 
         pageSize = Math.Clamp(pageSize, 1, 100);
 
-        // Get all completed deck IDs for the user
-        var userCompletedDeckIds = await userContext.UserDeckPreferences
-                                                    .AsNoTracking()
-                                                    .Where(udp => udp.UserId == targetUserId && udp.Status == DeckStatus.Completed)
-                                                    .Select(udp => udp.DeckId)
-                                                    .ToListAsync();
+        var userCompletedDeckIds = await MediaListEntryHelper.CompletedDeckIds(userContext, targetUserId).ToListAsync();
 
         // Load completed decks with parent relationship
         var allCompletedDecks = await jitenContext.Decks

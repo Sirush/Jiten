@@ -103,7 +103,7 @@ public class AuthController : ControllerBase
         var user = new User
                    {
                        UserName = userName, Email = email, SecurityStamp = Guid.NewGuid().ToString(), TosAcceptedAt = DateTime.UtcNow,
-                       ReceivesNewsletter = model.ReceiveNewsletter
+                       ReceivesNewsletter = model.ReceiveNewsletter, SignupSourceJson = SignupSourceSanitizer.ToJson(model.SignupSource)
                    };
 
         var result = await _userManager.CreateAsync(user, model.Password);
@@ -536,7 +536,7 @@ public class AuthController : ControllerBase
         var user = new User
                    {
                        UserName = username, Email = registrationData!.Email, EmailConfirmed = true, TosAcceptedAt = DateTime.UtcNow,
-                       ReceivesNewsletter = request.ReceiveNewsletter
+                       ReceivesNewsletter = request.ReceiveNewsletter, SignupSourceJson = SignupSourceSanitizer.ToJson(request.SignupSource)
                    };
 
         var createResult = await _userManager.CreateAsync(user);

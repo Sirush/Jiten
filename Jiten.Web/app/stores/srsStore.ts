@@ -33,11 +33,12 @@ interface SessionReview {
   duration: number | undefined;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+
 // In-progress session cache (localStorage) so a mobile tab killed in the background can resume
 // where it left off. Bumped if the persisted shape changes.
 const SESSION_CACHE_VERSION = 2;
 const SESSION_CACHE_TTL_MS = 2 * 60 * 60 * 1000; // 2h, matches the server srs:session TTL
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 interface PersistedSession {
   version: number;
@@ -189,6 +190,7 @@ export const useSrsStore = defineStore('srs', () => {
     showKeybinds: true,
     showElapsedTime: true,
     enableSwipeGesture: true,
+    swipeVibration: true,
     countFailedReviews: true,
     autoPlayWord: true,
     autoPlaySentence: true,
@@ -1147,12 +1149,13 @@ export const useSrsStore = defineStore('srs', () => {
     const counted = studySettings.value.countFailedReviews || !isRepeat;
     const wasNew = card.isNewCard && !isRepeat;
     const correct = rating >= FsrsRating.Good;
-    // Same rule as RetentionCalculator: a first answer at least a day after the previous review tests recall.
+    // Same rule as RetentionCalculator. Re-queued copies keep the served card's lastReview, so repeats and in-session steps are excluded here.
+    const isStep = card.state === FsrsState.Learning || card.state === FsrsState.Relearning;
     const retentionTest =
       !isRepeat &&
       !learningCardKeys.value.has(cardKey) &&
       card.lastReview != null &&
-      Date.now() - new Date(card.lastReview).getTime() >= DAY_MS;
+      (card.state === FsrsState.Review || (isStep && Date.now() - new Date(card.lastReview).getTime() >= DAY_MS));
     const gradeKey: 'again' | 'hard' | 'good' | 'easy' =
       rating === FsrsRating.Again ? 'again' : rating === FsrsRating.Hard ? 'hard' : rating === FsrsRating.Easy ? 'easy' : 'good';
     if (counted) sessionStats.value.cardsReviewed++;

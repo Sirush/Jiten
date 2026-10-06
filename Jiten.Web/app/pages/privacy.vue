@@ -7,7 +7,7 @@
 <template>
   <div class="legal-doc mx-auto max-w-3xl px-6 py-10 leading-relaxed text-gray-800 dark:text-gray-200">
     <h1 class="mb-2 text-center text-3xl font-bold text-gray-900 dark:text-gray-100">Privacy Policy for Jiten.moe</h1>
-    <p class="mb-10 text-center italic text-gray-500 dark:text-gray-400">Last Updated: 7 September 2026</p>
+    <p class="mb-10 text-center italic text-gray-500 dark:text-gray-400">Last Updated: 3 October 2026</p>
 
     <p>
       Jiten.moe ("we", "our", "us") respects your privacy and is committed to protecting your personal data. This Privacy Policy explains how we collect, use,
@@ -35,7 +35,8 @@
         <li><b>Technical Data:</b> IP address, browser type, operating system (collected automatically for security and site functionality).</li>
         <li><b>Study Data:</b> Your vocabulary state, study history and preferences, processed to provide the learning features you use.</li>
         <li>
-          <b>Usage Data:</b> Pages visited, features used and errors encountered, collected by our own analytics (see section 10). IP addresses are not
+          <b>Usage Data:</b> Pages visited, features used and errors encountered, collected by our own analytics (see section 10). When you create an account,
+          we also keep how you first found Jiten: the page you landed on, the site that linked you, and any campaign tag in the link. IP addresses are not
           stored and no advertising or cross-site tracking takes place.
         </li>
         <li><b>Payment and Subscription Data:</b> If you purchase Jiten+; see section 6.</li>
@@ -176,9 +177,10 @@
         </li>
         <li>
           <b>Audience measurement.</b> We measure site usage ourselves, on our own infrastructure. It sets no cookies, stores no identifier on your device,
-          never stores IP addresses, and performs no advertising or cross-site tracking. The data is not shared with anyone. While you are signed in, usage
-          and error reports are linked to your account for 30 days so we can fix problems and improve the features you use (legitimate interest, see section
-          3); after that only anonymous aggregate statistics remain. No consent banner is required for this.
+          never stores IP addresses, and performs no advertising or cross-site tracking. To know how you first found Jiten, your browser keeps a short note of
+          your first visit; it contains nothing that identifies you. The data is not shared with anyone. While you are signed in, usage and error reports are
+          linked to your account for 30 days so we can fix problems and improve the features you use (legitimate interest, see section 3); after that only
+          anonymous aggregate statistics remain. No consent banner is required for this.
         </li>
         <li>
           <b>Abuse prevention.</b> The registration page uses Google reCAPTCHA to block automated sign-ups. reCAPTCHA is provided by Google LLC and processes

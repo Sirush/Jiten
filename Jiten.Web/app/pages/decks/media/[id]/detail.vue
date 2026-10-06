@@ -22,6 +22,12 @@
 
   const showSeoBlocks = computed(() => !authStore.isAuthenticated);
 
+  // Set by the guest Study button's sign-up redirect; read once so a refresh doesn't reopen the dialog.
+  const openStudy = route.query.study === '1';
+  onMounted(() => {
+    if (openStudy) router.replace({ query: { ...route.query, study: undefined } });
+  });
+
   const offset = computed(() => (route.query.offset ? Number(route.query.offset) : 0));
   const url = computed(() => `media-deck/${route.params.id}/detail`);
 
@@ -32,7 +38,7 @@
     const size = Number(route.query.pageSize);
     return size === 50 || size === 100 ? size : undefined;
   });
-  
+
   const minutesParam = (key: string) => {
     const value = Number(route.query[key]);
     return Number.isFinite(value) && value > 0 ? value : undefined;
@@ -208,8 +214,7 @@
       storedSubdeckStyle.value = value;
       try {
         localStorage.setItem(subdeckStyleKey.value, String(value));
-      } catch {
-      }
+      } catch {}
     },
   });
 
@@ -248,20 +253,17 @@
   });
 
   const updateMainDeck = (updatedDeck: Deck) => {
-    if (response.value?.data?.mainDeck) {
-      response.value = { ...response.value, data: { ...response.value.data, mainDeck: updatedDeck } };
+    const previous = response.value?.data?.mainDeck;
+    if (previous && !sameDeck(previous, updatedDeck)) {
+      response.value = { ...response.value!, data: { ...response.value!.data, mainDeck: updatedDeck } };
     }
   };
 
   const updateSubDeck = (updatedDeck: Deck) => {
-    if (response.value?.data?.subDecks) {
-      const index = response.value.data.subDecks.findIndex((d) => d.deckId === updatedDeck.deckId);
-      if (index !== -1) {
-        const newSubDecks = [...response.value.data.subDecks];
-        newSubDecks[index] = updatedDeck;
-        response.value = { ...response.value, data: { ...response.value.data, subDecks: newSubDecks } };
-      }
-    }
+    const subDecks = response.value?.data?.subDecks;
+    if (!subDecks) return;
+    const replaced = replaceDeck(subDecks, updatedDeck);
+    if (replaced !== subDecks) response.value = { ...response.value!, data: { ...response.value!.data, subDecks: replaced } };
   };
 
   const jumpToSimilar = () => {
@@ -279,11 +281,15 @@
 
   useDeckViewBeacon(deckId);
 
-  const updateParentStatus = (parentDeckId: number, status: import('~/types').DeckStatus) => {
-    if (response.value?.data?.mainDeck && response.value.data.mainDeck.deckId === parentDeckId) {
-      response.value = { ...response.value, data: { ...response.value.data, mainDeck: { ...response.value.data.mainDeck, status } } };
-    }
-  };
+  onMediaListChange((change) => {
+    const data = response.value?.data;
+    if (!data) return;
+    const main = data.mainDeck;
+    const mainDeck = main && applyMediaListChange(main, change);
+    const subDecks = data.subDecks?.map((d) => applyMediaListChange(d, change));
+    if (mainDeck === main && subDecks?.every((d, i) => d === data.subDecks![i])) return;
+    response.value = { ...response.value!, data: { ...data, mainDeck, subDecks } };
+  });
 
   const title = computed(() => {
     if (!response.value?.data) {
@@ -392,7 +398,7 @@
       </Card>
     </div>
     <div v-else-if="response?.data?.mainDeck">
-      <MediaDeckCard :deck="response.data.mainDeck" title-tag="h1" hide-detail-button @update:deck="updateMainDeck" />
+      <MediaDeckCard :deck="response.data.mainDeck" title-tag="h1" hide-detail-button :open-study="openStudy" @update:deck="updateMainDeck" />
 
       <DeckStudyOverview v-if="showSeoBlocks && response.data.parentDeck == null" :deck="response.data.mainDeck" />
 
@@ -497,7 +503,6 @@
               title-tag="h3"
               :is-compact="true"
               @update:deck="updateSubDeck"
-              @parent-status-changed="updateParentStatus"
             />
           </div>
           <div v-else-if="hasSubdecksToShow && effectiveSubdeckStyle === DisplayStyle.Compact" class="flex flex-wrap gap-4 justify-center pt-4">
