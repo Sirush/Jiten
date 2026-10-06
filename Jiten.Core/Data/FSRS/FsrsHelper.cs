@@ -55,9 +55,11 @@ public static class FsrsHelper
     /// <param name="maximumInterval">Maximum allowed interval</param>
     /// <param name="anchorDate">Review time the interval is measured from (required for load balancing)</param>
     /// <param name="loadBalancer">Optional load balancer used to pick the least-loaded day</param>
+    /// <param name="dueAfter">Trims the window so the due date lands after this instant; needs <paramref name="anchorDate"/></param>
     /// <returns>Fuzzed interval</returns>
     public static TimeSpan ApplyFuzzing(TimeSpan interval, int maximumInterval, DateTime? anchorDate = null,
-                                        IFsrsLoadBalancer? loadBalancer = null, EasyDaysPolicy? easyDays = null)
+                                        IFsrsLoadBalancer? loadBalancer = null, EasyDaysPolicy? easyDays = null,
+                                        DateTime? dueAfter = null)
     {
         var intervalDays = interval.Days;
         if (intervalDays < 2.5)
@@ -66,6 +68,12 @@ public static class FsrsHelper
         var dayFraction = interval - TimeSpan.FromDays(intervalDays);
         var (minInterval, maxInterval) = GetFuzzRange(intervalDays, maximumInterval);
         var cap = TimeSpan.FromDays(maximumInterval);
+
+        if (dueAfter.HasValue && anchorDate.HasValue)
+        {
+            var firstDayAfter = (int)Math.Floor((dueAfter.Value - (anchorDate.Value + dayFraction)).TotalDays) + 1;
+            minInterval = Math.Min(Math.Max(minInterval, firstDayAfter), maxInterval);
+        }
 
         if (loadBalancer != null && anchorDate.HasValue)
         {

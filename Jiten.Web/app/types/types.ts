@@ -457,10 +457,14 @@ export interface FsrsParametersResponse {
 export interface ReschedulePreviewOption {
   desiredRetention: number;
   due: number;
+  upcoming: number;
 }
 
 export interface ReschedulePreviewResponse {
   currentDue: number;
+  // Cards not due now that come due within upcomingDays after today's cutoff.
+  currentUpcoming: number;
+  upcomingDays: number;
   // The first option is always the saved desired retention.
   options: ReschedulePreviewOption[];
 }

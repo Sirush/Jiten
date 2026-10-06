@@ -2318,15 +2318,8 @@ public class SrsController(
                                                       ResolveOffsetHours(DateTime.UtcNow, studySettings.Timezone));
     }
 
-    /// <summary>
-    /// Builds the Easy-Days weekday preference from the user's settings, or returns null when it is off or
-    /// load balancing is disabled (Easy Days is a refinement of load balancing and needs it enabled).
-    /// </summary>
     private static EasyDaysPolicy? BuildEasyDaysPolicy(StudySettingsDto studySettings)
-    {
-        if (!studySettings.LoadBalancing) return null;
-        return EasyDaysPolicy.From(studySettings.EasyDays, ResolveOffsetHours(DateTime.UtcNow, studySettings.Timezone));
-    }
+        => FsrsSettingsHelper.BuildEasyDaysPolicy(studySettings, DateTime.UtcNow);
 
     private static double ResolveOffsetHours(DateTime utcNow, string? timezone)
         => FsrsSettingsHelper.ResolveOffsetHours(utcNow, timezone);

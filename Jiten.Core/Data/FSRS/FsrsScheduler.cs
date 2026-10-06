@@ -51,6 +51,9 @@ public class FsrsScheduler
     /// </summary>
     private readonly EasyDaysPolicy? _easyDays;
 
+    /// <summary>Fuzz never moves a Review card across this instant, so which cards are due by it depends only on their exact intervals.</summary>
+    private readonly DateTime? _fuzzCutoff;
+
 
     /// <summary>
     /// Creates a new FSRS scheduler with specified configuration
@@ -64,6 +67,7 @@ public class FsrsScheduler
     /// <param name="loadBalancer">Optional load balancer for spreading fuzzed due dates across days</param>
     /// <param name="easyDays">Optional per-weekday load preference applied on top of load balancing</param>
     /// <param name="minimumReviewIntervalDays">Floor on Review-state intervals in days (default: none)</param>
+    /// <param name="fuzzCutoff">Set when rescheduling from past reviews, whose fuzz window can otherwise reach back into today</param>
     public FsrsScheduler(
         double desiredRetention = FsrsConstants.DefaultDesiredRetention,
         double[]? parameters = null,
@@ -73,7 +77,8 @@ public class FsrsScheduler
         bool enableFuzzing = true,
         IFsrsLoadBalancer? loadBalancer = null,
         EasyDaysPolicy? easyDays = null,
-        double minimumReviewIntervalDays = 0)
+        double minimumReviewIntervalDays = 0,
+        DateTime? fuzzCutoff = null)
     {
         Parameters = parameters is { Length: > 0 } ? parameters : FsrsConstants.DefaultParameters;
         Version = FsrsVersions.FromParameterCount(Parameters.Length) ?? FsrsVersion.V6;
@@ -85,6 +90,7 @@ public class FsrsScheduler
         MinimumReviewIntervalDays = minimumReviewIntervalDays;
         _loadBalancer = loadBalancer;
         _easyDays = easyDays;
+        _fuzzCutoff = fuzzCutoff;
     }
 
     /// <summary>
@@ -147,14 +153,17 @@ public class FsrsScheduler
         UpdateCardParameters(card, rating, reviewDateTime, daysSinceLastReview);
         var nextInterval = CalculateNextInterval(card, rating);
 
-        if (EnableFuzzing && card.State == FsrsState.Review)
+        if (EnableFuzzing && card.State == FsrsState.Review && !IsDueByFuzzCutoff(reviewDateTime, nextInterval))
         {
-            nextInterval = FsrsHelper.ApplyFuzzing(nextInterval, MaximumInterval, reviewDateTime, _loadBalancer, _easyDays);
+            nextInterval = FsrsHelper.ApplyFuzzing(nextInterval, MaximumInterval, reviewDateTime, _loadBalancer, _easyDays, _fuzzCutoff);
         }
 
         card.Due = nextInterval == TimeSpan.MaxValue ? DateTime.MaxValue : reviewDateTime + nextInterval;
         card.LastReview = reviewDateTime;
     }
+
+    private bool IsDueByFuzzCutoff(DateTime reviewDateTime, TimeSpan interval)
+        => _fuzzCutoff != null && interval != TimeSpan.MaxValue && reviewDateTime + interval <= _fuzzCutoff;
 
     private void UpdateCardParameters(FsrsCard card, FsrsRating rating, DateTime reviewDateTime, int? daysSinceLastReview)
     {

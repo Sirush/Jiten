@@ -90,7 +90,7 @@ public static class FsrsSettingsHelper
 
     public static FsrsScheduler CreateScheduler(StudySettingsDto studySettings, double[] parameters, double desiredRetention,
                                                 bool enableFuzzing, IFsrsLoadBalancer? loadBalancer = null,
-                                                EasyDaysPolicy? easyDays = null)
+                                                EasyDaysPolicy? easyDays = null, DateTime? fuzzCutoff = null)
         => new(desiredRetention: desiredRetention,
                parameters: parameters,
                learningSteps: GetLearningSteps(studySettings),
@@ -98,10 +98,17 @@ public static class FsrsSettingsHelper
                enableFuzzing: enableFuzzing,
                loadBalancer: loadBalancer,
                easyDays: easyDays,
-               minimumReviewIntervalDays: studySettings.DayBoundaryScheduling ? 1 : 0);
+               minimumReviewIntervalDays: studySettings.DayBoundaryScheduling ? 1 : 0,
+               fuzzCutoff: fuzzCutoff);
 
     public static async Task<FsrsScheduler> CreateSchedulerAsync(UserDbContext userContext, string userId, bool enableFuzzing)
         => CreateScheduler(await LoadAsync(userContext, userId), enableFuzzing);
+
+    /// <summary>Null when Easy Days is off or load balancing is disabled; Easy Days only refines load balancing.</summary>
+    public static EasyDaysPolicy? BuildEasyDaysPolicy(StudySettingsDto studySettings, DateTime utcNow)
+        => studySettings.LoadBalancing
+            ? EasyDaysPolicy.From(studySettings.EasyDays, ResolveOffsetHours(utcNow, studySettings.Timezone))
+            : null;
 
     public static double ResolveOffsetHours(DateTime utcNow, string? timezone)
         => ResolveTimeZone(timezone)?.GetUtcOffset(utcNow).TotalHours ?? 0;
