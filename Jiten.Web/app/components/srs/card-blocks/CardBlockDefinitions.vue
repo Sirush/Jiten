@@ -98,6 +98,7 @@
             :readings="wordData.alternativeReadings"
             :word-id="wordId"
             hidden-behaviour="hide"
+            :hide-cross-references="opts.hideCrossReferences"
           />
           <template #fallback>
             <VocabularyDefinitions
@@ -108,6 +109,7 @@
               :readings="wordData.alternativeReadings"
               :word-id="wordId"
               hidden-behaviour="hide"
+              :hide-cross-references="opts.hideCrossReferences"
             />
           </template>
         </ClientOnly>

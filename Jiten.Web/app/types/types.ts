@@ -2250,6 +2250,7 @@ export interface DefinitionsBlockOptions {
   maxDefinitions: number | null;
   size: CardTextSize;
   spoiler: boolean;
+  hideCrossReferences: boolean;
 }
 
 export interface CustomMeaningBlockOptions {

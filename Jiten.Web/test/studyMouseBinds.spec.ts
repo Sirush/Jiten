@@ -23,6 +23,14 @@ vi.stubGlobal('window', {
     listeners[type] = fn;
   },
   removeEventListener: () => {},
+  history: {
+    state: null as unknown,
+    pushState(state: unknown) {
+      this.state = state;
+    },
+    back: () => {},
+  },
+  location: { href: 'http://localhost/srs/study' },
 });
 vi.stubGlobal('onMounted', (fn: () => void) => fn());
 vi.stubGlobal('onUnmounted', () => {});
