@@ -270,12 +270,12 @@ public class RoadmapDataLoader(
                                            .ToListAsync(ct);
 
         var completed = (await MediaListEntryHelper.CompletedDeckIds(userContext, userId).ToListAsync(ct)).ToHashSet();
-        var ongoing = preferences.Where(p => p.Status == DeckStatus.Ongoing).Select(p => p.DeckId).ToHashSet();
+        var ongoing = preferences.Where(p => p.Status.IsInProgress()).Select(p => p.DeckId).ToHashSet();
         var dropped = preferences.Where(p => p.Status == DeckStatus.Dropped).Select(p => p.DeckId).ToHashSet();
         var ignored = preferences.Where(p => p.IsIgnored).Select(p => p.DeckId).ToHashSet();
         var planning = preferences.Where(p => p.Status == DeckStatus.Planning).Select(p => p.DeckId).ToHashSet();
 
-        // Ongoing titles steer taste like completed ones, but neither is ever suggested.
+        // Titles in progress, paused or not, steer taste like completed ones, but neither is ever suggested.
         var tasteSeeds = new HashSet<int>(completed);
         tasteSeeds.UnionWith(ongoing);
 
@@ -368,7 +368,7 @@ public class RoadmapDataLoader(
                                            .ToListAsync(ct);
 
         var completed = (await MediaListEntryHelper.CompletedDeckIds(userContext, userId).ToListAsync(ct)).ToHashSet();
-        var ongoing = preferences.Where(p => p.Status == DeckStatus.Ongoing).Select(p => p.DeckId).ToHashSet();
+        var ongoing = preferences.Where(p => p.Status.IsInProgress()).Select(p => p.DeckId).ToHashSet();
         var dropped = preferences.Where(p => p.Status == DeckStatus.Dropped).Select(p => p.DeckId).ToHashSet();
         var ignored = preferences.Where(p => p.IsIgnored).Select(p => p.DeckId).ToHashSet();
         var planning = preferences.Where(p => p.Status == DeckStatus.Planning).Select(p => p.DeckId).ToHashSet();

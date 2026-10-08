@@ -112,11 +112,12 @@
     subdecksCompleted: number;
   } | null>(null);
 
-  const statusOrder = [DeckStatus.Completed, DeckStatus.Ongoing, DeckStatus.Planning, DeckStatus.Dropped];
+  const statusOrder = [DeckStatus.Completed, DeckStatus.Ongoing, DeckStatus.Paused, DeckStatus.Planning, DeckStatus.Dropped];
 
   const statusChipClass: Record<number, string> = {
     [DeckStatus.Planning]: 'bg-gray-100 text-gray-600 dark:bg-gray-700/40 dark:text-gray-300',
     [DeckStatus.Ongoing]: 'bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300',
+    [DeckStatus.Paused]: 'bg-sky-100 text-sky-700 dark:bg-sky-900/40 dark:text-sky-300',
     [DeckStatus.Completed]: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
     [DeckStatus.Dropped]: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300',
   };

@@ -18,6 +18,7 @@ export function useStatusFlow(deck: () => Deck, { close, isOpen, home = 'list' }
 
   const step = ref<StatusStep>(home);
   const undoCompletion = ref(false);
+  const startStatus = ref<DeckStatus.Ongoing | DeckStatus.Paused>(DeckStatus.Ongoing);
   const requestsInFlight = ref(0);
   const busy = computed(() => requestsInFlight.value > 0);
 
@@ -45,6 +46,7 @@ export function useStatusFlow(deck: () => Deck, { close, isOpen, home = 'list' }
       case DeckStatus.Dropped:
         return dropQuestion(current, entry);
       case DeckStatus.Ongoing:
+      case DeckStatus.Paused:
         return restartQuestion(current, entry);
       default:
         return null;
@@ -57,18 +59,19 @@ export function useStatusFlow(deck: () => Deck, { close, isOpen, home = 'list' }
     const current = target.status ?? DeckStatus.None;
     if (status === current) return close();
 
+    if (status === DeckStatus.Ongoing || status === DeckStatus.Paused) startStatus.value = status;
     const question = questionFor(status, current, target.listEntry);
     if (question) {
       goTo(question);
       return;
     }
-    if (status === DeckStatus.Ongoing) {
+    if (status === DeckStatus.Ongoing || status === DeckStatus.Paused) {
       void start();
       return;
     }
 
     close();
-    if (status === DeckStatus.None && (target.listEntry || [DeckStatus.Ongoing, DeckStatus.Completed, DeckStatus.Dropped].includes(current))) {
+    if (status === DeckStatus.None && (target.listEntry || [DeckStatus.Ongoing, DeckStatus.Paused, DeckStatus.Completed, DeckStatus.Dropped].includes(current))) {
       confirm.require({
         message: 'Remove this title from your list? Its dates and character counts will be deleted too.',
         header: 'Remove from list',
@@ -102,8 +105,10 @@ export function useStatusFlow(deck: () => Deck, { close, isOpen, home = 'list' }
 
   async function start(newEntry = false) {
     const target = deck();
-    const response = await send(target, DeckStatus.Ongoing, { newEntry });
-    if (!isOpen() || deck().deckId !== target.deckId) return;
+    const status = startStatus.value;
+    if (status === DeckStatus.Paused) close();
+    const response = await send(target, status, { newEntry });
+    if (status === DeckStatus.Paused || !isOpen() || deck().deckId !== target.deckId) return;
     if (response) goTo('progress');
     else close();
   }

@@ -3,7 +3,7 @@
   import { useAuthStore } from '~/stores/authStore';
   import { useDisplayStyleStore } from '~/stores/displayStyleStore';
   import { storeToRefs } from 'pinia';
-  import { getDeckStatusText } from '~/utils/deckStatusMapper';
+  import { getDeckStatusText, isInProgressStatus } from '~/utils/deckStatusMapper';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { type DeckSortOption, deckSortMeta, deckSortOption, deckSortOrdering, sortDecks } from '~/utils/deckSorting';
   import { LazyHydrateMediaDeckCard, LazyHydrateMediaDeckCompactView, LazyHydrateMediaDeckTableView } from '~/utils/lazyHydratedComponents';
@@ -28,7 +28,7 @@
   const notAvailable = computed(() => (error.value as any)?.statusCode === 404);
 
   // Status groups in reading order; only non-empty ones get a tab.
-  const statusOrder: DeckStatus[] = [DeckStatus.Ongoing, DeckStatus.Completed, DeckStatus.Planning, DeckStatus.Dropped];
+  const statusOrder: DeckStatus[] = [DeckStatus.Ongoing, DeckStatus.Paused, DeckStatus.Completed, DeckStatus.Planning, DeckStatus.Dropped];
 
   // Media-type filter and sorting are client-side; the full list is already loaded.
   const mediaTypeFilter = ref<MediaType | null>(parseTypeQuery(route.query.type));
@@ -208,7 +208,7 @@
   }
 
   const statusMenuItems = computed(() => [
-    ...[DeckStatus.Planning, DeckStatus.Ongoing, DeckStatus.Completed, DeckStatus.Dropped].map((s) => ({
+    ...[DeckStatus.Planning, DeckStatus.Ongoing, DeckStatus.Paused, DeckStatus.Completed, DeckStatus.Dropped].map((s) => ({
       label: getDeckStatusText(s),
       command: () => bulkSetStatus(s),
     })),
@@ -321,7 +321,7 @@
     }
   }
 
-  const canLogProgress = (deck: Deck) => deck.status === DeckStatus.Ongoing;
+  const canLogProgress = (deck: Deck) => isInProgressStatus(deck.status);
 
   onMediaListChange((change) => {
     const deck = isOwnProfile.value ? decks.value?.find((d) => d.deckId === change.deckId) : undefined;
@@ -367,6 +367,7 @@
   const statusActionMeta: { status: DeckStatus; icon: string }[] = [
     { status: DeckStatus.Planning, icon: 'pi pi-bookmark' },
     { status: DeckStatus.Ongoing, icon: 'pi pi-play' },
+    { status: DeckStatus.Paused, icon: 'pi pi-pause' },
     { status: DeckStatus.Completed, icon: 'pi pi-check-circle' },
     { status: DeckStatus.Dropped, icon: 'pi pi-times-circle' },
   ];
@@ -427,6 +428,7 @@
   const editStatusSeverity: Record<number, string> = {
     [DeckStatus.Planning]: 'secondary',
     [DeckStatus.Ongoing]: 'warn',
+    [DeckStatus.Paused]: 'info',
     [DeckStatus.Completed]: 'success',
     [DeckStatus.Dropped]: 'danger',
   };
@@ -626,7 +628,7 @@
                 <div class="truncate font-medium" v-bind="japaneseTextAttrs(localiseTitle(deck))">{{ localiseTitle(deck) }}</div>
                 <div class="flex flex-wrap gap-x-3 text-xs text-surface-500 dark:text-surface-400">
                   <span>{{ getMediaTypeText(deck.mediaType) }}</span>
-                  <span v-if="deck.status === DeckStatus.Ongoing && deck.listEntry?.startedOn">Started {{ formatReadDate(deck.listEntry.startedOn) }}</span>
+                  <span v-if="isInProgressStatus(deck.status) && deck.listEntry?.startedOn">Started {{ formatReadDate(deck.listEntry.startedOn) }}</span>
                 </div>
               </div>
               <span v-if="canLogProgress(deck)" class="shrink-0" @click.prevent.stop>

@@ -44,7 +44,7 @@ export function progressFieldLabel(mediaType: MediaType): string {
   return mediaType === MediaType.Audio ? 'Listened so far' : 'Watched so far';
 }
 
-/** What moving to Ongoing asks first; away from Completed, a completion always gets a new pass, so only a stopped pass is worth asking about. */
+/** What moving to Ongoing or Paused asks first; away from Completed, a completion always gets a new pass, so only a stopped pass is worth asking about. */
 export function restartQuestion(status: DeckStatus | undefined, entry: MediaListEntrySummary | null | undefined): 'reread' | 'resume' | null {
   if (status === DeckStatus.Completed) return 'reread';
   if ((status === DeckStatus.Dropped || status === DeckStatus.Planning) && entry?.state === MediaListEntryState.Dropped) return 'resume';

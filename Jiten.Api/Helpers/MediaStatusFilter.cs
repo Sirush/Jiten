@@ -9,6 +9,7 @@ public sealed class MediaStatusFilter
     {
         ["planning"] = DeckStatus.Planning,
         ["ongoing"] = DeckStatus.Ongoing,
+        ["paused"] = DeckStatus.Paused,
         ["completed"] = DeckStatus.Completed,
         ["dropped"] = DeckStatus.Dropped,
     };

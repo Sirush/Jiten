@@ -16,6 +16,7 @@ describe('media status filter tokens', () => {
   it('reads a comma list in canonical order whatever order it arrives in', () => {
     expect(parseStatusFilter('nostatus,planning')).toEqual(['planning', 'nostatus']);
     expect(parseStatusFilter(' Planning , NOSTATUS ')).toEqual(['planning', 'nostatus']);
+    expect(parseStatusFilter('completed,paused,ongoing')).toEqual(['ongoing', 'paused', 'completed']);
   });
 
   it('drops legacy and unknown tokens', () => {

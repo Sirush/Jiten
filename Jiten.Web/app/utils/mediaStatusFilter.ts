@@ -1,6 +1,7 @@
 export const MEDIA_STATUS_OPTIONS = [
     {label: 'Planning', value: 'planning'},
     {label: 'Ongoing', value: 'ongoing'},
+    {label: 'Paused', value: 'paused'},
     {label: 'Completed', value: 'completed'},
     {label: 'Dropped', value: 'dropped'},
     {label: 'Without status', value: 'nostatus'},

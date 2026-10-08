@@ -47,7 +47,7 @@ public partial class UserController
                 continue;
             }
 
-            var strongest = StatusRank(entry.MappedStatus) > StatusRank(existing.MappedStatus) ? entry : existing;
+            var strongest = entry.MappedStatus.Rank() > existing.MappedStatus.Rank() ? entry : existing;
             byDeck[entry.DeckId] = strongest with
                                    {
                                        IsFavourite = existing.IsFavourite || entry.IsFavourite,

@@ -152,6 +152,7 @@ export enum DeckStatus {
   Ongoing = 2,
   Completed = 3,
   Dropped = 4,
+  Paused = 5,
 }
 
 export enum MediaListEntryState {

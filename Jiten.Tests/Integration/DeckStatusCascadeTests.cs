@@ -241,4 +241,27 @@ public class DeckStatusCascadeTests(JitenWebApplicationFactory factory)
         parentStatusB.Should().Be(DeckStatus.Ongoing);
         bodyB.GetProperty("allChildrenCompleted").GetBoolean().Should().BeFalse();
     }
+
+    [Fact]
+    public async Task PausingAVolume_PausesASeriesWithNoStatus()
+    {
+        var (parentId, childIds) = await SeedParentWithChildren();
+
+        await SetDeckStatus(childIds[0], DeckStatus.Paused);
+
+        (await GetDeckStatus(parentId)).Should().Be(DeckStatus.Paused);
+    }
+
+    [Fact]
+    public async Task PausedSeries_ResumesWhenAVolumeIsRead_ButNotWhenOneIsDropped()
+    {
+        var (parentId, childIds) = await SeedParentWithChildren();
+        await SetDeckStatus(parentId, DeckStatus.Paused);
+
+        await SetDeckStatus(childIds[0], DeckStatus.Dropped);
+        (await GetDeckStatus(parentId)).Should().Be(DeckStatus.Paused);
+
+        await SetDeckStatus(childIds[1], DeckStatus.Completed);
+        (await GetDeckStatus(parentId)).Should().Be(DeckStatus.Ongoing);
+    }
 }

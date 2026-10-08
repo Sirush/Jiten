@@ -45,7 +45,7 @@ public static class MediaListEntryHelper
     /// <summary>The entry state a title's status keeps current, or null for a status with no pass of its own.</summary>
     public static MediaListEntryState? EntryStateFor(DeckStatus status) => status switch
     {
-        DeckStatus.Ongoing => MediaListEntryState.InProgress,
+        DeckStatus.Ongoing or DeckStatus.Paused => MediaListEntryState.InProgress,
         DeckStatus.Completed => MediaListEntryState.Completed,
         DeckStatus.Dropped => MediaListEntryState.Dropped,
         _ => null
@@ -72,8 +72,8 @@ public static class MediaListEntryHelper
         var entry = preference.CurrentEntry;
         return status switch
         {
-            DeckStatus.Ongoing => entry == null || StartsAfterCompletion(preference, newEntry) ||
-                                  (newEntry && entry.State == MediaListEntryState.Dropped),
+            DeckStatus.Ongoing or DeckStatus.Paused => entry == null || StartsAfterCompletion(preference, newEntry) ||
+                                                       (newEntry && entry.State == MediaListEntryState.Dropped),
             DeckStatus.Completed => entry == null ||
                                     (entry.State == MediaListEntryState.Dropped && preference.Status == DeckStatus.Planning),
             _ => false
@@ -123,7 +123,7 @@ public static class MediaListEntryHelper
                 entry.FinishedOn ??= FinishDate(entry, date);
                 return false;
 
-            case DeckStatus.Ongoing:
+            case DeckStatus.Ongoing or DeckStatus.Paused:
                 if (entry == null || StartsEntry(preference, status, newEntry))
                 {
                     preference.CurrentEntry = NewEntry(userContext, preference, MediaListEntryState.InProgress, startedOn: date,
@@ -535,13 +535,15 @@ public static class MediaListEntryHelper
         return byStatus.Union(byEntry);
     }
 
-    /// <summary>A Completed or Dropped series is the user's call and only follows its unit count when set on the series itself; None or Planning opens once a volume is read.</summary>
+    /// <summary>A Completed or Dropped series is the user's call and only follows its unit count when set on the series itself; None or Planning opens once a volume is read, and Paused resumes.</summary>
     public static DeckStatus ResolveSeriesStatus(DeckStatus seriesStatus, bool allVolumesCompleted, DeckStatus volumeStatus,
                                                  bool setOnSeries) =>
         seriesStatus switch
         {
             DeckStatus.Completed when setOnSeries && !allVolumesCompleted => DeckStatus.Ongoing,
             DeckStatus.Dropped when setOnSeries && volumeStatus is DeckStatus.Completed or DeckStatus.Ongoing => DeckStatus.Ongoing,
+            DeckStatus.Paused when volumeStatus is DeckStatus.Completed or DeckStatus.Ongoing => DeckStatus.Ongoing,
+            DeckStatus.None or DeckStatus.Planning when !allVolumesCompleted && volumeStatus == DeckStatus.Paused => DeckStatus.Paused,
             DeckStatus.None or DeckStatus.Planning
                 when allVolumesCompleted || volumeStatus is DeckStatus.Completed or DeckStatus.Ongoing or DeckStatus.Dropped => DeckStatus
                     .Ongoing,

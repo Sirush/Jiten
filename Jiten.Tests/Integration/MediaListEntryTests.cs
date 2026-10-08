@@ -414,6 +414,57 @@ public class MediaListEntryTests(JitenWebApplicationFactory factory)
         (await Entries(deckId)).Single().State.Should().Be(MediaListEntryState.InProgress);
     }
 
+    [Fact]
+    public async Task Pausing_KeepsThePassOpen_AndResumingContinuesIt()
+    {
+        var deckId = await SeedDeck("VN");
+        await SetStatus(deckId, DeckStatus.Ongoing, new { date = "2024-05-12" });
+
+        var paused = await (await SetStatus(deckId, DeckStatus.Paused)).Content.ReadFromJsonAsync<JsonElement>();
+        paused.GetProperty("listEntry").GetProperty("state").GetInt32().Should().Be((int)MediaListEntryState.InProgress);
+
+        await SetStatus(deckId, DeckStatus.Ongoing);
+
+        var entry = (await Entries(deckId)).Single();
+        entry.State.Should().Be(MediaListEntryState.InProgress);
+        entry.StartedOn.Should().Be(new DateOnly(2024, 5, 12));
+        entry.FinishedOn.Should().BeNull();
+        (await Preference(deckId))!.CurrentEntryId.Should().Be(entry.Id);
+    }
+
+    [Fact]
+    public async Task Pausing_FromAnyStatus_HandlesThePassLikeOngoing()
+    {
+        var fresh = await SeedDeck("Fresh");
+        var finished = await SeedDeck("Finished");
+        var reread = await SeedDeck("Reread");
+        await SetStatus(finished, DeckStatus.Completed, new { date = "2024-05-12" });
+        await SetStatus(reread, DeckStatus.Completed, new { date = "2024-05-12" });
+
+        await SetStatus(fresh, DeckStatus.Paused);
+        await SetStatus(finished, DeckStatus.Paused);
+        await SetStatus(reread, DeckStatus.Paused, new { newEntry = true });
+
+        (await Entries(fresh)).Should().ContainSingle(r => r.State == MediaListEntryState.InProgress);
+        (await Entries(finished)).Should().ContainSingle(r => r.State == MediaListEntryState.InProgress && r.FinishedOn == null);
+        (await Entries(reread)).Select(r => r.State).Should().Equal(MediaListEntryState.Completed, MediaListEntryState.InProgress);
+        (await Preference(reread))!.Status.Should().Be(DeckStatus.Paused);
+    }
+
+    [Fact]
+    public async Task Stale_NeverListsPausedTitlesOrTheVolumesOfAPausedSeries()
+    {
+        var paused = await SeedDeck("Paused");
+        var (series, volumes) = await SeedSeries(3);
+        await SetStatus(paused, DeckStatus.Paused);
+        await SetStatus(volumes[0], DeckStatus.Ongoing);
+        await SetStatus(series, DeckStatus.Paused);
+        foreach (var deckId in new[] { paused, series, volumes[0] })
+            await Age(deckId, 45);
+
+        (await StaleDeckIds()).Should().BeEmpty();
+    }
+
     private async Task<(int Series, List<int> Volumes)> SeedSeries(int volumes, MediaType mediaType = MediaType.Novel)
     {
         using var scope = factory.Services.CreateScope();

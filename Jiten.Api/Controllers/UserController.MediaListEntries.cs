@@ -62,6 +62,17 @@ public partial class UserController
 
         var lastActivity = candidates.Where(c => decks.ContainsKey(c.DeckId)).ToDictionary(c => c.DeckId, c => c.UpdatedAt);
 
+        var parentIds = decks.Values.Where(d => d.ParentDeckId != null).Select(d => d.ParentDeckId!.Value).Distinct().ToList();
+        if (parentIds.Count > 0)
+        {
+            var pausedSeries = (await userContext.UserDeckPreferences.AsNoTracking()
+                                                 .Where(p => p.UserId == userId && parentIds.Contains(p.DeckId) && p.Status == DeckStatus.Paused)
+                                                 .Select(p => p.DeckId)
+                                                 .ToListAsync()).ToHashSet();
+            foreach (var volume in decks.Values.Where(d => d.ParentDeckId is { } parent && pausedSeries.Contains(parent)))
+                lastActivity.Remove(volume.DeckId);
+        }
+
         // A series is still being read while any of its volumes changes, and a stale volume already asks about it.
         var seriesIds = decks.Values.Where(d => d.childrenDeckCount > 0).Select(d => d.DeckId).ToList();
         if (seriesIds.Count > 0)

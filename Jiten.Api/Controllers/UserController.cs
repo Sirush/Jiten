@@ -3736,15 +3736,6 @@ public partial class UserController(
                                              .Select(d => new { d.DeckId, d.ParentDeckId })
                                              .ToDictionaryAsync(d => d.DeckId, d => d.ParentDeckId);
 
-        static int Rank(DeckStatus s) => s switch
-                                         {
-                                             DeckStatus.Completed => 4,
-                                             DeckStatus.Ongoing => 3,
-                                             DeckStatus.Planning => 2,
-                                             DeckStatus.Dropped => 1,
-                                             _ => 0
-                                         };
-
         var agg = new Dictionary<int, (DeckStatus Status, bool Own, bool Fav)>();
         foreach (var p in prefs)
         {
@@ -3761,7 +3752,7 @@ public partial class UserController(
             var statusValue = cur.Status;
             if (isOwn && !cur.Own)
                 statusValue = p.Status;
-            else if (isOwn == cur.Own && Rank(p.Status) > Rank(cur.Status))
+            else if (isOwn == cur.Own && p.Status.Rank() > cur.Status.Rank())
                 statusValue = p.Status;
 
             agg[displayId] = (statusValue, cur.Own || isOwn, cur.Fav || p.IsFavourite);

@@ -21,6 +21,7 @@ public static class PopularityWeights
     public const double Ongoing = 3;
     public const double Favourite = 3;
     public const double Download = 2;
+    public const double Paused = 2;
     public const double Boost = 2;
     public const double Planning = 1.5;
     public const double Upvote = 1;
@@ -57,6 +58,7 @@ public static class PopularityWeights
     {
         DeckStatus.Completed => Completed,
         DeckStatus.Ongoing => Ongoing,
+        DeckStatus.Paused => Paused,
         DeckStatus.Planning => Planning,
         DeckStatus.Dropped => Dropped,
         _ => 0

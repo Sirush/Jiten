@@ -82,6 +82,10 @@
     });
   }
 
+  function pause(deck: StaleDeck) {
+    return whileBusy(deck.deckId, () => postDeckStatus(deck, DeckStatus.Paused));
+  }
+
   async function setStatus(deck: StaleDeck, status: DeckStatus, date: string | null) {
     const response = await whileBusy(deck.deckId, () => postDeckStatus(deck, status, { date }));
     if (response && status === DeckStatus.Completed) await followUpCompletion(deck, response, date);
@@ -167,6 +171,15 @@
               @click="confirmStillGoing(deck)"
             />
             <MediaListProgressButton :deck="deck" hide-progress @close="onProgressClosed(deck.deckId)" />
+            <Button
+              label="Pause"
+              icon="pi pi-pause"
+              text
+              size="small"
+              severity="secondary"
+              :disabled="busyDeckIds.has(deck.deckId)"
+              @click="pause(deck)"
+            />
             <Button
               label="Finished"
               icon="pi pi-check"

@@ -205,7 +205,7 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
         // Custom lists repeat entries already present in the status lists.
         var deduped = entries
                       .GroupBy(e => e.ExternalId)
-                      .Select(g => g.OrderByDescending(e => StatusRank(e.MappedStatus)).First())
+                      .Select(g => g.OrderByDescending(e => e.MappedStatus.Rank()).First())
                       .ToList();
 
         return new ExternalListFetchResult(deduped, null);
@@ -241,12 +241,11 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
 
     private static bool TryMapAnilistStatus(string status, out DeckStatus mapped)
     {
-        // Paused stays Ongoing: the user still intends to continue.
         mapped = status switch
                  {
                      "CURRENT" => DeckStatus.Ongoing,
                      "REPEATING" => DeckStatus.Completed,
-                     "PAUSED" => DeckStatus.Ongoing,
+                     "PAUSED" => DeckStatus.Paused,
                      "PLANNING" => DeckStatus.Planning,
                      "COMPLETED" => DeckStatus.Completed,
                      "DROPPED" => DeckStatus.Dropped,
@@ -372,12 +371,11 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
             if (!label.TryGetProperty("id", out var idEl) || idEl.ValueKind != JsonValueKind.Number)
                 continue;
 
-            // Stalled stays Ongoing, same reasoning as AniList's Paused.
             var (status, rank) = idEl.GetInt32() switch
                                  {
                                      2 => (DeckStatus.Completed, 4), // Finished
                                      1 => (DeckStatus.Ongoing, 3),   // Playing
-                                     3 => (DeckStatus.Ongoing, 2),   // Stalled
+                                     3 => (DeckStatus.Paused, 2),    // Stalled
                                      4 => (DeckStatus.Dropped, 1),   // Dropped
                                      5 => (DeckStatus.Planning, 0),  // Wishlist
                                      _ => (DeckStatus.None, -1),
@@ -393,12 +391,4 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
         return (best.Label, best.Status);
     }
 
-    private static int StatusRank(DeckStatus s) => s switch
-                                                   {
-                                                       DeckStatus.Completed => 4,
-                                                       DeckStatus.Ongoing => 3,
-                                                       DeckStatus.Planning => 2,
-                                                       DeckStatus.Dropped => 1,
-                                                       _ => 0,
-                                                   };
 }

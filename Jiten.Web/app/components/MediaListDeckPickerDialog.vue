@@ -43,6 +43,7 @@
     { label: 'All', value: 'all' },
     { label: 'Completed', value: DeckStatus.Completed },
     { label: 'Ongoing', value: DeckStatus.Ongoing },
+    { label: 'Paused', value: DeckStatus.Paused },
     { label: 'Planning', value: DeckStatus.Planning },
     { label: 'Dropped', value: DeckStatus.Dropped },
   ];

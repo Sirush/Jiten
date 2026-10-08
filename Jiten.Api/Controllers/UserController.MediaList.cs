@@ -81,7 +81,7 @@ public partial class UserController
             }
 
             // Several external entries can share one deck (e.g. seasons linked to the same parent); strongest status wins.
-            if (!matchedByDeck.TryGetValue(deckId, out var existing) || StatusRank(entry.MappedStatus) > StatusRank(existing.MappedStatus))
+            if (!matchedByDeck.TryGetValue(deckId, out var existing) || entry.MappedStatus.Rank() > existing.MappedStatus.Rank())
                 matchedByDeck[deckId] = entry;
         }
 
@@ -171,7 +171,7 @@ public partial class UserController
         var deduped = request.Entries
                              .Where(e => Enum.IsDefined(e.Status) && e.Status != DeckStatus.None)
                              .GroupBy(e => e.DeckId)
-                             .Select(g => g.OrderByDescending(e => StatusRank(e.Status)).First())
+                             .Select(g => g.OrderByDescending(e => e.Status.Rank()).First())
                              .ToList();
 
         var requestedIds = deduped.Select(e => e.DeckId).ToList();
@@ -422,7 +422,7 @@ public partial class UserController
                 // Kept current like a completion is when the title is dropped or planned for a reread after finishing it.
                 preference.CurrentEntry ??= lastRepeat;
             }
-            else if (entry.Status == DeckStatus.Ongoing)
+            else if (entry.Status.IsInProgress())
                 lastRepeat!.FinishedOn = Clean(entry.FinishedOn);
         }
 
@@ -748,12 +748,4 @@ public partial class UserController
             : value;
     }
 
-    private static int StatusRank(DeckStatus s) => s switch
-                                                   {
-                                                       DeckStatus.Completed => 4,
-                                                       DeckStatus.Ongoing => 3,
-                                                       DeckStatus.Planning => 2,
-                                                       DeckStatus.Dropped => 1,
-                                                       _ => 0,
-                                                   };
 }

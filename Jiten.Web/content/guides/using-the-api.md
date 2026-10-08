@@ -6,7 +6,7 @@ level: advanced
 order: 20
 icon: material-symbols-light:api
 draft: false
-updated: 2026-07-28
+updated: 2026-10-08
 ---
 
 Jiten's API is public. Almost all actions that you can do on the website can also be done programmatically: searching the media library, a title's vocabulary, dictionary search, kanji details, frequency lists. Personal projects, hobby tools and small research scripts are welcome, within the rules in [Can I use the API or scrape the site?](/guides/api-and-scraping).
@@ -61,17 +61,13 @@ That call also works without the key, and returns the same title with the covera
 
 ## Rate limits
 
-**300 requests per minute** for ordinary endpoints, and **10 per minute** or less for the heavy ones: deck downloads, frequency lists, the custom deck parser, and some others.
+**120 requests per minute** while anonymous or **300 requests per minute** with an API key for ordinary endpoints, and **10 per minute** or less for the heavy ones: deck downloads, frequency lists, the custom deck parser, and some others.
 
-The numbers are the same whether you send a key or not. What changes is the bucket. An authenticated caller gets their own, an anonymous one shares with everyone else on the same IP address.
-
-Going over returns a **429** with a `Retry-After` header and this body:
+Going over returns a **429** with a `Retry-After` header and this body in plain text:
 
 ```
 Too many requests. Please try again later.
 ```
-
-That is plain text rather than JSON, so a client that parses every response will throw on it instead of seeing the status. Small overshoots may not fail at all: a few requests are held and served when the window rolls over, which looks like a call hanging for up to a minute.
 
 ## What to expect from it
 
