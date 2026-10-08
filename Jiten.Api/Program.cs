@@ -190,6 +190,15 @@ bool IsTrustedSsr(HttpContext ctx)
     return CryptographicOperations.FixedTimeEquals(Encoding.UTF8.GetBytes(provided.ToString()), ssrBypassKeyBytes);
 }
 
+var rateLimitTrustedIps = (builder.Configuration["RateLimitTrustedIps"] ?? "")
+                          .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                          .ToHashSet();
+
+bool IsTrustedIp(HttpContext ctx) => rateLimitTrustedIps.Count > 0 && rateLimitTrustedIps.Contains(GetClientIp(ctx));
+
+bool IsFirstPartyBrowser(HttpContext ctx) =>
+    !ctx.User.HasClaim("auth_scheme", "ApiKey") && ctx.Request.Headers.Origin.ToString() == "https://jiten.moe";
+
 // OpenTelemetry Configuration
 var otelConfig = builder.Configuration.GetSection("OpenTelemetry");
 var enableOtlpExporter = otelConfig.GetValue<bool>("EnableOtlpExporter");
@@ -230,6 +239,8 @@ if (enableOtlpExporter)
                            if (userAgent.Length > 0) activity.SetTag("user_agent.original", userAgent);
                            var clientName = request.Headers["X-Client-Name"].ToString();
                            if (clientName.Length > 0) activity.SetTag("client.name", clientName);
+                           var origin = request.Headers.Origin.ToString();
+                           if (origin.Length > 0) activity.SetTag("http.request.header.origin", origin);
                            if (IsTrustedSsr(request.HttpContext)) activity.SetTag("ssr.internal", true);
                        };
                        // Authentication runs after the request hook, so identity tags only exist on the response side.
@@ -548,22 +559,26 @@ builder.Services.AddRateLimiter(options =>
         var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
         var tier = context.User.FindFirst("rate_limit_tier")?.Value ?? "Default";
 
-        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+        if (tier == "Unlimited")
+            return RateLimitPartition.GetNoLimiter($"user:{userId}");
 
-        var permitLimit = tier switch
+        var (bucket, permitLimit) = (userId, tier) switch
         {
-            "Researcher" => 3000,
-            "Unlimited" => int.MaxValue,
-            _ => 300
+            (not null, "Researcher") => ($"user:{userId}", 3000),
+            (not null, _) when IsFirstPartyBrowser(context) => ($"user:{userId}", 600),
+            (not null, _) => ($"user:{userId}", 300),
+            _ when IsTrustedIp(context) => ($"ip:{GetClientIp(context)}", 3000),
+            _ => ($"ip:{GetClientIp(context)}", 120)
         };
 
-        return RateLimitPartition.GetFixedWindowLimiter(partitionKey,
-                                                        _ => new FixedWindowRateLimiterOptions
-                                                             {
-                                                                 PermitLimit = permitLimit, Window = TimeSpan.FromSeconds(60),
-                                                                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 3,
-                                                                 AutoReplenishment = true
-                                                             });
+        return RateLimitPartition.GetSlidingWindowLimiter($"{bucket}:{permitLimit}",
+                                                          _ => new SlidingWindowRateLimiterOptions
+                                                               {
+                                                                   PermitLimit = permitLimit, Window = TimeSpan.FromSeconds(60),
+                                                                   SegmentsPerWindow = 6,
+                                                                   QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 3,
+                                                                   AutoReplenishment = true
+                                                               });
     });
 
     // Home-CLI ingest: a drain posts one request per video at 1.5s intervals, so this only bounds key guessing
@@ -590,10 +605,12 @@ builder.Services.AddRateLimiter(options =>
         {
             "Researcher" => 300,
             "Unlimited" => int.MaxValue,
-            _ => userId != null ? 45 : 20
+            _ when userId != null => 45,
+            _ when IsTrustedIp(context) => 300,
+            _ => 20
         };
 
-        return RateLimitPartition.GetSlidingWindowLimiter(partitionKey,
+        return RateLimitPartition.GetSlidingWindowLimiter($"{partitionKey}:{permitLimit}",
                                                           _ => new SlidingWindowRateLimiterOptions
                                                                {
                                                                    PermitLimit = permitLimit, Window = TimeSpan.FromSeconds(60),
@@ -617,10 +634,11 @@ builder.Services.AddRateLimiter(options =>
         {
             "Researcher" => 300,
             "Unlimited" => int.MaxValue,
+            _ when userId == null && IsTrustedIp(context) => 300,
             _ => 10
         };
 
-        return RateLimitPartition.GetSlidingWindowLimiter(partitionKey,
+        return RateLimitPartition.GetSlidingWindowLimiter($"{partitionKey}:{permitLimit}",
                                                           _ => new SlidingWindowRateLimiterOptions
                                                                {
                                                                    PermitLimit = permitLimit, Window = TimeSpan.FromSeconds(60),
@@ -1220,8 +1238,6 @@ app.UseRouting();
 
 app.UseCors("AllowSpecificOrigin");
 
-app.UseResponseCaching();
-
 app.UseAuthentication();
 
 // Rate limiting is IP-partitioned; the integration test suite drives many auth-policy endpoints from a
@@ -1230,6 +1246,8 @@ if (!app.Environment.IsEnvironment("Testing"))
 {
     app.UseRateLimiter();
 }
+
+app.UseResponseCaching();
 
 app.UseStaticFiles();
 

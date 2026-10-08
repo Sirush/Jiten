@@ -74,6 +74,7 @@
     "ApiBaseUrl": ""
   },
   "SsrBypassKey": "",
+  "RateLimitTrustedIps": "",
   "RunPod": {
     "ApiKey": "your-api-key",
     "NovelsEndpointId": "endpoint-id-for-novels",
