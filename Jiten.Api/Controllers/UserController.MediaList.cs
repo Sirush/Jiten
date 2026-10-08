@@ -96,8 +96,10 @@ public partial class UserController
         var preferences = await userContext.UserDeckPreferences
                                            .AsNoTracking()
                                            .Where(p => p.UserId == userId && matchedDeckIds.Contains(p.DeckId))
-                                           .Select(p => new { p.DeckId, p.Status, p.IsIgnored })
+                                           .Select(p => new { p.DeckId, p.Status, p.IsIgnored, p.CurrentEntryId })
                                            .ToDictionaryAsync(p => p.DeckId);
+
+        var passesByDeck = await PassesByDeckAsync(userId, matchedDeckIds);
 
         var subdeckCounts = await jitenContext.Decks
                                               .AsNoTracking()
@@ -113,6 +115,9 @@ public partial class UserController
                           var deck = decks[kv.Key];
                           var pref = preferences.GetValueOrDefault(kv.Key);
                           var currentStatus = pref != null && pref.Status != DeckStatus.None ? pref.Status : (DeckStatus?)null;
+                          var datesTarget = currentStatus is { } status && pref is { IsIgnored: false }
+                              ? DatesTarget(status, pref.CurrentEntryId, passesByDeck.GetValueOrDefault(kv.Key) ?? [], kv.Value.MappedStatus)
+                              : null;
                           return new
                                  {
                                      deckId = deck.DeckId,
@@ -126,6 +131,16 @@ public partial class UserController
                                      finishedAt = kv.Value.FinishedAt,
                                      startedOn = kv.Value.StartedOn,
                                      completedOn = kv.Value.CompletedOn,
+                                     startedPrecision = kv.Value.StartedPrecision.ToString().ToLowerInvariant(),
+                                     completedPrecision = kv.Value.CompletedPrecision.ToString().ToLowerInvariant(),
+                                     datesTarget = datesTarget == null
+                                         ? null
+                                         : new
+                                           {
+                                               inProgress = datesTarget.State == MediaListEntryState.InProgress,
+                                               startedOn = datesTarget.StartedOn,
+                                               finishedOn = datesTarget.FinishedOn,
+                                           },
                                      repeatCount = kv.Value.RepeatCount,
                                      progress = kv.Value.Progress,
                                      subdeckCount = subdeckCounts.TryGetValue(deck.DeckId, out var subdecks) ? subdecks : (int?)null,
@@ -267,6 +282,96 @@ public partial class UserController
                               subdecksCompleted,
                               oversizedDecks,
                           });
+    }
+
+    /// <summary>Fills empty dates on titles already on the list from the source's dates; never changes a status, adds a pass or replaces a date.</summary>
+    [HttpPost("media-list/import/dates")]
+    [SwaggerOperation(Summary = "Add an external list's dates to titles already on the list")]
+    public async Task<IResult> ApplyMediaListDates([FromBody] MediaListDatesImportRequest request)
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        if (request.Entries.Count == 0)
+            return Results.BadRequest(new { message = "Nothing to import." });
+        if (request.Entries.Count > MaxImportApplyEntries)
+            return Results.BadRequest(new { message = $"Too many entries in one request (max {MaxImportApplyEntries})." });
+
+        var sourceByDeck = request.Entries
+                                  .Where(e => Enum.IsDefined(e.Status))
+                                  .GroupBy(e => e.DeckId)
+                                  .ToDictionary(g => g.Key, g => g.First());
+        var deckIds = sourceByDeck.Keys.ToList();
+
+        var preferences = await userContext.UserDeckPreferences
+                                           .AsNoTracking()
+                                           .Where(p => p.UserId == userId && deckIds.Contains(p.DeckId) && !p.IsIgnored && p.Status != DeckStatus.None)
+                                           .Select(p => new { p.DeckId, p.Status, p.CurrentEntryId })
+                                           .ToListAsync();
+        var passesByDeck = await PassesByDeckAsync(userId, preferences.Select(p => p.DeckId).ToList(), track: true);
+
+        var dated = new List<UserMediaListEntry>();
+        foreach (var preference in preferences)
+        {
+            var source = sourceByDeck[preference.DeckId];
+            var target = DatesTarget(preference.Status, preference.CurrentEntryId, passesByDeck.GetValueOrDefault(preference.DeckId) ?? [], source.Status);
+            if (target == null)
+                continue;
+
+            var (startedOn, finishedOn) = DatesToFill(target, source.StartedOn, source.FinishedOn);
+            if (startedOn == null && finishedOn == null)
+                continue;
+
+            target.StartedOn ??= startedOn;
+            target.FinishedOn ??= finishedOn;
+            dated.Add(target);
+        }
+
+        if (dated.Count > 0)
+        {
+            await SnapshotCoverageAtFinishAsync(userId, dated);
+            await userContext.SaveChangesAsync();
+            backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserAccomplishments(userId));
+        }
+
+        logger.LogInformation("Media list dates imported: UserId={UserId}, Requested={Requested}, Dated={Dated}", userId, sourceByDeck.Count, dated.Count);
+
+        return Results.Ok(new { dated = dated.Count, skipped = sourceByDeck.Count - dated.Count });
+    }
+
+    private async Task<Dictionary<int, List<UserMediaListEntry>>> PassesByDeckAsync(string userId, IReadOnlyCollection<int> deckIds, bool track = false)
+    {
+        var query = userContext.UserMediaListEntries.Where(r => r.UserId == userId && deckIds.Contains(r.DeckId));
+        var passes = await (track ? query : query.AsNoTracking()).ToListAsync();
+        return passes.GroupBy(r => r.DeckId).ToDictionary(g => g.Key, g => g.ToList());
+    }
+
+    /// <summary>The current pass, else the latest, in the state both statuses keep current; null when the statuses describe different passes.</summary>
+    private static UserMediaListEntry? DatesTarget(DeckStatus jitenStatus, long? currentEntryId, IReadOnlyCollection<UserMediaListEntry> passes,
+                                                   DeckStatus sourceStatus)
+    {
+        var state = MediaListEntryHelper.EntryStateFor(sourceStatus);
+        if (state == null || MediaListEntryHelper.EntryStateFor(jitenStatus) != state)
+            return null;
+
+        return passes.FirstOrDefault(r => r.Id == currentEntryId && r.State == state) ??
+               passes.Where(r => r.State == state).MaxBy(r => r.Id);
+    }
+
+    /// <summary>Source dates for the target's empty fields; a pass in progress takes no finish date, and a date out of order with the pass is left out.</summary>
+    private static (DateOnly? StartedOn, DateOnly? FinishedOn) DatesToFill(UserMediaListEntry target, DateOnly? startedOn, DateOnly? finishedOn)
+    {
+        static DateOnly? Allowed(DateOnly? date) => date is { } d && MediaListEntryHelper.IsAllowedDate(d) ? d : null;
+
+        var finish = target.State != MediaListEntryState.InProgress && target.FinishedOn == null ? Allowed(finishedOn) : null;
+        if (finish < target.StartedOn)
+            finish = null;
+
+        var start = target.StartedOn == null ? Allowed(startedOn) : null;
+        if (start > (target.FinishedOn ?? finish))
+            start = null;
+
+        return (start, finish);
     }
 
     /// <summary>Volume rows of a Jiten export, kept to the children of the title they were exported under and to the unit progress limits.</summary>

@@ -8,6 +8,13 @@ public enum ExternalListProvider
     Vndb,
 }
 
+public enum DatePrecision
+{
+    Day,
+    Month,
+    Year,
+}
+
 public record ExternalListEntry(
     string ExternalId,
     string Title,
@@ -18,7 +25,9 @@ public record ExternalListEntry(
     int? Progress = null,
     DateOnly? StartedOn = null,
     DateOnly? CompletedOn = null,
-    int? RepeatCount = null);
+    int? RepeatCount = null,
+    DatePrecision StartedPrecision = DatePrecision.Day,
+    DatePrecision CompletedPrecision = DatePrecision.Day);
 
 public record ExternalListFetchResult(List<ExternalListEntry> Entries, string? Error)
 {

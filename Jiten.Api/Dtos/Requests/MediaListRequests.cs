@@ -14,6 +14,19 @@ public class MediaListImportApplyRequest
     public bool OverwriteExisting { get; set; }
 }
 
+public class MediaListDatesImportRequest
+{
+    public List<MediaListDatesImportEntry> Entries { get; set; } = new();
+}
+
+public class MediaListDatesImportEntry
+{
+    public int DeckId { get; set; }
+    public DeckStatus Status { get; set; }
+    public DateOnly? StartedOn { get; set; }
+    public DateOnly? FinishedOn { get; set; }
+}
+
 /// <summary>Progress is the number of finished units on the source list; the server resolves which subdecks that covers.</summary>
 public class MediaListImportEntry
 {

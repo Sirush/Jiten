@@ -177,8 +177,8 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
                         title ??= titleEl.TryGetProperty("romaji", out var romaji) ? romaji.GetString() : null;
                     }
 
-                    var startedOn = ReadAnilistFuzzyDate(entry, "startedAt");
-                    var completedOn = ReadAnilistFuzzyDate(entry, "completedAt");
+                    var (startedOn, startedPrecision) = ReadAnilistFuzzyDate(entry, "startedAt");
+                    var (completedOn, completedPrecision) = ReadAnilistFuzzyDate(entry, "completedAt");
                     // Users often leave the finished date unset; the start date is the next best signal for the cutoff filter.
                     var finishedAt = completedOn ?? startedOn;
                     int? repeat = entry.TryGetProperty("repeat", out var repeatEl) && repeatEl.ValueKind == JsonValueKind.Number
@@ -195,7 +195,8 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
 
                     entries.Add(new ExternalListEntry(id.ToString(), title ?? $"AniList #{id}",
                                                       $"https://anilist.co/{urlSegment}/{id}", status, mapped, finishedAt, progress,
-                                                      startedOn, completedOn, RepeatsBeforeFromAnilist(repeat, mapped)));
+                                                      startedOn, completedOn, RepeatsBeforeFromAnilist(repeat, mapped), startedPrecision,
+                                                      completedPrecision));
                 }
             }
 
@@ -219,15 +220,26 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
         return mapped == DeckStatus.Completed ? repeat : repeat + 1;
     }
 
-    private static DateOnly? ReadAnilistFuzzyDate(JsonElement entry, string property)
+    private static (DateOnly? Date, DatePrecision Precision) ReadAnilistFuzzyDate(JsonElement entry, string property)
     {
         if (!entry.TryGetProperty(property, out var date) || date.ValueKind != JsonValueKind.Object ||
             !date.TryGetProperty("year", out var year) || year.ValueKind != JsonValueKind.Number)
-            return null;
+            return (null, DatePrecision.Day);
 
-        var month = date.TryGetProperty("month", out var m) && m.ValueKind == JsonValueKind.Number ? m.GetInt32() : 1;
-        var day = date.TryGetProperty("day", out var d) && d.ValueKind == JsonValueKind.Number ? d.GetInt32() : 1;
-        return new DateOnly(year.GetInt32(), Math.Clamp(month, 1, 12), Math.Clamp(day, 1, 28));
+        int? month = date.TryGetProperty("month", out var m) && m.ValueKind == JsonValueKind.Number ? m.GetInt32() : null;
+        int? day = month != null && date.TryGetProperty("day", out var d) && d.ValueKind == JsonValueKind.Number ? d.GetInt32() : null;
+        return PaddedDate(year.GetInt32(), month, day);
+    }
+
+    private static (DateOnly? Date, DatePrecision Precision) PaddedDate(int year, int? month, int? day)
+    {
+        if (year is < 1 or > 9999)
+            return (null, DatePrecision.Day);
+
+        var m = Math.Clamp(month ?? 1, 1, 12);
+        var d = Math.Clamp(day ?? 1, 1, DateTime.DaysInMonth(year, m));
+        var precision = month == null ? DatePrecision.Year : day == null ? DatePrecision.Month : DatePrecision.Day;
+        return (new DateOnly(year, m, d), precision);
     }
 
     /// <summary>AniList reports its own limiter as a GraphQL error, sometimes with a 200 status.</summary>
@@ -323,15 +335,16 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
                     title ??= vn.TryGetProperty("title", out var t) && t.ValueKind == JsonValueKind.String ? t.GetString() : null;
                 }
 
-                var startedOn = ReadVndbDate(item, "started");
-                var completedOn = ReadVndbDate(item, "finished");
+                var (startedOn, startedPrecision) = ReadVndbDate(item, "started");
+                var (completedOn, completedPrecision) = ReadVndbDate(item, "finished");
                 // Users often leave the finished date unset; start date, then vote date, are the next best signals for the cutoff filter.
                 var finishedAt = completedOn ?? startedOn;
                 if (finishedAt == null && item.TryGetProperty("voted", out var voted) && voted.ValueKind == JsonValueKind.Number)
                     finishedAt = DateOnly.FromDateTime(DateTimeOffset.FromUnixTimeSeconds(voted.GetInt64()).UtcDateTime);
 
                 entries.Add(new ExternalListEntry(vnId, title ?? $"VNDB {vnId}", $"https://vndb.org/{vnId}", label, mapped, finishedAt,
-                                                  StartedOn: startedOn, CompletedOn: completedOn));
+                                                  StartedOn: startedOn, CompletedOn: completedOn, StartedPrecision: startedPrecision,
+                                                  CompletedPrecision: completedPrecision));
             }
 
             var more = doc.RootElement.TryGetProperty("more", out var moreEl) && moreEl.ValueKind == JsonValueKind.True;
@@ -344,19 +357,19 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
         return new ExternalListFetchResult(entries, null);
     }
 
-    /// <summary>VNDB dates may be partial ("2020" or "2020-01"); missing parts default to 1.</summary>
-    private static DateOnly? ReadVndbDate(JsonElement item, string property)
+    /// <summary>VNDB dates may be partial ("2020" or "2020-01").</summary>
+    private static (DateOnly? Date, DatePrecision Precision) ReadVndbDate(JsonElement item, string property)
     {
         if (!item.TryGetProperty(property, out var el) || el.ValueKind != JsonValueKind.String)
-            return null;
+            return (null, DatePrecision.Day);
 
         var parts = el.GetString()!.Split('-');
-        if (parts.Length == 0 || !int.TryParse(parts[0], out var year) || year < 1)
-            return null;
+        if (!int.TryParse(parts[0], out var year))
+            return (null, DatePrecision.Day);
 
-        var month = parts.Length > 1 && int.TryParse(parts[1], out var m) ? Math.Clamp(m, 1, 12) : 1;
-        var day = parts.Length > 2 && int.TryParse(parts[2], out var d) ? Math.Clamp(d, 1, 28) : 1;
-        return new DateOnly(year, month, day);
+        int? month = parts.Length > 1 && int.TryParse(parts[1], out var m) ? m : null;
+        int? day = month != null && parts.Length > 2 && int.TryParse(parts[2], out var d) ? d : null;
+        return PaddedDate(year, month, day);
     }
 
     private static (string Label, DeckStatus Status) MapVndbLabels(JsonElement item)

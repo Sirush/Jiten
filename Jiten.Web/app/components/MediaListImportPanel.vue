@@ -32,6 +32,9 @@
     finishedAt: string | null;
     startedOn?: string | null;
     completedOn?: string | null;
+    startedPrecision?: DatePrecision;
+    completedPrecision?: DatePrecision;
+    datesTarget?: { inProgress: boolean; startedOn: string | null; finishedOn: string | null } | null;
     repeatCount?: number | null;
     charactersRead?: number | null;
     history?: ImportedHistoryRow[] | null;
@@ -52,10 +55,20 @@
     counts: { total: number; matched: number; unmatched: number; conflicts: number };
   }
 
-  type ViewKey = 'import' | 'all' | 'excluded' | 'conflicts' | 'ignored';
+  type DatePrecision = 'day' | 'month' | 'year';
+  type ImportMode = 'status' | 'dates';
+  type ViewKey = 'import' | 'all' | 'excluded' | 'conflicts' | 'ignored' | 'add' | 'partial' | 'dated' | 'skipped';
   type SortKey = 'title' | 'type' | 'source' | 'action' | 'finished';
   type SortDir = 'asc' | 'desc';
   type ActionKind = 'ignored' | 'excluded' | 'conflict' | 'favourite' | 'unchanged' | 'none';
+
+  interface DatesPlan {
+    kind: 'fill' | 'dated' | 'skip';
+    startedOn: string | null;
+    finishedOn: string | null;
+    partial: boolean;
+    reason: string;
+  }
 
   const store = useJitenStore();
   const localiseTitle = useLocaliseTitle();
@@ -97,6 +110,10 @@
   const rowResolutions = ref<Record<number, 'keep' | 'overwrite'>>({});
   const rowOverrides = ref<Record<number, boolean>>({});
   const unmatchedOpen = ref(false);
+  const mode = ref<ImportMode>('status');
+  const includePartialDates = ref(false);
+  const dateOverrides = ref<Record<number, boolean>>({});
+  const datesApplied = ref<{ dated: number } | null>(null);
 
   const search = ref('');
   const activeView = ref<ViewKey>('import');
@@ -127,7 +144,7 @@
   const sortOptions = computed<{ label: string; value: SortKey }[]>(() => [
     { label: 'Title', value: 'title' },
     { label: 'Type', value: 'type' },
-    { label: 'Source status', value: 'source' },
+    ...(mode.value === 'dates' ? [] : [{ label: 'Source status', value: 'source' as SortKey }]),
     { label: 'Action', value: 'action' },
     ...(isFile.value ? [] : [{ label: 'Date', value: 'finished' as SortKey }]),
   ]);
@@ -237,6 +254,7 @@
     isLoading.value = true;
     loadingMessage.value = isFile.value ? 'Reading your file...' : `Fetching your ${providerName.value} list...`;
     applied.value = null;
+    datesApplied.value = null;
 
     try {
       let data: PreviewData;
@@ -257,6 +275,9 @@
       includedTypes.value = typeOptions.value.map((o) => o.value);
       rowResolutions.value = {};
       rowOverrides.value = {};
+      dateOverrides.value = {};
+      includePartialDates.value = false;
+      mode.value = 'status';
       importProgress.value = true;
       cutoffEnabled.value = false;
       cutoffDate.value = null;
@@ -395,6 +416,117 @@
     () => applyRows.value.filter((r) => r.startedOn || r.completedOn || r.repeatCount || r.charactersRead || r.history?.length || r.volumes?.length).length
   );
 
+  function isPartial(precision: DatePrecision | undefined): boolean {
+    return precision === 'month' || precision === 'year';
+  }
+
+  function sentStartedOn(row: PreviewRow): string | null {
+    return row.startedOn && (!isPartial(row.startedPrecision) || includePartialDates.value) ? row.startedOn : null;
+  }
+
+  function sentFinishedOn(row: PreviewRow): string | null {
+    return row.completedOn && (!isPartial(row.completedPrecision) || includePartialDates.value) ? row.completedOn : null;
+  }
+
+  const partialDateRowCount = computed(
+    () => applyRows.value.filter((r) => (r.startedOn && isPartial(r.startedPrecision)) || (r.completedOn && isPartial(r.completedPrecision))).length
+  );
+
+  function passState(status: DeckStatus): 'progress' | 'completed' | 'dropped' | null {
+    if (status === DeckStatus.Ongoing || status === DeckStatus.Paused) return 'progress';
+    if (status === DeckStatus.Completed) return 'completed';
+    return status === DeckStatus.Dropped ? 'dropped' : null;
+  }
+
+  function latestAllowedDate(): string {
+    const now = new Date();
+    now.setDate(now.getDate() + 1);
+    return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+  }
+
+  // Mirrors the server's rules so the preview shows what will land; the server applies them again.
+  function buildDatesPlan(row: PreviewRow, latestAllowed: string): DatesPlan {
+    const skip = (reason: string): DatesPlan => ({ kind: 'skip', startedOn: null, finishedOn: null, partial: false, reason });
+    const target = row.datesTarget;
+    if (!target) {
+      if (row.isIgnored) return skip('Ignored');
+      if (row.currentStatus == null) return skip('Not on your list');
+      const state = passState(row.mappedStatus);
+      return skip(state != null && state !== passState(row.currentStatus) ? 'Status differs' : 'Nothing to date');
+    }
+
+    const allowed = (date: string | null | undefined) => (date && date >= '1900-01-01' && date <= latestAllowed ? date : null);
+    let finishedOn = !target.inProgress && !target.finishedOn ? allowed(row.completedOn) : null;
+    if (finishedOn && target.startedOn && finishedOn < target.startedOn) finishedOn = null;
+    let startedOn = !target.startedOn ? allowed(row.startedOn) : null;
+    const end = target.finishedOn ?? finishedOn;
+    if (startedOn && end && startedOn > end) startedOn = null;
+
+    if (!startedOn && !finishedOn) return { kind: 'dated', startedOn: null, finishedOn: null, partial: false, reason: 'Already dated' };
+    const partial = (!!startedOn && isPartial(row.startedPrecision)) || (!!finishedOn && isPartial(row.completedPrecision));
+    return { kind: 'fill', startedOn, finishedOn, partial, reason: '' };
+  }
+
+  const datesRows = computed(() => allRows.value.filter((r) => r.startedOn || r.completedOn));
+
+  const datesPlans = computed(() => {
+    const latestAllowed = latestAllowedDate();
+    return new Map(datesRows.value.map((r) => [r.deckId, buildDatesPlan(r, latestAllowed)]));
+  });
+
+  function datesPlan(row: PreviewRow): DatesPlan {
+    return datesPlans.value.get(row.deckId) ?? { kind: 'skip', startedOn: null, finishedOn: null, partial: false, reason: 'Nothing to date' };
+  }
+
+  function isDateRowIncluded(row: PreviewRow): boolean {
+    const plan = datesPlan(row);
+    if (plan.kind !== 'fill') return false;
+    return dateOverrides.value[row.deckId] ?? (!plan.partial && passesType(row));
+  }
+
+  function toggleDateRow(row: PreviewRow) {
+    dateOverrides.value[row.deckId] = !isDateRowIncluded(row);
+  }
+
+  const datesApplyRows = computed(() => datesRows.value.filter((r) => isDateRowIncluded(r)));
+  const datesPartialRows = computed(() => datesRows.value.filter((r) => datesPlan(r).partial));
+  const datesDatedRows = computed(() => datesRows.value.filter((r) => datesPlan(r).kind === 'dated'));
+  const datesSkippedRows = computed(() => datesRows.value.filter((r) => datesPlan(r).kind === 'skip'));
+
+  function datesActionRank(row: PreviewRow): number {
+    const plan = datesPlan(row);
+    if (plan.kind === 'fill') return isDateRowIncluded(row) ? 0 : 1;
+    return plan.kind === 'dated' ? 2 : 3;
+  }
+
+  function formatDay(iso: string, precision: DatePrecision = 'day'): string {
+    const [year, month, day] = iso.split('-').map(Number);
+    const date = new Date(year!, (month ?? 1) - 1, day ?? 1);
+    if (precision === 'year') return String(year);
+    if (precision === 'month') return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
+    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  }
+
+  function dateCell(row: PreviewRow, which: 'start' | 'finish'): { text: string; added: boolean } {
+    const kept = which === 'start' ? row.datesTarget?.startedOn : row.datesTarget?.finishedOn;
+    if (kept) return { text: formatDay(kept), added: false };
+    const plan = datesPlan(row);
+    const filled = which === 'start' ? plan.startedOn : plan.finishedOn;
+    if (!filled) return { text: '—', added: false };
+    return { text: formatDay(filled, which === 'start' ? row.startedPrecision : row.completedPrecision), added: true };
+  }
+
+  function dateCellClass(row: PreviewRow, which: 'start' | 'finish'): string {
+    if (!dateCell(row, which).added) return 'text-gray-500 dark:text-gray-400';
+    return isDateRowIncluded(row) ? 'font-semibold text-green-600 dark:text-green-400' : 'text-gray-700 dark:text-gray-300';
+  }
+
+  function partialLabel(row: PreviewRow): string {
+    const plan = datesPlan(row);
+    const precisions = [plan.startedOn ? row.startedPrecision : undefined, plan.finishedOn ? row.completedPrecision : undefined];
+    return precisions.includes('year') ? 'Year only' : 'No day';
+  }
+
   const excludedRows = computed(() => allRows.value.filter((row) => !row.isIgnored && !isRowIncluded(row)));
   const conflictRows = computed(() => allRows.value.filter((row) => isConflict(row)));
   const ignoredRows = computed(() => allRows.value.filter((row) => row.isIgnored));
@@ -402,7 +534,24 @@
   const newCount = computed(() => applyRows.value.filter((r) => r.currentStatus == null).length);
   const updateCount = computed(() => applyRows.value.filter((r) => r.currentStatus != null).length);
 
-  const viewOptions = computed(() => [
+  const viewOptions = computed(() =>
+    mode.value === 'dates'
+      ? [
+          { label: 'Will add', value: 'add' as ViewKey, count: datesApplyRows.value.length },
+          { label: 'Partial', value: 'partial' as ViewKey, count: datesPartialRows.value.length },
+          { label: 'Already dated', value: 'dated' as ViewKey, count: datesDatedRows.value.length },
+          { label: 'Skipped', value: 'skipped' as ViewKey, count: datesSkippedRows.value.length },
+          { label: 'All', value: 'all' as ViewKey, count: datesRows.value.length },
+        ]
+      : statusViewOptions.value
+  );
+
+  watch(mode, (value) => {
+    activeView.value = value === 'dates' ? 'add' : 'import';
+    if (value === 'dates' && sortKey.value === 'source') chooseSort('title');
+  });
+
+  const statusViewOptions = computed(() => [
     { label: 'Will import', value: 'import' as ViewKey, count: applyRows.value.length },
     { label: 'All', value: 'all' as ViewKey, count: allRows.value.length },
     { label: 'Excluded', value: 'excluded' as ViewKey, count: excludedRows.value.length },
@@ -422,8 +571,16 @@
         return conflictRows.value;
       case 'ignored':
         return ignoredRows.value;
+      case 'add':
+        return datesApplyRows.value;
+      case 'partial':
+        return datesPartialRows.value;
+      case 'dated':
+        return datesDatedRows.value;
+      case 'skipped':
+        return datesSkippedRows.value;
       default:
-        return allRows.value;
+        return mode.value === 'dates' ? datesRows.value : allRows.value;
     }
   });
 
@@ -468,7 +625,7 @@
         case 'source':
           return a.externalStatus.localeCompare(b.externalStatus);
         case 'action':
-          return actionRank(a) - actionRank(b);
+          return mode.value === 'dates' ? datesActionRank(a) - datesActionRank(b) : actionRank(a) - actionRank(b);
         default:
           return byTitle(a, b);
       }
@@ -522,8 +679,8 @@
               deckId: r.deckId,
               status: r.mappedStatus,
               isFavourite: !!r.isFavourite,
-              startedOn: r.startedOn ?? null,
-              finishedOn: r.completedOn ?? null,
+              startedOn: sentStartedOn(r),
+              finishedOn: sentFinishedOn(r),
               repeatCount: r.repeatCount ?? null,
               charactersRead: r.charactersRead ?? null,
               history: r.history ?? null,
@@ -550,6 +707,41 @@
       });
     } catch (error: unknown) {
       const message = (error as { data?: { message?: string } })?.data?.message ?? 'Import failed. Please try again.';
+      toast.add({ severity: 'error', summary: 'Import failed', detail: message, life: 8000 });
+    } finally {
+      isLoading.value = false;
+    }
+  }
+
+  async function applyDates() {
+    const rows = datesApplyRows.value;
+    if (rows.length === 0) return;
+
+    isLoading.value = true;
+    loadingMessage.value = `Adding dates to ${rows.length} titles...`;
+
+    try {
+      const result = await $api<{ dated: number; skipped: number }>('user/media-list/import/dates', {
+        method: 'POST',
+        body: {
+          entries: rows.map((r) => {
+            const plan = datesPlan(r);
+            return { deckId: r.deckId, status: r.mappedStatus, startedOn: plan.startedOn, finishedOn: plan.finishedOn };
+          }),
+        },
+      });
+
+      datesApplied.value = { dated: result.dated };
+      preview.value = null;
+      emit('changed');
+      toast.add({
+        severity: 'success',
+        summary: 'Dates added',
+        detail: result.dated === 1 ? 'Added dates to 1 title.' : `Added dates to ${result.dated} titles.`,
+        life: 6000,
+      });
+    } catch (error: unknown) {
+      const message = (error as { data?: { message?: string } })?.data?.message ?? 'Could not add the dates. Please try again.';
       toast.add({ severity: 'error', summary: 'Import failed', detail: message, life: 8000 });
     } finally {
       isLoading.value = false;
@@ -594,6 +786,10 @@
             ><template v-if="applied.skippedIgnored > 0">, {{ applied.skippedIgnored }} skipped (ignored)</template>.
             <NuxtLink to="/profile" class="ml-1">View your media list</NuxtLink>
           </Message>
+          <Message v-if="datesApplied" severity="success" class="mt-4">
+            Added dates to {{ datesApplied.dated }} {{ datesApplied.dated === 1 ? 'title' : 'titles' }}.
+            <NuxtLink to="/profile" class="ml-1">View your media list</NuxtLink>
+          </Message>
         </div>
 
         <!-- Step 2: preview -->
@@ -604,8 +800,44 @@
             <Button label="Start over" severity="secondary" text size="small" class="ml-auto" @click="startOver" />
           </div>
 
+          <div v-if="!isFile" class="flex flex-wrap items-center gap-x-3 gap-y-2">
+            <SelectButton
+              v-model="mode"
+              :options="[
+                { label: 'Statuses', value: 'status' },
+                { label: 'Dates only', value: 'dates' },
+              ]"
+              option-label="label"
+              option-value="value"
+              size="small"
+              :allow-empty="false"
+            />
+            <span class="text-sm text-gray-500 dark:text-gray-400">
+              <template v-if="mode === 'status'">Add titles to your list or update their status.</template>
+              <template v-else>Add your {{ providerName }} dates to titles already on your list. Your statuses and existing dates stay as they are.</template>
+            </span>
+          </div>
+
           <!-- Counts -->
-          <div class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          <div v-if="mode === 'dates'" class="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            <div class="rounded border border-surface-200 p-3 dark:border-surface-700">
+              <div class="text-xl font-bold tabular-nums">{{ datesRows.length }}</div>
+              <div class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">With dates</div>
+            </div>
+            <button type="button" class="rounded border p-3 text-left" :class="summaryCardClass('add')" @click="activeView = 'add'">
+              <div class="text-xl font-bold tabular-nums">{{ datesApplyRows.length }}</div>
+              <div class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">To add</div>
+            </button>
+            <button type="button" class="rounded border p-3 text-left" :class="summaryCardClass('partial')" @click="activeView = 'partial'">
+              <div class="text-xl font-bold tabular-nums text-amber-600 dark:text-amber-400">{{ datesPartialRows.length }}</div>
+              <div class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Partial dates</div>
+            </button>
+            <button type="button" class="rounded border p-3 text-left" :class="summaryCardClass('dated')" @click="activeView = 'dated'">
+              <div class="text-xl font-bold tabular-nums text-gray-400 dark:text-gray-500">{{ datesDatedRows.length }}</div>
+              <div class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Already dated</div>
+            </button>
+          </div>
+          <div v-else class="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <div class="rounded border border-surface-200 p-3 dark:border-surface-700">
               <div class="text-xl font-bold tabular-nums">{{ preview.counts.matched }}</div>
               <div class="text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400">Matched</div>
@@ -626,13 +858,15 @@
 
           <!-- Filters -->
           <div class="flex flex-col gap-3 rounded border border-surface-200 p-3 dark:border-surface-700">
-            <div class="flex flex-wrap items-center gap-x-5 gap-y-2">
+            <div v-if="mode === 'status' || typeOptions.length > 1" class="flex flex-wrap items-center gap-x-5 gap-y-2">
               <span class="text-xs font-bold uppercase tracking-widest text-gray-500 dark:text-gray-400">Include</span>
-              <label v-for="status in statusOrder" :key="status" class="flex items-center gap-2 text-sm">
-                <Checkbox v-model="includeStatuses[status]" :binary="true" :disabled="!statusGroupCounts.get(status)" />
-                {{ getDeckStatusText(status) }}
-                <span class="text-xs tabular-nums text-gray-400 dark:text-gray-500">{{ statusGroupCounts.get(status) ?? 0 }}</span>
-              </label>
+              <template v-if="mode === 'status'">
+                <label v-for="status in statusOrder" :key="status" class="flex items-center gap-2 text-sm">
+                  <Checkbox v-model="includeStatuses[status]" :binary="true" :disabled="!statusGroupCounts.get(status)" />
+                  {{ getDeckStatusText(status) }}
+                  <span class="text-xs tabular-nums text-gray-400 dark:text-gray-500">{{ statusGroupCounts.get(status) ?? 0 }}</span>
+                </label>
+              </template>
               <div v-if="typeOptions.length > 1" class="max-w-full overflow-x-auto">
                 <SelectButton v-model="includedTypes" :options="typeOptions" option-label="label" option-value="value" multiple size="small">
                   <template #option="{ option }">
@@ -643,54 +877,72 @@
               </div>
             </div>
 
-            <div v-if="!isFile" class="flex flex-wrap items-center gap-2">
-              <label class="flex items-center gap-2 text-sm">
-                <Checkbox v-model="cutoffEnabled" :binary="true" />
-                Only entries finished or started after
-              </label>
-              <DatePicker v-model="cutoffDate" view="month" date-format="yy-mm" show-icon :disabled="!cutoffEnabled" class="w-40" size="small" />
-              <span v-if="cutoffEnabled && cutoffDate" class="text-xs text-gray-500 dark:text-gray-400">
-                {{ cutoffExcludedCount }} entries older than your set date were filtered out.
-              </span>
-            </div>
-
-            <div v-if="progressRows.length > 0" class="flex flex-wrap items-center gap-2">
-              <label class="flex items-center gap-2 text-sm">
-                <Checkbox v-model="importProgress" :binary="true" />
-                Mark watched episodes / read volumes as completed subdecks
-              </label>
-              <span class="text-xs text-gray-500 dark:text-gray-400">
-                {{ progressRows.length }} titles have progress<template v-if="importProgress && progressUnitTotal > 0"
-                  >; {{ progressUnitTotal }} volumes/episodes will be marked as completed</template
-                >.
-              </span>
-            </div>
-
-            <p v-if="historyRowCount > 0" class="text-xs text-gray-500 dark:text-gray-400">
-              <template v-if="historyRowCount === 1">
-                1 title has dates, repeat counts or character counts. They'll be added to your history unless the title already has one on Jiten.
-              </template>
-              <template v-else>
-                {{ historyRowCount }} titles have dates, repeat counts or character counts. They'll be added to your history, except on titles that already have
-                one on Jiten.
-              </template>
+            <p v-if="mode === 'dates'" class="text-xs text-gray-500 dark:text-gray-400">
+              Only empty dates are filled, on the history entry that matches your {{ providerName }} status. Titles with a date missing its day or month start
+              unticked; tick them to add that date as the 1st.
             </p>
 
-            <div class="flex flex-wrap items-center gap-3 border-t border-surface-200 pt-3 dark:border-surface-700">
-              <span class="text-xs font-bold text-gray-500 dark:text-gray-400">In case of conflict</span>
-              <SelectButton
-                v-model="conflictMode"
-                :options="[
-                  { label: 'Keep mine', value: 'keep' },
-                  { label: 'Overwrite', value: 'overwrite' },
-                ]"
-                option-label="label"
-                option-value="value"
-                size="small"
-                :allow-empty="false"
-              />
-              <span class="text-xs text-gray-500 dark:text-gray-400">You can override each row individually in the Conflicts tab.</span>
-            </div>
+            <template v-else>
+              <div v-if="!isFile" class="flex flex-wrap items-center gap-2">
+                <label class="flex items-center gap-2 text-sm">
+                  <Checkbox v-model="cutoffEnabled" :binary="true" />
+                  Only entries finished or started after
+                </label>
+                <DatePicker v-model="cutoffDate" view="month" date-format="yy-mm" show-icon :disabled="!cutoffEnabled" class="w-40" size="small" />
+                <span v-if="cutoffEnabled && cutoffDate" class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ cutoffExcludedCount }} entries older than your set date were filtered out.
+                </span>
+              </div>
+
+              <div v-if="progressRows.length > 0" class="flex flex-wrap items-center gap-2">
+                <label class="flex items-center gap-2 text-sm">
+                  <Checkbox v-model="importProgress" :binary="true" />
+                  Mark watched episodes / read volumes as completed subdecks
+                </label>
+                <span class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ progressRows.length }} titles have progress<template v-if="importProgress && progressUnitTotal > 0"
+                    >; {{ progressUnitTotal }} volumes/episodes will be marked as completed</template
+                  >.
+                </span>
+              </div>
+
+              <p v-if="historyRowCount > 0" class="text-xs text-gray-500 dark:text-gray-400">
+                <template v-if="historyRowCount === 1">
+                  1 title has dates, repeat counts or character counts. They'll be added to your history unless the title already has one on Jiten.
+                </template>
+                <template v-else>
+                  {{ historyRowCount }} titles have dates, repeat counts or character counts. They'll be added to your history, except on titles that already
+                  have one on Jiten.
+                </template>
+                <template v-if="!isFile"> To date titles already on your list, switch to Dates only.</template>
+              </p>
+
+              <div v-if="partialDateRowCount > 0" class="flex flex-wrap items-center gap-2">
+                <label class="flex items-center gap-2 text-sm">
+                  <Checkbox v-model="includePartialDates" :binary="true" />
+                  Add dates missing a day or month as the 1st
+                </label>
+                <span class="text-xs text-gray-500 dark:text-gray-400">
+                  {{ partialDateRowCount === 1 ? '1 title has' : `${partialDateRowCount} titles have` }} a date like this.
+                </span>
+              </div>
+
+              <div class="flex flex-wrap items-center gap-3 border-t border-surface-200 pt-3 dark:border-surface-700">
+                <span class="text-xs font-bold text-gray-500 dark:text-gray-400">In case of conflict</span>
+                <SelectButton
+                  v-model="conflictMode"
+                  :options="[
+                    { label: 'Keep mine', value: 'keep' },
+                    { label: 'Overwrite', value: 'overwrite' },
+                  ]"
+                  option-label="label"
+                  option-value="value"
+                  size="small"
+                  :allow-empty="false"
+                />
+                <span class="text-xs text-gray-500 dark:text-gray-400">You can override each row individually in the Conflicts tab.</span>
+              </div>
+            </template>
           </div>
 
           <div class="flex flex-wrap items-center gap-2">
@@ -731,6 +983,55 @@
           <!-- Matched rows -->
           <div class="rounded border border-surface-200 dark:border-surface-700">
             <div
+              v-if="mode === 'dates'"
+              class="dates-row h-9 border-b border-surface-200 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:border-surface-700 dark:text-gray-400"
+            >
+              <span />
+              <button
+                type="button"
+                class="sort-header flex min-w-0 items-center gap-1"
+                :class="{ 'sort-header-active': sortKey === 'title' }"
+                :aria-label="sortLabel('title', 'Title')"
+                @click="setSort('title')"
+              >
+                <span>Title</span>
+                <Icon v-if="sortKey === 'title'" :name="sortIcon" />
+              </button>
+              <button
+                type="button"
+                class="sort-header hidden min-w-0 items-center gap-1 sm:flex"
+                :class="{ 'sort-header-active': sortKey === 'type' }"
+                :aria-label="sortLabel('type', 'Type')"
+                @click="setSort('type')"
+              >
+                <span class="truncate">Type</span>
+                <Icon v-if="sortKey === 'type'" :name="sortIcon" />
+              </button>
+              <span class="hidden sm:block">Jiten</span>
+              <span class="hidden sm:block">Started</span>
+              <button
+                type="button"
+                class="sort-header hidden min-w-0 items-center gap-1 sm:flex"
+                :class="{ 'sort-header-active': sortKey === 'finished' }"
+                :aria-label="sortLabel('finished', 'Finished')"
+                @click="setSort('finished')"
+              >
+                <span class="truncate">Finished</span>
+                <Icon v-if="sortKey === 'finished'" :name="sortIcon" />
+              </button>
+              <button
+                type="button"
+                class="sort-header flex min-w-0 items-center justify-end gap-1"
+                :class="{ 'sort-header-active': sortKey === 'action' }"
+                :aria-label="sortLabel('action', 'Action')"
+                @click="setSort('action')"
+              >
+                <span class="truncate">Action</span>
+                <Icon v-if="sortKey === 'action'" :name="sortIcon" />
+              </button>
+            </div>
+            <div
+              v-else
               class="import-row h-9 border-b border-surface-200 text-xs font-semibold uppercase tracking-wider text-gray-500 dark:border-surface-700 dark:text-gray-400"
               :class="{ 'with-date': showDateColumn }"
             >
@@ -793,7 +1094,66 @@
 
             <VirtualScroller v-if="visibleRows.length > 0" :items="visibleRows" :item-size="56" scroll-height="30rem" class="w-full">
               <template #item="{ item }">
+                <div v-if="mode === 'dates'" :key="item.deckId" class="dates-row h-14 border-b border-surface-100 dark:border-surface-800">
+                  <Checkbox
+                    :model-value="isDateRowIncluded(item)"
+                    :binary="true"
+                    :disabled="datesPlan(item).kind !== 'fill'"
+                    :aria-label="`Add dates to ${rowTitle(item)}`"
+                    @update:model-value="toggleDateRow(item)"
+                  />
+                  <div class="flex min-w-0 items-center gap-2.5">
+                    <img
+                      :src="coverUrl(item.coverName)"
+                      alt=""
+                      class="h-10 w-7 flex-none rounded-xs bg-surface-200 object-cover dark:bg-surface-700"
+                      loading="lazy"
+                      @error="onCoverError"
+                    />
+                    <div class="min-w-0">
+                      <NuxtLink :to="`/decks/media/${item.deckId}/detail`" target="_blank" class="block truncate font-medium">
+                        {{ rowTitle(item) }}
+                      </NuxtLink>
+                      <div class="truncate text-xs text-gray-500 sm:hidden dark:text-gray-400">
+                        <span :class="dateCellClass(item, 'start')">{{ dateCell(item, 'start').text }}</span>
+                        <span class="mx-1 text-gray-400">→</span>
+                        <span :class="dateCellClass(item, 'finish')">{{ dateCell(item, 'finish').text }}</span>
+                      </div>
+                    </div>
+                  </div>
+                  <span class="hidden truncate text-sm sm:block">{{ getMediaTypeText(item.mediaType) }}</span>
+                  <span class="hidden sm:block">
+                    <span
+                      v-if="item.currentStatus != null"
+                      class="inline-block max-w-full truncate rounded-full px-2 py-0.5 text-xs font-semibold"
+                      :class="statusChipClass[item.currentStatus]"
+                      >{{ getDeckStatusText(item.currentStatus) }}</span
+                    >
+                    <span v-else class="text-gray-400 dark:text-gray-500">—</span>
+                  </span>
+                  <span class="hidden truncate text-xs sm:block" :class="dateCellClass(item, 'start')">{{ dateCell(item, 'start').text }}</span>
+                  <span class="hidden truncate text-xs sm:block" :class="dateCellClass(item, 'finish')">{{ dateCell(item, 'finish').text }}</span>
+                  <div class="min-w-0 justify-self-end text-right">
+                    <span v-if="datesPlan(item).kind === 'fill' && isDateRowIncluded(item)" class="text-xs font-semibold text-green-600 dark:text-green-400"
+                      >Add</span
+                    >
+                    <span
+                      v-else-if="datesPlan(item).kind === 'fill'"
+                      class="inline-block max-w-full truncate rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
+                      :title="datesPlan(item).partial ? 'Tick to add it as the 1st' : undefined"
+                      >{{ datesPlan(item).partial ? partialLabel(item) : 'Unticked' }}</span
+                    >
+                    <span v-else-if="datesPlan(item).kind === 'dated'" class="text-xs text-gray-400 dark:text-gray-500">Already dated</span>
+                    <span
+                      v-else
+                      class="inline-block max-w-full truncate rounded-full bg-surface-100 px-2 py-0.5 text-xs text-surface-500 dark:bg-surface-700/60 dark:text-surface-300"
+                      :title="datesPlan(item).reason"
+                      >{{ datesPlan(item).reason }}</span
+                    >
+                  </div>
+                </div>
                 <div
+                  v-else
                   :key="item.deckId"
                   class="import-row h-14 border-b border-surface-100 dark:border-surface-800"
                   :class="{ 'bg-amber-50 dark:bg-amber-900/10': isConflict(item), 'with-date': showDateColumn }"
@@ -923,7 +1283,7 @@
           </div>
 
           <!-- Unmatched -->
-          <div v-if="preview.unmatched.length > 0" class="rounded border border-surface-200 dark:border-surface-700">
+          <div v-if="mode === 'status' && preview.unmatched.length > 0" class="rounded border border-surface-200 dark:border-surface-700">
             <button type="button" class="flex w-full items-center gap-2 p-3 text-left text-sm font-semibold" @click="unmatchedOpen = !unmatchedOpen">
               <i :class="unmatchedOpen ? 'pi pi-chevron-down' : 'pi pi-chevron-right'" class="text-xs text-gray-400" />
               Not on Jiten
@@ -940,7 +1300,19 @@
           </div>
 
           <!-- Apply bar -->
-          <div class="flex flex-wrap items-center gap-3">
+          <div v-if="mode === 'dates'" class="flex flex-wrap items-center gap-3">
+            <div class="text-sm">
+              <b class="tabular-nums">{{ datesApplyRows.length }}</b> {{ datesApplyRows.length === 1 ? 'title' : 'titles' }} will get dates
+            </div>
+            <Button
+              :label="datesApplyRows.length === 1 ? 'Add dates to 1 title' : `Add dates to ${datesApplyRows.length} titles`"
+              icon="pi pi-check"
+              class="ml-auto"
+              :disabled="datesApplyRows.length === 0 || isLoading"
+              @click="applyDates"
+            />
+          </div>
+          <div v-else class="flex flex-wrap items-center gap-3">
             <div class="text-sm">
               <b class="tabular-nums">{{ newCount }}</b> new · <b class="tabular-nums">{{ updateCount }}</b> updates
               <span v-if="ignoredRows.length > 0" class="text-gray-500 dark:text-gray-400"> · {{ ignoredRows.length }} skipped (ignored)</span>
@@ -986,6 +1358,26 @@
 
     .import-row.with-date {
       grid-template-columns: 1.75rem minmax(0, 1fr) 5.5rem 6.5rem 1rem 6.5rem 6.5rem 5rem 9rem;
+    }
+  }
+
+  .dates-row {
+    display: grid;
+    align-items: center;
+    column-gap: 0.5rem;
+    padding: 0 0.5rem;
+    grid-template-columns: 1.75rem minmax(0, 1fr) fit-content(6rem);
+  }
+
+  @media (min-width: 640px) {
+    .dates-row {
+      grid-template-columns: 1.75rem minmax(0, 1fr) 5rem 5.5rem 6.5rem 6.5rem 6.5rem;
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .dates-row {
+      grid-template-columns: 1.75rem minmax(0, 1fr) 5.5rem 6.5rem 7.5rem 7.5rem 7rem;
     }
   }
 
