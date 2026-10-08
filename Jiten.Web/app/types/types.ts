@@ -1547,6 +1547,14 @@ export interface StudyExampleSourceDto {
 export type StudyInterleaving = 'Mixed' | 'NewFirst' | 'ReviewsFirst';
 export type StudyNewCardGathering = 'TopDeck' | 'RoundRobin' | 'CrossDeckFrequency';
 export type StudyReviewFrom = 'AllTracked' | 'StudyDecksOnly';
+export type StudyReviewSortOrder =
+  | 'RetrievabilityAscending'
+  | 'RetrievabilityDescending'
+  | 'DifficultyDescending'
+  | 'DifficultyAscending'
+  | 'FrequencyRankAscending'
+  | 'FrequencyRankDescending'
+  | 'Random';
 // What the question-side timer does when it expires.
 // Reveal = flip to the answer; FailLearn = reveal + lock + auto-fail after a beat; Nudge = alert only.
 export type TimedRevealAction = 'Reveal' | 'FailLearn' | 'Nudge';
@@ -1624,6 +1632,7 @@ export interface StudySettingsDto {
   interleaving: StudyInterleaving;
   newCardGathering: StudyNewCardGathering;
   reviewFrom: StudyReviewFrom;
+  reviewSortOrder: StudyReviewSortOrder;
   showPitchAccent: boolean;
   exampleSentencePosition: ExampleSentencePosition;
   exampleSentenceSorting: ExampleSentenceSorting;

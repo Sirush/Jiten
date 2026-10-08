@@ -2,7 +2,7 @@
   import { useSrsStore } from '~/stores/srsStore';
   import { useToast } from 'primevue/usetoast';
   import { DEFAULT_KEYBINDS } from '~/composables/useStudyKeyboard';
-  import type { CardBlockType, CardImageLayout, CardImagePosition, HeadwordFurigana, StudyKeybinds, StudySettingsDto } from '~/types';
+  import type { CardBlockType, CardImageLayout, CardImagePosition, HeadwordFurigana, StudyKeybinds, StudyReviewSortOrder, StudySettingsDto } from '~/types';
   import {
     getCardImageBlock,
     getCardImagePosition,
@@ -94,6 +94,16 @@
   const reviewFromOptions = [
     { label: 'All tracked', value: 'AllTracked' },
     { label: 'Study decks only', value: 'StudyDecksOnly' },
+  ];
+
+  const reviewSortOrderOptions: { label: string; value: StudyReviewSortOrder }[] = [
+    { label: 'Most forgotten first', value: 'RetrievabilityAscending' },
+    { label: 'Most remembered first', value: 'RetrievabilityDescending' },
+    { label: 'Hardest first', value: 'DifficultyDescending' },
+    { label: 'Easiest first', value: 'DifficultyAscending' },
+    { label: 'Most common first', value: 'FrequencyRankAscending' },
+    { label: 'Least common first', value: 'FrequencyRankDescending' },
+    { label: 'Random', value: 'Random' },
   ];
 
   const exampleSentenceOptions = [
@@ -586,6 +596,18 @@
             </Tooltip>
           </label>
           <InputNumber v-model="form.maxReviewsPerDay" :min="0" :max="9999" :show-buttons="!props.inline" class="w-full [&_input]:w-full" />
+          <div class="flex items-center gap-2 mt-3">
+            <ToggleSwitch v-model="form.countFailedReviews" input-id="countFailedReviews" class="shrink-0" />
+            <label for="countFailedReviews" class="text-sm cursor-pointer">
+              Count failed reviews toward daily limit
+              <Tooltip
+                content="When enabled, every review of a card you already knew counts toward the daily review limit, including repeats after you got it wrong. When disabled, only unique cards count, so failing a card multiple times won't eat into your daily budget."
+                placement="top"
+              >
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+          </div>
         </div>
         <div class="min-w-0">
           <label class="block text-sm font-medium mb-1">
@@ -598,86 +620,95 @@
             </Tooltip>
           </label>
           <InputNumber v-model="form.batchSize" :min="1" :max="999" :show-buttons="!props.inline" class="w-full [&_input]:w-full" />
+          <div class="flex items-center gap-2 mt-3">
+            <ToggleSwitch v-model="form.pauseBetweenBatches" input-id="pauseBetweenBatches" class="shrink-0" />
+            <label for="pauseBetweenBatches" class="text-sm cursor-pointer">
+              Pause at the end of each batch
+              <Tooltip
+                content="When enabled, finishing a full batch shows a checkpoint so you can stop or keep going, instead of loading the next batch automatically."
+                placement="top"
+              >
+                <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+              </Tooltip>
+            </label>
+          </div>
         </div>
       </div>
 
-      <div class="flex items-center gap-2">
-        <ToggleSwitch v-model="form.pauseBetweenBatches" input-id="pauseBetweenBatches" />
-        <label for="pauseBetweenBatches" class="text-sm cursor-pointer">
-          Pause at the end of each batch
-          <Tooltip
-            content="When enabled, finishing a full batch shows a checkpoint so you can stop or keep going, instead of loading the next batch automatically."
-            placement="top"
-          >
-            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-          </Tooltip>
-        </label>
-      </div>
+      <div :class="props.inline ? 'flex flex-col gap-4' : 'grid grid-cols-1 md:grid-cols-2 gap-4'">
+        <div class="min-w-0">
+          <label class="block text-sm font-medium mb-1">
+            New card gathering
+            <Tooltip
+              content="How new cards are picked when you have multiple decks.<br>**Top deck** — draws all new cards from your highest-priority deck first before moving to the next.<br>**All decks equally** — rotates between decks so you get new cards from each one.<br>**Cross-deck frequency** — draw words by total occurrence count across all your study decks, picking the words you'll see the most first."
+              placement="top"
+            >
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+          <SelectButton
+            v-model="form.newCardGathering"
+            :options="newCardGatheringOptions"
+            option-label="label"
+            option-value="value"
+            :allow-empty="false"
+            class="flex-wrap"
+          />
+        </div>
 
-      <div class="flex items-center gap-2">
-        <ToggleSwitch v-model="form.countFailedReviews" input-id="countFailedReviews" />
-        <label for="countFailedReviews" class="text-sm cursor-pointer">
-          Count failed reviews toward daily limit
-          <Tooltip
-            content="When enabled, every review of a card you already knew counts toward the daily review limit, including repeats after you got it wrong. When disabled, only unique cards count, so failing a card multiple times won't eat into your daily budget."
-            placement="top"
-          >
-            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-          </Tooltip>
-        </label>
-      </div>
+        <div class="min-w-0">
+          <label class="block text-sm font-medium mb-1">
+            Review cards from
+            <Tooltip
+              content="Which words to include in your reviews.<br>**All tracked** — reviews every word you've ever studied, even if it's no longer in an active deck.<br>**Study decks only** — only reviews words that belong to your current study decks."
+              placement="top"
+            >
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+          <SelectButton v-model="form.reviewFrom" :options="reviewFromOptions" option-label="label" option-value="value" :allow-empty="false" class="flex-wrap" />
+        </div>
 
-      <div>
-        <label class="block text-sm font-medium mb-1">
-          Card interleaving
-          <Tooltip
-            content="Controls how new cards and reviews are mixed.<br>**Mixed** — shuffles new and review cards together.<br>**New first** — shows all new cards before reviews.<br>**Reviews first** — clears your review backlog before introducing new cards."
-            placement="top"
-          >
-            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-          </Tooltip>
-        </label>
-        <SelectButton
-          v-model="form.interleaving"
-          :options="interleavingOptions"
-          option-label="label"
-          option-value="value"
-          :allow-empty="false"
-          class="flex-wrap"
-        />
-      </div>
+        <div class="min-w-0">
+          <label class="block text-sm font-medium mb-1">
+            Card interleaving
+            <Tooltip
+              content="Controls how new cards and reviews are mixed.<br>**Mixed** — shuffles new and review cards together.<br>**New first** — shows all new cards before reviews.<br>**Reviews first** — clears your review backlog before introducing new cards."
+              placement="top"
+            >
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+          <SelectButton
+            v-model="form.interleaving"
+            :options="interleavingOptions"
+            option-label="label"
+            option-value="value"
+            :allow-empty="false"
+            class="flex-wrap"
+          />
+        </div>
 
-      <div>
-        <label class="block text-sm font-medium mb-1">
-          New card gathering
-          <Tooltip
-            content="How new cards are picked when you have multiple decks.<br>**Top deck** — draws all new cards from your highest-priority deck first before moving to the next.<br>**All decks equally** — rotates between decks so you get new cards from each one.<br>**Cross-deck frequency** — draw words by total occurrence count across all your study decks, picking the words you'll see the most first."
-            placement="top"
-          >
-            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-          </Tooltip>
-        </label>
-        <SelectButton
-          v-model="form.newCardGathering"
-          :options="newCardGatheringOptions"
-          option-label="label"
-          option-value="value"
-          :allow-empty="false"
-          class="flex-wrap"
-        />
-      </div>
-
-      <div>
-        <label class="block text-sm font-medium mb-1">
-          Review cards from
-          <Tooltip
-            content="Which words to include in your reviews.<br>**All tracked** — reviews every word you've ever studied, even if it's no longer in an active deck.<br>**Study decks only** — only reviews words that belong to your current study decks."
-            placement="top"
-          >
-            <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
-          </Tooltip>
-        </label>
-        <SelectButton v-model="form.reviewFrom" :options="reviewFromOptions" option-label="label" option-value="value" :allow-empty="false" class="flex-wrap" />
+        <div class="min-w-0">
+          <label id="reviewSortOrderLabel" class="block text-sm font-medium mb-1">
+            Review order
+            <Tooltip
+              content="The order of today's reviews, without changing which cards are due or how many.<br>**Most forgotten first**: the cards you're most likely to have forgotten (default).<br>**Most remembered first**: the cards you're most likely to still remember.<br>**Hardest first** / **Easiest first**: by card difficulty.<br>**Most common first** / **Least common first**: by the frequency source chosen in your vocabulary settings.<br>**Random**: no particular order."
+              placement="top"
+            >
+              <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
+            </Tooltip>
+          </label>
+          <Select
+            v-model="form.reviewSortOrder"
+            input-id="reviewSortOrder"
+            aria-labelledby="reviewSortOrderLabel"
+            :options="reviewSortOrderOptions"
+            option-label="label"
+            option-value="value"
+            class="w-full sm:w-72"
+          />
+        </div>
       </div>
 
       <Divider />

@@ -26,6 +26,19 @@ public enum StudyNewCardGathering
     CrossDeckFrequency
 }
 
+/// <summary>Members are persisted by name in the settings blob: add new ones, never rename or remove.</summary>
+[JsonConverter(typeof(JsonStringEnumConverter<StudyReviewSortOrder>))]
+public enum StudyReviewSortOrder
+{
+    RetrievabilityAscending,
+    RetrievabilityDescending,
+    DifficultyDescending,
+    DifficultyAscending,
+    FrequencyRankAscending,
+    FrequencyRankDescending,
+    Random
+}
+
 [JsonConverter(typeof(JsonStringEnumConverter<ExampleSentencePosition>))]
 public enum ExampleSentencePosition
 {
@@ -126,6 +139,10 @@ public class StudySettingsDto
 
     [JsonPropertyName("reviewFrom")]
     public StudyReviewFrom ReviewFrom { get; set; } = StudyReviewFrom.AllTracked;
+
+    /// <summary>Orders the reviews already selected for today; which cards fill the daily budget stays by due date.</summary>
+    [JsonPropertyName("reviewSortOrder")]
+    public StudyReviewSortOrder ReviewSortOrder { get; set; } = StudyReviewSortOrder.RetrievabilityAscending;
 
     [JsonPropertyName("showPitchAccent")]
     public bool ShowPitchAccent { get; set; } = true;

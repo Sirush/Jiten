@@ -181,6 +181,7 @@ export const useSrsStore = defineStore('srs', () => {
     interleaving: 'Mixed',
     newCardGathering: 'TopDeck',
     reviewFrom: 'AllTracked',
+    reviewSortOrder: 'RetrievabilityAscending',
     exampleSentenceSorting: 'Random',
     exampleSentenceSource: 'StudyDecks',
     cardImageLayout: 'beside',

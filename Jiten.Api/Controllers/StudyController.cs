@@ -2000,6 +2000,10 @@ public partial class StudyController(
                     .Take(reviewBudget)
                     .ToListAsync();
 
+                // Recent mistakes keeps its due-date order unless the user picked a different review order.
+                if (settings.ReviewSortOrder != StudyReviewSortOrder.RetrievabilityAscending)
+                    mistakeCards = await OrderDueReviews(mistakeCards, settings.ReviewSortOrder, memoryScheduler, now, dueCutoff);
+
                 totalDueCount = mistakeCards.Count;
                 foreach (var card in mistakeCards)
                 {
@@ -2088,29 +2092,7 @@ public partial class StudyController(
                     .ToListAsync();
             }
 
-            // Sort: learning/relearning steps first (by due), then reviews by relative overdueness; cards
-            // served ahead of their step come last so they never push a due card out of the batch.
-            // Add slight randomness so batches don't always come in the exact same order
-            var rng = Random.Shared;
-            dueCards = dueCards
-                .OrderBy(c => c.Due <= dueCutoff ? 0 : 1)
-                .ThenBy(c => c.State is FsrsState.Learning or FsrsState.Relearning ? 0 : 1)
-                .ThenByDescending(c =>
-                {
-                    double overdueness;
-                    if (c.Stability is > 0 && c.LastReview.HasValue && memoryScheduler.GetStabilityDays(c) is > 0 and var stabilityDays)
-                    {
-                        var elapsed = (now - c.LastReview.Value).TotalDays;
-                        overdueness = elapsed / stabilityDays;
-                    }
-                    else
-                    {
-                        overdueness = (now - c.Due).TotalDays;
-                    }
-                    // ±10% jitter so similarly-overdue cards shuffle around between sessions
-                    return overdueness * (0.9 + rng.NextDouble() * 0.2);
-                })
-                .ToList();
+            dueCards = await OrderDueReviews(dueCards, settings.ReviewSortOrder, memoryScheduler, now, dueCutoff);
 
             foreach (var card in dueCards)
             {
