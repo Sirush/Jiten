@@ -12,7 +12,7 @@
   import BuilderSeriesDialog from '~/components/dashboard/franchise/BuilderSeriesDialog.vue';
   import BuilderSettingsPanel from '~/components/dashboard/franchise/BuilderSettingsPanel.vue';
   import { SeriesKind, type SeriesRef } from '~/types/series';
-  import type { Franchise, FranchiseEdge, FranchiseNode } from '~/types/types';
+  import type { Franchise, FranchiseEdge } from '~/types/types';
   import { getEdgeFlow, type LinkTone } from '~/utils/relationshipRoles';
   import { compareFranchiseRelease } from '~/utils/franchiseLayout';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
@@ -88,7 +88,7 @@
     decks.value = next;
   }
 
-  function applyFranchise(f: Franchise, keepBoard: number[] = []) {
+  function applyFranchise(f: Franchise) {
     const next = { ...decks.value };
     for (const n of f.nodes) next[n.deckId] = toBuilderDeck(n);
     decks.value = next;
@@ -96,9 +96,7 @@
     const serverIds = new Set(fromServer.map((s) => s.seriesId));
     const localOnly = series.value.filter((s) => !serverIds.has(s.seriesId)).map((s) => ({ ...s, outsideCount: undefined }));
     series.value = [...fromServer, ...localOnly];
-    const fresh = builderStateFromFranchise(f);
-    fresh.board = [...new Set([...fresh.board, ...keepBoard.filter((id) => next[id])])];
-    history.reset(fresh);
+    history.reset(builderStateFromFranchise(f));
   }
 
   const anchorTitle = computed(() => (decks.value[anchorDeckId] ? title(anchorDeckId) : `Deck #${anchorDeckId}`));
@@ -112,12 +110,7 @@
         .split(',')
         .map(Number)
         .filter((id) => Number.isInteger(id) && id > 0 && id !== anchorDeckId);
-      const [franchise, extra] = await Promise.all([
-        $api<Franchise>(`admin/franchise-builder/${anchorDeckId}`),
-        extraIds.length ? $api<FranchiseNode[]>('admin/franchise-builder/decks', { query: { ids: extraIds } }) : Promise.resolve([]),
-      ]);
-      addDecks(extra.map(toBuilderDeck));
-      applyFranchise(franchise, extraIds);
+      applyFranchise(await $api<Franchise>(`admin/franchise-builder/${anchorDeckId}`, { query: { add: extraIds } }));
     } catch (e) {
       loadError.value = apiErrorMessage(e, 'The franchise could not be loaded.');
     } finally {
@@ -591,7 +584,7 @@
         method: 'POST',
         body: buildSaveRequest(anchorDeckId, state.value),
       });
-      applyFranchise(saved, state.value.board);
+      applyFranchise(saved);
       closeFloating();
       flash(`Saved ${n} ${n === 1 ? 'change' : 'changes'}`);
     } catch (e) {

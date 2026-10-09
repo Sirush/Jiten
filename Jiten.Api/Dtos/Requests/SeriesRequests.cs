@@ -31,6 +31,7 @@ public class FranchiseBuilderSaveRequest
     public List<FranchiseEdgeDto> RemoveEdges { get; set; } = new();
     public List<FranchiseBuilderMember> AddMembers { get; set; } = new();
     public List<FranchiseBuilderMember> RemoveMembers { get; set; } = new();
+    public List<int> BoardDeckIds { get; set; } = new();
 }
 
 public class UpdateFranchiseRequest
