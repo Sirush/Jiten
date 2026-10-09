@@ -86,8 +86,9 @@ const errorItem = (r: { error: string; lookup?: string }): CommandItem => ({ kin
 // Longest first, so a phrase never loses to a shorter one it starts with.
 const PHRASES = linkChoices.flatMap((c) => c.phrases.map((p) => [p, c] as const)).sort((a, b) => b[0].length - a[0].length);
 const choiceByPhrase = new Map(PHRASES);
+const escapeRegExp = (s: string) => s.replace(/[\\^$.*+?()[\]{}|/-]/g, '\\$&');
 const PHRASE_RE = new RegExp(
-  `\\s(?:is\\s+)?(?:an?\\s+|the\\s+)?(${PHRASES.map((p) => p[0].replace(/-/g, '\\-')).join('|')})(?:\\s+(?:version\\s+)?(?:to|of|as|with|for))?(?=\\s)`,
+  `\\s(?:is\\s+)?(?:an?\\s+|the\\s+)?(${PHRASES.map((p) => escapeRegExp(p[0])).join('|')})(?:\\s+(?:version\\s+)?(?:to|of|as|with|for))?(?=\\s)`,
   'gi'
 );
 
