@@ -147,6 +147,45 @@ public partial class AdminController
         return summaries;
     }
 
+    [HttpGet("franchise/suggestions")]
+    public Task<PaginatedResponse<List<FranchiseSuggestionDto>>> ListFranchiseSuggestions([FromServices] FranchiseSuggestionService suggestions,
+                                                                                         string? query = null, MediaType? mediaType = null,
+                                                                                         FranchiseSuggestionScope scope = FranchiseSuggestionScope.All,
+                                                                                         int offset = 0, int limit = 25) =>
+        suggestions.ListAsync(query, mediaType, scope, Math.Max(offset, 0), Math.Clamp(limit, 1, 100));
+
+    [HttpPost("franchise/suggestions/dismiss")]
+    public async Task<IActionResult> DismissFranchiseSuggestion([FromBody] FranchiseSuggestionDismissRequest request,
+                                                                [FromServices] FranchiseSuggestionService suggestions)
+    {
+        if (ValidateSuggestionRequest(request) is { } error)
+            return BadRequest(new { Message = error });
+
+        var dismissed = await suggestions.DismissAsync(request.RootKey, request.DeckIds.Distinct().ToList());
+        logger.LogInformation("Admin dismissed franchise suggestion {RootKey} for {Decks} decks", request.RootKey, dismissed);
+        return Ok(new { dismissed });
+    }
+
+    [HttpPost("franchise/suggestions/restore")]
+    public async Task<IActionResult> RestoreFranchiseSuggestion([FromBody] FranchiseSuggestionDismissRequest request,
+                                                                [FromServices] FranchiseSuggestionService suggestions)
+    {
+        if (ValidateSuggestionRequest(request) is { } error)
+            return BadRequest(new { Message = error });
+
+        var restored = await suggestions.RestoreAsync(request.RootKey, request.DeckIds.Distinct().ToList());
+        return Ok(new { restored });
+    }
+
+    private static string? ValidateSuggestionRequest(FranchiseSuggestionDismissRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.RootKey) || request.RootKey.Length > FranchiseNaming.MaxNameLength)
+            return "The title root is missing or too long.";
+        if (request.DeckIds.Count == 0 || request.DeckIds.Count > FranchiseSuggestionService.MaxDismissDecks)
+            return $"Send between 1 and {FranchiseSuggestionService.MaxDismissDecks} decks.";
+        return null;
+    }
+
     [HttpPost("franchise/sync")]
     public async Task<FranchiseSyncSummary> SyncFranchises([FromServices] FranchiseSyncRunner franchiseSync) =>
         await franchiseSync.RunAsync();

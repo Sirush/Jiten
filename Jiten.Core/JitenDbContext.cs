@@ -58,6 +58,7 @@ public class JitenDbContext : DbContext
     public DbSet<Franchise> Franchises { get; set; }
     public DbSet<Series> Series { get; set; }
     public DbSet<SeriesMember> SeriesMembers { get; set; }
+    public DbSet<FranchiseSuggestionDismissal> FranchiseSuggestionDismissals { get; set; }
 
     public DbSet<WebNovelSource> WebNovelSources { get; set; }
     public DbSet<WebNovelChapter> WebNovelChapters { get; set; }
@@ -975,6 +976,18 @@ public class JitenDbContext : DbContext
                   .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(m => m.DeckId).HasDatabaseName("IX_SeriesMembers_DeckId");
+        });
+
+        modelBuilder.Entity<FranchiseSuggestionDismissal>(entity =>
+        {
+            entity.ToTable("FranchiseSuggestionDismissals", "jiten");
+            entity.HasKey(x => new { x.DeckId, x.RootKey });
+            entity.Property(x => x.RootKey).HasMaxLength(200);
+
+            entity.HasOne(x => x.Deck)
+                  .WithMany()
+                  .HasForeignKey(x => x.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<WordSet>(entity =>

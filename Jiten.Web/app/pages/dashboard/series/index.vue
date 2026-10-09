@@ -16,6 +16,7 @@
   import TabPanels from 'primevue/tabpanels';
   import TabPanel from 'primevue/tabpanel';
   import FranchisesTab from '~/components/dashboard/FranchisesTab.vue';
+  import FranchiseSuggestionsTab from '~/components/dashboard/FranchiseSuggestionsTab.vue';
   import { debounce } from 'perfect-debounce';
   import { SeriesKind, type SeriesDetail, type SeriesRef, type SeriesSummary } from '~/types/series';
   import type { FranchiseNode, PaginatedResponse } from '~/types/types';
@@ -29,10 +30,12 @@
 
   const route = useRoute();
   const router = useRouter();
-  const activeTab = computed<string>({
-    get: () => (route.query.tab === 'franchises' ? 'franchises' : 'series'),
+  const TABS = ['series', 'franchises', 'suggestions'] as const;
+  type TabName = (typeof TABS)[number];
+  const activeTab = computed<TabName>({
+    get: () => TABS.find((t) => t === route.query.tab) ?? 'series',
     set: (value) => {
-      router.replace({ query: { ...route.query, tab: value === 'franchises' ? 'franchises' : undefined } });
+      router.replace({ query: { ...route.query, tab: value === 'series' ? undefined : value } });
     },
   });
 
@@ -245,6 +248,7 @@
       <TabList :pt="{ root: { class: 'bg-transparent!' }, tabList: { class: 'bg-transparent!' } }">
         <Tab value="series">Series and settings</Tab>
         <Tab value="franchises">Franchises</Tab>
+        <Tab value="suggestions">Suggestions</Tab>
       </TabList>
       <TabPanels class="bg-transparent! px-0! pt-5!">
         <TabPanel value="series">
@@ -317,6 +321,9 @@
         </TabPanel>
         <TabPanel value="franchises">
           <FranchisesTab v-if="activeTab === 'franchises'" />
+        </TabPanel>
+        <TabPanel value="suggestions">
+          <FranchiseSuggestionsTab v-if="activeTab === 'suggestions'" />
         </TabPanel>
       </TabPanels>
     </Tabs>

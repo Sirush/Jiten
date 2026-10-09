@@ -937,6 +937,23 @@ namespace Jiten.Core.Migrations
                     b.ToTable("Franchises", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.FranchiseSuggestionDismissal", b =>
+                {
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RootKey")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("DismissedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("DeckId", "RootKey");
+
+                    b.ToTable("FranchiseSuggestionDismissals", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictCrossReference", b =>
                 {
                     b.Property<int>("Id")
@@ -2816,6 +2833,17 @@ namespace Jiten.Core.Migrations
                         .IsRequired();
 
                     b.Navigation("Tag");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.FranchiseSuggestionDismissal", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", "Deck")
+                        .WithMany()
+                        .HasForeignKey("DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Deck");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictDefinition", b =>

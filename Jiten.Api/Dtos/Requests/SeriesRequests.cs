@@ -37,3 +37,9 @@ public class UpdateFranchiseRequest
 {
     public string? Name { get; set; }
 }
+
+public class FranchiseSuggestionDismissRequest
+{
+    public string RootKey { get; set; } = "";
+    public List<int> DeckIds { get; set; } = new();
+}

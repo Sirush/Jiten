@@ -80,6 +80,27 @@ namespace Jiten.Core.Migrations
                         onDelete: ReferentialAction.Cascade);
                 });
 
+            migrationBuilder.CreateTable(
+                name: "FranchiseSuggestionDismissals",
+                schema: "jiten",
+                columns: table => new
+                {
+                    DeckId = table.Column<int>(type: "integer", nullable: false),
+                    RootKey = table.Column<string>(type: "character varying(200)", maxLength: 200, nullable: false),
+                    DismissedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_FranchiseSuggestionDismissals", x => new { x.DeckId, x.RootKey });
+                    table.ForeignKey(
+                        name: "FK_FranchiseSuggestionDismissals_Decks_DeckId",
+                        column: x => x.DeckId,
+                        principalSchema: "jiten",
+                        principalTable: "Decks",
+                        principalColumn: "DeckId",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
             migrationBuilder.CreateIndex(
                 name: "IX_Decks_FranchiseId",
                 schema: "jiten",
@@ -166,6 +187,10 @@ namespace Jiten.Core.Migrations
                 name: "FK_Decks_Franchises_FranchiseId",
                 schema: "jiten",
                 table: "Decks");
+
+            migrationBuilder.DropTable(
+                name: "FranchiseSuggestionDismissals",
+                schema: "jiten");
 
             migrationBuilder.DropTable(
                 name: "Franchises",

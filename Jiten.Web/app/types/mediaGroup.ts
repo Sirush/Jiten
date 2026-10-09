@@ -1,4 +1,5 @@
 import type { FranchiseNode } from './types';
+import type { LinkType } from './enums';
 
 export enum MediaGroupKind {
   Franchise = 1,
@@ -59,4 +60,26 @@ export interface FranchiseSyncSummary {
   merged: number;
   deleted: number;
   unchanged: number;
+}
+
+export interface FranchiseSuggestionDeck {
+  deck: FranchiseNode;
+  franchiseId: number | null;
+  franchiseName: string | null;
+  linkTypes: LinkType[];
+}
+
+/** Decks whose titles share a root, at least one of them outside any franchise. */
+export interface FranchiseSuggestion {
+  root: string;
+  rootKey: string;
+  anchorDeckId: number;
+  /** Earliest release first. */
+  decks: FranchiseSuggestionDeck[];
+}
+
+export enum FranchiseSuggestionScope {
+  All = 0,
+  Franchise = 1,
+  Unlinked = 2,
 }

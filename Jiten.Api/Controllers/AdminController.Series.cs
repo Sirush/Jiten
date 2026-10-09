@@ -151,6 +151,15 @@ public partial class AdminController
         return dto == null ? NotFound() : Ok(dto);
     }
 
+    [HttpGet("franchise-builder/decks")]
+    public async Task<IActionResult> GetFranchiseBuilderDecks([FromQuery] List<int> ids, [FromServices] FranchiseService franchise)
+    {
+        if (ids.Count > FranchiseSuggestionService.MaxDismissDecks)
+            return BadRequest(new { Message = $"Ask for at most {FranchiseSuggestionService.MaxDismissDecks} decks." });
+
+        return Ok(await franchise.LoadNodesAsync(ids.Distinct().ToList()));
+    }
+
     [HttpPost("franchise-builder/save")]
     public async Task<IActionResult> SaveFranchiseBuilder([FromBody] FranchiseBuilderSaveRequest request,
                                                           [FromServices] FranchiseService franchise,

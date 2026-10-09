@@ -12,7 +12,7 @@
   import BuilderSeriesDialog from '~/components/dashboard/franchise/BuilderSeriesDialog.vue';
   import BuilderSettingsPanel from '~/components/dashboard/franchise/BuilderSettingsPanel.vue';
   import { SeriesKind, type SeriesRef } from '~/types/series';
-  import type { Franchise, FranchiseEdge } from '~/types/types';
+  import type { Franchise, FranchiseEdge, FranchiseNode } from '~/types/types';
   import { getEdgeFlow, type LinkTone } from '~/utils/relationshipRoles';
   import { compareFranchiseRelease } from '~/utils/franchiseLayout';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
@@ -108,7 +108,16 @@
     loading.value = true;
     loadError.value = '';
     try {
-      applyFranchise(await $api<Franchise>(`admin/franchise-builder/${anchorDeckId}`));
+      const extraIds = String(route.query.add ?? '')
+        .split(',')
+        .map(Number)
+        .filter((id) => Number.isInteger(id) && id > 0 && id !== anchorDeckId);
+      const [franchise, extra] = await Promise.all([
+        $api<Franchise>(`admin/franchise-builder/${anchorDeckId}`),
+        extraIds.length ? $api<FranchiseNode[]>('admin/franchise-builder/decks', { query: { ids: extraIds } }) : Promise.resolve([]),
+      ]);
+      addDecks(extra.map(toBuilderDeck));
+      applyFranchise(franchise, extraIds);
     } catch (e) {
       loadError.value = apiErrorMessage(e, 'The franchise could not be loaded.');
     } finally {
@@ -174,6 +183,7 @@
 
   const selected = ref<number[]>([]);
   const linkFrom = ref<number | null>(null);
+  const SELECTION_PREVIEW = 5;
 
   const { drag, beginDrag, stopDrag } = useBuilderDrag({
     onStart: closeFloating,
@@ -214,6 +224,14 @@
     if (additive) selected.value = selected.value.includes(id) ? selected.value.filter((x) => x !== id) : [...selected.value, id];
     else if (selected.value.length === 1 && selected.value[0] === id) selected.value = [];
     else selected.value = [id];
+  }
+
+  function selectDecks(ids: number[]) {
+    if (!ids.length) return;
+    closeFloating();
+    linkFrom.value = null;
+    selected.value = [...ids];
+    flash(`Selected ${ids.length === 1 ? title(ids[0]!) : `${ids.length} decks`}`);
   }
 
   function startLink(id: number) {
@@ -618,6 +636,11 @@
       redo();
       return;
     }
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'a' && !typing && !seriesDialog.value) {
+      ev.preventDefault();
+      selectDecks(state.value.board);
+      return;
+    }
     if (ev.key === '/' && !typing) {
       ev.preventDefault();
       document.getElementById('fb-cmd')?.focus();
@@ -826,8 +849,11 @@
             <Button v-if="selectionRemovable" label="Take off the board" size="small" severity="secondary" text @click="removeFromBoard(selected)" />
             <Button label="Clear" size="small" severity="secondary" text @click="clearSelection" />
             <span class="min-w-0 text-xs text-gray-600 [overflow-wrap:anywhere] dark:text-gray-400">
-              <template v-if="selected.length >= 2">{{ selectionOrdered.map(title).join(' → ') }} (release order)</template>
-              <template v-else>Shift-click more decks to link several at once.</template>
+              <template v-if="selected.length > SELECTION_PREVIEW">
+                {{ selectionOrdered.slice(0, SELECTION_PREVIEW).map(title).join(' → ') }} and {{ selected.length - SELECTION_PREVIEW }} more (release order)
+              </template>
+              <template v-else-if="selected.length >= 2">{{ selectionOrdered.map(title).join(' → ') }} (release order)</template>
+              <template v-else>Shift-click more decks, or press Ctrl+A for all of them.</template>
             </span>
           </div>
 
@@ -852,6 +878,7 @@
             @rail-node="openRailPop"
             @rename="openRename"
             @background="clearSelection"
+            @select="selectDecks"
             @resize="(w) => (boardWidth = w)"
           />
           <div v-if="!state.board.length" class="px-4 py-6 text-center text-sm text-gray-500 dark:text-gray-400">

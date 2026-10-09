@@ -523,6 +523,7 @@ builder.Services.AddScoped<IFrequencySourceResolver, FrequencySourceResolver>();
 builder.Services.AddScoped<IStudyDeckMembershipService, StudyDeckMembershipService>();
 builder.Services.AddScoped<DeckMetadataService>();
 builder.Services.AddScoped<FranchiseService>();
+builder.Services.AddScoped<FranchiseSuggestionService>();
 builder.Services.AddSingleton<FranchiseResponseCache>();
 builder.Services.AddScoped<FranchiseSyncRunner>();
 builder.Services.AddScoped<SeriesService>();

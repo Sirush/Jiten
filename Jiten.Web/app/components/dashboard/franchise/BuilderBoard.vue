@@ -43,6 +43,7 @@
     railNode: [seriesId: number, index: number, anchor: Point];
     rename: [seriesId: number];
     background: [];
+    select: [deckIds: number[]];
     resize: [width: number];
   }>();
 
@@ -339,10 +340,21 @@
         "
         :style="{ left: `${b.x}px`, top: `${b.y}px`, width: `${b.w}px`, height: `${b.h}px` }"
       >
-        <span class="absolute left-3 top-1.5 max-w-[calc(100%-24px)] truncate text-xs text-gray-500 dark:text-gray-400">
+        <span
+          class="absolute left-3 top-1.5 truncate text-xs text-gray-500 dark:text-gray-400"
+          :class="b.kind === 'unlinked' && b.ids.length > 1 ? 'max-w-[calc(100%-110px)]' : 'max-w-[calc(100%-24px)]'"
+        >
           <b class="font-medium text-gray-900 dark:text-gray-100">{{ bandLabel(b).lead }}</b
           >{{ bandLabel(b).rest }}
         </span>
+        <button
+          v-if="b.kind === 'unlinked' && b.ids.length > 1"
+          type="button"
+          class="absolute right-2 top-0.5 rounded px-1.5 py-0.5 text-xs font-medium text-primary-700 hover:bg-primary-50 hover:underline focus-visible:outline-2 focus-visible:outline-primary-500 dark:text-primary-300 dark:hover:bg-primary-950/40"
+          @click="emit('select', b.ids)"
+        >
+          Select all {{ b.ids.length }}
+        </button>
       </div>
 
       <svg class="pointer-events-none absolute inset-0 overflow-visible" :width="layout.width" :height="layout.height" aria-hidden="true">
