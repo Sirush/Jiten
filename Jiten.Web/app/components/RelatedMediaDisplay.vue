@@ -76,7 +76,7 @@
           .map((s) => ({
             key: `series-${s.seriesId}`,
             label: 'Series',
-            text: s.name,
+            text: localiseTitle(s),
             to: franchisePath(props.franchiseId!, { kind: MediaGroupKind.Series, id: s.seriesId }),
           }))
   );

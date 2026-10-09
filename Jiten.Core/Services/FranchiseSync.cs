@@ -29,8 +29,8 @@ public static class FranchiseSync
                             .ToListAsync(ct);
         var series = await db.Series.AsNoTracking()
                              .Where(s => s.Kind == SeriesKind.Series)
-                             .Select(s => new { s.SeriesId, s.Name })
-                             .ToDictionaryAsync(s => s.SeriesId, s => s.Name, ct);
+                             .Select(s => new { s.SeriesId, s.OriginalTitle, s.RomajiTitle, s.EnglishTitle })
+                             .ToDictionaryAsync(s => s.SeriesId, s => new GroupTitles(s.OriginalTitle, s.RomajiTitle, s.EnglishTitle), ct);
         var memberships = await db.SeriesMembers.AsNoTracking()
                                   .Where(m => m.Series.Kind == SeriesKind.Series)
                                   .Select(m => new { m.SeriesId, m.DeckId })
@@ -110,20 +110,21 @@ public static class FranchiseSync
         var allComponentDecks = components.SelectMany(c => c).ToList();
         var titles = await db.Decks.AsNoTracking()
                              .Where(d => allComponentDecks.Contains(d.DeckId))
-                             .Select(d => new { d.DeckId, d.OriginalTitle, d.ReleaseDate })
+                             .Select(d => new { d.DeckId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle, d.ReleaseDate })
                              .ToDictionaryAsync(d => d.DeckId, ct);
 
-        string SuggestName(List<int> decks)
+        GroupTitles SuggestTitles(List<int> decks)
         {
             var members = decks.Where(titles.ContainsKey)
-                               .Select(id => (titles[id].OriginalTitle, titles[id].ReleaseDate, id))
+                               .Select(id => (new GroupTitles(titles[id].OriginalTitle, titles[id].RomajiTitle, titles[id].EnglishTitle),
+                                              titles[id].ReleaseDate, id))
                                .ToList();
-            var seriesNames = decks.SelectMany(id => seriesByDeck.GetValueOrDefault(id) ?? [])
-                                   .Distinct()
-                                   .Order()
-                                   .Select(id => series[id])
-                                   .ToList();
-            return FranchiseNaming.Suggest(members, seriesNames);
+            var seriesTitles = decks.SelectMany(id => seriesByDeck.GetValueOrDefault(id) ?? [])
+                                    .Distinct()
+                                    .Order()
+                                    .Select(id => series[id])
+                                    .ToList();
+            return FranchiseNaming.Suggest(members, seriesTitles);
         }
 
         var now = DateTime.UtcNow;
@@ -132,7 +133,8 @@ public static class FranchiseSync
         {
             if (assigned[i] != null)
                 continue;
-            var row = new Franchise { Name = SuggestName(components[i]), CreatedAt = now, UpdatedAt = now };
+            var row = new Franchise { CreatedAt = now, UpdatedAt = now };
+            row.SetTitles(SuggestTitles(components[i]));
             db.Franchises.Add(row);
             created[i] = row;
         }
@@ -188,10 +190,10 @@ public static class FranchiseSync
             var touched = changedFranchises.Contains(row.FranchiseId);
             if (!row.NameIsManual)
             {
-                var name = SuggestName(components[i]);
-                if (name != row.Name)
+                var suggested = SuggestTitles(components[i]);
+                if (suggested != row.Titles())
                 {
-                    row.Name = name;
+                    row.SetTitles(suggested);
                     renamed++;
                     touched = true;
                 }

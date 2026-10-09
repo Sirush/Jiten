@@ -71,7 +71,7 @@ public class MediaGroupStudyDeckTests(JitenWebApplicationFactory factory)
 
         db.DeckRelationships.Add(Rel(2, 1));
 
-        var saga = new Series { SeriesId = SagaId, Name = "Saga", Kind = SeriesKind.Series };
+        var saga = new Series { SeriesId = SagaId, OriginalTitle = "Saga", Kind = SeriesKind.Series };
         saga.Members.Add(new SeriesMember { SeriesId = SagaId, DeckId = 1 });
         saga.Members.Add(new SeriesMember { SeriesId = SagaId, DeckId = 2 });
         saga.Members.Add(new SeriesMember { SeriesId = SagaId, DeckId = 3 });
@@ -147,8 +147,8 @@ public class MediaGroupStudyDeckTests(JitenWebApplicationFactory factory)
         row.GetProperty("deckType").GetInt32().Should().Be(4);
         row.GetProperty("groupKind").GetInt32().Should().Be(Series);
         row.GetProperty("groupId").GetInt32().Should().Be(SagaId);
-        row.GetProperty("groupName").GetString().Should().Be("Saga");
-        row.GetProperty("groupTitles").ValueKind.Should().Be(JsonValueKind.Null);
+        row.GetProperty("groupTitles").GetProperty("originalTitle").GetString().Should().Be("Saga");
+        row.GetProperty("groupTitles").GetProperty("englishTitle").ValueKind.Should().Be(JsonValueKind.Null);
         row.GetProperty("groupFranchiseId").GetInt32().Should().Be(_franchiseId);
         row.GetProperty("title").GetString().Should().Be("Saga");
         row.GetProperty("totalWords").GetInt32().Should().Be(4);
@@ -162,7 +162,7 @@ public class MediaGroupStudyDeckTests(JitenWebApplicationFactory factory)
 
         var row = await StudyDeckRowAsync(id);
         row.GetProperty("groupKind").GetInt32().Should().Be(Franchise);
-        row.GetProperty("groupName").GetString().Should().Be("Saga");
+        row.GetProperty("groupTitles").GetProperty("originalTitle").GetString().Should().Be("Saga");
         row.GetProperty("groupFranchiseId").GetInt32().Should().Be(_franchiseId);
         row.GetProperty("title").GetString().Should().Be("Saga");
         row.GetProperty("totalWords").GetInt32().Should().Be(4);
@@ -177,7 +177,6 @@ public class MediaGroupStudyDeckTests(JitenWebApplicationFactory factory)
 
         var row = await StudyDeckRowAsync(id);
         row.GetProperty("groupKind").GetInt32().Should().Be(Line);
-        row.GetProperty("groupName").GetString().Should().Be("Anime one");
         row.GetProperty("groupTitles").GetProperty("originalTitle").GetString().Should().Be("Anime one");
         row.GetProperty("groupTitles").GetProperty("romajiTitle").GetString().Should().Be("Anime one (romaji)");
         row.GetProperty("groupFranchiseId").GetInt32().Should().Be(_franchiseId);
@@ -387,7 +386,7 @@ public class MediaGroupStudyDeckTests(JitenWebApplicationFactory factory)
 
         var row = await StudyDeckRowAsync(id);
         row.GetProperty("groupId").GetInt32().Should().Be(bigFranchiseId);
-        row.GetProperty("groupName").GetString().Should().NotBeNull();
+        row.GetProperty("groupTitles").ValueKind.Should().Be(JsonValueKind.Object);
         row.GetProperty("totalWords").GetInt32().Should().Be(4);
     }
 
@@ -403,7 +402,7 @@ public class MediaGroupStudyDeckTests(JitenWebApplicationFactory factory)
         }
 
         var row = await StudyDeckRowAsync(id);
-        row.GetProperty("groupName").ValueKind.Should().Be(JsonValueKind.Null);
+        row.GetProperty("groupTitles").ValueKind.Should().Be(JsonValueKind.Null);
         row.GetProperty("title").GetString().Should().BeEmpty();
         row.GetProperty("totalWords").GetInt32().Should().Be(0);
         (await VocabularyAsync(id)).Should().BeEmpty();
@@ -424,7 +423,7 @@ public class MediaGroupStudyDeckTests(JitenWebApplicationFactory factory)
 
         var row = await StudyDeckRowAsync(id);
         row.GetProperty("groupId").GetInt32().Should().Be(_franchiseId);
-        row.GetProperty("groupName").ValueKind.Should().Be(JsonValueKind.Null);
+        row.GetProperty("groupTitles").ValueKind.Should().Be(JsonValueKind.Null);
         row.GetProperty("groupFranchiseId").ValueKind.Should().Be(JsonValueKind.Null);
         row.GetProperty("totalWords").GetInt32().Should().Be(0);
         (await VocabularyAsync(id)).Should().BeEmpty();

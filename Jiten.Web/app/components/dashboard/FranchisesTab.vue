@@ -1,6 +1,5 @@
 <script setup lang="ts">
   import Button from 'primevue/button';
-  import InputText from 'primevue/inputtext';
   import Message from 'primevue/message';
   import DataTable, { type DataTableSortEvent } from 'primevue/datatable';
   import Column from 'primevue/column';
@@ -8,7 +7,7 @@
   import Tag from 'primevue/tag';
   import { debounce } from 'perfect-debounce';
   import type { FranchiseListSort, FranchiseSummary, FranchiseSyncSummary, PaginatedResponse } from '~/types';
-  import { FRANCHISE_NAME_MAX_LENGTH, useFranchiseRename } from '~/composables/useFranchiseRename';
+  import { useFranchiseRename } from '~/composables/useFranchiseRename';
   import { useJitenStore } from '~/stores/jitenStore';
   import { apiErrorMessage } from '~/utils/apiErrorMessage';
 
@@ -91,10 +90,6 @@
 
   onMounted(loadList);
 
-  function displayName(row: FranchiseSummary): string {
-    return row.nameTitles ? localiseTitle(row.nameTitles) : row.name;
-  }
-
   const filtering = computed(() => !!query.value.trim() || nameSource.value !== 'all');
 
   const syncing = ref(false);
@@ -118,8 +113,8 @@
 
   const editingId = ref<number | null>(null);
   const rename = useFranchiseRename({
-    saved: async (name) => {
-      toast.add({ severity: 'success', summary: 'Done', detail: name ? `Renamed to ${name}` : 'Back to the automatic name', life: 3000 });
+    saved: async (titles) => {
+      toast.add({ severity: 'success', summary: 'Done', detail: titles ? `Renamed to ${localiseTitle(titles)}` : 'Back to the automatic name', life: 3000 });
       await cancelEdit();
       await loadList();
     },
@@ -127,13 +122,9 @@
   });
   const { value: editValue, busy: saving, error: editError } = rename;
 
-  async function startEdit(row: FranchiseSummary) {
+  function startEdit(row: FranchiseSummary) {
     editingId.value = row.franchiseId;
-    rename.reset(row.name);
-    await nextTick();
-    const input = document.getElementById(`franchise-name-${row.franchiseId}`) as HTMLInputElement | null;
-    input?.focus();
-    input?.select();
+    rename.reset(row);
   }
 
   async function cancelEdit() {
@@ -182,15 +173,13 @@
       </template>
       <Column field="name" header="Name" sortable>
         <template #body="{ data }">
-          <form v-if="editingId === data.franchiseId" class="flex flex-col gap-2" @submit.prevent="rename.submit(data)" @keydown.esc.prevent="cancelEdit">
-            <InputText
-              :id="`franchise-name-${data.franchiseId}`"
-              v-model="editValue"
-              :maxlength="FRANCHISE_NAME_MAX_LENGTH"
-              class="w-full"
-              :invalid="!!editError"
-              :aria-label="`New name for ${data.name}`"
-            />
+          <form
+            v-if="editingId === data.franchiseId"
+            class="flex flex-col gap-2"
+            @submit.prevent="rename.submit({ franchiseId: data.franchiseId, titles: data, nameIsManual: data.nameIsManual })"
+            @keydown.esc.prevent="cancelEdit"
+          >
+            <GroupTitlesFields v-model="editValue" :invalid="!!editError && !editValue.originalTitle.trim()" autofocus />
             <p v-if="editError" class="m-0 text-sm text-red-700 dark:text-red-400" role="alert">{{ editError }}</p>
             <div class="flex flex-wrap gap-2">
               <Button label="Save" type="submit" size="small" :loading="saving" />
@@ -208,13 +197,17 @@
           </form>
           <div v-else class="flex min-w-0 flex-col">
             <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
-              <NuxtLink :to="`/franchise/${data.franchiseId}`" class="font-medium hover:underline" v-bind="japaneseTextAttrs(displayName(data))">
-                {{ displayName(data) }}
+              <NuxtLink :to="`/franchise/${data.franchiseId}`" class="font-medium hover:underline" v-bind="japaneseTextAttrs(localiseTitle(data))">
+                {{ localiseTitle(data) }}
               </NuxtLink>
               <Tag v-if="data.nameIsManual" value="Set by admin" severity="info" class="!px-1.5 !py-0 !text-xs" />
             </div>
-            <span v-if="displayName(data) !== data.name" class="text-sm text-gray-500 dark:text-gray-400" v-bind="japaneseTextAttrs(data.name)">
-              {{ data.name }}
+            <span
+              v-if="localiseTitle(data) !== data.originalTitle"
+              class="text-sm text-gray-500 dark:text-gray-400"
+              v-bind="japaneseTextAttrs(data.originalTitle)"
+            >
+              {{ data.originalTitle }}
             </span>
           </div>
         </template>
@@ -231,7 +224,7 @@
                 icon="pi pi-pencil"
                 size="small"
                 severity="secondary"
-                :aria-label="`Rename ${displayName(data)}`"
+                :aria-label="`Rename ${localiseTitle(data)}`"
                 :disabled="editingId === data.franchiseId"
                 @click="startEdit(data)"
               />
@@ -243,7 +236,7 @@
                 icon="pi pi-sitemap"
                 size="small"
                 severity="secondary"
-                :aria-label="`Open ${displayName(data)} in the franchise builder`"
+                :aria-label="`Open ${localiseTitle(data)} in the franchise builder`"
               />
             </Tooltip>
           </div>

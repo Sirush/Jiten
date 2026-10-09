@@ -1,7 +1,6 @@
 <script setup lang="ts">
   import { ref, computed, watch, onMounted } from 'vue';
   import Button from 'primevue/button';
-  import InputText from 'primevue/inputtext';
   import Dialog from 'primevue/dialog';
   import AutoComplete from 'primevue/autocomplete';
   import Select from 'primevue/select';
@@ -24,6 +23,7 @@
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { apiErrorMessage } from '~/utils/apiErrorMessage';
   import { seriesKindLabel } from '~/utils/seriesKind';
+  import { sameTitles, titlesDraft, titlesFromDraft } from '~/utils/groupTitles';
 
   definePageMeta({ middleware: ['auth-admin'] });
   useHead({ title: 'Series and franchises - Admin Dashboard - Jiten' });
@@ -91,22 +91,22 @@
   onMounted(loadList);
 
   const createOpen = ref(false);
-  const createName = ref('');
+  const createTitles = ref(titlesDraft());
   const createKind = ref<SeriesKind>(SeriesKind.Series);
   const { error: createError, busy: creating, create } = useSeriesCreate();
 
   function openCreate() {
-    createName.value = '';
+    createTitles.value = titlesDraft();
     createKind.value = SeriesKind.Series;
     createError.value = '';
     createOpen.value = true;
   }
 
   async function submitCreate() {
-    const created = await create(createName.value, createKind.value, 'It could not be created.');
+    const created = await create(createTitles.value, createKind.value, 'It could not be created.');
     if (!created) return;
     createOpen.value = false;
-    notify('success', `Created ${created.name}`);
+    notify('success', `Created ${localiseTitle(created)}`);
     await loadList();
     openDetail(created.seriesId);
   }
@@ -115,7 +115,9 @@
   const detail = ref<SeriesDetail | null>(null);
   const detailLoading = ref(false);
   const detailError = ref('');
-  const renameValue = ref('');
+  const renameValue = ref(titlesDraft());
+  const renameTitles = computed(() => titlesFromDraft(renameValue.value));
+  const canRename = computed(() => !!detail.value && !!renameTitles.value.originalTitle && !sameTitles(renameTitles.value, detail.value));
   const detailBusy = ref(false);
   const confirmRemove = ref<number | null>(null);
 
@@ -131,7 +133,7 @@
       const loaded = await $api<SeriesDetail>(`admin/series/${id}`);
       if (detailId.value !== id) return;
       detail.value = loaded;
-      renameValue.value = loaded.name;
+      renameValue.value = titlesDraft(loaded);
     } catch (e) {
       detailError.value = apiErrorMessage(e, 'This series could not be loaded.');
     } finally {
@@ -160,9 +162,9 @@
   }
 
   function rename() {
-    const name = renameValue.value.trim();
-    if (!name || name === detail.value?.name) return;
-    patchDetail({ name }, `Renamed to ${name}`);
+    if (!canRename.value) return;
+    const titles = renameTitles.value;
+    patchDetail(titles, `Renamed to ${localiseTitle(titles)}`);
   }
 
   async function removeMember(member: FranchiseNode) {
@@ -201,7 +203,7 @@
     mergeError.value = '';
     try {
       await $api(`admin/series/${src.seriesId}/merge-into/${target.seriesId}`, { method: 'POST' });
-      notify('success', `Merged ${src.name} into ${target.name}`);
+      notify('success', `Merged ${localiseTitle(src)} into ${localiseTitle(target)}`);
       mergeSource.value = null;
       if (detailId.value === src.seriesId) openDetail(target.seriesId);
       await loadList();
@@ -214,7 +216,7 @@
 
   function askDelete(row: SeriesSummary) {
     confirm.require({
-      header: `Delete ${row.name}?`,
+      header: `Delete ${localiseTitle(row)}?`,
       message: `${row.deckCount} ${row.deckCount === 1 ? 'deck' : 'decks'} will leave this ${seriesKindLabel(row.kind).toLowerCase()}. The decks themselves stay.`,
       acceptLabel: 'Delete',
       rejectLabel: 'Keep',
@@ -226,7 +228,7 @@
   async function deleteSeries(row: SeriesSummary) {
     try {
       await $api(`admin/series/${row.seriesId}`, { method: 'DELETE' });
-      notify('success', `Deleted ${row.name}`);
+      notify('success', `Deleted ${localiseTitle(row)}`);
       if (detailId.value === row.seriesId) closeDetail();
       await loadList();
     } catch (e) {
@@ -253,7 +255,7 @@
       <TabPanels class="bg-transparent! px-0! pt-5!">
         <TabPanel value="series">
           <div class="mb-4 flex flex-wrap gap-2">
-            <SearchInput v-model="query" placeholder="Search by name" aria-label="Search series and settings" class="w-full md:w-96" />
+            <SearchInput v-model="query" placeholder="Search by title" aria-label="Search series and settings" class="w-full md:w-96" />
             <Select
               v-model="kindFilter"
               :options="kindOptions"
@@ -293,7 +295,14 @@
             </template>
             <Column header="Name">
               <template #body="{ data }">
-                <button type="button" class="text-left font-medium hover:underline" @click="openDetail(data.seriesId)">{{ data.name }}</button>
+                <button
+                  type="button"
+                  class="text-left font-medium hover:underline"
+                  v-bind="japaneseTextAttrs(localiseTitle(data))"
+                  @click="openDetail(data.seriesId)"
+                >
+                  {{ localiseTitle(data) }}
+                </button>
               </template>
             </Column>
             <Column header="Kind" style="width: 110px">
@@ -306,13 +315,25 @@
               <template #body="{ data }">
                 <div class="flex gap-2">
                   <Tooltip content="Details and members">
-                    <Button icon="pi pi-pencil" size="small" severity="secondary" :aria-label="`Edit ${data.name}`" @click="openDetail(data.seriesId)" />
+                    <Button
+                      icon="pi pi-pencil"
+                      size="small"
+                      severity="secondary"
+                      :aria-label="`Edit ${localiseTitle(data)}`"
+                      @click="openDetail(data.seriesId)"
+                    />
                   </Tooltip>
                   <Tooltip content="Merge into another">
-                    <Button icon="pi pi-arrow-right-arrow-left" size="small" severity="secondary" :aria-label="`Merge ${data.name}`" @click="openMerge(data)" />
+                    <Button
+                      icon="pi pi-arrow-right-arrow-left"
+                      size="small"
+                      severity="secondary"
+                      :aria-label="`Merge ${localiseTitle(data)}`"
+                      @click="openMerge(data)"
+                    />
                   </Tooltip>
                   <Tooltip content="Delete">
-                    <Button icon="pi pi-trash" size="small" severity="danger" :aria-label="`Delete ${data.name}`" @click="askDelete(data)" />
+                    <Button icon="pi pi-trash" size="small" severity="danger" :aria-label="`Delete ${localiseTitle(data)}`" @click="askDelete(data)" />
                   </Tooltip>
                 </div>
               </template>
@@ -330,10 +351,7 @@
 
     <Dialog :visible="createOpen" header="New series or setting" modal class="w-full max-w-lg" @update:visible="(v: boolean) => (createOpen = v)">
       <form class="flex flex-col gap-4" @submit.prevent="submitCreate">
-        <div class="flex flex-col gap-1.5">
-          <label for="series-create-name" class="text-sm font-medium">Name</label>
-          <InputText id="series-create-name" v-model="createName" autofocus class="w-full" :invalid="!!createError && !createName.trim()" />
-        </div>
+        <GroupTitlesFields v-model="createTitles" :invalid="!!createError && !createTitles.originalTitle.trim()" autofocus />
         <div class="flex flex-col gap-1.5">
           <label for="series-create-kind" class="text-sm font-medium">Kind</label>
           <Select
@@ -358,7 +376,7 @@
 
     <Dialog
       :visible="detailId != null"
-      :header="detail ? `${seriesKindLabel(detail.kind)}: ${detail.name}` : 'Series'"
+      :header="detail ? `${seriesKindLabel(detail.kind)}: ${localiseTitle(detail)}` : 'Series'"
       modal
       class="w-full max-w-3xl"
       @update:visible="(v: boolean) => !v && closeDetail()"
@@ -369,17 +387,10 @@
       <div v-else-if="detail" class="flex flex-col gap-5">
         <Message v-if="detailError" severity="error" :closable="false">{{ detailError }}</Message>
 
-        <form class="flex flex-col gap-1.5" @submit.prevent="rename">
-          <label for="series-rename" class="text-sm font-medium">Name</label>
-          <div class="flex flex-wrap gap-2">
-            <InputText id="series-rename" v-model="renameValue" class="min-w-0 flex-1" />
-            <Button
-              label="Rename"
-              type="submit"
-              severity="secondary"
-              :disabled="!renameValue.trim() || renameValue.trim() === detail.name"
-              :loading="detailBusy"
-            />
+        <form class="flex flex-col gap-2" @submit.prevent="rename">
+          <GroupTitlesFields v-model="renameValue" />
+          <div class="flex justify-end">
+            <Button label="Rename" type="submit" severity="secondary" :disabled="!canRename" :loading="detailBusy" />
           </div>
         </form>
 
@@ -419,7 +430,7 @@
                 <div class="text-xs text-gray-500 dark:text-gray-400">{{ getMediaTypeText(m.mediaType) }}</div>
               </div>
               <div v-if="confirmRemove === m.deckId" class="flex flex-wrap items-center gap-2">
-                <span class="text-xs text-amber-800 dark:text-amber-300">Leaves {{ detail.name }}.</span>
+                <span class="text-xs text-amber-800 dark:text-amber-300">Leaves {{ localiseTitle(detail) }}.</span>
                 <Button label="Remove" size="small" severity="danger" outlined :loading="detailBusy" @click="removeMember(m)" />
                 <Button label="Keep" size="small" severity="secondary" text @click="confirmRemove = null" />
               </div>
@@ -446,7 +457,7 @@
 
     <Dialog
       :visible="!!mergeSource"
-      :header="mergeSource ? `Merge ${mergeSource.name}` : 'Merge'"
+      :header="mergeSource ? `Merge ${localiseTitle(mergeSource)}` : 'Merge'"
       modal
       class="w-full max-w-lg"
       @update:visible="(v: boolean) => !v && (mergeSource = null)"
@@ -458,7 +469,7 @@
             v-model="mergeTarget"
             input-id="series-merge-target"
             :suggestions="mergeSuggestions"
-            option-label="name"
+            :option-label="localiseTitle"
             :placeholder="`Search ${mergeSource.kind === SeriesKind.Setting ? 'settings' : 'series'}…`"
             class="w-full"
             input-class="w-full"
@@ -467,10 +478,10 @@
         </div>
         <p class="m-0 text-sm text-gray-600 dark:text-gray-400">
           <template v-if="mergeTarget && typeof mergeTarget === 'object'">
-            {{ mergeSource.deckCount }} {{ mergeSource.deckCount === 1 ? 'deck' : 'decks' }} will move to {{ mergeTarget.name }}, then
-            {{ mergeSource.name }} will be deleted.
+            {{ mergeSource.deckCount }} {{ mergeSource.deckCount === 1 ? 'deck' : 'decks' }} will move to {{ localiseTitle(mergeTarget) }}, then
+            {{ localiseTitle(mergeSource) }} will be deleted.
           </template>
-          <template v-else>Pick where its decks go. {{ mergeSource.name }} will be deleted afterwards.</template>
+          <template v-else>Pick where its decks go. {{ localiseTitle(mergeSource) }} will be deleted afterwards.</template>
         </p>
         <Message v-if="mergeError" severity="error" :closable="false">{{ mergeError }}</Message>
         <div class="flex justify-end gap-2">

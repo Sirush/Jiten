@@ -8,7 +8,11 @@ public class FranchiseDto
     /// <summary>Null for a deck that belongs to no franchise; the DTO then holds that deck alone.</summary>
     public int? FranchiseId { get; set; }
 
-    public string? Name { get; set; }
+    /// <summary>Null with <see cref="FranchiseId"/>.</summary>
+    public string? OriginalTitle { get; set; }
+
+    public string? RomajiTitle { get; set; }
+    public string? EnglishTitle { get; set; }
     public bool NameIsManual { get; set; }
     public List<FranchiseNodeDto> Nodes { get; set; } = new();
     public List<FranchiseEdgeDto> Edges { get; set; } = new();
@@ -26,6 +30,8 @@ public class FranchiseDto
 
     /// <summary>Franchise builder only: decks put on the board that are not in the franchise yet.</summary>
     public List<int> BoardOnlyDeckIds { get; set; } = new();
+
+    public void SetTitles(GroupTitles titles) => (OriginalTitle, RomajiTitle, EnglishTitle) = (titles.OriginalTitle, titles.RomajiTitle, titles.EnglishTitle);
 
     /// <summary>Copy with its own node instances (setting outsiders included) for per-viewer data; every other list is shared.</summary>
     public FranchiseDto CloneNodes()
@@ -57,19 +63,15 @@ public class FranchiseLineDto
     public List<int> DeckIds { get; set; } = new();
 }
 
-public class FranchiseSummaryDto
+public class FranchiseSummaryDto : MediaGroupTitlesDto
 {
     public int FranchiseId { get; set; }
-    public string Name { get; set; } = "";
     public bool NameIsManual { get; set; }
     public int DeckCount { get; set; }
     public int SeriesCount { get; set; }
 
     /// <summary>Any member deck, to open the franchise builder on.</summary>
     public int? FirstDeckId { get; set; }
-
-    /// <summary>Titles of the member deck the name was taken from, so the client can localise it; null when the name is not a deck title.</summary>
-    public MediaGroupTitlesDto? NameTitles { get; set; }
 }
 
 public enum FranchiseListSort
@@ -79,17 +81,15 @@ public enum FranchiseListSort
     Series
 }
 
-public class FranchiseSeriesDto
+public class FranchiseSeriesDto : MediaGroupTitlesDto
 {
     public int SeriesId { get; set; }
-    public string Name { get; set; } = "";
     public List<int> MemberDeckIds { get; set; } = new();
 }
 
-public class FranchiseSettingDto
+public class FranchiseSettingDto : MediaGroupTitlesDto
 {
     public int SeriesId { get; set; }
-    public string Name { get; set; } = "";
     public List<int> MemberDeckIds { get; set; } = new();
     public List<FranchiseNodeDto> Outside { get; set; } = new();
     public int OutsideCount { get; set; }
@@ -110,8 +110,8 @@ public class FranchiseNodeDto
 {
     public int DeckId { get; set; }
     public string OriginalTitle { get; set; } = "Unknown";
-    public string RomajiTitle { get; set; } = "";
-    public string EnglishTitle { get; set; } = "";
+    public string? RomajiTitle { get; set; }
+    public string? EnglishTitle { get; set; }
     public string CoverName { get; set; } = "nocover.jpg";
     public MediaType MediaType { get; set; }
     public DateTime ReleaseDate { get; set; }

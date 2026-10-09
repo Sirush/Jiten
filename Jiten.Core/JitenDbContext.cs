@@ -942,7 +942,9 @@ public class JitenDbContext : DbContext
             entity.ToTable("Franchises", "jiten");
             entity.HasKey(f => f.FranchiseId);
             entity.Property(f => f.FranchiseId).ValueGeneratedOnAdd();
-            entity.Property(f => f.Name).IsRequired().HasMaxLength(200);
+            entity.Property(f => f.OriginalTitle).IsRequired().HasMaxLength(GroupTitles.MaxLength);
+            entity.Property(f => f.RomajiTitle).HasMaxLength(GroupTitles.MaxLength);
+            entity.Property(f => f.EnglishTitle).HasMaxLength(GroupTitles.MaxLength);
             entity.Property(f => f.NameIsManual).HasDefaultValue(false);
 
             entity.HasMany(f => f.Decks)
@@ -976,7 +978,9 @@ public class JitenDbContext : DbContext
             entity.ToTable("Series", "jiten");
             entity.HasKey(s => s.SeriesId);
             entity.Property(s => s.SeriesId).ValueGeneratedOnAdd();
-            entity.Property(s => s.Name).IsRequired().HasMaxLength(200);
+            entity.Property(s => s.OriginalTitle).IsRequired().HasMaxLength(GroupTitles.MaxLength);
+            entity.Property(s => s.RomajiTitle).HasMaxLength(GroupTitles.MaxLength);
+            entity.Property(s => s.EnglishTitle).HasMaxLength(GroupTitles.MaxLength);
         });
 
         modelBuilder.Entity<SeriesMember>(entity =>

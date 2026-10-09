@@ -155,11 +155,7 @@
     </p>
 
     <ul v-else class="m-0 flex list-none flex-col gap-3 p-0" :class="{ 'opacity-60': loading }" :aria-busy="loading">
-      <li
-        v-for="s in rows"
-        :key="s.rootKey"
-        class="rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900"
-      >
+      <li v-for="s in rows" :key="s.rootKey" class="rounded-lg border border-gray-200 bg-white dark:border-gray-800 dark:bg-gray-900">
         <div v-if="dismissedKeys.has(s.rootKey)" class="flex flex-wrap items-center justify-between gap-2 px-4 py-3">
           <span class="text-sm text-gray-600 dark:text-gray-400">
             Dismissed <span class="font-medium text-gray-800 dark:text-gray-200" v-bind="japaneseTextAttrs(s.root)">{{ s.root }}</span>
@@ -214,9 +210,9 @@
                 v-if="d.franchiseId != null"
                 :to="`/franchise/${d.franchiseId}`"
                 class="text-sm text-primary-700 hover:underline dark:text-primary-300"
-                v-bind="japaneseTextAttrs(d.franchiseName)"
+                v-bind="japaneseTextAttrs(d.franchiseTitles ? localiseTitle(d.franchiseTitles) : null)"
               >
-                {{ d.franchiseName ?? `Franchise #${d.franchiseId}` }}
+                {{ d.franchiseTitles ? localiseTitle(d.franchiseTitles) : `Franchise #${d.franchiseId}` }}
               </NuxtLink>
               <span v-else class="text-sm font-medium text-amber-800 dark:text-amber-300">No franchise</span>
             </li>
@@ -225,13 +221,6 @@
       </li>
     </ul>
 
-    <Paginator
-      v-if="total > PAGE_SIZE"
-      :first="offset"
-      :rows="PAGE_SIZE"
-      :total-records="total"
-      class="bg-transparent!"
-      @page="onPage"
-    />
+    <Paginator v-if="total > PAGE_SIZE" :first="offset" :rows="PAGE_SIZE" :total-records="total" class="bg-transparent!" @page="onPage" />
   </div>
 </template>

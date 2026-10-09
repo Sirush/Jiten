@@ -2,16 +2,31 @@ using Jiten.Core.Data;
 
 namespace Jiten.Api.Dtos.Requests;
 
-public class CreateSeriesRequest
+public class GroupTitlesRequest
 {
-    public string Name { get; set; } = "";
+    public string? OriginalTitle { get; set; }
+    public string? RomajiTitle { get; set; }
+    public string? EnglishTitle { get; set; }
+
+    public GroupTitles ToTitles() => GroupTitles.Of(OriginalTitle, RomajiTitle, EnglishTitle);
+
+    public string? Validate()
+    {
+        if (string.IsNullOrWhiteSpace(OriginalTitle))
+            return "The original title cannot be empty.";
+        if (new[] { OriginalTitle, RomajiTitle, EnglishTitle }.Any(t => t != null && t.Trim().Length > GroupTitles.MaxLength))
+            return $"Titles must be at most {GroupTitles.MaxLength} characters.";
+        return null;
+    }
+}
+
+public class CreateSeriesRequest : GroupTitlesRequest
+{
     public SeriesKind Kind { get; set; }
 }
 
-public class UpdateSeriesRequest
-{
-    public string? Name { get; set; }
-}
+/// <summary>A null original title leaves all three titles unchanged; otherwise all three are replaced.</summary>
+public class UpdateSeriesRequest : GroupTitlesRequest;
 
 public class SeriesMembersRequest
 {
@@ -34,10 +49,8 @@ public class FranchiseBuilderSaveRequest
     public List<int> BoardDeckIds { get; set; } = new();
 }
 
-public class UpdateFranchiseRequest
-{
-    public string? Name { get; set; }
-}
+/// <summary>A blank original title returns the franchise to automatic titles.</summary>
+public class UpdateFranchiseRequest : GroupTitlesRequest;
 
 public class FranchiseSuggestionDismissRequest
 {

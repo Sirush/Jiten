@@ -55,7 +55,7 @@ public sealed class FranchiseService(JitenDbContext db, UserDbContext userContex
 
         var dto = await BuildForMembersAsync(deckIds, ct);
         dto.FranchiseId = row.FranchiseId;
-        dto.Name = row.Name;
+        dto.SetTitles(row.Titles());
         dto.NameIsManual = row.NameIsManual;
         return dto;
     }
@@ -91,7 +91,7 @@ public sealed class FranchiseService(JitenDbContext db, UserDbContext userContex
         deckIds.UnionWith(boardOnly);
         var dto = await BuildForMembersAsync(deckIds.ToList(), ct);
         dto.FranchiseId = franchise.FranchiseId;
-        dto.Name = franchise.Name;
+        (dto.OriginalTitle, dto.RomajiTitle, dto.EnglishTitle) = (franchise.OriginalTitle, franchise.RomajiTitle, franchise.EnglishTitle);
         dto.NameIsManual = franchise.NameIsManual;
         dto.BoardOnlyDeckIds = boardOnly.Where(id => dto.Nodes.Any(n => n.DeckId == id)).ToList();
         return dto;
@@ -130,14 +130,16 @@ public sealed class FranchiseService(JitenDbContext db, UserDbContext userContex
         var seriesIds = memberships.Select(m => m.SeriesId).Distinct().ToList();
         var series = await db.Series.AsNoTracking()
                              .Where(s => seriesIds.Contains(s.SeriesId))
-                             .Select(s => new { s.SeriesId, s.Name })
+                             .Select(s => new { s.SeriesId, s.OriginalTitle, s.RomajiTitle, s.EnglishTitle })
                              .ToListAsync(ct);
 
-        dto.Series = series.OrderBy(s => s.Name).ThenBy(s => s.SeriesId)
+        dto.Series = series.OrderBy(s => s.OriginalTitle).ThenBy(s => s.SeriesId)
                            .Select(s => new FranchiseSeriesDto
                            {
                                SeriesId = s.SeriesId,
-                               Name = s.Name,
+                               OriginalTitle = s.OriginalTitle,
+                               RomajiTitle = s.RomajiTitle,
+                               EnglishTitle = s.EnglishTitle,
                                MemberDeckIds = memberships.Where(m => m.SeriesId == s.SeriesId).Select(m => m.DeckId).Order().ToList()
                            })
                            .ToList();
@@ -175,7 +177,7 @@ public sealed class FranchiseService(JitenDbContext db, UserDbContext userContex
         var ids = franchiseIds.ToList();
         var settings = await db.Series.AsNoTracking()
                                .Where(s => s.Kind == SeriesKind.Setting && s.Members.Any(m => ids.Contains(m.DeckId)))
-                               .Select(s => new { s.SeriesId, s.Name })
+                               .Select(s => new { s.SeriesId, s.OriginalTitle, s.RomajiTitle, s.EnglishTitle })
                                .ToListAsync(ct);
         if (settings.Count == 0)
             return [];
@@ -196,14 +198,16 @@ public sealed class FranchiseService(JitenDbContext db, UserDbContext userContex
         var shownOutside = outsideBySetting.Values.SelectMany(v => v.Take(SettingOutsideCap)).Distinct().ToList();
         var outsideNodes = (await LoadNodesAsync(shownOutside, ct)).ToDictionary(n => n.DeckId);
 
-        return settings.OrderBy(s => s.Name).ThenBy(s => s.SeriesId)
+        return settings.OrderBy(s => s.OriginalTitle).ThenBy(s => s.SeriesId)
                        .Select(s =>
                        {
                            var outside = outsideBySetting.GetValueOrDefault(s.SeriesId) ?? [];
                            return new FranchiseSettingDto
                            {
                                SeriesId = s.SeriesId,
-                               Name = s.Name,
+                               OriginalTitle = s.OriginalTitle,
+                               RomajiTitle = s.RomajiTitle,
+                               EnglishTitle = s.EnglishTitle,
                                MemberDeckIds = members.Where(m => m.SeriesId == s.SeriesId && franchiseIds.Contains(m.DeckId))
                                                       .Select(m => m.DeckId).Order().ToList(),
                                Outside = outside.Take(SettingOutsideCap)
@@ -236,8 +240,8 @@ public sealed class FranchiseService(JitenDbContext db, UserDbContext userContex
         {
             DeckId = d.DeckId,
             OriginalTitle = d.OriginalTitle,
-            RomajiTitle = d.RomajiTitle ?? "",
-            EnglishTitle = d.EnglishTitle ?? "",
+            RomajiTitle = string.IsNullOrWhiteSpace(d.RomajiTitle) ? null : d.RomajiTitle,
+            EnglishTitle = string.IsNullOrWhiteSpace(d.EnglishTitle) ? null : d.EnglishTitle,
             CoverName = d.CoverName,
             MediaType = d.MediaType,
             ReleaseDate = d.ReleaseDate.ToDateTime(new TimeOnly()),

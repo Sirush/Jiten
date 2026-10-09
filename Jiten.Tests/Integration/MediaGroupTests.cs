@@ -52,13 +52,13 @@ public class MediaGroupTests(JitenWebApplicationFactory factory)
 
         db.DeckRelationships.AddRange(Rel(2, 1, DeckRelationshipType.Sequel), Rel(3, 1, DeckRelationshipType.Adaptation),
                                       Rel(5, 4, DeckRelationshipType.Sequel));
-        var saga = new Series { SeriesId = SagaSeriesId, Name = "Saga", Kind = SeriesKind.Series };
+        var saga = new Series { SeriesId = SagaSeriesId, OriginalTitle = "Saga", Kind = SeriesKind.Series };
         saga.Members.Add(new SeriesMember { SeriesId = SagaSeriesId, DeckId = 1 });
         saga.Members.Add(new SeriesMember { SeriesId = SagaSeriesId, DeckId = 4 });
         saga.Members.Add(new SeriesMember { SeriesId = SagaSeriesId, DeckId = 5 });
         db.Series.Add(saga);
 
-        var world = new Series { SeriesId = SettingId, Name = "World", Kind = SeriesKind.Setting };
+        var world = new Series { SeriesId = SettingId, OriginalTitle = "World", Kind = SeriesKind.Setting };
         world.Members.Add(new SeriesMember { SeriesId = SettingId, DeckId = 1 });
         world.Members.Add(new SeriesMember { SeriesId = SettingId, DeckId = LoneDeckId });
         db.Series.Add(world);
@@ -125,7 +125,7 @@ public class MediaGroupTests(JitenWebApplicationFactory factory)
 
         members.Kind.Should().Be(MediaGroupKind.Franchise);
         members.Id.Should().Be(_franchiseId);
-        members.Name.Should().Be("Saga");
+        members.OriginalTitle.Should().Be("Saga");
         members.FranchiseId.Should().Be(_franchiseId);
         members.Members.Select(m => m.DeckId).Should().Equal(1, 3, 2, 4, 5);
     }
@@ -135,7 +135,7 @@ public class MediaGroupTests(JitenWebApplicationFactory factory)
     {
         var members = await MembersAsync(2, SagaSeriesId);
 
-        members.Name.Should().Be("Saga");
+        members.OriginalTitle.Should().Be("Saga");
         members.FranchiseId.Should().Be(_franchiseId);
         members.Members.Select(m => m.DeckId).Should().Equal(1, 4, 5);
     }
@@ -145,7 +145,7 @@ public class MediaGroupTests(JitenWebApplicationFactory factory)
     {
         var line = await MembersAsync(3, 1, authenticated: true);
 
-        line.Name.Should().Be("Saga I");
+        line.OriginalTitle.Should().Be("Saga I");
         line.FranchiseId.Should().Be(_franchiseId);
         line.Members.Select(m => m.DeckId).Should().Equal(1, 3, 2);
 

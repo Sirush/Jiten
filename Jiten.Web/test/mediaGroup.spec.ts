@@ -48,8 +48,8 @@ const franchise: ScopeFranchise = {
   ],
   edges: [],
   series: [
-    { seriesId: 100, name: 'Final Fantasy', memberDeckIds: [1, 12, 20] },
-    { seriesId: 101, name: 'Compilation of FF VII', memberDeckIds: [7, 8, 9] },
+    { seriesId: 100, originalTitle: 'Final Fantasy', memberDeckIds: [1, 12, 20] },
+    { seriesId: 101, originalTitle: 'Compilation of FF VII', memberDeckIds: [7, 8, 9] },
   ],
   lines: [
     { anchorDeckId: 1, deckIds: [1] },
@@ -123,9 +123,9 @@ describe('buildScopeChips', () => {
       ...franchise,
       lines: [],
       series: [
-        { seriesId: 5, name: 'Empty', memberDeckIds: [] },
-        { seriesId: 6, name: 'Elsewhere', memberDeckIds: [404] },
-        { seriesId: 7, name: 'Kept', memberDeckIds: [12, 13] },
+        { seriesId: 5, originalTitle: 'Empty', memberDeckIds: [] },
+        { seriesId: 6, originalTitle: 'Elsewhere', memberDeckIds: [404] },
+        { seriesId: 7, originalTitle: 'Kept', memberDeckIds: [12, 13] },
       ],
     };
     expect(buildScopeChips(odd, localise).map((c) => c.key)).toEqual(['all', 'series:7']);
@@ -174,19 +174,23 @@ describe('node filters', () => {
 
 describe('study deck labels', () => {
   it('names each kind and falls back when the group is gone', () => {
-    expect(mediaGroupLabel({ groupKind: MediaGroupKind.Franchise, groupName: 'Final Fantasy' }, localise)).toBe('Franchise: Final Fantasy');
-    expect(mediaGroupLabel({ groupKind: MediaGroupKind.Series, groupName: null }, localise)).toBe('Series removed');
-    expect(
-      mediaGroupLabel({ groupKind: MediaGroupKind.Line, groupName: 'ignored', groupTitles: { originalTitle: 'ファイナルファンタジーXII' } }, localise)
-    ).toBe('Series: ファイナルファンタジーXII');
+    expect(mediaGroupLabel({ groupKind: MediaGroupKind.Franchise, groupTitles: { originalTitle: 'Final Fantasy' } }, localise)).toBe(
+      'Franchise: Final Fantasy'
+    );
+    expect(mediaGroupLabel({ groupKind: MediaGroupKind.Series, groupTitles: null }, localise)).toBe('Series removed');
+    expect(mediaGroupLabel({ groupKind: MediaGroupKind.Line, groupTitles: { originalTitle: 'ファイナルファンタジーXII' } }, localise)).toBe(
+      'Series: ファイナルファンタジーXII'
+    );
   });
 
   it('links to the franchise page, scoped for series and lines', () => {
-    expect(mediaGroupLink({ groupKind: MediaGroupKind.Franchise, groupId: 3, groupName: 'FF', groupFranchiseId: 3 })).toBe('/franchise/3');
-    expect(mediaGroupLink({ groupKind: MediaGroupKind.Series, groupId: 101, groupName: 'C', groupFranchiseId: 3 })).toBe('/franchise/3?scope=series:101');
+    expect(mediaGroupLink({ groupKind: MediaGroupKind.Franchise, groupId: 3, groupTitles: { originalTitle: 'FF' }, groupFranchiseId: 3 })).toBe('/franchise/3');
+    expect(mediaGroupLink({ groupKind: MediaGroupKind.Series, groupId: 101, groupTitles: { originalTitle: 'C' }, groupFranchiseId: 3 })).toBe(
+      '/franchise/3?scope=series:101'
+    );
     expect(mediaGroupLink({ groupKind: MediaGroupKind.Line, groupId: 12, groupFranchiseId: 3 })).toBe('/franchise/3?scope=line:12');
-    expect(mediaGroupLink({ groupKind: MediaGroupKind.Series, groupId: 101, groupName: 'C', groupFranchiseId: null })).toBeNull();
-    expect(mediaGroupLink({ groupKind: MediaGroupKind.Franchise, groupId: 3, groupName: null })).toBeNull();
+    expect(mediaGroupLink({ groupKind: MediaGroupKind.Series, groupId: 101, groupTitles: { originalTitle: 'C' }, groupFranchiseId: null })).toBeNull();
+    expect(mediaGroupLink({ groupKind: MediaGroupKind.Franchise, groupId: 3, groupTitles: null })).toBeNull();
   });
 
   it('summarises the filters', () => {

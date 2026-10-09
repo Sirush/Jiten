@@ -1,4 +1,4 @@
-﻿using Jiten.Api.Dtos;
+using Jiten.Api.Dtos;
 using Jiten.Core.Data;
 using Jiten.Core.Data.User;
 
@@ -23,7 +23,7 @@ public sealed record DeckWordSource
         new() { DeckId = deckId, DeckIds = [deckId], WordCount = wordCount, Title = title };
 
     public static DeckWordSource Merged(IReadOnlyList<int> deckIds, MediaGroupDescription? group = null) =>
-        new() { DeckIds = deckIds, Group = group, Title = group?.Name };
+        new() { DeckIds = deckIds, Group = group, Title = group?.Titles.OriginalTitle };
 }
 
 public record DeckWordResolveRequest(

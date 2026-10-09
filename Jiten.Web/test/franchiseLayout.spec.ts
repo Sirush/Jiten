@@ -163,7 +163,7 @@ describe('layoutStoryLine', () => {
 });
 
 describe('buildFranchiseSeriesLayout', () => {
-  const series = (seriesId: number, name: string, memberDeckIds: number[]): FranchiseSeries => ({ seriesId, name, memberDeckIds });
+  const series = (seriesId: number, originalTitle: string, memberDeckIds: number[]): FranchiseSeries => ({ seriesId, originalTitle, memberDeckIds });
 
   it('builds release-ordered rows and merges consecutive standalone entries', () => {
     const nodes = [node(1, 1987), node(27, 1988), node(28, 1990), node(2, 1991), node(3, 2008), node(4, 1994)];
@@ -186,7 +186,7 @@ describe('buildFranchiseSeriesLayout', () => {
       lines: lines([6, 5], [51, 50]),
       series: [series(101, 'Compilation of FF VII', [5]), series(100, 'FF', [1, 11]), series(102, 'Empty', [])],
     });
-    expect(layout.groups.map((g) => g.name)).toEqual(['FF', 'Compilation of FF VII']);
+    expect(layout.groups.map((g) => g.originalTitle)).toEqual(['FF', 'Compilation of FF VII']);
     expect(layout.groups[0]!.rows.map((r) => r.deckIds)).toEqual([[1, 11]]);
     expect(layout.groups[1]!.rows[0]).toMatchObject({ kind: 'line', deckIds: [5, 6], entryId: 5 });
     expect(layout.groups[1]!.deckIds).toEqual([5, 6]);
@@ -212,7 +212,7 @@ describe('buildFranchiseSeriesLayout', () => {
 });
 
 describe('resolveFranchiseView', () => {
-  const withSeries = { series: [{ seriesId: 1, name: 'S', memberDeckIds: [1] }], preferredView: 'series' as const };
+  const withSeries = { series: [{ seriesId: 1, originalTitle: 'S', memberDeckIds: [1] }], preferredView: 'series' as const };
   const noSeries = { series: [], preferredView: 'timeline' as const };
 
   it('prefers the query', () => {
@@ -264,21 +264,30 @@ describe('franchiseDerivedChips', () => {
 });
 
 describe('franchisePopoverMemberships', () => {
+  const localise = (t: { originalTitle: string; englishTitle?: string | null }) => t.englishTitle ?? t.originalTitle;
   const franchise = {
-    series: [{ seriesId: 10, name: 'Main', memberDeckIds: [1] }],
-    settings: [{ seriesId: 20, name: 'World', memberDeckIds: [1, 2], outside: [], outsideCount: 0 }],
+    series: [{ seriesId: 10, originalTitle: 'Main', memberDeckIds: [1] }],
+    settings: [{ seriesId: 20, originalTitle: 'World', memberDeckIds: [1, 2], outside: [], outsideCount: 0 }],
   };
 
   it('lists direct series and settings by default', () => {
-    expect(franchisePopoverMemberships(franchise, 1, () => null).map((m) => [m.kind, m.seriesId, m.name])).toEqual([
+    expect(franchisePopoverMemberships(franchise, 1, localise, () => null).map((m) => [m.kind, m.seriesId, m.name])).toEqual([
       ['series', 10, 'Main'],
       ['setting', 20, 'World'],
     ]);
   });
 
   it('names the deck a line reaches its series through', () => {
-    const rows = franchisePopoverMemberships(franchise, 2, (id) => `Deck ${id}`, [{ seriesId: 10, viaDeckId: 1 }]);
+    const rows = franchisePopoverMemberships(franchise, 2, localise, (id) => `Deck ${id}`, [{ seriesId: 10, viaDeckId: 1 }]);
     expect(rows[0]).toMatchObject({ kind: 'series', name: 'Main (through Deck 1)' });
+  });
+
+  it('localises series and setting titles', () => {
+    const localised = {
+      series: [{ seriesId: 10, originalTitle: 'メイン', englishTitle: 'Main', memberDeckIds: [1] }],
+      settings: [{ seriesId: 20, originalTitle: '世界', englishTitle: 'World', memberDeckIds: [1], outside: [], outsideCount: 0 }],
+    };
+    expect(franchisePopoverMemberships(localised, 1, localise).map((m) => m.name)).toEqual(['Main', 'World']);
   });
 });
 

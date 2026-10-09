@@ -216,10 +216,7 @@ public class StudyDeckDto
     public MediaGroupKind? GroupKind { get; set; }
     public int? GroupId { get; set; }
 
-    /// <summary>Franchise or series name, a line's anchor OriginalTitle; null when the group no longer exists.</summary>
-    public string? GroupName { get; set; }
-
-    /// <summary>Line anchor titles, for localisation.</summary>
+    /// <summary>Franchise or series titles, a line's anchor titles; null when the group no longer exists.</summary>
     public MediaGroupTitlesDto? GroupTitles { get; set; }
 
     public int? GroupFranchiseId { get; set; }

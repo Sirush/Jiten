@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import Skeleton from 'primevue/skeleton';
-  import type { Franchise, FranchiseNode, MediaGroupStats, MediaType } from '~/types';
+  import type { Franchise, FranchiseNode, MediaGroupStats, MediaGroupTitles, MediaType } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
   import { useJitenStore } from '~/stores/jitenStore';
   import { franchiseEntryCountLabel, franchiseFirstNode, franchiseYearRange } from '~/utils/franchiseLayout';
@@ -40,7 +40,12 @@
   const renaming = ref(false);
   const renameButton = ref<{ $el?: HTMLElement } | null>(null);
 
-  const storedName = computed(() => props.franchise.name || props.name);
+  const storedTitles = computed<MediaGroupTitles>(() => {
+    const f = props.franchise;
+    return f.originalTitle
+      ? { originalTitle: f.originalTitle, romajiTitle: f.romajiTitle, englishTitle: f.englishTitle }
+      : { originalTitle: props.name, romajiTitle: null, englishTitle: null };
+  });
 
   async function stopRename() {
     renaming.value = false;
@@ -127,7 +132,7 @@
     <FranchiseRenameForm
       v-if="renaming"
       :franchise-id="franchise.franchiseId"
-      :name="storedName"
+      :titles="storedTitles"
       :name-is-manual="franchise.nameIsManual"
       @saved="onRenamed"
       @close="stopRename"

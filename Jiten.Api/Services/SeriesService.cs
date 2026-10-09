@@ -11,7 +11,7 @@ public sealed class SeriesService(JitenDbContext db, FranchiseService franchise)
 {
     private static readonly Expression<Func<Series, SeriesRefDto>> RefProjection = s => new SeriesRefDto
     {
-        SeriesId = s.SeriesId, Name = s.Name, Kind = s.Kind
+        SeriesId = s.SeriesId, OriginalTitle = s.OriginalTitle, RomajiTitle = s.RomajiTitle, EnglishTitle = s.EnglishTitle, Kind = s.Kind
     };
 
     public static IQueryable<Series> Filter(IQueryable<Series> query, string? text, SeriesKind? kind)
@@ -22,19 +22,12 @@ public sealed class SeriesService(JitenDbContext db, FranchiseService franchise)
         if (!string.IsNullOrWhiteSpace(text))
         {
             var needle = text.Trim().ToLower();
-            query = query.Where(s => s.Name.ToLower().Contains(needle));
+            query = query.Where(s => s.OriginalTitle.ToLower().Contains(needle) ||
+                                     (s.RomajiTitle != null && s.RomajiTitle.ToLower().Contains(needle)) ||
+                                     (s.EnglishTitle != null && s.EnglishTitle.ToLower().Contains(needle)));
         }
 
         return query;
-    }
-
-    public static string? ValidateName(string? name)
-    {
-        if (string.IsNullOrWhiteSpace(name))
-            return "Name cannot be empty.";
-        if (name.Trim().Length > FranchiseNaming.MaxNameLength)
-            return $"Name must be at most {FranchiseNaming.MaxNameLength} characters.";
-        return null;
     }
 
     public Task<SeriesRefDto> ToRefAsync(int seriesId, CancellationToken ct = default) =>
@@ -53,7 +46,7 @@ public sealed class SeriesService(JitenDbContext db, FranchiseService franchise)
                            .ToListAsync(ct);
 
         var byDeck = rows.GroupBy(r => r.DeckId)
-                         .ToDictionary(g => g.Key, g => g.Select(r => r.Ref).OrderBy(r => r.Kind).ThenBy(r => r.Name).ToList());
+                         .ToDictionary(g => g.Key, g => g.Select(r => r.Ref).OrderBy(r => r.Kind).ThenBy(r => r.OriginalTitle).ToList());
 
         foreach (var deck in decks)
             deck.Series = byDeck.GetValueOrDefault(deck.DeckId) ?? [];
@@ -74,7 +67,9 @@ public sealed class SeriesService(JitenDbContext db, FranchiseService franchise)
         return series.Select(s => new SeriesSummaryDto
         {
             SeriesId = s.SeriesId,
-            Name = s.Name,
+            OriginalTitle = s.OriginalTitle,
+            RomajiTitle = s.RomajiTitle,
+            EnglishTitle = s.EnglishTitle,
             Kind = s.Kind,
             DeckCount = deckCounts.GetValueOrDefault(s.SeriesId)
         }).ToList();
@@ -99,7 +94,9 @@ public sealed class SeriesService(JitenDbContext db, FranchiseService franchise)
         return new SeriesDetailDto
         {
             SeriesId = series.SeriesId,
-            Name = series.Name,
+            OriginalTitle = series.OriginalTitle,
+            RomajiTitle = series.RomajiTitle,
+            EnglishTitle = series.EnglishTitle,
             Kind = series.Kind,
             FranchiseId = await SeriesHome.FranchiseAsync(db, seriesId, ct),
             Members = members

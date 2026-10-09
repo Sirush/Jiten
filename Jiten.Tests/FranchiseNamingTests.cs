@@ -1,29 +1,109 @@
 using FluentAssertions;
+using Jiten.Core.Data;
 using Jiten.Core.Services;
 
 namespace Jiten.Tests;
 
 public class FranchiseNamingTests
 {
-    private static List<(string OriginalTitle, DateOnly ReleaseDate, int DeckId)> Members(params (string Title, int Year)[] titles) =>
-        titles.Select((t, i) => (t.Title, new DateOnly(t.Year, 1, 1), i + 1)).ToList();
+    private static List<(GroupTitles Titles, DateOnly ReleaseDate, int DeckId)> Members(params (string Title, int Year)[] titles) =>
+        titles.Select((t, i) => (new GroupTitles(t.Title, null, null), new DateOnly(t.Year, 1, 1), i + 1)).ToList();
 
-    private static string Suggest(params (string Title, int Year)[] titles) => FranchiseNaming.Suggest(Members(titles), []);
+    private static GroupTitles Titles(string original) => new(original, null, null);
+
+    private static string Suggest(params (string Title, int Year)[] titles) => FranchiseNaming.Suggest(Members(titles), []).OriginalTitle;
 
     [Fact]
     public void SingleSeries_NamesTheFranchise()
     {
-        var name = FranchiseNaming.Suggest(Members(("ファイナルファンタジーVII", 1997), ("クライシス コア", 2007)), ["Final Fantasy"]);
+        var series = new GroupTitles("ファイナルファンタジー", "Final Fantasy", "Final Fantasy");
+        var titles = FranchiseNaming.Suggest(Members(("ファイナルファンタジーVII", 1997), ("クライシス コア", 2007)), [series]);
 
-        name.Should().Be("Final Fantasy");
+        titles.Should().Be(series);
     }
 
     [Fact]
     public void SeveralSeries_FallBackToTitles()
     {
-        var name = FranchiseNaming.Suggest(Members(("ファイナルファンタジーVII", 1997), ("ファイナルファンタジーX", 2001)), ["Final Fantasy", "Compilation"]);
+        var name = FranchiseNaming.Suggest(Members(("ファイナルファンタジーVII", 1997), ("ファイナルファンタジーX", 2001)),
+                                           [Titles("Final Fantasy"), Titles("Compilation")]);
 
-        name.Should().Be("ファイナルファンタジー");
+        name.OriginalTitle.Should().Be("ファイナルファンタジー");
+    }
+
+    [Fact]
+    public void Prefix_IsTakenPerLanguage()
+    {
+        var members = new List<(GroupTitles Titles, DateOnly ReleaseDate, int DeckId)>
+        {
+            (new GroupTitles("ペルソナ3", "Persona 3", "Persona 3"), new DateOnly(2006, 1, 1), 1),
+            (new GroupTitles("ペルソナ4", "Persona 4", null), new DateOnly(2008, 1, 1), 2),
+            (new GroupTitles("ペルソナ5", "Persona 5", "Persona 5"), new DateOnly(2016, 1, 1), 3)
+        };
+
+        FranchiseNaming.Suggest(members, []).Should().Be(new GroupTitles("ペルソナ", "Persona", "Persona"));
+    }
+
+    [Fact]
+    public void Prefix_LeavesALanguageEmptyWhenTooFewTitlesShareIt()
+    {
+        var members = new List<(GroupTitles Titles, DateOnly ReleaseDate, int DeckId)>
+        {
+            (new GroupTitles("ペルソナ3", null, "Persona 3"), new DateOnly(2006, 1, 1), 1),
+            (new GroupTitles("ペルソナ4", null, null), new DateOnly(2008, 1, 1), 2),
+            (new GroupTitles("ペルソナ5", null, null), new DateOnly(2016, 1, 1), 3)
+        };
+
+        FranchiseNaming.Suggest(members, []).Should().Be(new GroupTitles("ペルソナ", null, null));
+    }
+
+    [Fact]
+    public void Prefix_ThatIsAMembersTitle_TakesItsTitles()
+    {
+        var members = new List<(GroupTitles Titles, DateOnly ReleaseDate, int DeckId)>
+        {
+            (new GroupTitles("四月は君の嘘 特別編", null, "Your Lie in April: Special"), new DateOnly(2015, 1, 1), 1),
+            (new GroupTitles("四月は君の嘘", "Shigatsu wa Kimi no Uso", "Your Lie in April"), new DateOnly(2014, 1, 1), 2)
+        };
+
+        FranchiseNaming.Suggest(members, []).Should().Be(new GroupTitles("四月は君の嘘", "Shigatsu wa Kimi no Uso", "Your Lie in April"));
+    }
+
+    [Fact]
+    public void TranslatedPrefix_MustBeSharedByAllAndEndOnAWord()
+    {
+        var members = new List<(GroupTitles Titles, DateOnly ReleaseDate, int DeckId)>
+        {
+            (new GroupTitles("ATRI -My Dear Moments-", "ATRI -My Dear Moments-", "ATRI -My Dear Moments-"), new DateOnly(2020, 1, 1), 1),
+            (new GroupTitles("ATRI -My Dear Moments- 外伝", "ATRIA", "The Side Story"), new DateOnly(2021, 1, 1), 2),
+            (new GroupTitles("ATRI -My Dear Moments- 前日譚", null, "The Prequel"), new DateOnly(2022, 1, 1), 3)
+        };
+
+        FranchiseNaming.Suggest(members, []).Should().Be(new GroupTitles("ATRI -My Dear Moments", null, null));
+    }
+
+    [Fact]
+    public void TranslatedPrefix_ThatIsOnlyAnArticle_IsDropped()
+    {
+        var members = new List<(GroupTitles Titles, DateOnly ReleaseDate, int DeckId)>
+        {
+            (new GroupTitles("涼宮ハルヒの憂鬱", null, "The Melancholy of Haruhi Suzumiya"), new DateOnly(2006, 1, 1), 1),
+            (new GroupTitles("涼宮ハルヒの消失", null, "The Disappearance of Haruhi Suzumiya"), new DateOnly(2010, 1, 1), 2)
+        };
+
+        FranchiseNaming.Suggest(members, []).EnglishTitle.Should().BeNull();
+    }
+
+    [Fact]
+    public void Fallback_KeepsTheEarliestMembersTitles()
+    {
+        var members = new List<(GroupTitles Titles, DateOnly ReleaseDate, int DeckId)>
+        {
+            (new GroupTitles("真・女神転生", "Shin Megami Tensei", " "), new DateOnly(1992, 1, 1), 1),
+            (new GroupTitles("デビルサマナー", "Devil Summoner", "Devil Summoner"), new DateOnly(1995, 1, 1), 2)
+        };
+
+        FranchiseNaming.Suggest(members, []).Should().Be(new GroupTitles("真・女神転生", "Shin Megami Tensei", null));
     }
 
     [Fact]
@@ -64,21 +144,21 @@ public class FranchiseNamingTests
     [Fact]
     public void Fallback_PicksTheEarliestRelease_UnknownDatesLast()
     {
-        var members = new List<(string OriginalTitle, DateOnly ReleaseDate, int DeckId)>
+        var members = new List<(GroupTitles Titles, DateOnly ReleaseDate, int DeckId)>
         {
-            ("Unknown date", new DateOnly(1, 1, 1), 1),
-            ("Later", new DateOnly(2010, 5, 1), 2),
-            ("Earlier tie, higher id", new DateOnly(2005, 1, 1), 4),
-            ("Earlier tie, lower id", new DateOnly(2005, 1, 1), 3)
+            (Titles("Unknown date"), new DateOnly(1, 1, 1), 1),
+            (Titles("Later"), new DateOnly(2010, 5, 1), 2),
+            (Titles("Earlier tie, higher id"), new DateOnly(2005, 1, 1), 4),
+            (Titles("Earlier tie, lower id"), new DateOnly(2005, 1, 1), 3)
         };
 
-        FranchiseNaming.Suggest(members, []).Should().Be("Earlier tie, lower id");
+        FranchiseNaming.Suggest(members, []).OriginalTitle.Should().Be("Earlier tie, lower id");
     }
 
     [Fact]
     public void LongNames_AreClamped()
     {
         var title = new string('あ', 250);
-        FranchiseNaming.Suggest(Members((title, 2000)), []).Should().HaveLength(FranchiseNaming.MaxNameLength);
+        FranchiseNaming.Suggest(Members((title, 2000)), []).OriginalTitle.Should().HaveLength(FranchiseNaming.MaxNameLength);
     }
 }

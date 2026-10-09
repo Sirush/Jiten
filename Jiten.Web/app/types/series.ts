@@ -1,13 +1,13 @@
 import type { FranchiseNode } from './types';
+import type { MediaGroupTitles } from './mediaGroup';
 
 export enum SeriesKind {
   Series = 1,
   Setting = 2,
 }
 
-export interface SeriesRef {
+export interface SeriesRef extends MediaGroupTitles {
   seriesId: number;
-  name: string;
   kind: SeriesKind;
 }
 
@@ -15,25 +15,22 @@ export interface SeriesSummary extends SeriesRef {
   deckCount: number;
 }
 
-export interface SeriesDetail {
+export interface SeriesDetail extends MediaGroupTitles {
   seriesId: number;
-  name: string;
   kind: SeriesKind;
   /** Franchise holding most of the members; null for a setting or when no member has one. */
   franchiseId: number | null;
   members: FranchiseNode[];
 }
 
-export interface FranchiseSeries {
+export interface FranchiseSeries extends MediaGroupTitles {
   seriesId: number;
-  name: string;
   memberDeckIds: number[];
 }
 
 /** A setting shared by franchise decks; settings never merge franchises. */
-export interface FranchiseSetting {
+export interface FranchiseSetting extends MediaGroupTitles {
   seriesId: number;
-  name: string;
   /** Members that are part of this franchise. */
   memberDeckIds: number[];
   /** Members outside this franchise (capped at 20). */

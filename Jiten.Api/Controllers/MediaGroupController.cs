@@ -53,7 +53,11 @@ public class MediaGroupController(
             await franchiseService.ApplyCoverageAsync(members, currentUserService.UserId!);
         }
 
-        return new MediaGroupMembersDto { Kind = kind, Id = id, Name = group.Name, FranchiseId = group.FranchiseId, Members = members };
+        return new MediaGroupMembersDto
+        {
+            Kind = kind, Id = id, OriginalTitle = group.Titles.OriginalTitle, RomajiTitle = group.Titles.RomajiTitle,
+            EnglishTitle = group.Titles.EnglishTitle, FranchiseId = group.FranchiseId, Members = members
+        };
     }
 
     /// <summary>Live totals of the filtered deck set.</summary>

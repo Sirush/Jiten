@@ -35,7 +35,7 @@ public class FranchiseSyncTests(JitenWebApplicationFactory factory)
 
     private static Series Group(int id, string name, SeriesKind kind, params int[] deckIds)
     {
-        var series = new Series { SeriesId = id, Name = name, Kind = kind };
+        var series = new Series { SeriesId = id, OriginalTitle = name, Kind = kind };
         foreach (var deckId in deckIds)
             series.Members.Add(new SeriesMember { SeriesId = id, DeckId = deckId });
         return series;
@@ -108,7 +108,7 @@ public class FranchiseSyncTests(JitenWebApplicationFactory factory)
         franchiseId.Should().NotBeNull();
         new[] { 1, 2, 3, 4, 5 }.Select(id => membership[id]).Should().AllBeEquivalentTo(franchiseId);
         new[] { 6, 7, 8, 9, 10 }.Select(id => membership[id]).Should().AllBeEquivalentTo((int?)null);
-        (await FranchisesAsync()).Single().Name.Should().Be("Saga");
+        (await FranchisesAsync()).Single().OriginalTitle.Should().Be("Saga");
     }
 
     [Fact]
@@ -206,16 +206,20 @@ public class FranchiseSyncTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task Naming_UsesTheSharedPrefix_AndFollowsTitleChanges()
     {
-        await SeedAsync([Deck(1, "ドラゴンクエストⅢ", 1988), Deck(2, "ドラゴンクエストⅣ", 1990), Deck(3, "スライムもりもり", 2003)],
+        var first = Deck(1, "ドラゴンクエストⅢ", 1988);
+        (first.RomajiTitle, first.EnglishTitle) = ("Dragon Quest III", "Dragon Quest III");
+        var second = Deck(2, "ドラゴンクエストⅣ", 1990);
+        (second.RomajiTitle, second.EnglishTitle) = ("Dragon Quest IV", "Dragon Quest IV");
+        await SeedAsync([first, second, Deck(3, "スライムもりもり", 2003)],
                         [Rel(1, 2), Rel(2, 3, DeckRelationshipType.Spinoff)]);
         await SyncAsync();
-        (await FranchisesAsync()).Single().Name.Should().Be("ドラゴンクエスト");
+        (await FranchisesAsync()).Single().Titles().Should().Be(new GroupTitles("ドラゴンクエスト", "Dragon Quest", "Dragon Quest"));
 
         await InDbAsync(db => db.Decks.Where(d => d.DeckId == 2).ExecuteUpdateAsync(s => s.SetProperty(d => d.OriginalTitle, "勇者の物語")));
         var summary = await SyncAsync();
 
         summary.Renamed.Should().Be(1);
-        (await FranchisesAsync()).Single().Name.Should().Be("ドラゴンクエストⅢ");
+        (await FranchisesAsync()).Single().Titles().Should().Be(new GroupTitles("ドラゴンクエストⅢ", "Dragon Quest III", "Dragon Quest III"));
     }
 
     [Fact]
@@ -226,22 +230,33 @@ public class FranchiseSyncTests(JitenWebApplicationFactory factory)
         var id = (await FranchisesAsync()).Single().FranchiseId;
 
         var renamed = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Patch, $"/api/admin/franchise/{id}")
-                                              .WithAdmin().WithJsonContent(new { name = "  The Alpha Saga " }));
+                                              .WithAdmin().WithJsonContent(new
+                                              {
+                                                  originalTitle = "  アルファ・サーガ ", romajiTitle = " ", englishTitle = "The Alpha Saga"
+                                              }));
         renamed.StatusCode.Should().Be(HttpStatusCode.OK);
         (await renamed.Content.ReadFromJsonAsync<FranchiseSummaryDto>())!.Should()
-            .BeEquivalentTo(new { FranchiseId = id, Name = "The Alpha Saga", NameIsManual = true, DeckCount = 2 });
+            .BeEquivalentTo(new
+            {
+                FranchiseId = id, OriginalTitle = "アルファ・サーガ", RomajiTitle = (string?)null, EnglishTitle = "The Alpha Saga",
+                NameIsManual = true, DeckCount = 2
+            });
 
         (await SyncAsync()).Renamed.Should().Be(0);
-        (await FranchisesAsync()).Single().Name.Should().Be("The Alpha Saga");
+        (await FranchisesAsync()).Single().Titles().Should().Be(new GroupTitles("アルファ・サーガ", null, "The Alpha Saga"));
+
+        var tooLong = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Patch, $"/api/admin/franchise/{id}")
+                                              .WithAdmin().WithJsonContent(new { originalTitle = "x", englishTitle = new string('x', 201) }));
+        tooLong.StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
         var reset = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Patch, $"/api/admin/franchise/{id}")
-                                            .WithAdmin().WithJsonContent(new { name = (string?)null }));
+                                            .WithAdmin().WithJsonContent(new { originalTitle = (string?)null }));
         reset.StatusCode.Should().Be(HttpStatusCode.OK);
         (await reset.Content.ReadFromJsonAsync<FranchiseSummaryDto>())!.Should()
-            .BeEquivalentTo(new { Name = "Alpha", NameIsManual = false });
+            .BeEquivalentTo(new { OriginalTitle = "Alpha", EnglishTitle = (string?)null, NameIsManual = false });
 
         (await _client.SendAsync(new HttpRequestMessage(HttpMethod.Patch, "/api/admin/franchise/999")
-                                 .WithAdmin().WithJsonContent(new { name = "x" })))
+                                 .WithAdmin().WithJsonContent(new { originalTitle = "x" })))
             .StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -258,7 +273,7 @@ public class FranchiseSyncTests(JitenWebApplicationFactory factory)
 
         var alpha = await GetAsync<PaginatedResponse<List<FranchiseSummaryDto>>>("/api/admin/franchise?query=alp", admin: true);
         alpha.Data.Should().ContainSingle().Which.Should()
-             .BeEquivalentTo(new { Name = "Alpha", NameIsManual = false, DeckCount = 3, SeriesCount = 1, FirstDeckId = 1, NameTitles = (object?)null });
+             .BeEquivalentTo(new { OriginalTitle = "Alpha", NameIsManual = false, DeckCount = 3, SeriesCount = 1, FirstDeckId = 1 });
 
         var byDeckTitle = await GetAsync<PaginatedResponse<List<FranchiseSummaryDto>>>("/api/admin/franchise?query=beta%20two", admin: true);
         byDeckTitle.Data.Should().ContainSingle().Which.DeckCount.Should().Be(2);
@@ -277,11 +292,11 @@ public class FranchiseSyncTests(JitenWebApplicationFactory factory)
         await SyncAsync();
 
         var original = await GetAsync<PaginatedResponse<List<FranchiseSummaryDto>>>("/api/admin/franchise", admin: true);
-        original.Data.Select(f => f.Name).Should().Equal("Alpha", "“Bungaku Shoujo”", "Zeta", "【推しの子】");
-        original.Data.Last().NameTitles!.EnglishTitle.Should().Be("Oshi no Ko");
+        original.Data.Select(f => f.OriginalTitle).Should().Equal("Alpha", "“Bungaku Shoujo”", "Zeta", "【推しの子】");
+        original.Data.Last().EnglishTitle.Should().Be("Oshi no Ko");
 
         var english = await GetAsync<PaginatedResponse<List<FranchiseSummaryDto>>>("/api/admin/franchise?titleLanguage=2&descending=true", admin: true);
-        english.Data.Select(f => f.Name).Should().Equal("Zeta", "【推しの子】", "“Bungaku Shoujo”", "Alpha");
+        english.Data.Select(f => f.OriginalTitle).Should().Equal("Zeta", "【推しの子】", "“Bungaku Shoujo”", "Alpha");
 
         var byDecks = await GetAsync<PaginatedResponse<List<FranchiseSummaryDto>>>("/api/admin/franchise?sort=decks&descending=true&limit=1", admin: true);
         byDecks.TotalItems.Should().Be(4);

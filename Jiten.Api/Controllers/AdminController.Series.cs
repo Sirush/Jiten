@@ -21,7 +21,7 @@ public partial class AdminController
 
         var filtered = SeriesService.Filter(dbContext.Series.AsNoTracking(), query, kind);
         var total = await filtered.CountAsync();
-        var page = await filtered.OrderBy(s => s.Name).ThenBy(s => s.SeriesId).Skip(offset).Take(limit).ToListAsync();
+        var page = await filtered.OrderBy(s => s.OriginalTitle).ThenBy(s => s.SeriesId).Skip(offset).Take(limit).ToListAsync();
 
         return new PaginatedResponse<List<SeriesSummaryDto>>(await series.BuildSummariesAsync(page), total, limit, offset);
     }
@@ -36,17 +36,18 @@ public partial class AdminController
     [HttpPost("series")]
     public async Task<IActionResult> CreateSeries([FromBody] CreateSeriesRequest request, [FromServices] SeriesService series)
     {
-        var error = SeriesService.ValidateName(request.Name);
+        var error = request.Validate();
         if (error == null && !Enum.IsDefined(request.Kind))
             error = $"Unknown series kind {(int)request.Kind}.";
         if (error != null)
             return BadRequest(new { Message = error });
 
-        var entity = new Series { Name = request.Name.Trim(), Kind = request.Kind };
+        var entity = new Series { Kind = request.Kind };
+        entity.SetTitles(request.ToTitles());
         dbContext.Series.Add(entity);
         await dbContext.SaveChangesAsync();
 
-        logger.LogInformation("Admin created series {SeriesId} ({Kind}) {Name}", entity.SeriesId, entity.Kind, entity.Name);
+        logger.LogInformation("Admin created series {SeriesId} ({Kind}) {Name}", entity.SeriesId, entity.Kind, entity.OriginalTitle);
         return Ok(await series.ToRefAsync(entity.SeriesId));
     }
 
@@ -58,12 +59,11 @@ public partial class AdminController
         if (entity == null)
             return NotFound();
 
-        if (request.Name != null)
+        if (request.OriginalTitle != null)
         {
-            var nameError = SeriesService.ValidateName(request.Name);
-            if (nameError != null)
-                return BadRequest(new { Message = nameError });
-            entity.Name = request.Name.Trim();
+            if (request.Validate() is { } titleError)
+                return BadRequest(new { Message = titleError });
+            entity.SetTitles(request.ToTitles());
         }
 
         entity.UpdatedAt = DateTime.UtcNow;
@@ -92,7 +92,7 @@ public partial class AdminController
             : 0;
         await franchiseSync.RunAsync();
 
-        logger.LogInformation("Admin deleted series {SeriesId} {Name}, repointing {StudyDecks} study decks", id, entity.Name, repointed);
+        logger.LogInformation("Admin deleted series {SeriesId} {Name}, repointing {StudyDecks} study decks", id, entity.OriginalTitle, repointed);
         return NoContent();
     }
 
@@ -170,6 +170,9 @@ public partial class AdminController
     {
         if (request.BoardDeckIds.Count > FranchiseSuggestionService.MaxDismissDecks)
             return BadRequest(new { Message = $"The board holds at most {FranchiseSuggestionService.MaxDismissDecks} decks." });
+
+        if (request.BoardDeckIds.Count > 0 && !request.BoardDeckIds.Contains(request.AnchorDeckId))
+            return BadRequest(new { Message = "The anchor deck must stay on the board." });
 
         foreach (var edge in request.AddEdges.Concat(request.RemoveEdges))
             if (DeckRelationship.ValidateEdge(edge.SourceDeckId, edge.TargetDeckId, edge.RelationshipType) is { } edgeError)
@@ -268,7 +271,7 @@ public partial class AdminController
 
         var current = await dbContext.Decks.AsNoTracking()
                                      .Where(d => board.Contains(d.DeckId) || d.DeckId == anchorDeckId)
-                                     .Select(d => new { d.DeckId, d.FranchiseId, d.OriginalTitle })
+                                     .Select(d => new { d.DeckId, d.FranchiseId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle })
                                      .ToListAsync();
         var anchor = current.Single(d => d.DeckId == anchorDeckId);
         var franchiseId = anchor.FranchiseId ??
@@ -286,7 +289,8 @@ public partial class AdminController
 
         if (franchiseId == null)
         {
-            var franchise = new Franchise { Name = anchor.OriginalTitle };
+            var franchise = new Franchise();
+            franchise.SetTitles(GroupTitles.Of(anchor.OriginalTitle, anchor.RomajiTitle, anchor.EnglishTitle));
             dbContext.Franchises.Add(franchise);
             await dbContext.SaveChangesAsync();
             franchiseId = franchise.FranchiseId;

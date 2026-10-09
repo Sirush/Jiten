@@ -24,7 +24,7 @@ public class FranchiseSuggestionTests(JitenWebApplicationFactory factory)
         await db.Lookups.Where(l => l.WordId == 990).ExecuteDeleteAsync();
         await db.JMDictWords.Where(w => w.WordId == 990).ExecuteDeleteAsync();
 
-        db.Franchises.Add(new Franchise { FranchiseId = 50, Name = "星のカービィ" });
+        db.Franchises.Add(new Franchise { FranchiseId = 50, OriginalTitle = "星のカービィ" });
         db.Decks.AddRange(
             Deck(1, "日本統一", MediaType.Movie),
             Deck(2, "日本統一2", MediaType.Movie),
@@ -67,7 +67,7 @@ public class FranchiseSuggestionTests(JitenWebApplicationFactory factory)
 
         var kirby = page.Data.Single(s => s.Root == "星のカービィ");
         kirby.AnchorDeckId.Should().Be(3);
-        kirby.Decks.Select(d => (d.Deck.DeckId, d.FranchiseName)).Should().Equal((3, "星のカービィ"), (4, "星のカービィ"), (5, null));
+        kirby.Decks.Select(d => (d.Deck.DeckId, d.FranchiseTitles?.OriginalTitle)).Should().Equal((3, "星のカービィ"), (4, "星のカービィ"), (5, null));
     }
 
     [Fact]

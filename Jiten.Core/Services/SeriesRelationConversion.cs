@@ -40,17 +40,22 @@ public static class SeriesRelationConversion
         CREATE TEMP TABLE series_conv_groups ON COMMIT DROP AS
         SELECT g.t, g.comp,
                nextval(pg_get_serial_sequence('jiten."Series"', 'SeriesId'))::int AS series_id,
-               (SELECT d."OriginalTitle"
+               (SELECT d."DeckId"
                 FROM series_conv_components c
                 JOIN jiten."Decks" d ON d."DeckId" = c.deck
                 WHERE c.t = g.t AND c.comp = g.comp
                 ORDER BY d."ReleaseDate" < DATE '{FranchiseNaming.UnknownReleaseCutoff.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)}', d."ReleaseDate", d."DeckId"
-                LIMIT 1) AS name
+                LIMIT 1) AS name_deck
         FROM (SELECT DISTINCT t, comp FROM series_conv_components) g;
 
-        INSERT INTO jiten."Series" ("SeriesId", "Name", "Kind", "CreatedAt", "UpdatedAt")
-        SELECT series_id, LEFT(COALESCE(name, 'Unnamed'), {FranchiseNaming.MaxNameLength}), CASE WHEN t = 7 THEN 1 ELSE 2 END, now(), now()
-        FROM series_conv_groups;
+        INSERT INTO jiten."Series" ("SeriesId", "OriginalTitle", "RomajiTitle", "EnglishTitle", "Kind", "CreatedAt", "UpdatedAt")
+        SELECT g.series_id,
+               LEFT(COALESCE(d."OriginalTitle", 'Unnamed'), {FranchiseNaming.MaxNameLength}),
+               LEFT(NULLIF(BTRIM(d."RomajiTitle"), ''), {FranchiseNaming.MaxNameLength}),
+               LEFT(NULLIF(BTRIM(d."EnglishTitle"), ''), {FranchiseNaming.MaxNameLength}),
+               CASE WHEN g.t = 7 THEN 1 ELSE 2 END, now(), now()
+        FROM series_conv_groups g
+        LEFT JOIN jiten."Decks" d ON d."DeckId" = g.name_deck;
 
         INSERT INTO jiten."SeriesMembers" ("SeriesId", "DeckId")
         SELECT g.series_id, c.deck
@@ -76,7 +81,7 @@ public static class SeriesRelationConversion
                              .Where(s => createdIds.Contains(s.SeriesId))
                              .Select(s => new
                              {
-                                 s.SeriesId, s.Name, s.Kind,
+                                 s.SeriesId, Name = s.OriginalTitle, s.Kind,
                                  Members = s.Members.Select(m => new SeriesConversionMember(m.DeckId, m.Deck.OriginalTitle, m.Deck.ReleaseDate)).ToList()
                              })
                              .ToListAsync(ct);
