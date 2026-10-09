@@ -177,6 +177,7 @@ public partial class AdminController
 
         var deckIds = request.AddEdges.Concat(request.RemoveEdges).SelectMany(e => new[] { e.SourceDeckId, e.TargetDeckId })
                              .Concat(request.AddMembers.Concat(request.RemoveMembers).Select(m => m.DeckId))
+                             .Concat(request.BoardDeckIds)
                              .Append(request.AnchorDeckId)
                              .Distinct()
                              .ToList();
@@ -246,6 +247,7 @@ public partial class AdminController
         var addedMembers = request.AddMembers.Select(m => (m.SeriesId, m.DeckId)).Where(presentMembers.Add).ToList();
         dbContext.SeriesMembers.AddRange(addedMembers.Select(m => new SeriesMember { SeriesId = m.SeriesId, DeckId = m.DeckId }));
         await dbContext.SaveChangesAsync();
+        await SaveBoardAsync(request.AnchorDeckId, request.BoardDeckIds.Distinct().ToList());
         await transaction.CommitAsync();
 
         var touchedSeries = removedMembers.Select(m => m.SeriesId).Concat(addedMembers.Select(m => m.SeriesId)).Distinct().Count();
@@ -256,6 +258,43 @@ public partial class AdminController
                               request.AnchorDeckId, addedEdges.Count, removedEdges.Count, touchedSeries);
 
         return Ok(await franchise.BuildForBoardAsync(request.AnchorDeckId, request.BoardDeckIds));
+    }
+
+    /// <summary>Ties every deck on the board to the anchor's franchise, creating it when needed; decks taken off the board are released.</summary>
+    private async Task SaveBoardAsync(int anchorDeckId, List<int> board)
+    {
+        if (board.Count == 0)
+            return;
+
+        var current = await dbContext.Decks.AsNoTracking()
+                                     .Where(d => board.Contains(d.DeckId) || d.DeckId == anchorDeckId)
+                                     .Select(d => new { d.DeckId, d.FranchiseId, d.OriginalTitle })
+                                     .ToListAsync();
+        var anchor = current.Single(d => d.DeckId == anchorDeckId);
+        var franchiseId = anchor.FranchiseId ??
+                          current.Where(d => board.Contains(d.DeckId) && d.FranchiseId != null)
+                                 .GroupBy(d => d.FranchiseId!.Value)
+                                 .OrderByDescending(g => g.Count()).ThenBy(g => g.Key)
+                                 .Select(g => (int?)g.Key)
+                                 .FirstOrDefault();
+
+        if (franchiseId is { } existing)
+            await dbContext.FranchiseMembers.Where(m => m.FranchiseId == existing && !board.Contains(m.DeckId)).ExecuteDeleteAsync();
+
+        if (board.Count < 2)
+            return;
+
+        if (franchiseId == null)
+        {
+            var franchise = new Franchise { Name = anchor.OriginalTitle };
+            dbContext.Franchises.Add(franchise);
+            await dbContext.SaveChangesAsync();
+            franchiseId = franchise.FranchiseId;
+        }
+
+        await dbContext.FranchiseMembers.Where(m => board.Contains(m.DeckId)).ExecuteDeleteAsync();
+        dbContext.FranchiseMembers.AddRange(board.Select(deckId => new FranchiseMember { DeckId = deckId, FranchiseId = franchiseId.Value }));
+        await dbContext.SaveChangesAsync();
     }
 
     /// <summary>Path from <paramref name="from"/> to <paramref name="to"/> along story flow (earlier -> later) over every directed type, both ends included; null when none.</summary>

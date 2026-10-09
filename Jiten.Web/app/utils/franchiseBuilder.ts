@@ -34,6 +34,8 @@ export interface BuilderState {
   board: number[];
   edges: BuilderEdge[];
   members: BuilderMembership[];
+  /** Decks in the franchise as last saved; a board that differs from it has pending changes. */
+  savedBoard?: number[];
 }
 
 export interface BuilderDeck {
@@ -421,15 +423,33 @@ export function revertMembership(state: BuilderState, seriesId: number, deckId: 
   else m.status = 'saved';
 }
 
+/** Undoes a deck joining or leaving the board, along with any unsaved link or membership it carries. */
+export function revertDeck(state: BuilderState, deckId: number): void {
+  if (!state.board.includes(deckId)) {
+    state.board.push(deckId);
+    return;
+  }
+  state.board = state.board.filter((id) => id !== deckId);
+  state.edges = state.edges.filter((e) => e.status !== 'new' || (e.sourceDeckId !== deckId && e.targetDeckId !== deckId));
+  state.members = state.members.filter((m) => m.status !== 'new' || m.deckId !== deckId);
+}
+
 export function discardPending(state: BuilderState): void {
+  if (state.savedBoard) state.board = [...state.savedBoard];
   state.edges = state.edges.filter((e) => e.status !== 'new').map((e) => ({ ...e, status: 'saved' }));
   state.members = state.members.filter((m) => m.status !== 'new').map((m) => ({ ...m, status: 'saved' }));
 }
 
-export type PendingChange = { kind: 'link'; edge: BuilderEdge } | { kind: 'member'; member: BuilderMembership };
+export type PendingChange =
+  | { kind: 'link'; edge: BuilderEdge }
+  | { kind: 'member'; member: BuilderMembership }
+  | { kind: 'deck'; deckId: number; joining: boolean };
 
 export function pendingChanges(state: BuilderState): PendingChange[] {
+  const saved = state.savedBoard;
   return [
+    ...(saved ? state.board.filter((id) => !saved.includes(id)).map((deckId): PendingChange => ({ kind: 'deck', deckId, joining: true })) : []),
+    ...(saved ? saved.filter((id) => !state.board.includes(id)).map((deckId): PendingChange => ({ kind: 'deck', deckId, joining: false })) : []),
     ...state.edges.filter((e) => e.status !== 'saved').map((edge): PendingChange => ({ kind: 'link', edge })),
     ...state.members.filter((m) => m.status !== 'saved').map((member): PendingChange => ({ kind: 'member', member })),
   ];
@@ -448,8 +468,11 @@ export function buildSaveRequest(anchorDeckId: number, state: BuilderState): Fra
 }
 
 export function builderStateFromFranchise(franchise: Franchise): BuilderState {
+  const board = franchise.nodes.map((n) => n.deckId);
+  const boardOnly = new Set(franchise.boardOnlyDeckIds ?? []);
   return {
-    board: franchise.nodes.map((n) => n.deckId),
+    board,
+    savedBoard: board.filter((id) => !boardOnly.has(id)),
     edges: franchise.edges
       .filter((e) => !isLegacyGroupRelationship(e.relationshipType))
       .map((e, i) => ({ ...pickEdge(e), id: i + 1, status: 'saved' as const })),
@@ -467,58 +490,13 @@ export function builderSeriesFromFranchise(franchise: Franchise): BuilderSeries[
   ];
 }
 
-/** Franchises as Jiten will see them after saving: story lines merged through each series. */
-function franchiseGroups(state: BuilderState, series: BuilderSeries[]): number[][] {
-  const uf = new UnionFind(state.board);
-  for (const e of activeEdges(state)) uf.join(e.sourceDeckId, e.targetDeckId);
-  const kinds = new Map(series.map((s) => [s.seriesId, s.kind]));
-  const firstBySeries = new Map<number, number>();
-  for (const m of activeMembers(state)) {
-    if (kinds.get(m.seriesId) !== SeriesKind.Series || !state.board.includes(m.deckId)) continue;
-    const first = firstBySeries.get(m.seriesId);
-    if (first == null) firstBySeries.set(m.seriesId, m.deckId);
-    else uf.join(first, m.deckId);
-  }
-  return uf.groups(state.board);
-}
-
-/** The smaller part the franchise splits off into once the link is gone; empty when it stays whole. */
-export function cutOffBy(state: BuilderState, series: BuilderSeries[], edgeId: number): number[] {
-  const e = state.edges.find((x) => x.id === edgeId);
-  if (!e || e.status === 'removed') return [];
-  const groups = franchiseGroups({ ...state, edges: state.edges.filter((x) => x.id !== edgeId) }, series);
-  const a = groups.find((g) => g.includes(e.sourceDeckId));
-  const b = groups.find((g) => g.includes(e.targetDeckId));
-  if (!a || !b || a === b) return [];
-  return a.length <= b.length ? a : b;
-}
-
 export type BuilderCheck =
-  | { kind: 'outside'; lines: number[][] }
-  | { kind: 'unlinked'; deckIds: number[] }
   | { kind: 'branch'; deckId: number; sequels: number[] }
-  | { kind: 'order'; edge: BuilderEdge }
-  | { kind: 'ok'; deckCount: number };
+  | { kind: 'order'; edge: BuilderEdge };
 
-export function builderChecks(state: BuilderState, series: BuilderSeries[], year: (deckId: number) => number | null): BuilderCheck[] {
+export function builderChecks(state: BuilderState, year: (deckId: number) => number | null): BuilderCheck[] {
   const out: BuilderCheck[] = [];
   const edges = activeEdges(state);
-  const seriesIds = new Set(series.filter((s) => s.kind === SeriesKind.Series).map((s) => s.seriesId));
-  const inSeries = new Set(
-    activeMembers(state)
-      .filter((m) => seriesIds.has(m.seriesId))
-      .map((m) => m.deckId)
-  );
-  const lines = storyLines(state.board, edges);
-  const outside = lines.filter((l) => !l.some((id) => inSeries.has(id)));
-  const groupCount = franchiseGroups(state, series).length;
-  const relevant = inSeries.size > 0 || outside.length > 1;
-
-  const outsideLines = outside.filter((l) => l.length > 1);
-  if (relevant && outsideLines.length) out.push({ kind: 'outside', lines: outsideLines });
-  const loose = outside.filter((l) => l.length === 1).map((l) => l[0]!);
-  if (relevant && loose.length && state.board.length > 1) out.push({ kind: 'unlinked', deckIds: loose });
-
   for (const id of state.board) {
     const sequels = edges.filter((e) => e.relationshipType === Sequel && getEdgeFlow(e).from === id).map((e) => getEdgeFlow(e).to);
     if (sequels.length > 1) out.push({ kind: 'branch', deckId: id, sequels });
@@ -530,8 +508,6 @@ export function builderChecks(state: BuilderState, series: BuilderSeries[], year
     const b = year(flow.to);
     if (a != null && b != null && b < a) out.push({ kind: 'order', edge: e });
   }
-  if (groupCount === 1 && state.board.length > 0 && !out.some((c) => c.kind === 'outside' || c.kind === 'unlinked'))
-    out.unshift({ kind: 'ok', deckCount: state.board.length });
   return out;
 }
 

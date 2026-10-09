@@ -24,6 +24,9 @@ public class FranchiseDto
     /// <summary>"series" when one series holds 2+ entries (story lines or standalone members), else "timeline".</summary>
     public string PreferredView { get; set; } = FranchiseViews.Timeline;
 
+    /// <summary>Franchise builder only: decks put on the board that are not in the franchise yet.</summary>
+    public List<int> BoardOnlyDeckIds { get; set; } = new();
+
     /// <summary>Copy with its own node instances (setting outsiders included) for per-viewer data; every other list is shared.</summary>
     public FranchiseDto CloneNodes()
     {

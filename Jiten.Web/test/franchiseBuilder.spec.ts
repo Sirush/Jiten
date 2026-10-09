@@ -13,7 +13,6 @@ import {
   checkLink,
   choiceForEdge,
   choiceToEdge,
-  cutOffBy,
   discardPending,
   dropLink,
   filterLinkChoices,
@@ -30,6 +29,7 @@ import {
   otherSeriesOfLine,
   pendingChanges,
   putLinesInSeries,
+  revertDeck,
   revertLink,
   toBuilderDeck,
   type BuilderDeck,
@@ -332,15 +332,6 @@ describe('line helpers', () => {
     expect(chainSequels(state, [1, 2, 3])).toEqual({ made: 1, skipped: [[1, 2]] });
     expect(state.edges.at(-1)).toMatchObject(edge(3, 2, Sequel));
   });
-
-  it('names the smaller part a link cuts off, unless a series keeps it joined', () => {
-    const state = stateWith([edge(2, 1, Sequel), edge(3, 2, Sequel)], [1, 2, 3]);
-    expect(cutOffBy(state, groups, 2)).toEqual([3]);
-    state.members.push({ seriesId: 10, deckId: 1, status: 'saved' }, { seriesId: 10, deckId: 3, status: 'saved' });
-    expect(cutOffBy(state, groups, 2)).toEqual([]);
-    dropLink(state, 1);
-    expect(cutOffBy(state, groups, 1)).toEqual([]);
-  });
 });
 
 describe('builderStateFromFranchise', () => {
@@ -363,46 +354,72 @@ describe('builderStateFromFranchise', () => {
       { seriesId: 10, deckId: 1, status: 'saved' },
       { seriesId: 20, deckId: 3, status: 'saved' },
     ]);
+    expect(state.savedBoard).toEqual([1, 2, 3]);
+  });
+
+  it('leaves decks added to the board out of the saved board', () => {
+    const node = (deckId: number) => ({ deckId }) as Franchise['nodes'][number];
+    const franchise = {
+      franchiseId: null,
+      name: null,
+      nameIsManual: false,
+      nodes: [node(1), node(2)],
+      edges: [],
+      lines: [],
+      series: [],
+      settings: [],
+      preferredView: 'timeline',
+      boardOnlyDeckIds: [2],
+    } as Franchise;
+    const state = builderStateFromFranchise(franchise);
+    expect(state.board).toEqual([1, 2]);
+    expect(pendingChanges(state)).toEqual([{ kind: 'deck', deckId: 2, joining: true }]);
+  });
+});
+
+describe('board changes', () => {
+  const tracked = (): BuilderState => ({ ...stateWith([edge(2, 1, Sequel)], [1, 2, 3]), savedBoard: [1, 2, 3] });
+
+  it('lists decks joining and leaving the franchise', () => {
+    const state = tracked();
+    state.board = [1, 2, 4];
+    expect(pendingChanges(state)).toEqual([
+      { kind: 'deck', deckId: 4, joining: true },
+      { kind: 'deck', deckId: 3, joining: false },
+    ]);
+  });
+
+  it('reverting a joined deck drops its unsaved links and memberships', () => {
+    const state = tracked();
+    state.board.push(4);
+    applyLink(state, edge(4, 2, Sequel));
+    joinGroup(state, 10, 4);
+    revertDeck(state, 4);
+    expect(state.board).toEqual([1, 2, 3]);
+    expect(pendingChanges(state)).toEqual([]);
+  });
+
+  it('reverting a removed deck puts it back, and discarding restores the saved board', () => {
+    const state = tracked();
+    state.board = [1, 2];
+    revertDeck(state, 3);
+    expect(pendingChanges(state)).toEqual([]);
+    state.board = [2, 5];
+    discardPending(state);
+    expect(state.board).toEqual([1, 2, 3]);
   });
 });
 
 describe('builderChecks', () => {
-  const series: BuilderSeries[] = [
-    { seriesId: 10, name: 'Main', kind: SeriesKind.Series },
-    { seriesId: 11, name: 'Other', kind: SeriesKind.Series },
-    { seriesId: 20, name: 'World', kind: SeriesKind.Setting },
-  ];
   const year = (id: number) => 2000 + id;
 
-  it('lists lines outside the series and unlinked decks', () => {
-    const state = stateWith([edge(2, 1, Sequel), edge(4, 3, Sequel)]);
-    state.members.push({ seriesId: 10, deckId: 1, status: 'saved' });
-    const checks = builderChecks(state, series, year);
-    expect(checks).toContainEqual({ kind: 'outside', lines: [[3, 4]] });
-    expect(checks).toContainEqual({ kind: 'unlinked', deckIds: [5] });
-  });
-
-  it('settings never count as series membership', () => {
-    const state = stateWith([edge(2, 1, Sequel)], [1, 2, 3]);
-    state.members.push({ seriesId: 10, deckId: 1, status: 'saved' }, { seriesId: 20, deckId: 3, status: 'saved' });
-    expect(builderChecks(state, series, year)).toContainEqual({ kind: 'unlinked', deckIds: [3] });
-  });
-
-  it('is ok when every line joins the same series', () => {
-    const state = stateWith([edge(2, 1, Sequel)], [1, 2, 3]);
-    state.members.push({ seriesId: 10, deckId: 1, status: 'saved' }, { seriesId: 10, deckId: 3, status: 'new' });
-    expect(builderChecks(state, series, year)[0]).toEqual({ kind: 'ok', deckCount: 3 });
-  });
-
-  it('keeps lines in different series apart', () => {
-    const state = stateWith([edge(2, 1, Sequel)], [1, 2, 3]);
-    state.members.push({ seriesId: 10, deckId: 1, status: 'saved' }, { seriesId: 11, deckId: 3, status: 'new' });
-    expect(builderChecks(state, series, year).some((c) => c.kind === 'ok')).toBe(false);
+  it('has nothing to flag on a plain board', () => {
+    expect(builderChecks(stateWith([edge(2, 1, Sequel)]), year)).toEqual([]);
   });
 
   it('flags branching sequels and sequels released earlier', () => {
     const state = stateWith([edge(2, 1, Sequel), edge(3, 1, Sequel), edge(1, 5, Sequel)]);
-    const checks = builderChecks(state, series, year);
+    const checks = builderChecks(state, year);
     expect(checks).toContainEqual({ kind: 'branch', deckId: 1, sequels: [2, 3] });
     expect(checks.filter((c) => c.kind === 'order')).toHaveLength(1);
   });

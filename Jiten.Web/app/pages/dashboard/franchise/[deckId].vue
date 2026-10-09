@@ -14,7 +14,7 @@
   import { SeriesKind, type SeriesRef } from '~/types/series';
   import type { Franchise, FranchiseEdge } from '~/types/types';
   import { getEdgeFlow, type LinkTone } from '~/utils/relationshipRoles';
-  import { compareFranchiseRelease } from '~/utils/franchiseLayout';
+  import { compareFranchiseRelease, franchiseDisplayName } from '~/utils/franchiseLayout';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { apiErrorMessage } from '~/utils/apiErrorMessage';
   import {
@@ -31,7 +31,6 @@
     checkLink,
     choiceForEdge,
     choiceToEdge,
-    cutOffBy,
     discardPending,
     dropLink,
     layoutBoard,
@@ -45,6 +44,7 @@
     otherSeriesOfLine,
     pendingChanges,
     putLinesInSeries,
+    revertDeck,
     revertLink,
     revertMembership,
     toBuilderDeck,
@@ -88,7 +88,10 @@
     decks.value = next;
   }
 
+  const franchise = ref<Franchise | null>(null);
+
   function applyFranchise(f: Franchise) {
+    franchise.value = f;
     const next = { ...decks.value };
     for (const n of f.nodes) next[n.deckId] = toBuilderDeck(n);
     decks.value = next;
@@ -100,7 +103,29 @@
   }
 
   const anchorTitle = computed(() => (decks.value[anchorDeckId] ? title(anchorDeckId) : `Deck #${anchorDeckId}`));
-  useHead({ title: computed(() => `${anchorTitle.value} - Franchise builder - Jiten`) });
+  const franchiseId = computed(() => franchise.value?.franchiseId ?? null);
+  const pageTitle = computed(() => (franchise.value?.franchiseId ? franchiseDisplayName(franchise.value, localiseTitle) || anchorTitle.value : anchorTitle.value));
+  useHead({ title: computed(() => `${pageTitle.value} - Franchise builder - Jiten`) });
+
+  const renaming = ref(false);
+  const renameButton = ref<{ $el?: HTMLElement } | null>(null);
+
+  async function stopRename() {
+    renaming.value = false;
+    await nextTick();
+    renameButton.value?.$el?.focus();
+  }
+
+  async function onRenamed(name: string | null) {
+    const current = franchise.value;
+    if (current && name) franchise.value = { ...current, name, nameIsManual: true };
+    else if (current) {
+      const fresh = await $api<Franchise>(`admin/franchise-builder/${anchorDeckId}`).catch(() => null);
+      franchise.value = { ...current, name: fresh?.name ?? current.name, nameIsManual: false };
+    }
+    flash(name ? `Renamed the franchise to ${name}` : 'The franchise is named automatically again');
+    await stopRename();
+  }
 
   async function load() {
     loading.value = true;
@@ -164,13 +189,13 @@
   const stats = computed(() => {
     const links = activeEdges(state.value).length;
     const inSeries = layout.value.sections.reduce((s, sec) => s + sec.deckCount, 0);
-    const unlinked = layout.value.bands.find((b) => b.kind === 'unlinked')?.ids.length ?? 0;
     const n = state.value.board.length;
+    const outside = n - inSeries;
     return [
       `${n} ${n === 1 ? 'deck' : 'decks'} on the board`,
       `${links} story ${links === 1 ? 'link' : 'links'}`,
       `${inSeries} in a series`,
-      ...(unlinked ? [`${unlinked} not linked`] : []),
+      ...(outside ? [`${outside} not in a series`] : []),
     ].join(' · ');
   });
 
@@ -270,7 +295,7 @@
     }
     commit((s) => (s.board = s.board.filter((id) => !ids.includes(id))));
     selected.value = selected.value.filter((id) => !ids.includes(id));
-    flash(`Took ${ids.length === 1 ? title(ids[0]!) : `${ids.length} decks`} off the board`, true);
+    flash(`Took ${ids.length === 1 ? title(ids[0]!) : `${ids.length} decks`} out of the franchise`, true);
   }
 
   function seriesDropHint(seriesId: number, id: number) {
@@ -375,7 +400,6 @@
 
   const edgePop = ref<{ id: number; anchor: Point } | null>(null);
   const popEdge = computed(() => (edgePop.value ? state.value.edges.find((e) => e.id === edgePop.value!.id) : undefined));
-  const popCut = computed(() => (edgePop.value ? cutOffBy(state.value, series.value, edgePop.value.id) : []));
 
   function edgeChangeType() {
     const e = popEdge.value;
@@ -495,36 +519,9 @@
     flash(edges.length > 1 ? `Made ${edges.length} changes` : `Linked: ${linkSentenceText(edges[0]!, title)}`, true);
   }
 
-  const firstSeries = computed(() => seriesOrder.value[0] ?? null);
-
   const checks = computed(() =>
-    builderChecks(state.value, series.value, year).map((c) => {
+    builderChecks(state.value, year).map((c) => {
       switch (c.kind) {
-        case 'outside': {
-          const names = c.lines.map((l) => `${title(releaseOrder(l)[0]!)} (${l.length})`).join(', ');
-          const root = firstSeries.value;
-          return {
-            tone: 'warn',
-            tag: 'Outside',
-            text: `${c.lines.length} story ${c.lines.length === 1 ? "line isn't" : "lines aren't"} in a series: ${names}. Jiten will show ${c.lines.length === 1 ? 'it' : 'each'} as a separate franchise.`,
-            action: root
-              ? {
-                  label: `Add ${c.lines.length === 1 ? 'it' : `the ${c.lines.length} lines`} to ${root.name}`,
-                  run: () => {
-                    putInSeries(root.seriesId, c.lines.flat());
-                    flash(`Added ${c.lines.length} ${c.lines.length === 1 ? 'line' : 'lines'} to ${root.name}`, true);
-                  },
-                }
-              : null,
-          };
-        }
-        case 'unlinked':
-          return {
-            tone: 'warn',
-            tag: 'Unlinked',
-            text: `${c.deckIds.map(title).join(', ')} ${c.deckIds.length === 1 ? "isn't" : "aren't"} linked to anything. Link spin-offs and sequels to their line; drop main entries on a series rail.`,
-            action: null,
-          };
         case 'branch':
           return {
             tone: 'info',
@@ -541,22 +538,19 @@
             action: { label: 'Swap direction', run: () => swapEdge(c.edge.id) },
           };
         }
-        case 'ok':
-          return { tone: 'ok', tag: 'Good', text: `All ${c.deckCount} decks on the board form one franchise.`, action: null };
       }
     })
   );
 
   const checkTagClass: Record<string, string> = {
-    warn: 'bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-300',
     info: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-300',
-    ok: 'bg-green-100 text-green-800 dark:bg-green-950 dark:text-green-300',
   };
 
   function revertChange(change: (typeof changes.value)[number]) {
     commit((s) => {
       if (change.kind === 'link') revertLink(s, change.edge.id);
-      else revertMembership(s, change.member.seriesId, change.member.deckId);
+      else if (change.kind === 'member') revertMembership(s, change.member.seriesId, change.member.deckId);
+      else revertDeck(s, change.deckId);
     });
   }
 
@@ -680,8 +674,32 @@
             <NuxtLink to="/dashboard" class="hover:underline">Dashboard</NuxtLink> ›
             <NuxtLink to="/dashboard/series" class="hover:underline">Series</NuxtLink> › Franchise builder
           </div>
-          <h1 class="m-0 text-2xl font-bold" v-bind="japaneseTextAttrs(anchorTitle)">{{ anchorTitle }}</h1>
-          <p v-if="!loading && !loadError" class="m-0 mt-0.5 text-[13px] tabular-nums text-gray-500 dark:text-gray-400">{{ stats }}</p>
+          <div class="group/title flex min-w-0 items-center gap-x-1">
+            <h1 class="m-0 text-2xl font-bold" v-bind="japaneseTextAttrs(pageTitle)">{{ pageTitle }}</h1>
+            <Button
+              v-if="franchiseId && !renaming"
+              ref="renameButton"
+              icon="pi pi-pencil"
+              severity="secondary"
+              text
+              rounded
+              size="small"
+              aria-label="Rename this franchise"
+              @click="renaming = true"
+            />
+          </div>
+          <p v-if="!loading && !loadError" class="m-0 mt-0.5 text-[13px] tabular-nums text-gray-500 dark:text-gray-400">
+            {{ stats }}<template v-if="!franchiseId"> · Not a franchise yet. Saving will make the board one.</template>
+          </p>
+          <FranchiseRenameForm
+            v-if="renaming && franchise?.franchiseId"
+            class="mt-2"
+            :franchise-id="franchise.franchiseId"
+            :name="franchise.name ?? ''"
+            :name-is-manual="franchise.nameIsManual"
+            @saved="onRenamed"
+            @close="stopRename"
+          />
         </div>
       </div>
       <div class="flex flex-wrap gap-2">
@@ -839,7 +857,7 @@
                 @click="selectionSeries != null && selectionToSeries(selectionSeries)"
               />
             </template>
-            <Button v-if="selectionRemovable" label="Take off the board" size="small" severity="secondary" text @click="removeFromBoard(selected)" />
+            <Button v-if="selectionRemovable" label="Take out of the franchise" size="small" severity="secondary" text @click="removeFromBoard(selected)" />
             <Button label="Clear" size="small" severity="secondary" text @click="clearSelection" />
             <span class="min-w-0 text-xs text-gray-600 [overflow-wrap:anywhere] dark:text-gray-400">
               <template v-if="selected.length > SELECTION_PREVIEW">
@@ -902,11 +920,11 @@
             </div>
             <ul class="m-0 flex list-none flex-col p-0">
               <li v-if="!changes.length" class="py-2 text-[13px] text-gray-500 dark:text-gray-400">
-                No unsaved changes. Links and memberships you change on the board are listed here until you save.
+                No unsaved changes. Decks, links and memberships you change on the board are listed here until you save.
               </li>
               <li
                 v-for="c in changes"
-                :key="c.kind === 'link' ? `l${c.edge.id}` : `m${c.member.seriesId}-${c.member.deckId}`"
+                :key="c.kind === 'link' ? `l${c.edge.id}` : c.kind === 'member' ? `m${c.member.seriesId}-${c.member.deckId}` : `d${c.deckId}`"
                 class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2.5 border-t border-gray-200 py-2 text-[13px] first:border-t-0 dark:border-gray-800"
               >
                 <template v-if="c.kind === 'link'">
@@ -921,6 +939,16 @@
                     <b class="font-medium">{{ title(linkSentence(c.edge).first) }}</b> {{ linkSentence(c.edge).verb }}
                     <b class="font-medium">{{ title(linkSentence(c.edge).second) }}</b>
                   </span>
+                </template>
+                <template v-else-if="c.kind === 'deck'">
+                  <span
+                    class="w-4 text-center font-bold"
+                    :class="c.joining ? 'text-green-700 dark:text-green-400' : 'text-red-700 dark:text-red-400'"
+                    :aria-label="c.joining ? 'Added' : 'Removed'"
+                  >
+                    {{ c.joining ? '+' : '−' }}
+                  </span>
+                  <span>{{ title(c.deckId) }} {{ c.joining ? 'joins' : 'leaves' }} the franchise</span>
                 </template>
                 <template v-else>
                   <span
@@ -981,10 +1009,6 @@
       </p>
       <p class="m-0 text-xs text-gray-500 dark:text-gray-400">
         {{ popEdge.status === 'new' ? 'Not saved yet.' : popEdge.status === 'removed' ? 'Will be removed when you save.' : 'Saved.' }}
-      </p>
-      <p v-if="popCut.length" class="m-0 text-[12.5px] text-amber-800 dark:text-amber-300">
-        Removing it cuts {{ popCut.length === 1 ? '' : `${popCut.length} decks ` }}off from the franchise: {{ popCut.slice(0, 5).map(title).join(', ')
-        }}{{ popCut.length > 5 ? '…' : '' }}.
       </p>
       <div class="flex flex-wrap gap-1.5">
         <template v-if="popEdge.status === 'removed'">

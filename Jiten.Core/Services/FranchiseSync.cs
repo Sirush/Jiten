@@ -6,7 +6,7 @@ namespace Jiten.Core.Services;
 
 public sealed record FranchiseSyncSummary(int Created, int Renamed, int Merged, int Deleted, int Unchanged, int DecksUpdated);
 
-/// <summary>Recomputes every franchise from story links (types 1-6) and series membership.</summary>
+/// <summary>Recomputes every franchise from story links (types 1-6), series membership and saved builder boards.</summary>
 public static class FranchiseSync
 {
     private const long SyncLockKey = 7_212_026_002;
@@ -35,6 +35,9 @@ public static class FranchiseSync
                                   .Where(m => m.Series.Kind == SeriesKind.Series)
                                   .Select(m => new { m.SeriesId, m.DeckId })
                                   .ToListAsync(ct);
+        var boardMembers = await db.FranchiseMembers.AsNoTracking()
+                                   .Select(m => new { m.DeckId, m.FranchiseId })
+                                   .ToDictionaryAsync(m => m.DeckId, m => m.FranchiseId, ct);
 
         var uf = new UnionFind();
         foreach (var link in links)
@@ -53,6 +56,13 @@ public static class FranchiseSync
             }
         }
 
+        foreach (var board in boardMembers.GroupBy(m => m.Value, m => m.Key))
+        {
+            var first = board.First();
+            foreach (var deckId in board)
+                uf.Union(first, deckId);
+        }
+
         var components = uf.Components()
                            .Where(c => c.Count >= 2)
                            .Select(c => c.Order().ToList())
@@ -67,6 +77,24 @@ public static class FranchiseSync
 
         var assigned = new int?[components.Count];
         var taken = new HashSet<int>();
+
+        // A saved board keeps its franchise id; boards that links have since joined fold into the one holding the most decks.
+        var boardMerges = new List<(int From, int To)>();
+        for (var i = 0; i < components.Count; i++)
+        {
+            var boards = components[i].Where(boardMembers.ContainsKey)
+                                      .GroupBy(d => boardMembers[d])
+                                      .OrderByDescending(g => g.Count()).ThenBy(g => g.Key)
+                                      .Select(g => g.Key)
+                                      .ToList();
+            if (boards.Count == 0)
+                continue;
+
+            assigned[i] = boards[0];
+            taken.Add(boards[0]);
+            boardMerges.AddRange(boards.Skip(1).Select(id => (id, boards[0])));
+        }
+
         var claims = components.SelectMany((decks, index) => decks.Where(current.ContainsKey)
                                                                   .GroupBy(d => current[d])
                                                                   .Where(g => rows.ContainsKey(g.Key))
@@ -174,6 +202,10 @@ public static class FranchiseSync
             else
                 unchanged++;
         }
+
+        foreach (var (from, to) in boardMerges)
+            await db.FranchiseMembers.Where(m => m.FranchiseId == from)
+                    .ExecuteUpdateAsync(s => s.SetProperty(m => m.FranchiseId, to), ct);
 
         var repoints = new List<(int OldId, int NewId)>();
         var deleted = 0;

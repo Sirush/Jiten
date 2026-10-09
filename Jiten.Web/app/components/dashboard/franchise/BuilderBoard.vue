@@ -120,9 +120,9 @@
         });
       } else if (action) {
         out.set(id, {
-          label: `Take ${props.title(id)} off the board`,
-          tip: 'Take off the board',
-          keyHint: 'take off the board',
+          label: `Take ${props.title(id)} out of the franchise`,
+          tip: 'Take out of the franchise',
+          keyHint: 'take out of the franchise',
           run: () => emit('remove', id),
         });
       }
@@ -249,7 +249,7 @@
       case 'outside':
         return { lead: b.ids.length === 1 ? 'Unlinked deck' : `${b.ids.length} linked decks`, rest: ' · not in a series' };
       case 'unlinked':
-        return { lead: 'Not linked yet', rest: ` · ${plural(b.ids.length)} · drag one onto the deck it relates to, or onto a series rail` };
+        return { lead: 'Not in a series', rest: ` · ${plural(b.ids.length)} · drag one onto the deck it relates to, or onto a series rail` };
     }
     return { lead: '', rest: '' };
   }
