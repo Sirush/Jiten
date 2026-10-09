@@ -376,7 +376,7 @@ internal static class ResegmentationEngine
     private const int CompoundTailVerbRankAdvantage = 2;
 
     // Segments born here skip ApplyContextPins; ナシ means 無し, but the pear 梨 would win the rank tiebreak.
-    private static readonly Dictionary<string, int> SegmentSurfacePins = new() { ["ナシ"] = 1529560 };
+    private static readonly Dictionary<string, int> SegmentSurfacePins = new() { ["ナシ"] = 1529560, ["オラ"] = 2080360 };
 
     private static void ReplaceSpan(SentenceInfo sentence, UncertainSpan span, SpanPath path,
         Dictionary<string, List<int>> lookups, Dictionary<int, int> frequencyRanks, Dictionary<int, JmDictWordMeta> wordMeta,
