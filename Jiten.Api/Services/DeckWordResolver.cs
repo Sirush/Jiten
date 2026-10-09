@@ -27,7 +27,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
     {
         var (source, downloadType, order, minFrequency, maxFrequency,
             excludeMatureMasteredBlacklisted, excludeAllTrackedWords,
-            targetPercentage, minOccurrences, maxOccurrences, posFilter, startFromKnown, frequencySource) = request;
+            targetPercentage, minOccurrences, maxOccurrences, posFilter, startFromKnown, bandSource, orderSource) = request;
 
         var deckWordsQuery = QuerySource(source);
 
@@ -50,7 +50,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 break;
 
             case DeckDownloadType.TopGlobalFrequency:
-                deckWordsQuery = ApplyFrequencyRankFilter(deckWordsQuery, minFrequency, maxFrequency, frequencySource);
+                deckWordsQuery = ApplyFrequencyRankFilter(deckWordsQuery, minFrequency, maxFrequency, bandSource);
                 break;
 
             case DeckDownloadType.TopDeckFrequency:
@@ -105,10 +105,14 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 {
                     deckWordsRaw = resultWords.OrderBy(dw => dw.DeckWordId).ToList();
                 }
+                else if (order == DeckOrder.GlobalFrequency && !orderSource.IsGlobal)
+                {
+                    deckWordsRaw = await OrderByFrequency(resultWords, orderSource, dw => dw.WordId, dw => dw.ReadingIndex);
+                }
                 else if (order == DeckOrder.GlobalFrequency)
                 {
                     var resultWordIds = resultWords.Select(dw => dw.WordId).Distinct().ToList();
-                    var freqMap = await LoadFormRanks(resultWordIds, frequencySource);
+                    var freqMap = await LoadFormRanks(resultWordIds, null);
 
                     deckWordsRaw = resultWords.OrderBy(dw =>
                                                            freqMap.TryGetValue((dw.WordId, (short)dw.ReadingIndex), out var rank)
@@ -147,8 +151,13 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                     deckWordsQuery = deckWordsQuery.OrderBy(dw => dw.DeckWordId);
                     break;
 
+                case DeckOrder.GlobalFrequency when orderSource.FrequencyListId.HasValue:
+                    deckWordsRaw = await OrderByFrequency(await deckWordsQuery.OrderBy(dw => dw.DeckWordId).ToListAsync(), orderSource,
+                                                          dw => dw.WordId, dw => dw.ReadingIndex);
+                    break;
+
                 case DeckOrder.GlobalFrequency:
-                    deckWordsQuery = ApplyFrequencyRankOrder(deckWordsQuery, frequencySource);
+                    deckWordsQuery = ApplyFrequencyRankOrder(deckWordsQuery, orderSource.MediaType);
                     break;
 
                 case DeckOrder.DeckFrequency:
@@ -275,12 +284,12 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         {
             var source = frequencySource.Value;
             // Unobserved words rank last, not first as the global path's FirstOrDefault() zero would put them.
-            return query.OrderBy(dw => context.WordFormFrequenciesByType
-                                              .Where(wff => wff.MediaType == source &&
-                                                            wff.WordId == dw.WordId &&
-                                                            wff.ReadingIndex == (short)dw.ReadingIndex)
-                                              .Select(wff => (int?)wff.FrequencyRank)
-                                              .FirstOrDefault() ?? int.MaxValue);
+            return ThenByGlobalRank(query.OrderBy(dw => context.WordFormFrequenciesByType
+                                                               .Where(wff => wff.MediaType == source &&
+                                                                             wff.WordId == dw.WordId &&
+                                                                             wff.ReadingIndex == (short)dw.ReadingIndex)
+                                                               .Select(wff => (int?)wff.FrequencyRank)
+                                                               .FirstOrDefault() ?? int.MaxValue));
         }
 
         return query.OrderBy(dw => context.WordFormFrequencies
@@ -519,12 +528,28 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         return result;
     }
 
+    public async Task<FrequencyOrderKeys> LoadFrequencyOrderKeys(List<int> wordIds, FrequencyScope scope)
+    {
+        var global = await LoadFormRanks(wordIds, null);
+        var scoped = scope.IsGlobal ? new Dictionary<(int, byte), int>() : await GetFrequencyRanks(wordIds, scope);
+        return new FrequencyOrderKeys(scoped, global);
+    }
+
+    /// <summary>Stable, so words tied on both ranks keep the order they arrived in.</summary>
+    private async Task<List<T>> OrderByFrequency<T>(List<T> items, FrequencyScope scope,
+                                                     Func<T, int> wordId, Func<T, byte> readingIndex)
+    {
+        var keys = await LoadFrequencyOrderKeys(items.Select(wordId).Distinct().ToList(), scope);
+        return items.OrderBy(i => keys.For(wordId(i), readingIndex(i))).ToList();
+    }
+
     public async Task<List<ResolvedWord>> ResolveStaticDeckWords(int studyDeckId, int order,
         bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false,
         DeckDownloadType downloadType = DeckDownloadType.Full,
         int minFrequency = 0, int maxFrequency = 0,
         int? minOccurrences = null, int? maxOccurrences = null,
-        float? targetPercentage = null, bool startFromKnown = false)
+        float? targetPercentage = null, bool startFromKnown = false,
+        FrequencyScope orderSource = default)
     {
         var words = await userContext.UserStudyDeckWords
             .AsNoTracking()
@@ -542,7 +567,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
 
         // Global frequency ranks live in the jiten context, so filtering/sorting on them happens in memory.
         Dictionary<(int, short), JmDictWordFormFrequency>? freqMap = null;
-        if (downloadType == DeckDownloadType.TopGlobalFrequency || order == (int)DeckOrder.GlobalFrequency)
+        if (downloadType == DeckDownloadType.TopGlobalFrequency || (order == (int)DeckOrder.GlobalFrequency && orderSource.IsGlobal))
         {
             var wordIds = words.Select(w => w.WordId).Distinct().ToList();
             freqMap = await WordFormHelper.LoadWordFormFrequencies(context, wordIds);
@@ -625,7 +650,11 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 return [];
         }
 
-        if (order == (int)DeckOrder.GlobalFrequency)
+        if (order == (int)DeckOrder.GlobalFrequency && !orderSource.IsGlobal)
+        {
+            words = await OrderByFrequency(words.OrderBy(w => w.SortOrder).ToList(), orderSource, w => w.WordId, w => w.ReadingIndex);
+        }
+        else if (order == (int)DeckOrder.GlobalFrequency)
         {
             words.Sort((a, b) =>
             {
@@ -741,7 +770,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
     {
         var (source, downloadType, order, minFrequency, maxFrequency,
             excludeMatureMasteredBlacklisted, excludeAllTrackedWords,
-            targetPercentage, minOccurrences, maxOccurrences, posFilter, startFromKnown, frequencySource) = request;
+            targetPercentage, minOccurrences, maxOccurrences, posFilter, startFromKnown, bandSource, _) = request;
 
         var query = QuerySource(source);
 
@@ -751,7 +780,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 break;
             case DeckDownloadType.TopGlobalFrequency:
                 if (globalFrequencyKeys == null)
-                    query = ApplyFrequencyRankFilter(query, minFrequency, maxFrequency, frequencySource);
+                    query = ApplyFrequencyRankFilter(query, minFrequency, maxFrequency, bandSource);
                 break;
             case DeckDownloadType.TopDeckFrequency:
                 query = ThenByGlobalRank(query.OrderByDescending(dw => dw.Occurrences))

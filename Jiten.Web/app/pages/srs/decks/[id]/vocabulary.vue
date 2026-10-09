@@ -85,7 +85,8 @@
     const d = deck.value;
     if (d?.frequencyMediaType) return `${getMediaTypeText(d.frequencyMediaType)} Frequency`;
     if (d?.frequencyListId) return `${d.frequencySourceName ?? 'List'} Frequency`;
-    return 'Global Frequency';
+    if (d?.deckType === StudyDeckType.GlobalDynamic || d?.deckType === StudyDeckType.Smart) return 'Global Frequency';
+    return frequencyOrderLabel(srsStore.studySettings);
   });
 
   const rankSourceLabel = computed(() => {

@@ -6,6 +6,7 @@
   import { formatRelativeTime } from '~/utils/relativeTime';
   import { groupFilterSummary } from '~/utils/mediaGroup';
   import { studyDeckPresentation } from '~/utils/studyDeckPresentation';
+  import { defaultFrequencySourceName } from '~/utils/frequencySource';
   import { Bar } from 'vue-chartjs';
   import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip as ChartTooltip } from 'chart.js';
   import ChartDataLabels from 'chartjs-plugin-datalabels';
@@ -50,6 +51,7 @@
       srsStore.refreshOverview();
     }
     srsStore.fetchReviewForecast30d();
+    srsStore.fetchSettings();
     if (!smartDeck.value) fetchPromo();
   });
 
@@ -400,6 +402,8 @@
     if (deck.deckType === StudyDeckType.GlobalDynamic && deck.order === DeckOrder.GlobalFrequency) return undefined;
     if (deck.order === DeckOrder.SentenceUnlock && planFetched.value && !hasFeature('sentence-order'))
       return 'Deck frequency (sentence unlock needs Jiten+)';
+    if (deck.order === DeckOrder.GlobalFrequency && deck.deckType !== StudyDeckType.Smart)
+      return `${defaultFrequencySourceName(srsStore.studySettings) ?? 'Global'} frequency`;
     return orderLabels[deck.order];
   }
 
@@ -430,6 +434,8 @@
         />
       </div>
     </div>
+
+    <OneTimeNotice surface="decks" class="mb-4" />
 
     <!-- Due Summary Skeleton -->
     <div

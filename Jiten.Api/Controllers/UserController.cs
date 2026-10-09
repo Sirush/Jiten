@@ -3498,7 +3498,8 @@ public partial class UserController(
                 request.MinFrequency, request.MaxFrequency,
                 request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                 request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,
-                StartFromKnown: request.StartFromKnown, FrequencySource: request.FrequencySource));
+                StartFromKnown: request.StartFromKnown, BandSource: request.FrequencySource,
+                OrderSource: DeckWordResolveRequest.OrderFor(request.FrequencySource)));
 
             if (error != null)
                 return (new(), new(), error);

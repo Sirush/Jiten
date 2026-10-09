@@ -2663,7 +2663,8 @@ public class MediaDeckController(
             minFrequency, maxFrequency,
             excludeMatureMasteredBlacklisted, excludeAllTrackedWords,
             targetPercentage, minOccurrences, maxOccurrences,
-            StartFromKnown: startFromKnown, FrequencySource: frequencySource));
+            StartFromKnown: startFromKnown, BandSource: frequencySource,
+            OrderSource: DeckWordResolveRequest.OrderFor(frequencySource)));
     }
 
     private const string LikeEscapeCharacter = "\\";

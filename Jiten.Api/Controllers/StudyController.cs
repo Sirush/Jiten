@@ -1414,6 +1414,8 @@ public partial class StudyController(
                         break;
                 }
 
+                var sortScope = sortBy == "globalFreq" ? await frequencySource.Resolve(userId) : default;
+
                 IOrderedQueryable<DeckWord> sorted = sortBy switch
                 {
                     // The study order starts from deck frequency; ranked words are moved ahead once the list is filtered.
@@ -1421,6 +1423,7 @@ public partial class StudyController(
                     "deckFreq" => sortOrder == SortOrder.Ascending
                         ? query.OrderByDescending(d => d.Occurrences).ThenBy(d => d.DeckWordId)
                         : query.OrderBy(d => d.Occurrences).ThenBy(d => d.DeckWordId),
+                    "globalFreq" when !sortScope.IsGlobal => query.OrderBy(d => d.DeckWordId),
                     "globalFreq" => sortOrder == SortOrder.Ascending
                         ? query.OrderBy(d => context.WordFormFrequencies
                             .Where(wff => wff.WordId == d.WordId && wff.ReadingIndex == (short)d.ReadingIndex)
@@ -1439,6 +1442,8 @@ public partial class StudyController(
                     .Select(d => new { d.WordId, ReadingIndex = (short)d.ReadingIndex, d.Occurrences })
                     .ToListAsync();
                 allItems = mediaDeckItems.Select(d => (d.WordId, d.ReadingIndex, d.Occurrences)).ToList();
+                if (!sortScope.IsGlobal)
+                    allItems = await SortByFrequency(allItems, sortScope, sortOrder);
 
                 if ((DeckDownloadType)studyDeck.DownloadType == DeckDownloadType.TargetCoverage && studyDeck.TargetPercentage.HasValue)
                 {
@@ -1557,7 +1562,15 @@ public partial class StudyController(
 
                 allItems = rawItems.Select(d => (d.WordId, d.ReadingIndex, d.Occurrences)).ToList();
 
-                if (needsInMemorySort)
+                var listSortScope = needsInMemorySort && studyDeck.DeckType == StudyDeckType.StaticWordList
+                    ? await frequencySource.Resolve(userId)
+                    : default;
+
+                if (needsInMemorySort && !listSortScope.IsGlobal)
+                {
+                    allItems = await SortByFrequency(allItems, listSortScope, sortOrder);
+                }
+                else if (needsInMemorySort)
                 {
                     var wordIds = allItems.Select(i => i.WordId).Distinct().ToList();
                     var freqMap = await WordFormHelper.LoadWordFormFrequencies(context, wordIds);
@@ -2159,6 +2172,7 @@ public partial class StudyController(
             var activeDecks = studyDecks.Where(sd => sd.IsActive).ToList();
             var deckSources = await wordSources.ResolveAsync(activeDecks);
             var sourceDeckIds = deckSources.Values.SelectMany(src => src.DeckIds).Distinct().ToList();
+            var frequencyOrderSource = await frequencySource.Resolve(userId);
 
             var isCrossDeck = settings.NewCardGathering == StudyNewCardGathering.CrossDeckFrequency;
             var isRoundRobin = settings.NewCardGathering == StudyNewCardGathering.RoundRobin;
@@ -2175,7 +2189,8 @@ public partial class StudyController(
                 {
                     if (!deckSources.TryGetValue(studyDeck.UserStudyDeckId, out var source)) continue;
 
-                    var (words, error) = await deckWordResolver.ResolveDeckWords(DeckWordResolveRequest.ForStudyDeck(studyDeck, source));
+                    var (words, error) = await deckWordResolver.ResolveDeckWords(
+                        DeckWordResolveRequest.ForStudyDeck(studyDeck, source, frequencyOrderSource));
 
                     if (error != null || words == null) continue;
                     wordPairs = words.Select(w => (w.WordId, w.ReadingIndex)).ToList();
@@ -2193,7 +2208,8 @@ public partial class StudyController(
                 }
                 else if (studyDeck.DeckType.HasMaterialisedWords())
                 {
-                    var resolved = await deckWordResolver.ResolveStaticDeckWords(studyDeck.UserStudyDeckId, studyDeck.Order);
+                    var resolved = await deckWordResolver.ResolveStaticDeckWords(studyDeck.UserStudyDeckId, studyDeck.Order,
+                        orderSource: StaticOrderSource(studyDeck, frequencyOrderSource));
                     wordPairs = resolved.Select(w => (w.WordId, w.ReadingIndex)).ToList();
                 }
 
@@ -4039,6 +4055,25 @@ public partial class StudyController(
                 || !c.LastReview.HasValue
                 || c.LastReview < todayStart;
 
+    private static FrequencyScope StaticOrderSource(UserStudyDeck studyDeck, FrequencyScope accountDefault) =>
+        studyDeck.DeckType == StudyDeckType.StaticWordList ? accountDefault : default;
+
+    private async Task<List<(int WordId, short ReadingIndex, int Occurrences)>> SortByFrequency(
+        List<(int WordId, short ReadingIndex, int Occurrences)> items, FrequencyScope scope, SortOrder sortOrder)
+    {
+        var keys = await deckWordResolver.LoadFrequencyOrderKeys(items.Select(i => i.WordId).Distinct().ToList(), scope);
+        if (sortOrder == SortOrder.Ascending)
+            return items.OrderBy(i => keys.For(i.WordId, (byte)i.ReadingIndex)).ToList();
+
+        return items.Select(i => (Item: i, Key: keys.For(i.WordId, (byte)i.ReadingIndex)))
+                    .OrderBy(x => x.Key.Scoped == int.MaxValue)
+                    .ThenByDescending(x => x.Key.Scoped)
+                    .ThenBy(x => x.Key.Global == int.MaxValue)
+                    .ThenByDescending(x => x.Key.Global)
+                    .Select(x => x.Item)
+                    .ToList();
+    }
+
     private static SrsDueWindow GetDueWindow(DateTime utcNow, StudySettingsDto settings)
         => SrsDueWindow.At(utcNow, settings);
 
@@ -4768,7 +4803,8 @@ public partial class StudyController(
                     request.MinFrequency, request.MaxFrequency,
                     request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                     request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,
-                    studyDeck.PosFilter, studyDeck.StartFromKnown, request.FrequencySource));
+                    studyDeck.PosFilter, studyDeck.StartFromKnown, request.FrequencySource,
+                    DeckWordResolveRequest.OrderFor(request.FrequencySource)));
                 if (error != null) return error;
 
                 deckWords = words!.Select(dw => (dw.WordId, dw.ReadingIndex, dw.Occurrences)).ToList();
@@ -4791,7 +4827,8 @@ public partial class StudyController(
                     request.MinFrequency, request.MaxFrequency,
                     request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                     request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,
-                    studyDeck.PosFilter, studyDeck.StartFromKnown, request.FrequencySource));
+                    studyDeck.PosFilter, studyDeck.StartFromKnown, request.FrequencySource,
+                    DeckWordResolveRequest.OrderFor(request.FrequencySource)));
                 if (error != null) return error;
 
                 deckWords = words!.Select(dw => (dw.WordId, dw.ReadingIndex, dw.Occurrences)).ToList();
@@ -4910,7 +4947,8 @@ public partial class StudyController(
                     request.MinFrequency, request.MaxFrequency,
                     request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                     request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,
-                    studyDeck.PosFilter, request.StartFromKnown, request.FrequencySource));
+                    studyDeck.PosFilter, request.StartFromKnown, request.FrequencySource,
+                    DeckWordResolveRequest.OrderFor(request.FrequencySource)));
                 if (error != null) return error;
 
                 resolvedWords = words!;

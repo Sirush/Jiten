@@ -482,7 +482,9 @@
   watch(
     localVisible,
     (open) => {
-      if (open) loadFrequencySources();
+      if (!open) return;
+      loadFrequencySources();
+      srsStore.fetchSettings();
     },
     { immediate: true }
   );
@@ -722,9 +724,14 @@
 
   const canUseSentenceOrder = computed(() => hasFeature('sentence-order'));
   const sentenceOrderLapsed = computed(() => deckOrder.value === DeckOrder.SentenceUnlock && planFetched.value && !canUseSentenceOrder.value);
+  const rankOrderLabel = computed(() => {
+    const listId = srsStore.studySettings.defaultFrequencyListId;
+    return frequencyOrderLabel(srsStore.studySettings, listId ? savedFrequencyLists.value.find((l) => l.id === listId)?.name : null);
+  });
+
   const orderOptions = computed(() => [
     { label: 'Chronological', value: DeckOrder.Chronological },
-    { label: 'Global Frequency', value: DeckOrder.GlobalFrequency },
+    { label: rankOrderLabel.value, value: DeckOrder.GlobalFrequency },
     { label: 'Deck Frequency', value: DeckOrder.DeckFrequency },
     { label: 'Random', value: DeckOrder.Random },
     ...(isGroupMode.value
@@ -744,12 +751,12 @@
     { label: 'Random', value: DeckOrder.Random },
   ]);
 
-  const staticOrderOptions = [
+  const staticOrderOptions = computed(() => [
     { label: 'Import Order', value: DeckOrder.ImportOrder },
-    { label: 'Global Frequency', value: DeckOrder.GlobalFrequency },
+    { label: rankOrderLabel.value, value: DeckOrder.GlobalFrequency },
     { label: 'Deck Frequency', value: DeckOrder.DeckFrequency },
     { label: 'Random', value: DeckOrder.Random },
-  ];
+  ]);
 
   const modeOptions = [
     { label: 'Manual Range', value: 'manual' },

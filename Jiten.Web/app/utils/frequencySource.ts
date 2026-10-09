@@ -1,4 +1,23 @@
-import type { Reading, ResolvedFrequencyRank } from '~/types';
+import type { Reading, ResolvedFrequencyRank, StudySettingsDto } from '~/types';
+import { getMediaTypeText } from './mediaTypeMapper';
+
+/** Name of the account default rank source, or null for the site-wide ranking; a list falls back to "List" when its name is unknown. */
+export function defaultFrequencySourceName(
+  settings: Pick<StudySettingsDto, 'defaultFrequencyMediaType' | 'defaultFrequencyListId'> | null | undefined,
+  listName?: string | null
+): string | null {
+  if (settings?.defaultFrequencyListId) return listName || 'List';
+  if (settings?.defaultFrequencyMediaType) return getMediaTypeText(settings.defaultFrequencyMediaType);
+  return null;
+}
+
+/** Media, media group and word list decks in frequency order sort by the account default rank source. */
+export function frequencyOrderLabel(
+  settings: Pick<StudySettingsDto, 'defaultFrequencyMediaType' | 'defaultFrequencyListId'> | null | undefined,
+  listName?: string | null
+): string {
+  return `${defaultFrequencySourceName(settings, listName) ?? 'Global'} Frequency`;
+}
 
 /**
  * Single-number encoding for a rank source, so one Select and one popover can offer all three kinds:
