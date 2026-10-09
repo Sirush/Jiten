@@ -349,12 +349,93 @@ public class SeriesTests(JitenWebApplicationFactory factory)
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         var saved = (await response.Content.ReadFromJsonAsync<FranchiseDto>())!;
         saved.Nodes.Select(n => n.DeckId).Should().BeEquivalentTo([1, 2, 3]);
+        saved.BoardOnlyDeckIds.Should().BeEmpty();
         saved.Edges.Should().ContainSingle();
         saved.Series.Single().MemberDeckIds.Should().BeEquivalentTo([2]);
 
-        var reloaded = await GetAsync<FranchiseDto>("/api/admin/franchise-builder/1?add=2&add=3", admin: true);
+        var reloaded = await GetAsync<FranchiseDto>("/api/admin/franchise-builder/1", admin: true);
         reloaded.Nodes.Select(n => n.DeckId).Should().BeEquivalentTo([1, 2, 3]);
         reloaded.Series.Single().MemberDeckIds.Should().BeEquivalentTo([2]);
+    }
+
+    [Fact]
+    public async Task FranchiseBuilder_AddedDecksAreMarkedBoardOnly()
+    {
+        await SeedAsync([Deck(1, "A"), Deck(2, "B"), Deck(3, "C")], [Rel(2, 1, DeckRelationshipType.Sequel)]);
+        await FranchiseAsync(1);
+
+        var dto = await GetAsync<FranchiseDto>("/api/admin/franchise-builder/1?add=3", admin: true);
+
+        dto.Nodes.Select(n => n.DeckId).Should().BeEquivalentTo([1, 2, 3]);
+        dto.BoardOnlyDeckIds.Should().Equal(3);
+    }
+
+    private Task<HttpResponseMessage> SaveBoardAsync(int anchorDeckId, params int[] board) =>
+        AdminSendAsync(HttpMethod.Post, "/api/admin/franchise-builder/save", new
+        {
+            anchorDeckId,
+            addEdges = Array.Empty<object>(),
+            removeEdges = Array.Empty<object>(),
+            addMembers = Array.Empty<object>(),
+            removeMembers = Array.Empty<object>(),
+            boardDeckIds = board
+        });
+
+    [Fact]
+    public async Task FranchiseBuilder_BoardBecomesOneFranchise_AcrossUnrelatedSeries()
+    {
+        await SeedAsync([Deck(1, "FF II"), Deck(2, "FF VII"), Deck(3, "FF VII Remake"), Deck(4, "FF XIII"), Deck(5, "FF XIII-2"), Deck(6, "Other")],
+                        [Rel(3, 2, DeckRelationshipType.Sequel), Rel(5, 4, DeckRelationshipType.Sequel)],
+                        [Group(1, "Final Fantasy VII", SeriesKind.Series, 2), Group(2, "Final Fantasy XIII", SeriesKind.Series, 4)]);
+        var before = await FranchiseAsync(2);
+        before.Nodes.Select(n => n.DeckId).Should().BeEquivalentTo([2, 3]);
+
+        var response = await SaveBoardAsync(1, 1, 2, 3, 4, 5);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        var saved = (await response.Content.ReadFromJsonAsync<FranchiseDto>())!;
+        saved.FranchiseId.Should().NotBeNull();
+        saved.BoardOnlyDeckIds.Should().BeEmpty();
+        saved.Nodes.Select(n => n.DeckId).Should().BeEquivalentTo([1, 2, 3, 4, 5]);
+        saved.Series.Select(s => s.SeriesId).Should().BeEquivalentTo([1, 2]);
+
+        var fromSeries = await FranchiseAsync(4);
+        fromSeries.FranchiseId.Should().Be(saved.FranchiseId);
+        fromSeries.Nodes.Should().HaveCount(5);
+        (await FranchiseAsync(6)).FranchiseId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task FranchiseBuilder_DeckTakenOffTheBoard_LeavesTheFranchise()
+    {
+        await SeedAsync([Deck(1, "A"), Deck(2, "B"), Deck(3, "C")]);
+        (await SaveBoardAsync(1, 1, 2, 3)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await SaveBoardAsync(1, 1, 2);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        (await FranchiseAsync(1)).Nodes.Select(n => n.DeckId).Should().BeEquivalentTo([1, 2]);
+        var dropped = await FranchiseAsync(3);
+        dropped.FranchiseId.Should().BeNull();
+    }
+
+    [Fact]
+    public async Task FranchiseBuilder_BoardsJoinedByALink_MergeIntoTheLargerOne()
+    {
+        await SeedAsync([Deck(1, "A"), Deck(2, "B"), Deck(3, "C"), Deck(4, "D"), Deck(5, "E")]);
+        await SaveBoardAsync(1, 1, 2, 3);
+        await SaveBoardAsync(4, 4, 5);
+        var big = (await FranchiseAsync(1)).FranchiseId;
+
+        await SeedAsync([], [Rel(4, 3, DeckRelationshipType.Sequel)]);
+        var merged = await FranchiseAsync(5);
+
+        merged.FranchiseId.Should().Be(big);
+        merged.Nodes.Should().HaveCount(5);
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+        (await db.FranchiseMembers.Select(m => m.FranchiseId).Distinct().ToListAsync()).Should().Equal(big!.Value);
+        (await db.Franchises.CountAsync()).Should().Be(1);
     }
 
     [Fact]

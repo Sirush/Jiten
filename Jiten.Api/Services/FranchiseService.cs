@@ -87,11 +87,13 @@ public sealed class FranchiseService(JitenDbContext db, UserDbContext userContex
         if (boardDeckIds.All(deckIds.Contains))
             return franchise;
 
-        deckIds.UnionWith(boardDeckIds);
+        var boardOnly = boardDeckIds.Where(id => !deckIds.Contains(id)).Distinct().ToList();
+        deckIds.UnionWith(boardOnly);
         var dto = await BuildForMembersAsync(deckIds.ToList(), ct);
         dto.FranchiseId = franchise.FranchiseId;
         dto.Name = franchise.Name;
         dto.NameIsManual = franchise.NameIsManual;
+        dto.BoardOnlyDeckIds = boardOnly.Where(id => dto.Nodes.Any(n => n.DeckId == id)).ToList();
         return dto;
     }
 

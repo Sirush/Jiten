@@ -58,6 +58,7 @@ public class JitenDbContext : DbContext
     public DbSet<Franchise> Franchises { get; set; }
     public DbSet<Series> Series { get; set; }
     public DbSet<SeriesMember> SeriesMembers { get; set; }
+    public DbSet<FranchiseMember> FranchiseMembers { get; set; }
     public DbSet<FranchiseSuggestionDismissal> FranchiseSuggestionDismissals { get; set; }
 
     public DbSet<WebNovelSource> WebNovelSources { get; set; }
@@ -951,6 +952,24 @@ public class JitenDbContext : DbContext
         });
 
         modelBuilder.Entity<Deck>().HasIndex(d => d.FranchiseId).HasDatabaseName("IX_Decks_FranchiseId");
+
+        modelBuilder.Entity<FranchiseMember>(entity =>
+        {
+            entity.ToTable("FranchiseMembers", "jiten");
+            entity.HasKey(m => m.DeckId);
+
+            entity.HasOne(m => m.Deck)
+                  .WithOne()
+                  .HasForeignKey<FranchiseMember>(m => m.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(m => m.Franchise)
+                  .WithMany()
+                  .HasForeignKey(m => m.FranchiseId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(m => m.FranchiseId).HasDatabaseName("IX_FranchiseMembers_FranchiseId");
+        });
 
         modelBuilder.Entity<Series>(entity =>
         {

@@ -321,6 +321,8 @@ export interface Franchise {
   series: FranchiseSeries[];
   settings: FranchiseSetting[];
   preferredView: 'timeline' | 'series';
+  /** Franchise builder only: decks put on the board that are not in the franchise yet. */
+  boardOnlyDeckIds?: number[];
 }
 
 export interface MetadataTag {

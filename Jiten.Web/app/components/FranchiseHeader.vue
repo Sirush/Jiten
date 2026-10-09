@@ -1,10 +1,8 @@
 <script setup lang="ts">
   import Skeleton from 'primevue/skeleton';
-  import InputText from 'primevue/inputtext';
   import type { Franchise, FranchiseNode, MediaGroupStats, MediaType } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
   import { useJitenStore } from '~/stores/jitenStore';
-  import { FRANCHISE_NAME_MAX_LENGTH, useFranchiseRename } from '~/composables/useFranchiseRename';
   import { franchiseEntryCountLabel, franchiseFirstNode, franchiseYearRange } from '~/utils/franchiseLayout';
   import { mediaGroupKindWord, type ScopeChip } from '~/utils/mediaGroup';
 
@@ -40,28 +38,9 @@
   const hasChipRow = computed(() => props.chips.length > 1 || new Set(props.scopedNodes.map((n) => n.mediaType)).size > 1);
 
   const renaming = ref(false);
-  const rename = useFranchiseRename({
-    saved: async () => {
-      emit('renamed');
-      await stopRename();
-    },
-    close: () => stopRename(),
-  });
-  const { value: renameValue, busy: renameBusy, error: renameError } = rename;
-  const renameInput = ref<{ $el?: HTMLElement } | null>(null);
   const renameButton = ref<{ $el?: HTMLElement } | null>(null);
 
   const storedName = computed(() => props.franchise.name || props.name);
-
-  async function startRename() {
-    rename.reset(storedName.value);
-    renaming.value = true;
-    await nextTick();
-    const el = renameInput.value?.$el;
-    const input = el instanceof HTMLInputElement ? el : el?.querySelector('input');
-    input?.focus();
-    input?.select();
-  }
 
   async function stopRename() {
     renaming.value = false;
@@ -69,12 +48,9 @@
     renameButton.value?.$el?.focus();
   }
 
-  function saveName(name: string | null) {
-    rename.save(props.franchise.franchiseId, name);
-  }
-
-  function submitRename() {
-    rename.submit({ franchiseId: props.franchise.franchiseId, name: storedName.value, nameIsManual: props.franchise.nameIsManual });
+  async function onRenamed() {
+    emit('renamed');
+    await stopRename();
   }
 </script>
 
@@ -96,7 +72,7 @@
           size="small"
           class="!h-11 !w-11 opacity-0 transition-opacity group-hover/title:opacity-100 group-focus-within/title:opacity-100 focus-visible:opacity-100 pointer-coarse:opacity-100"
           aria-label="Rename this franchise"
-          @click="startRename"
+          @click="renaming = true"
         />
         <NuxtLink
           v-if="showAdminTools && builderLink"
@@ -148,32 +124,14 @@
       </div>
     </div>
 
-    <form
+    <FranchiseRenameForm
       v-if="renaming"
-      class="flex flex-col gap-2 rounded-md border border-surface-300 p-3 dark:border-surface-700"
-      @submit.prevent="submitRename"
-      @keydown.esc.prevent="stopRename"
-    >
-      <label for="franchise-rename" class="text-sm font-medium">Franchise name</label>
-      <InputText id="franchise-rename" ref="renameInput" v-model="renameValue" class="w-full" :maxlength="FRANCHISE_NAME_MAX_LENGTH" :invalid="!!renameError" />
-      <p class="m-0 text-xs text-surface-600 dark:text-surface-300">
-        {{ franchise.nameIsManual ? 'Named by an admin. Syncs keep this name.' : 'Named automatically. Every sync renames it until you set a name.' }}
-      </p>
-      <p v-if="renameError" class="m-0 text-sm text-red-700 dark:text-red-400" role="alert">{{ renameError }}</p>
-      <div class="flex flex-wrap gap-2">
-        <Button label="Save name" type="submit" size="small" :loading="renameBusy" />
-        <Button
-          v-if="franchise.nameIsManual"
-          label="Use automatic name"
-          type="button"
-          severity="secondary"
-          size="small"
-          :disabled="renameBusy"
-          @click="saveName(null)"
-        />
-        <Button label="Cancel" type="button" severity="secondary" text size="small" :disabled="renameBusy" @click="stopRename" />
-      </div>
-    </form>
+      :franchise-id="franchise.franchiseId"
+      :name="storedName"
+      :name-is-manual="franchise.nameIsManual"
+      @saved="onRenamed"
+      @close="stopRename"
+    />
 
     <div v-if="hasChipRow" class="flex flex-wrap items-start gap-x-6 gap-y-3 max-sm:flex-col max-sm:flex-nowrap max-sm:items-stretch">
       <FranchiseScopeChips :chips="chips" :active-key="activeChip?.key ?? null" @select="(chip) => emit('selectScope', chip)" />

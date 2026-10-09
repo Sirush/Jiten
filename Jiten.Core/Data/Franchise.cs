@@ -2,7 +2,7 @@ using System.Text.Json.Serialization;
 
 namespace Jiten.Core.Data;
 
-/// <summary>Decks connected by story links or a shared series; membership lives in <see cref="Deck.FranchiseId"/>.</summary>
+/// <summary>Decks connected by story links, a shared series or a saved builder board; membership lives in <see cref="Deck.FranchiseId"/>.</summary>
 public class Franchise
 {
     public int FranchiseId { get; set; }
