@@ -1,11 +1,8 @@
 services:
   postgres:
-    build:
-      context: ./postgres-pgroonga
-      dockerfile: Dockerfile
-      args:
-        PG_VERSION: 17
+    # Built by hand from ./postgres-pgroonga so app deploys never rebuild or restart the database
     image: jiten/postgres-pgroonga:17
+    pull_policy: never
     shm_size: 1gb
     environment:
       POSTGRES_PASSWORD: ${DB_PASSWORD}
