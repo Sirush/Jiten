@@ -157,6 +157,8 @@ services:
   redis:
     image: redis:latest
     command: ["redis-server", "--maxmemory", "${REDIS_MAX_MEMORY:-2}gb", "--maxmemory-policy", "allkeys-lru"]
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -167,3 +169,4 @@ volumes:
   postgres_data:
   uploads:
   dictionaries:
+  redis_data:
