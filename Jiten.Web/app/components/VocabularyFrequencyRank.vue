@@ -34,7 +34,7 @@
   const fallbackHint = computed(() => {
     const r = resolved.value;
     if (!r?.isFallback || r.mediaType == null) return null;
-    return `Not seen in ${getMediaTypeText(r.mediaType)} yet, so this is the global rank.`;
+    return fallbackRankHint(getMediaTypeText(r.mediaType));
   });
 
   const typeRows = computed(() =>
