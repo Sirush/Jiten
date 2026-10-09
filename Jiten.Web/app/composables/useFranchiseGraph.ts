@@ -1,5 +1,9 @@
-import { computed, type ComputedRef, type Ref } from 'vue';
-import { type Franchise, type FranchiseNode, type FranchiseEdge, DeckRelationshipType } from '~/types';
+import { computed, toValue, type ComputedRef, type MaybeRefOrGetter, type Ref } from 'vue';
+import type { Franchise, FranchiseNode, FranchiseEdge } from '~/types';
+import { useJitenStore } from '~/stores/jitenStore';
+import { useAuthStore } from '~/stores/authStore';
+import { franchiseUsableEdges } from '~/utils/franchiseLayout';
+import { relatedMediaLabelFrom } from '~/utils/relationshipRoles';
 
 export interface RelationCaption {
   label: string;
@@ -7,108 +11,75 @@ export interface RelationCaption {
   otherTitle: string;
 }
 
-// ---- Relationship labels ----
-// MUST match RelatedMediaDisplay's pills: the label names the OTHER deck's role ("Source: X"
-// means X is the source). Derived mechanically from its table — forward (this node is the
-// stored edge's source) = labels[T]; inverse (this node is the target) = labels[GetInverse(T)].
-export const forwardLabels: Record<number, string> = {
-  [DeckRelationshipType.Sequel]: 'Prequel',
-  [DeckRelationshipType.Fandisc]: 'Source',
-  [DeckRelationshipType.Spinoff]: 'Source',
-  [DeckRelationshipType.SideStory]: 'Source',
-  [DeckRelationshipType.Adaptation]: 'Adaptation',
-  [DeckRelationshipType.Alternative]: 'Alternative',
-  [DeckRelationshipType.SameSeries]: 'Same Series',
-  [DeckRelationshipType.SameSetting]: 'Same Setting',
-};
-export const inverseLabels: Record<number, string> = {
-  [DeckRelationshipType.Sequel]: 'Sequel',
-  [DeckRelationshipType.Fandisc]: 'Fandisc',
-  [DeckRelationshipType.Spinoff]: 'Spinoff',
-  [DeckRelationshipType.SideStory]: 'Side Story',
-  [DeckRelationshipType.Adaptation]: 'Source',
-  [DeckRelationshipType.Alternative]: 'Alternative',
-  [DeckRelationshipType.SameSeries]: 'Same Series',
-  [DeckRelationshipType.SameSetting]: 'Same Setting',
-};
-
-// Shared node/edge logic for both the timeline and the constellation web view.
-// View-specific concerns (timeline rows/columns/SVG measurement, web force sim/projection)
-// stay in their respective components.
-export function useFranchiseGraph(franchise: Ref<Franchise> | ComputedRef<Franchise>) {
+/** Node, edge and hover-focus state shared by the franchise views; layout stays in each view. */
+export function useFranchiseGraph(
+  franchise: Ref<Franchise> | ComputedRef<Franchise>,
+  scope: { deckIds: MaybeRefOrGetter<number[] | null | undefined>; activeNode: Ref<number | null> }
+) {
   const localiseTitle = useLocaliseTitle();
+  const store = useJitenStore();
+  const authStore = useAuthStore();
+  const { activeNode } = scope;
 
-  const nodes = computed<FranchiseNode[]>(() => franchise.value.nodes);
-  const edges = computed<FranchiseEdge[]>(() => franchise.value.edges);
+  const edges = computed<FranchiseEdge[]>(() => franchiseUsableEdges(franchise.value.nodes, franchise.value.edges));
+  const nodeById = computed(() => new Map(franchise.value.nodes.map((n) => [n.deckId, n])));
 
-  const nodeById = computed<Map<number, FranchiseNode>>(() => {
-    const m = new Map<number, FranchiseNode>();
-    for (const n of nodes.value) m.set(n.deckId, n);
-    return m;
+  const scopeSet = computed(() => {
+    const ids = toValue(scope.deckIds);
+    return ids ? new Set(ids) : null;
   });
 
-  // Unset release dates arrive as the DateOnly default (year 1); treat them as unknown.
-  function releaseYear(node: FranchiseNode): number | null {
-    const t = Date.parse(node.releaseDate);
-    if (Number.isNaN(t)) return null;
-    const year = new Date(t).getFullYear();
-    return year <= 1 ? null : year;
+  function outOfScope(deckId: number): boolean {
+    return !!scopeSet.value && !scopeSet.value.has(deckId) && activeNode.value !== deckId;
   }
 
-  function coverSrc(node: FranchiseNode): string {
-    return !node.coverName || node.coverName === 'nocover.jpg' ? '/img/nocover.jpg' : node.coverName;
-  }
-
-  // Relation captions for a node, derived from its incident edges.
   function captionsFor(deckId: number): RelationCaption[] {
     const out: RelationCaption[] = [];
     for (const e of edges.value) {
-      let label: string | undefined;
-      let otherId: number | undefined;
-      if (e.targetDeckId === deckId) {
-        label = inverseLabels[e.relationshipType];
-        otherId = e.sourceDeckId;
-      } else if (e.sourceDeckId === deckId) {
-        label = forwardLabels[e.relationshipType];
-        otherId = e.targetDeckId;
-      }
-      if (label == null || otherId == null) continue;
+      if (e.sourceDeckId !== deckId && e.targetDeckId !== deckId) continue;
+      const otherId = e.sourceDeckId === deckId ? e.targetDeckId : e.sourceDeckId;
       const other = nodeById.value.get(otherId);
-      if (!other) continue;
-      out.push({ label, otherId, otherTitle: localiseTitle(other) });
+      if (other) out.push({ label: relatedMediaLabelFrom(e, deckId), otherId, otherTitle: localiseTitle(other) });
     }
     return out;
   }
 
-  // Set of nodes incident to (and including) the active node. Reactive to the supplied ref.
-  function useAdjacentNodes(activeNode: Ref<number | null>): ComputedRef<Set<number>> {
-    return computed<Set<number>>(() => {
-      const s = new Set<number>();
-      if (activeNode.value == null) return s;
-      s.add(activeNode.value);
-      for (const e of edges.value) {
-        if (e.sourceDeckId === activeNode.value) s.add(e.targetDeckId);
-        else if (e.targetDeckId === activeNode.value) s.add(e.sourceDeckId);
-      }
-      return s;
-    });
+  const adjacentNodes = computed(() => {
+    const s = new Set<number>();
+    const id = activeNode.value;
+    if (id == null) return s;
+    s.add(id);
+    for (const e of edges.value) {
+      if (e.sourceDeckId === id) s.add(e.targetDeckId);
+      else if (e.targetDeckId === id) s.add(e.sourceDeckId);
+    }
+    return s;
+  });
+
+  const activeNodeData = computed(() => (activeNode.value == null ? null : (nodeById.value.get(activeNode.value) ?? null)));
+
+  function edgeActive(e: FranchiseEdge): boolean {
+    return activeNode.value != null && (e.sourceDeckId === activeNode.value || e.targetDeckId === activeNode.value);
   }
 
-  function edgeActive(e: FranchiseEdge, activeId: number | null): boolean {
-    return activeId != null && (e.sourceDeckId === activeId || e.targetDeckId === activeId);
+  function nodeDimmed(deckId: number): boolean {
+    return activeNode.value != null && !adjacentNodes.value.has(deckId);
+  }
+
+  function showCoverage(node: FranchiseNode): boolean {
+    return authStore.isAuthenticated && !store.hideCoverageBorders && (node.coverage !== 0 || node.uniqueCoverage !== 0);
   }
 
   return {
     localiseTitle,
-    nodes,
     edges,
     nodeById,
-    releaseYear,
-    coverSrc,
+    outOfScope,
     captionsFor,
-    useAdjacentNodes,
+    adjacentNodes,
+    activeNodeData,
     edgeActive,
-    forwardLabels,
-    inverseLabels,
+    nodeDimmed,
+    showCoverage,
   };
 }

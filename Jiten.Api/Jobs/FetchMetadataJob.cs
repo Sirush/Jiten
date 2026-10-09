@@ -11,7 +11,9 @@ namespace Jiten.Api.Jobs;
 public class FetchMetadataJob(
     IDbContextFactory<JitenDbContext> contextFactory,
     IConfiguration configuration,
-    IWebNovelSourceResolver sourceResolver)
+    IWebNovelSourceResolver sourceResolver,
+    IBackgroundJobClient backgroundJobs,
+    ILogger<FetchMetadataJob> logger)
 {
     private const float ANILIST_DELAY = 2.2f;
     private const float GOOGLE_BOOKS_DELAY = 3f;
@@ -66,7 +68,8 @@ public class FetchMetadataJob(
             // Process relations from metadata
             if (metadata.Relations.Count > 0)
             {
-                await MetadataProviderHelper.ProcessRelations(context, deckId, metadata.Relations);
+                await MetadataProviderHelper.ProcessRelations(context, deckId, metadata.Relations, logger);
+                FranchiseSyncJob.Enqueue(backgroundJobs);
             }
 
             await context.SaveChangesAsync();
@@ -171,7 +174,8 @@ public class FetchMetadataJob(
             // Process relations from metadata
             if (metadata.Relations.Count > 0)
             {
-                await MetadataProviderHelper.ProcessRelations(context, deckId, metadata.Relations);
+                await MetadataProviderHelper.ProcessRelations(context, deckId, metadata.Relations, logger);
+                FranchiseSyncJob.Enqueue(backgroundJobs);
             }
 
             // VNDB anime adaptations (from the database dump, matched to anime decks by MAL id)
@@ -179,6 +183,7 @@ public class FetchMetadataJob(
             if (animeRelations.Count > 0)
             {
                 await MetadataProviderHelper.ProcessRelations(context, deckId, animeRelations);
+                FranchiseSyncJob.Enqueue(backgroundJobs);
             }
 
             await context.SaveChangesAsync();
@@ -345,7 +350,8 @@ public class FetchMetadataJob(
 
             if (metadata.Relations.Count > 0)
             {
-                await MetadataProviderHelper.ProcessRelations(context, deckId, metadata.Relations);
+                await MetadataProviderHelper.ProcessRelations(context, deckId, metadata.Relations, logger);
+                FranchiseSyncJob.Enqueue(backgroundJobs);
             }
 
             await context.SaveChangesAsync();

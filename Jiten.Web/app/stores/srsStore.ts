@@ -18,7 +18,7 @@ import type {
   SessionStreakDto,
   ReviewForecastDto,
 } from '~/types';
-import { FsrsRating, FsrsState } from '~/types';
+import { FsrsRating, FsrsState, StudyDeckType } from '~/types';
 import { DEFAULT_KEYBINDS } from '~/composables/useStudyKeyboard';
 import { DEFAULT_CARD_DISPLAY_SETTINGS } from '~/utils/defaultStudySettings';
 import { useAuthStore } from '~/stores/authStore';
@@ -181,6 +181,7 @@ export const useSrsStore = defineStore('srs', () => {
     interleaving: 'Mixed',
     newCardGathering: 'TopDeck',
     reviewFrom: 'AllTracked',
+    reviewSortOrder: 'RetrievabilityAscending',
     exampleSentenceSorting: 'Random',
     exampleSentenceSource: 'StudyDecks',
     cardImageLayout: 'beside',
@@ -518,6 +519,7 @@ export const useSrsStore = defineStore('srs', () => {
       minFrequency: request.minFrequency,
       maxFrequency: request.maxFrequency,
       targetPercentage: request.targetPercentage,
+      startFromKnown: request.startFromKnown ?? false,
       minOccurrences: request.minOccurrences,
       maxOccurrences: request.maxOccurrences,
       excludeKana: request.excludeKana,
@@ -526,10 +528,16 @@ export const useSrsStore = defineStore('srs', () => {
       posFilter: request.posFilter,
       frequencyMediaType: request.frequencyMediaType,
       frequencyListId: request.frequencyListId,
+      groupKind: request.groupKind,
+      groupId: request.groupId,
+      groupMediaTypes: request.groupMediaTypes?.length ? request.groupMediaTypes : null,
+      groupExcludedDeckIds: request.groupExcludedDeckIds?.length ? request.groupExcludedDeckIds : null,
       totalWords: 0,
       unseenCount: 0,
       learningCount: 0,
       reviewCount: 0,
+      youngCount: 0,
+      matureCount: 0,
       masteredCount: 0,
       blacklistedCount: 0,
       suspendedCount: 0,
@@ -572,6 +580,10 @@ export const useSrsStore = defineStore('srs', () => {
       deck.posFilter = request.posFilter;
       deck.frequencyMediaType = request.frequencyMediaType;
       deck.frequencyListId = request.frequencyListId;
+      if (deck.deckType === StudyDeckType.MediaGroup) {
+        deck.groupMediaTypes = request.groupMediaTypes?.length ? request.groupMediaTypes : null;
+        deck.groupExcludedDeckIds = request.groupExcludedDeckIds?.length ? request.groupExcludedDeckIds : null;
+      }
     }
     refreshOverview();
     invalidateSession();

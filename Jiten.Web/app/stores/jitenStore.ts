@@ -18,6 +18,7 @@ import { AVERAGE_BAND, difficultyBand } from '~/utils/difficultyColours';
 import { DEFAULT_MEDIA_CARD_COLUMNS, type MediaCardStatColumns } from '~/utils/mediaCardStats';
 import { DEFAULT_MEDIA_CARD_SECTION_LAYOUT, copySectionLayout, type MediaCardSectionLayout } from '~/utils/mediaCardSections';
 import { readJarCookie, registerSettingResync, sameSetting, settingChangedInOtherTab } from '~/utils/settingsTabSync';
+import type { FranchiseCardSize, FranchiseLinkMode, FranchiseSeriesDensity } from '~/utils/franchiseLayout';
 
 export type WatchColourKey = WordStateColourKey;
 
@@ -250,6 +251,10 @@ export const useJitenStore = defineStore('jiten', () => {
 
   const coverageJourneyScale = createLocalStorageState<CoverageScale>('coverage-journey-scale', 'fit');
 
+  const franchiseLinkMode = createLocalStorageState<FranchiseLinkMode>('franchise-link-mode', 'all');
+  const franchiseCardSize = createLocalStorageState<FranchiseCardSize>('franchise-card-size', 'covers');
+  const franchiseSeriesDensity = createLocalStorageState<FranchiseSeriesDensity>('franchise-series-density', 'detailed');
+
   // Drives the unread dot on the home page's "what's new" strip.
   const lastSeenUpdateId = createLocalStorageState<number>('last-seen-update-id', 0);
   const customDictionaryFontSize = createLocalStorageState<number>('custom-dictionary-font-size', DEFAULT_DICTIONARY_FONT_SIZE);
@@ -331,6 +336,9 @@ export const useJitenStore = defineStore('jiten', () => {
     hideSentenceStats,
     separatePriorKnowledge,
     coverageJourneyScale,
+    franchiseLinkMode,
+    franchiseCardSize,
+    franchiseSeriesDensity,
     lastSeenUpdateId,
     customDictionaryFontSize,
     coverageVersion,

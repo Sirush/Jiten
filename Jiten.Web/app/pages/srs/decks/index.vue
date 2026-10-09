@@ -4,6 +4,9 @@
   import { useConfirm } from 'primevue/useconfirm';
   import { DeckOrder, MediaType, StudyDeckType, type StudyDeckDto } from '~/types';
   import { formatRelativeTime } from '~/utils/relativeTime';
+  import { groupFilterSummary } from '~/utils/mediaGroup';
+  import { studyDeckPresentation } from '~/utils/studyDeckPresentation';
+  import { defaultFrequencySourceName } from '~/utils/frequencySource';
   import { Bar } from 'vue-chartjs';
   import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip as ChartTooltip } from 'chart.js';
   import ChartDataLabels from 'chartjs-plugin-datalabels';
@@ -17,8 +20,8 @@
   const toast = useToast();
   const confirm = useConfirm();
   const localiseTitle = useLocaliseTitle();
-  const deckTitle = (deck: StudyDeckDto) =>
-    deck.deckType === StudyDeckType.MediaDeck ? localiseTitle({ originalTitle: deck.title, romajiTitle: deck.romajiTitle, englishTitle: deck.englishTitle }) : deck.name;
+  const presentation = (deck: StudyDeckDto) => studyDeckPresentation(deck, localiseTitle);
+  const deckTitle = (deck: StudyDeckDto) => presentation(deck).title;
   const parentTitle = (deck: StudyDeckDto) =>
     localiseTitle({ originalTitle: deck.parentTitle ?? '', romajiTitle: deck.parentRomajiTitle, englishTitle: deck.parentEnglishTitle });
   const router = useRouter();
@@ -48,6 +51,7 @@
       srsStore.refreshOverview();
     }
     srsStore.fetchReviewForecast30d();
+    srsStore.fetchSettings();
     if (!smartDeck.value) fetchPromo();
   });
 
@@ -398,6 +402,8 @@
     if (deck.deckType === StudyDeckType.GlobalDynamic && deck.order === DeckOrder.GlobalFrequency) return undefined;
     if (deck.order === DeckOrder.SentenceUnlock && planFetched.value && !hasFeature('sentence-order'))
       return 'Deck frequency (sentence unlock needs Jiten+)';
+    if (deck.order === DeckOrder.GlobalFrequency && deck.deckType !== StudyDeckType.Smart)
+      return `${defaultFrequencySourceName(srsStore.studySettings) ?? 'Global'} frequency`;
     return orderLabels[deck.order];
   }
 
@@ -428,6 +434,8 @@
         />
       </div>
     </div>
+
+    <OneTimeNotice surface="decks" class="mb-4" />
 
     <!-- Due Summary Skeleton -->
     <div
@@ -740,6 +748,12 @@
                 <div v-else-if="deck.deckType === StudyDeckType.Smart" class="w-full h-full flex items-center justify-center text-primary-500">
                   <Icon name="material-symbols:track-changes" size="28" />
                 </div>
+                <div
+                  v-else-if="deck.deckType === StudyDeckType.MediaGroup"
+                  class="w-full h-full flex items-center justify-center text-purple-500 dark:text-purple-400"
+                >
+                  <Icon name="material-symbols:collections-bookmark" size="28" />
+                </div>
                 <div v-else class="w-full h-full flex items-center justify-center text-green-400">
                   <Icon name="material-symbols:list-alt" size="28" />
                 </div>
@@ -751,22 +765,18 @@
                   {{ parentTitle(deck) }}
                 </div>
                 <div class="font-semibold truncate" v-bind="japaneseTextAttrs(deckTitle(deck))">
-                  <NuxtLink
-                    v-if="deck.deckType === StudyDeckType.MediaDeck && deck.deckId"
-                    :to="`/decks/media/${deck.deckId}/detail`"
-                    class="hover:text-primary-500 transition-colors"
-                  >
-                    {{ localiseTitle({ originalTitle: deck.title, romajiTitle: deck.romajiTitle, englishTitle: deck.englishTitle }) }}
+                  <NuxtLink v-if="presentation(deck).link" :to="presentation(deck).link!" class="hover:text-primary-500 transition-colors">
+                    {{ deckTitle(deck) }}
                   </NuxtLink>
-                  <template v-else-if="deck.deckType === StudyDeckType.MediaDeck">
-                    {{ localiseTitle({ originalTitle: deck.title, romajiTitle: deck.romajiTitle, englishTitle: deck.englishTitle }) }}
-                  </template>
-                  <template v-else>{{ deck.name }}</template>
+                  <template v-else>{{ deckTitle(deck) }}</template>
                 </div>
                 <div class="text-sm text-gray-500 dark:text-gray-400">
                   <template v-if="deck.deckType === StudyDeckType.MediaDeck">{{ getMediaTypeText(deck.mediaType) }}</template>
                   <template v-else-if="deck.deckType === StudyDeckType.GlobalDynamic">{{ frequencyDeckLabel(deck) }}</template>
                   <template v-else-if="deck.deckType === StudyDeckType.Smart">Your current immersion</template>
+                  <template v-else-if="deck.deckType === StudyDeckType.MediaGroup">{{
+                    groupFilterSummary(deck.groupMediaTypes, deck.groupExcludedDeckIds)
+                  }}</template>
                   <template v-else>Word List</template>
                   <span v-if="deck.totalWords"> · {{ deck.totalWords }} words</span>
                   <span v-else-if="deck.building"> · Building</span>
@@ -841,13 +851,7 @@
                 <Button icon="pi pi-download" severity="secondary" text size="small" @click="openDownload(deck)" />
               </Tooltip>
               <Tooltip content="Remove" placement="top">
-                <Button
-                  icon="pi pi-trash"
-                  severity="danger"
-                  text
-                  size="small"
-                  @click="confirmRemove(deck.userStudyDeckId, deck.deckType === 0 ? deck.title : deck.name)"
-                />
+                <Button icon="pi pi-trash" severity="danger" text size="small" @click="confirmRemove(deck.userStudyDeckId, deckTitle(deck))" />
               </Tooltip>
             </div>
           </div>
@@ -920,6 +924,12 @@
                 <div v-else-if="deck.deckType === StudyDeckType.Smart" class="w-full h-full flex items-center justify-center text-primary-500">
                   <Icon name="material-symbols:track-changes" size="28" />
                 </div>
+                <div
+                  v-else-if="deck.deckType === StudyDeckType.MediaGroup"
+                  class="w-full h-full flex items-center justify-center text-purple-500 dark:text-purple-400"
+                >
+                  <Icon name="material-symbols:collections-bookmark" size="28" />
+                </div>
                 <div v-else class="w-full h-full flex items-center justify-center text-green-400">
                   <Icon name="material-symbols:list-alt" size="28" />
                 </div>
@@ -931,22 +941,18 @@
                   {{ parentTitle(deck) }}
                 </div>
                 <div class="font-semibold truncate" v-bind="japaneseTextAttrs(deckTitle(deck))">
-                  <NuxtLink
-                    v-if="deck.deckType === StudyDeckType.MediaDeck && deck.deckId"
-                    :to="`/decks/media/${deck.deckId}/detail`"
-                    class="hover:text-primary-500 transition-colors"
-                  >
-                    {{ localiseTitle({ originalTitle: deck.title, romajiTitle: deck.romajiTitle, englishTitle: deck.englishTitle }) }}
+                  <NuxtLink v-if="presentation(deck).link" :to="presentation(deck).link!" class="hover:text-primary-500 transition-colors">
+                    {{ deckTitle(deck) }}
                   </NuxtLink>
-                  <template v-else-if="deck.deckType === StudyDeckType.MediaDeck">
-                    {{ localiseTitle({ originalTitle: deck.title, romajiTitle: deck.romajiTitle, englishTitle: deck.englishTitle }) }}
-                  </template>
-                  <template v-else>{{ deck.name }}</template>
+                  <template v-else>{{ deckTitle(deck) }}</template>
                 </div>
                 <div class="text-sm text-gray-500 dark:text-gray-400">
                   <template v-if="deck.deckType === StudyDeckType.MediaDeck">{{ getMediaTypeText(deck.mediaType) }}</template>
                   <template v-else-if="deck.deckType === StudyDeckType.GlobalDynamic">{{ frequencyDeckLabel(deck) }}</template>
                   <template v-else-if="deck.deckType === StudyDeckType.Smart">Your current immersion</template>
+                  <template v-else-if="deck.deckType === StudyDeckType.MediaGroup">{{
+                    groupFilterSummary(deck.groupMediaTypes, deck.groupExcludedDeckIds)
+                  }}</template>
                   <template v-else>Word List</template>
                   <span v-if="deck.totalWords"> · {{ deck.totalWords }} words</span>
                   <span v-else-if="deck.building"> · Building</span>
@@ -1023,13 +1029,7 @@
                 <Button icon="pi pi-download" severity="secondary" text size="small" @click="openDownload(deck)" />
               </Tooltip>
               <Tooltip content="Remove" placement="top">
-                <Button
-                  icon="pi pi-trash"
-                  severity="danger"
-                  text
-                  size="small"
-                  @click="confirmRemove(deck.userStudyDeckId, deck.deckType === 0 ? deck.title : deck.name)"
-                />
+                <Button icon="pi pi-trash" severity="danger" text size="small" @click="confirmRemove(deck.userStudyDeckId, deckTitle(deck))" />
               </Tooltip>
             </div>
           </div>

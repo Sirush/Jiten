@@ -1,6 +1,6 @@
 import type { DeckRelationshipType, Genre, LinkType } from '~/types/enums';
 import type { DeckMetadataPatch } from '~/types/types';
-import { toCanonicalEdge, type PerspectiveRelationship } from '~/utils/relationshipRoles';
+import { isLegacyGroupRelationship, toCanonicalEdge, type PerspectiveRelationship } from '~/utils/relationshipRoles';
 
 export interface DeckMetadataDraftTag {
   tagId: number;
@@ -38,9 +38,10 @@ const linkKey = (links: DeckMetadataDraftLink[]) =>
     .map((l) => `${l.linkType}|${l.url.trim()}`)
     .sort()
     .join(',');
+const savableEdges = (deckId: number, relationships: PerspectiveRelationship[]) =>
+  relationships.map((r) => toCanonicalEdge(deckId, r)).filter((e) => !isLegacyGroupRelationship(e.relationshipType));
 const edgeKey = (deckId: number, relationships: PerspectiveRelationship[]) =>
-  relationships
-    .map((r) => toCanonicalEdge(deckId, r))
+  savableEdges(deckId, relationships)
     .map((e) => `${e.sourceDeckId}>${e.targetDeckId}:${e.relationshipType}`)
     .sort()
     .join(',');
@@ -62,8 +63,7 @@ export function buildDeckMetadataPatch(deckId: number, original: DeckMetadataDra
   if (genreKey(draft.genres) !== genreKey(original.genres)) patch.genres = [...draft.genres];
   if (tagKey(draft.tags) !== tagKey(original.tags)) patch.tags = draft.tags.map((t) => ({ tagId: t.tagId, percentage: t.percentage }));
   if (linkKey(draft.links) !== linkKey(original.links)) patch.links = draft.links.map((l) => ({ linkType: l.linkType, url: l.url.trim() }));
-  if (edgeKey(deckId, draft.relationships) !== edgeKey(deckId, original.relationships))
-    patch.relationships = draft.relationships.map((r) => toCanonicalEdge(deckId, r));
+  if (edgeKey(deckId, draft.relationships) !== edgeKey(deckId, original.relationships)) patch.relationships = savableEdges(deckId, draft.relationships);
 
   return patch;
 }

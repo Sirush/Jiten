@@ -51,6 +51,7 @@ services:
       # Shared secret that exempts first-party SSR (the Nuxt web app) from the per-IP rate
       # limit. MUST match NUXT_SSR_BYPASS_KEY on the web application. Empty = bypass disabled.
       - SsrBypassKey=${SSR_BYPASS_KEY:-}
+      - RateLimitTrustedIps=${RATE_LIMIT_TRUSTED_IPS:-}
       - StaticFilesPath=${STATIC_FILES_PATH:-/app/uploads}
       - UseBunnyCdn=${USE_BUNNYCDN:-false}
       - BunnyCdnSecret=${BUNNYCDN_SECRET:-}

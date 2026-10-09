@@ -1,11 +1,15 @@
 <script setup lang="ts">
   import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type ComponentPublicInstance } from 'vue';
   import Tag from 'primevue/tag';
-  import { type DeckRelationship, DeckRelationshipType } from '~/types';
+  import { type DeckRelationship, DeckRelationshipType, MediaGroupKind, type SeriesRef, SeriesKind } from '~/types';
+  import { franchisePath } from '~/utils/mediaGroup';
+  import { relatedMediaLabel } from '~/utils/relationshipRoles';
 
   interface Props {
     relationships: DeckRelationship[];
-    /** When set, appends an always-visible "View franchise" tag linking to the franchise page. */
+    series?: SeriesRef[];
+    franchiseId?: number | null;
+    /** Passed as ?deck= so the franchise page marks this deck. */
     deckId?: number;
     minVisibleItems?: number;
     buttonBuffer?: number;
@@ -13,6 +17,7 @@
   }
 
   const props = withDefaults(defineProps<Props>(), {
+    series: () => [],
     minVisibleItems: 1,
     buttonBuffer: 80,
     gapSize: 16,
@@ -36,26 +41,6 @@
     DeckRelationshipType.SameSetting,
   ];
 
-  const relationshipTypeLabels: Record<DeckRelationshipType, string> = {
-    [DeckRelationshipType.Sequel]: 'Prequel',
-    [DeckRelationshipType.Fandisc]: 'Source',
-    [DeckRelationshipType.Spinoff]: 'Source',
-    [DeckRelationshipType.SideStory]: 'Source',
-    [DeckRelationshipType.Adaptation]: 'Adaptation',
-    [DeckRelationshipType.Alternative]: 'Alternative',
-    [DeckRelationshipType.Prequel]: 'Sequel',
-    [DeckRelationshipType.HasFandisc]: 'Fandisc',
-    [DeckRelationshipType.HasSpinoff]: 'Spinoff',
-    [DeckRelationshipType.HasSideStory]: 'Side Story',
-    [DeckRelationshipType.SourceMaterial]: 'Source',
-    [DeckRelationshipType.SameSeries]: 'Same Series',
-    [DeckRelationshipType.SameSetting]: 'Same Setting',
-  };
-
-  function getRelationshipTypeLabel(type: DeckRelationshipType): string {
-    return relationshipTypeLabels[type] ?? 'Unknown';
-  }
-
   const expanded = ref(false);
   const containerRef = ref<HTMLElement | null>(null);
   const labelRef = ref<HTMLElement | null>(null);
@@ -64,13 +49,54 @@
   const visibleCount = ref<number>(20); // Default to a high number initially
   const isCalculating = ref(false);
 
-  const sortedRelationships = computed(() => {
-    return [...props.relationships].sort((a, b) => {
-      const indexA = relationshipSortOrder.indexOf(a.relationshipType);
-      const indexB = relationshipSortOrder.indexOf(b.relationshipType);
-      return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
-    });
+  interface RelatedItem {
+    key: string;
+    label: string;
+    text: string;
+    to: string;
+  }
+
+  // Settings span franchises and have no page of their own.
+  const memberSeries = computed(() => props.series.filter((s) => s.kind === SeriesKind.Series));
+  const primarySeries = computed(() => memberSeries.value[0] ?? null);
+
+  const groupLink = computed(() => {
+    if (props.franchiseId == null) return null;
+    const series = primarySeries.value;
+    const path = franchisePath(props.franchiseId, series ? { kind: MediaGroupKind.Series, id: series.seriesId } : null);
+    const to = props.deckId != null ? `${path}${path.includes('?') ? '&' : '?'}deck=${props.deckId}` : path;
+    return { to, text: series ? 'View series' : 'View franchise' };
   });
+
+  const seriesItems = computed<RelatedItem[]>(() =>
+    props.franchiseId == null
+      ? []
+      : memberSeries.value
+          .filter((s) => s !== primarySeries.value)
+          .map((s) => ({
+            key: `series-${s.seriesId}`,
+            label: 'Series',
+            text: s.name,
+            to: franchisePath(props.franchiseId!, { kind: MediaGroupKind.Series, id: s.seriesId }),
+          }))
+  );
+
+  const relationshipItems = computed<RelatedItem[]>(() =>
+    [...props.relationships]
+      .sort((a, b) => {
+        const indexA = relationshipSortOrder.indexOf(a.relationshipType);
+        const indexB = relationshipSortOrder.indexOf(b.relationshipType);
+        return (indexA === -1 ? 99 : indexA) - (indexB === -1 ? 99 : indexB);
+      })
+      .map((rel) => ({
+        key: `${rel.targetDeckId}-${rel.relationshipType}`,
+        label: relatedMediaLabel(rel.relationshipType),
+        text: localiseTitle(rel.targetDeck),
+        to: `/decks/media/${rel.targetDeckId}/detail`,
+      }))
+  );
+
+  const sortedRelationships = computed(() => [...seriesItems.value, ...relationshipItems.value]);
 
   const hasOverflow = computed(() => sortedRelationships.value.length > visibleCount.value);
   const hiddenCount = computed(() => Math.max(0, sortedRelationships.value.length - visibleCount.value));
@@ -95,7 +121,7 @@
     const containerWidth = containerRef.value.getBoundingClientRect().width;
     const labelWidth = labelRef.value.getBoundingClientRect().width;
 
-    // The "View franchise" tag is always visible, so reserve its width up front like the label.
+    // The group link is always visible, so its width is reserved up front like the label.
     const fr = franchiseRef.value;
     const franchiseEl: unknown = fr instanceof HTMLElement ? fr : fr?.$el;
     const franchiseWidth = franchiseEl instanceof Element ? franchiseEl.getBoundingClientRect().width : 0;
@@ -144,7 +170,7 @@
   });
 
   watch(
-    () => props.relationships,
+    () => [props.relationships, props.series, props.franchiseId],
     () => {
       expanded.value = false;
       itemRefs.value = [];
@@ -162,23 +188,23 @@
 </script>
 
 <template>
-  <div v-if="sortedRelationships.length > 0" ref="containerRef" class="flex flex-wrap gap-x-4 gap-y-1 items-center w-full relative">
+  <div v-if="sortedRelationships.length > 0 || groupLink" ref="containerRef" class="flex flex-wrap gap-x-4 gap-y-1 items-center w-full relative">
     <span ref="labelRef" class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mr-1 shrink-0">Related</span>
 
     <NuxtLink
-      v-for="(rel, index) in sortedRelationships"
+      v-for="(item, index) in sortedRelationships"
       v-show="expanded || index < visibleCount || isCalculating"
-      :key="`${rel.targetDeckId}-${rel.relationshipType}`"
+      :key="item.key"
       :ref="
         (el: any) => {
           if (el) itemRefs[index] = el.$el || el;
         }
       "
-      :to="`/decks/media/${rel.targetDeckId}/detail`"
+      :to="item.to"
       class="text-xs whitespace-nowrap no-underline hover:underline underline-offset-2 transition-colors"
     >
-      <span class="text-gray-600 dark:text-gray-400">{{ getRelationshipTypeLabel(rel.relationshipType) }}:</span>
-      <span class="ml-1 text-primary" v-bind="japaneseTextAttrs(localiseTitle(rel.targetDeck))">{{ localiseTitle(rel.targetDeck) }}</span>
+      <span class="text-gray-600 dark:text-gray-400">{{ item.label }}:</span>
+      <span class="ml-1 text-primary" v-bind="japaneseTextAttrs(item.text)">{{ item.text }}</span>
     </NuxtLink>
 
     <Tag
@@ -195,12 +221,12 @@
     </Tag>
 
     <NuxtLink
-      v-if="deckId != null"
+      v-if="groupLink"
       ref="franchiseRef"
-      :to="`/decks/media/${deckId}/franchise`"
+      :to="groupLink.to"
       class="text-xs whitespace-nowrap text-primary font-medium no-underline hover:underline underline-offset-2 transition-colors"
     >
-      View franchise →
+      {{ groupLink.text }} →
     </NuxtLink>
   </div>
 </template>

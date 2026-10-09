@@ -1,5 +1,18 @@
 <script setup lang="ts">
-  import { type MediaSuggestion, type StudyDeckDto, DeckDownloadType, DeckOrder, StudyDeckType, MediaType } from '~/types';
+  import {
+    type FranchiseNode,
+    type MediaGroupMembers,
+    type MediaSuggestion,
+    type StudyDeckDto,
+    DeckDownloadType,
+    DeckOrder,
+    MediaGroupKind,
+    StudyDeckType,
+    MediaType,
+  } from '~/types';
+  import { buildGroupStudyFilter, groupTypesForForm } from '~/utils/mediaGroupStudyDeck';
+  import { countByMediaType, mediaGroupKindWord } from '~/utils/mediaGroup';
+  import { studyDeckPresentation } from '~/utils/studyDeckPresentation';
   import { useSrsStore } from '~/stores/srsStore';
   import { useToast } from 'primevue/usetoast';
   import { debounce } from 'perfect-debounce';
@@ -7,10 +20,20 @@
   type Mode = 'manual' | 'target' | 'occurrence';
 
   type PreselectedDeck = { deckId: number; originalTitle: string; coverName?: string | null };
+  type PreselectedGroup = {
+    kind: MediaGroupKind;
+    id: number;
+    name: string;
+    /** Given by the page that opens the dialog, which skips the fetch and starts from its filters. */
+    members?: FranchiseNode[];
+    mediaTypes?: MediaType[];
+    excludedDeckIds?: number[];
+  };
 
   const props = defineProps<{
     visible: boolean;
     preselectedDeck?: PreselectedDeck;
+    preselectedGroup?: PreselectedGroup;
     editDeck?: StudyDeckDto;
     preselectedFrequencyListId?: number;
     initialFilterMode?: Mode;
@@ -53,7 +76,7 @@
       if (props.editDeck.deckType === StudyDeckType.StaticWordList) return 'static';
       return 'filters';
     }
-    if (props.preselectedDeck) return 'filters';
+    if (props.preselectedDeck || props.preselectedGroup) return 'filters';
     if (props.preselectedFrequencyListId) return 'global';
     return 'type';
   }
@@ -77,6 +100,76 @@
     }
   );
 
+  function groupFromDeck(deck: StudyDeckDto): PreselectedGroup {
+    return { kind: deck.groupKind ?? MediaGroupKind.Series, id: deck.groupId!, name: studyDeckPresentation(deck, localiseTitle).name };
+  }
+
+  const selectedGroup = ref<PreselectedGroup | null>(
+    props.editDeck?.deckType === StudyDeckType.MediaGroup ? groupFromDeck(props.editDeck) : (props.preselectedGroup ?? null)
+  );
+  const isGroupMode = computed(() => !!selectedGroup.value);
+  const groupKindWord = computed(() => mediaGroupKindWord(selectedGroup.value?.kind));
+  const groupKey = (group: { kind: MediaGroupKind; id: number } | null | undefined) => (group ? `${group.kind}:${group.id}` : null);
+  const groupMembers = ref<Pick<MediaGroupMembers, 'kind' | 'id' | 'members'> | null>(null);
+  const groupLoadFailed = ref(false);
+  const storedGroupTypes = ref<MediaType[] | null>(null);
+  const groupTypes = ref<MediaType[]>([]);
+  const groupExcluded = ref<number[]>([]);
+
+  const groupTypeCounts = computed(() => countByMediaType(groupMembers.value?.members ?? []));
+  const groupAvailableTypes = computed<MediaType[]>(() => [...groupTypeCounts.value.keys()].sort((a, b) => a - b));
+
+  const groupMemberOptions = computed(() =>
+    (groupMembers.value?.members ?? []).map((m) => ({ value: m.deckId, label: `${localiseTitle(m)} (${getMediaTypeText(m.mediaType)})` }))
+  );
+
+  const groupFilter = computed(() =>
+    buildGroupStudyFilter(
+      groupTypes.value,
+      groupAvailableTypes.value,
+      groupExcluded.value,
+      (groupMembers.value?.members ?? []).map((m) => m.deckId)
+    )
+  );
+
+  async function loadGroupMembers(group: PreselectedGroup) {
+    groupLoadFailed.value = false;
+    if (group.members) {
+      groupMembers.value = { kind: group.kind, id: group.id, members: group.members };
+      groupTypes.value = groupTypesForForm(group.mediaTypes, groupAvailableTypes.value);
+      groupExcluded.value = [...(group.excludedDeckIds ?? [])];
+      return;
+    }
+    groupMembers.value = null;
+    try {
+      const members = await $api<MediaGroupMembers>('media-group/members', { query: { kind: group.kind, id: group.id } });
+      if (groupKey(selectedGroup.value) !== groupKey(group)) return;
+      groupMembers.value = members;
+      groupTypes.value = groupTypesForForm(storedGroupTypes.value, groupAvailableTypes.value);
+    } catch {
+      groupMembers.value = null;
+      groupLoadFailed.value = true;
+    }
+  }
+
+  watch(
+    () => groupKey(selectedGroup.value),
+    () => {
+      if (selectedGroup.value) loadGroupMembers(selectedGroup.value);
+    },
+    { immediate: true }
+  );
+
+  watch(
+    () => props.preselectedGroup,
+    (group) => {
+      if (group) {
+        selectedGroup.value = group;
+        step.value = 'filters';
+      }
+    }
+  );
+
   function modeFromDownloadType(dt: number): Mode {
     if (dt === DeckDownloadType.TargetCoverage) return 'target';
     if (dt === DeckDownloadType.OccurrenceCount) return 'occurrence';
@@ -85,8 +178,18 @@
 
   function applyEditDeck(deck: StudyDeckDto | undefined) {
     if (!deck) return;
-    if (deck.deckType === StudyDeckType.MediaDeck) {
-      selectedDeck.value = { deckId: deck.deckId!, title: deck.title, coverName: deck.coverName };
+    if (deck.deckType === StudyDeckType.MediaDeck || deck.deckType === StudyDeckType.MediaGroup) {
+      if (deck.deckType === StudyDeckType.MediaGroup) {
+        const group = groupFromDeck(deck);
+        storedGroupTypes.value = deck.groupMediaTypes ?? null;
+        groupExcluded.value = [...(deck.groupExcludedDeckIds ?? [])];
+        selectedGroup.value = group;
+        selectedDeck.value = null;
+        if (groupKey(groupMembers.value) === groupKey(group)) groupTypes.value = groupTypesForForm(storedGroupTypes.value, groupAvailableTypes.value);
+      } else {
+        selectedDeck.value = { deckId: deck.deckId!, title: deck.title, coverName: deck.coverName };
+        selectedGroup.value = null;
+      }
       downloadMode.value = modeFromDownloadType(deck.downloadType);
       downloadType.value = [
         DeckDownloadType.Full,
@@ -212,15 +315,24 @@
   });
 
   let countRequestId = 0;
+  const hasFilterSubject = computed(() => !!selectedDeck.value || !!selectedGroup.value);
+
+  function subjectPayload() {
+    if (selectedGroup.value) {
+      return { deckType: StudyDeckType.MediaGroup, groupKind: selectedGroup.value.kind, groupId: selectedGroup.value.id, ...groupFilter.value };
+    }
+    return { deckType: StudyDeckType.MediaDeck, deckId: selectedDeck.value?.deckId };
+  }
+
   const fetchPreviewCount = async () => {
-    if (!selectedDeck.value || step.value !== 'filters') return;
+    if (!hasFilterSubject.value || step.value !== 'filters') return;
     const reqId = ++countRequestId;
     isCountLoading.value = true;
     try {
       const response = await $api<{ total: number; unlearned: number }>('srs/study-decks/preview-count', {
         method: 'POST',
         body: {
-          deckId: selectedDeck.value.deckId,
+          ...subjectPayload(),
           downloadType: computedDownloadType.value,
           order: deckOrder.value,
           minFrequency: minFrequency.value,
@@ -248,6 +360,8 @@
     [
       step,
       () => selectedDeck.value?.deckId,
+      () => groupKey(selectedGroup.value),
+      () => (groupMembers.value ? JSON.stringify(groupFilter.value) : null),
       computedDownloadType,
       downloadType,
       deckOrder,
@@ -261,10 +375,12 @@
       excludeKana,
     ],
     () => {
-      if (step.value !== 'filters' || !selectedDeck.value) {
+      if (step.value !== 'filters' || !hasFilterSubject.value) {
         previewCount.value = null;
         return;
       }
+      // The group filter is unknown until the members load; that load triggers the count.
+      if (selectedGroup.value && !groupMembers.value) return;
       fetchPreviewCountDebounced();
     }
   );
@@ -366,7 +482,9 @@
   watch(
     localVisible,
     (open) => {
-      if (open) loadFrequencySources();
+      if (!open) return;
+      loadFrequencySources();
+      srsStore.fetchSettings();
     },
     { immediate: true }
   );
@@ -452,7 +570,7 @@
     if (isEditMode.value) return 'Edit Study Deck';
     if (step.value === 'type') return 'Add Study Deck';
     if (step.value === 'search') return 'Add Media Deck';
-    if (step.value === 'filters') return 'Configure Media Deck';
+    if (step.value === 'filters') return isGroupMode.value ? `Study a ${groupKindWord.value.toLowerCase()}` : 'Configure Media Deck';
     if (step.value === 'global') return isEditMode.value ? 'Edit Frequency Deck' : 'Add Frequency Deck';
     if (step.value === 'static-import-preview') return 'Import Preview';
     if (step.value === 'static') return isEditMode.value ? 'Edit Word List' : 'Create Word List';
@@ -462,9 +580,10 @@
   async function addDeck() {
     adding.value = true;
     try {
-      if (step.value === 'filters' && selectedDeck.value) {
+      if (step.value === 'filters' && hasFilterSubject.value) {
         const filterPayload = {
-          deckType: StudyDeckType.MediaDeck,
+          deckType: isGroupMode.value ? StudyDeckType.MediaGroup : StudyDeckType.MediaDeck,
+          ...(isGroupMode.value ? groupFilter.value : {}),
           downloadType: computedDownloadType.value,
           order: deckOrder.value,
           minFrequency: minFrequency.value,
@@ -481,7 +600,7 @@
           await srsStore.updateStudyDeck(props.editDeck.userStudyDeckId, filterPayload);
           toast.add({ severity: 'success', summary: 'Deck filters updated', life: 3000 });
         } else {
-          await srsStore.addStudyDeck({ deckId: selectedDeck.value.deckId, ...filterPayload });
+          await srsStore.addStudyDeck({ ...subjectPayload(), ...filterPayload });
           toast.add({ severity: 'success', summary: 'Deck added to study list', life: 3000 });
         }
       } else if (step.value === 'global') {
@@ -547,6 +666,9 @@
     searchQuery.value = '';
     searchResults.value = [];
     if (!props.preselectedDeck && !props.editDeck) selectedDeck.value = null;
+    if (!props.preselectedGroup && !props.editDeck) selectedGroup.value = null;
+    groupTypes.value = groupTypesForForm(props.editDeck ? storedGroupTypes.value : props.preselectedGroup?.mediaTypes, groupAvailableTypes.value);
+    groupExcluded.value = [...((props.editDeck ? props.editDeck.groupExcludedDeckIds : props.preselectedGroup?.excludedDeckIds) ?? [])];
     downloadMode.value = props.initialFilterMode ?? 'manual';
     downloadType.value = DeckDownloadType.TopGlobalFrequency;
     deckOrder.value = props.initialOrder ?? DeckOrder.DeckFrequency;
@@ -581,7 +703,7 @@
   }
 
   function goBack() {
-    if (props.preselectedDeck) {
+    if (props.preselectedDeck || props.preselectedGroup) {
       localVisible.value = false;
     } else if (step.value === 'filters') {
       step.value = 'search';
@@ -602,17 +724,26 @@
 
   const canUseSentenceOrder = computed(() => hasFeature('sentence-order'));
   const sentenceOrderLapsed = computed(() => deckOrder.value === DeckOrder.SentenceUnlock && planFetched.value && !canUseSentenceOrder.value);
+  const rankOrderLabel = computed(() => {
+    const listId = srsStore.studySettings.defaultFrequencyListId;
+    return frequencyOrderLabel(srsStore.studySettings, listId ? savedFrequencyLists.value.find((l) => l.id === listId)?.name : null);
+  });
+
   const orderOptions = computed(() => [
     { label: 'Chronological', value: DeckOrder.Chronological },
-    { label: 'Global Frequency', value: DeckOrder.GlobalFrequency },
+    { label: rankOrderLabel.value, value: DeckOrder.GlobalFrequency },
     { label: 'Deck Frequency', value: DeckOrder.DeckFrequency },
     { label: 'Random', value: DeckOrder.Random },
-    {
-      label: getDeckOrderText(DeckOrder.SentenceUnlock),
-      value: DeckOrder.SentenceUnlock,
-      plusOnly: !canUseSentenceOrder.value,
-      disabled: !canUseSentenceOrder.value && deckOrder.value !== DeckOrder.SentenceUnlock,
-    },
+    ...(isGroupMode.value
+      ? []
+      : [
+          {
+            label: getDeckOrderText(DeckOrder.SentenceUnlock),
+            value: DeckOrder.SentenceUnlock,
+            plusOnly: !canUseSentenceOrder.value,
+            disabled: !canUseSentenceOrder.value && deckOrder.value !== DeckOrder.SentenceUnlock,
+          },
+        ]),
   ]);
 
   const globalOrderOptions = computed(() => [
@@ -620,12 +751,12 @@
     { label: 'Random', value: DeckOrder.Random },
   ]);
 
-  const staticOrderOptions = [
+  const staticOrderOptions = computed(() => [
     { label: 'Import Order', value: DeckOrder.ImportOrder },
-    { label: 'Global Frequency', value: DeckOrder.GlobalFrequency },
+    { label: rankOrderLabel.value, value: DeckOrder.GlobalFrequency },
     { label: 'Deck Frequency', value: DeckOrder.DeckFrequency },
     { label: 'Random', value: DeckOrder.Random },
-  ];
+  ]);
 
   const modeOptions = [
     { label: 'Manual Range', value: 'manual' },
@@ -733,11 +864,54 @@
     </div>
 
     <!-- Step: Media deck filters -->
-    <div v-if="step === 'filters' && selectedDeck">
+    <div v-if="step === 'filters' && (selectedDeck || selectedGroup)">
       <div class="flex items-center gap-2 mb-4 pb-3 border-b border-gray-200 dark:border-gray-700">
-        <Button v-if="!preselectedDeck && !isEditMode" icon="pi pi-arrow-left" severity="secondary" text size="small" @click="goBack" />
-        <span class="font-semibold" v-bind="japaneseTextAttrs(selectedDeck.title)">{{ selectedDeck.title }}</span>
+        <Button v-if="!preselectedDeck && !preselectedGroup && !isEditMode" icon="pi pi-arrow-left" severity="secondary" text size="small" @click="goBack" />
+        <span v-if="selectedGroup" class="font-semibold min-w-0 break-words">
+          {{ groupKindWord }}: <span v-bind="japaneseTextAttrs(selectedGroup.name)">{{ selectedGroup.name }}</span>
+        </span>
+        <span v-else-if="selectedDeck" class="font-semibold" v-bind="japaneseTextAttrs(selectedDeck.title)">{{ selectedDeck.title }}</span>
       </div>
+
+      <template v-if="selectedGroup">
+        <p v-if="groupLoadFailed" class="mb-3 text-sm text-red-600 dark:text-red-400">
+          This {{ groupKindWord.toLowerCase() }} could not be loaded, so its media types and titles are unavailable.
+        </p>
+        <template v-else-if="groupMembers">
+          <fieldset v-if="groupAvailableTypes.length > 1" class="mb-3">
+            <legend class="block text-sm font-medium mb-1">Media types</legend>
+            <div class="flex flex-wrap gap-x-4 gap-y-2">
+              <div v-for="type in groupAvailableTypes" :key="type" class="flex items-center gap-2">
+                <Checkbox v-model="groupTypes" :input-id="`groupType${type}`" :value="type" />
+                <label :for="`groupType${type}`" class="text-sm cursor-pointer">
+                  {{ getMediaTypePluralText(type) }}
+                  <span class="text-gray-500 dark:text-gray-400">({{ groupTypeCounts.get(type) ?? 0 }})</span>
+                </label>
+              </div>
+            </div>
+          </fieldset>
+          <div class="mb-3">
+            <label for="groupExcluded" class="block text-sm font-medium mb-1">Skip titles <span class="text-gray-400">(optional)</span></label>
+            <MultiSelect
+              v-model="groupExcluded"
+              input-id="groupExcluded"
+              :options="groupMemberOptions"
+              option-label="label"
+              option-value="value"
+              placeholder="Every title is included"
+              filter
+              display="chip"
+              :max-selected-labels="3"
+              selected-items-label="{0} titles skipped"
+              class="w-full"
+            />
+          </div>
+        </template>
+        <div v-else class="mb-3 flex items-center gap-2 text-sm text-gray-500 dark:text-gray-400">
+          <i class="pi pi-spin pi-spinner text-xs" />
+          <span>Loading the {{ groupKindWord.toLowerCase() }}...</span>
+        </div>
+      </template>
 
       <div class="mb-4">
         <label class="block text-sm font-medium mb-1">Filter Mode</label>
@@ -832,7 +1006,7 @@
           <NuxtLink to="/jiten-plus" class="text-primary-600 dark:text-primary-400 hover:underline">Jiten+</NuxtLink>. New cards follow deck frequency until
           you subscribe again.
         </p>
-        <p v-else-if="deckOrder === DeckOrder.SentenceUnlock" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
+        <p v-else-if="deckOrder === DeckOrder.SentenceUnlock && selectedDeck" class="mt-1 text-xs text-gray-500 dark:text-gray-400">
           New cards follow the list on this title's
           <NuxtLink :to="`/decks/media/${selectedDeck.deckId}/sentences`" class="text-primary-600 dark:text-primary-400 hover:underline"
             >sentences page</NuxtLink
@@ -863,7 +1037,13 @@
           </template>
         </span>
       </div>
-      <Button :label="isEditMode ? 'Save Changes' : 'Add to Study List'" class="w-full" :loading="adding" @click="addDeck" />
+      <Button
+        :label="isEditMode ? 'Save Changes' : 'Add to Study List'"
+        class="w-full"
+        :loading="adding"
+        :disabled="isGroupMode && (!groupMembers || (groupAvailableTypes.length > 1 && groupTypes.length === 0))"
+        @click="addDeck"
+      />
     </div>
 
     <!-- Step: Global Dynamic form -->

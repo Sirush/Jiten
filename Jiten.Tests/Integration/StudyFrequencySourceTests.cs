@@ -2,6 +2,7 @@
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Jiten.Api.Enums;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
@@ -78,8 +79,21 @@ public class StudyFrequencySourceTests(JitenWebApplicationFactory factory)
                 FrequencyRank = rank, UsedInMediaAmount = 1, ObservedFrequency = 0.1
             });
 
+        await jitenDb.DeckWords.Where(dw => dw.DeckId == MediaDeckId).ExecuteDeleteAsync();
+        await jitenDb.Decks.Where(d => d.DeckId == MediaDeckId).ExecuteDeleteAsync();
+        var deck = new Deck
+        {
+            DeckId = MediaDeckId, OriginalTitle = "Media", MediaType = MediaType.Anime, CreationDate = DateTime.UtcNow,
+            CharacterCount = 50, WordCount = 15, UniqueWordCount = 5
+        };
+        jitenDb.Decks.Add(deck);
+        for (var i = 1; i <= 5; i++)
+            jitenDb.DeckWords.Add(new DeckWord { Deck = deck, WordId = i, ReadingIndex = 0, Occurrences = i });
+
         await jitenDb.SaveChangesAsync();
     }
+
+    private const int MediaDeckId = 7401;
 
     private async Task ClearUserState()
     {
@@ -87,6 +101,12 @@ public class StudyFrequencySourceTests(JitenWebApplicationFactory factory)
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         await userDb.UserStudyDecks.ExecuteDeleteAsync();
         await userDb.UserFrequencyLists.ExecuteDeleteAsync();
+        await userDb.UserFsrsSettings.ExecuteDeleteAsync();
+        await userDb.FsrsCards.ExecuteDeleteAsync();
+
+        var cache = factory.Services.GetRequiredService<IMemoryCache>();
+        foreach (var userId in new[] { TestUsers.UserA, TestUsers.UserB })
+            FrequencySourceResolver.Invalidate(cache, userId);
     }
 
     private async Task<long> SeedList(string userId, bool isSaved, bool withBlob,
@@ -324,5 +344,159 @@ public class StudyFrequencySourceTests(JitenWebApplicationFactory factory)
             new HttpRequestMessage(HttpMethod.Delete, $"/api/frequency-lists/{listId}").WithUser(TestUsers.UserA));
 
         res.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    // ---- Account default drives frequency order -----------------------------
+
+    private async Task SetDefault(string userId, int? mediaType = null, long? listId = null)
+    {
+        var res = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Put, "/api/srs/study-settings")
+                                          .WithUser(userId)
+                                          .WithJsonContent(new
+                                          {
+                                              defaultFrequencyMediaType = mediaType ?? 0, defaultFrequencyListId = listId ?? 0L,
+                                              interleaving = "NewFirst"
+                                          }));
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+    }
+
+    private static object MediaDeckBody(int order = 2, int downloadType = 1, int minFrequency = 0, int maxFrequency = 0) => new
+    {
+        deckType = (int)StudyDeckType.MediaDeck, deckId = MediaDeckId, downloadType, order, minFrequency, maxFrequency
+    };
+
+    private async Task<int> AddWordListDeck(params int[] wordIdsInImportOrder)
+    {
+        var deckId = await AddDeckOk(new { deckType = (int)StudyDeckType.StaticWordList, name = "List", downloadType = 1, order = 2 });
+        var words = wordIdsInImportOrder.Select(id => new { wordId = id, readingIndex = 0, occurrences = 1 }).ToArray();
+        var res = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, $"/api/srs/study-decks/{deckId}/words/batch")
+                                          .WithUser(TestUsers.UserA).WithJsonContent(new { words }));
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        return deckId;
+    }
+
+    private async Task<List<int>> NewCardOrder(string userId = TestUsers.UserA)
+    {
+        var res = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/srs/study-batch?limit=20").WithUser(userId));
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        var body = await res.Content.ReadFromJsonAsync<JsonElement>();
+        return body.GetProperty("cards").EnumerateArray().Select(c => c.GetProperty("wordId").GetInt32()).ToList();
+    }
+
+    private async Task<List<int>> VocabularyByRank(int studyDeckId, string userId = TestUsers.UserA,
+        SortOrder sortOrder = SortOrder.Ascending)
+    {
+        var res = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get,
+                $"/api/srs/study-decks/{studyDeckId}/vocabulary?sortBy=globalFreq&sortOrder={(int)sortOrder}")
+            .WithUser(userId));
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+        var body = await res.Content.ReadFromJsonAsync<JsonElement>();
+        return body.GetProperty("data").EnumerateArray().Select(w => w.GetProperty("wordId").GetInt32()).ToList();
+    }
+
+    [Fact]
+    public async Task MediaDeckInFrequencyOrder_GlobalDefault_KeepsTheGlobalOrder()
+    {
+        var deckId = await AddDeckOk(MediaDeckBody());
+
+        (await NewCardOrder()).Should().Equal(1, 2, 3, 4, 5);
+        (await VocabularyByRank(deckId)).Should().Equal(1, 2, 3, 4, 5);
+    }
+
+    [Fact]
+    public async Task MediaDeckInFrequencyOrder_NovelDefault_ServesNovelRanksThenUnrankedByGlobalRank()
+    {
+        await SetDefault(TestUsers.UserA, mediaType: (int)MediaType.Novel);
+        var deckId = await AddDeckOk(MediaDeckBody());
+
+        (await NewCardOrder()).Should().Equal(4, 5, 1, 2, 3);
+        (await VocabularyByRank(deckId)).Should().Equal(4, 5, 1, 2, 3);
+    }
+
+    [Fact]
+    public async Task MediaDeckInFrequencyOrder_ListDefault_PutsOutOfListWordsLast()
+    {
+        await MakeFull(TestUsers.UserA);
+        var listId = await SeedList(TestUsers.UserA, isSaved: true, withBlob: true, rankedWords: [(3, 0), (1, 0)]);
+        await SetDefault(TestUsers.UserA, listId: listId);
+        var deckId = await AddDeckOk(MediaDeckBody());
+
+        (await NewCardOrder()).Should().Equal(3, 1, 2, 4, 5);
+        (await VocabularyByRank(deckId)).Should().Equal(3, 1, 2, 4, 5);
+    }
+
+    [Fact]
+    public async Task MediaDeckRankBand_StaysGlobal_WhileOrderFollowsTheDefault()
+    {
+        await SetDefault(TestUsers.UserA, mediaType: (int)MediaType.Anime);
+        // A band read from Anime would hold only words 2 and 3; word 4 proves the band is global.
+        var deckId = await AddDeckOk(MediaDeckBody(downloadType: 2, minFrequency: 2, maxFrequency: 4));
+
+        (await NewCardOrder()).Should().Equal(2, 3, 4);
+
+        var res = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/srs/study-decks").WithUser(TestUsers.UserA));
+        var deck = (await res.Content.ReadFromJsonAsync<JsonElement>()).EnumerateArray()
+                                                                       .Single(d => d.GetProperty("userStudyDeckId").GetInt32() == deckId);
+        deck.GetProperty("totalWords").GetInt32().Should().Be(3);
+    }
+
+    [Fact]
+    public async Task WordListInFrequencyOrder_GlobalDefault_KeepsTheGlobalOrder()
+    {
+        var deckId = await AddWordListDeck(5, 3, 1, 4, 2);
+
+        (await NewCardOrder()).Should().Equal(1, 2, 3, 4, 5);
+        (await VocabularyByRank(deckId)).Should().Equal(1, 2, 3, 4, 5);
+    }
+
+    [Fact]
+    public async Task WordListInFrequencyOrder_NovelDefault_ServesNovelRanksThenUnrankedByGlobalRank()
+    {
+        await SetDefault(TestUsers.UserA, mediaType: (int)MediaType.Novel);
+        var deckId = await AddWordListDeck(5, 3, 1, 4, 2);
+
+        (await NewCardOrder()).Should().Equal(4, 5, 1, 2, 3);
+        (await VocabularyByRank(deckId)).Should().Equal(4, 5, 1, 2, 3);
+    }
+
+    [Fact]
+    public async Task VocabularyRankSort_Descending_KeepsUnrankedWordsLast()
+    {
+        await SetDefault(TestUsers.UserA, mediaType: (int)MediaType.Novel);
+        var mediaDeckId = await AddDeckOk(MediaDeckBody());
+        var wordListId = await AddWordListDeck(5, 3, 1, 4, 2);
+
+        (await VocabularyByRank(mediaDeckId, sortOrder: SortOrder.Descending)).Should().Equal(5, 4, 3, 2, 1);
+        (await VocabularyByRank(wordListId, sortOrder: SortOrder.Descending)).Should().Equal(5, 4, 3, 2, 1);
+    }
+
+    [Fact]
+    public async Task WordListInFrequencyOrder_ListDefault_PutsOutOfListWordsLast()
+    {
+        await MakeFull(TestUsers.UserA);
+        var listId = await SeedList(TestUsers.UserA, isSaved: true, withBlob: true, rankedWords: [(3, 0), (1, 0)]);
+        await SetDefault(TestUsers.UserA, listId: listId);
+        await AddWordListDeck(5, 3, 1, 4, 2);
+
+        (await NewCardOrder()).Should().Equal(3, 1, 2, 4, 5);
+    }
+
+    [Fact]
+    public async Task FrequencyDeck_IgnoresTheAccountDefault()
+    {
+        await SetDefault(TestUsers.UserA, mediaType: (int)MediaType.Novel);
+        var deckId = await AddDeckOk(GlobalDynamicBody("Global"));
+
+        (await NewCardOrder()).Should().Equal(1, 2, 3, 4, 5);
+        (await VocabularyWordIds(deckId)).Should().Equal(1, 2, 3, 4, 5);
+    }
+
+    [Fact]
+    public async Task DefaultOnlyAppliesToItsOwner()
+    {
+        await SetDefault(TestUsers.UserA, mediaType: (int)MediaType.Novel);
+        await AddDeckOk(MediaDeckBody(), TestUsers.UserB);
+
+        (await NewCardOrder(TestUsers.UserB)).Should().Equal(1, 2, 3, 4, 5);
     }
 }

@@ -99,6 +99,7 @@ export enum StudyDeckType {
   GlobalDynamic = 1,
   StaticWordList = 2,
   Smart = 3,
+  MediaGroup = 4,
 }
 
 export enum SortOrder {
@@ -152,6 +153,7 @@ export enum DeckStatus {
   Ongoing = 2,
   Completed = 3,
   Dropped = 4,
+  Paused = 5,
 }
 
 export enum MediaListEntryState {

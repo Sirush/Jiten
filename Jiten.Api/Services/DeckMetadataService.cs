@@ -183,11 +183,8 @@ public sealed class DeckMetadataService(JitenDbContext dbContext)
         {
             foreach (var edge in patch.Relationships)
             {
-                if (!Enum.IsDefined(typeof(DeckRelationshipType), edge.RelationshipType) ||
-                    !DeckRelationship.IsPrimaryRelationship(edge.RelationshipType))
-                    return $"Relationship type {(int)edge.RelationshipType} is not a primary relationship.";
-                if (edge.SourceDeckId == edge.TargetDeckId)
-                    return "A deck cannot be related to itself.";
+                if (DeckRelationship.ValidateEdge(edge.SourceDeckId, edge.TargetDeckId, edge.RelationshipType) is { } edgeError)
+                    return edgeError;
                 if (edge.SourceDeckId != deck.DeckId && edge.TargetDeckId != deck.DeckId)
                     return "Every relationship must have this deck as one of its endpoints.";
             }
@@ -263,7 +260,10 @@ public sealed class DeckMetadataService(JitenDbContext dbContext)
                      .Select(r => (r.SourceDeckId, r.TargetDeckId, r.RelationshipType))
                      .ToHashSet();
 
-        var existingEdges = deck.RelationshipsAsSource.Concat(deck.RelationshipsAsTarget).ToList();
+        // Legacy group rows wait for the series conversion; editors no longer send them, so they must not read as removals.
+        var existingEdges = deck.RelationshipsAsSource.Concat(deck.RelationshipsAsTarget)
+                                .Where(e => !DeckRelationship.IsLegacyGroupType(e.RelationshipType))
+                                .ToList();
 
         foreach (var existing in existingEdges)
             if (!target.Contains((existing.SourceDeckId, existing.TargetDeckId, existing.RelationshipType)))

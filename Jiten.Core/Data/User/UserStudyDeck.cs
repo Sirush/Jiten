@@ -29,6 +29,17 @@ public class UserStudyDeck
 
     public long? FrequencyListId { get; set; }
 
+    public MediaGroupKind? GroupKind { get; set; }
+
+    /// <summary>Franchise id, series id, or the line's anchor deck id.</summary>
+    public int? GroupId { get; set; }
+
+    /// <summary>JSON int[] of media types; null means every type.</summary>
+    public string? GroupMediaTypes { get; set; }
+
+    /// <summary>JSON int[] of deck ids.</summary>
+    public string? GroupExcludedDeckIds { get; set; }
+
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public List<UserStudyDeckWord> Words { get; set; } = new();

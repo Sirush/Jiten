@@ -10,6 +10,7 @@
     maxDefinitions?: number | null;
     wordId?: number;
     hiddenBehaviour?: 'gray' | 'hide';
+    hideCrossReferences?: boolean;
   }>();
 
   const store = useJitenStore();
@@ -96,7 +97,7 @@
   }
 
   function groupedXrefs(definition: Definition): { type: string; label: string; items: NonNullable<Definition['crossReferences']> }[] {
-    if (!definition.crossReferences || definition.crossReferences.length === 0) return [];
+    if (props.hideCrossReferences || !definition.crossReferences || definition.crossReferences.length === 0) return [];
     const order = ['see', 'ant', 'syn'];
     const groups = new Map<string, NonNullable<Definition['crossReferences']>>();
     for (const x of definition.crossReferences) {

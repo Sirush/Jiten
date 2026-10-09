@@ -119,6 +119,15 @@ public class CliOptions
     [Option(longName: "backfill-compositions", Required = false, HelpText = "Fill WordCompositions for compounds with no rows via Sudachi Mode A + sense resolver (idempotent/rerunnable). Combine with --dry-run for a sampled coverage report.")]
     public bool BackfillCompositions { get; set; }
 
+    [Option(longName: "convert-series-relations", Required = false, HelpText = "Turn SameSeries (7) / SameSetting (8) relationships into Series membership. Dry run unless --apply is given: prints every group it would create and rolls back.")]
+    public bool ConvertSeriesRelations { get; set; }
+
+    [Option(longName: "apply", Required = false, HelpText = "Commit --convert-series-relations instead of rolling it back.")]
+    public bool Apply { get; set; }
+
+    [Option(longName: "sync-franchises", Required = false, HelpText = "Recompute every franchise from story links (types 1-6) and series membership: deck assignment, ids and automatic names. Prints the summary.")]
+    public bool SyncFranchises { get; set; }
+
     [Option(longName: "build-derivations", Required = false, HelpText = "Truncate and rebuild jmdict.WordDerivations from the derivation rules and derivation_overrides.json. Runs automatically at the end of --sync-jmdict. Combine with --dry-run to report counts without writing, and --output to dump per-pair outcomes.")]
     public bool BuildDerivations { get; set; }
 

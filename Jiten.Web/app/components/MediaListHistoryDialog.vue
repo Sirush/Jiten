@@ -54,8 +54,17 @@
     [MediaListEntryState.Dropped]: 'danger',
   };
 
+  const isPausedEntry = (entry: MediaListEntry) =>
+    data.value?.status === DeckStatus.Paused && entry.isCurrent && entry.state === MediaListEntryState.InProgress;
+  const entryLabel = (entry: MediaListEntry) => (isPausedEntry(entry) ? 'Paused' : stateLabel[entry.state]);
+  const entrySeverity = (entry: MediaListEntry) => (isPausedEntry(entry) ? 'info' : stateSeverity[entry.state]);
+
   const hasEntryInProgress = computed(() => data.value?.entries.some((e) => e.state === MediaListEntryState.InProgress) ?? false);
-  const canResume = computed(() => !hasEntryInProgress.value && data.value?.entries.some((e) => e.isCurrent && e.state === MediaListEntryState.Dropped));
+  const canResume = computed(
+    () =>
+      data.value?.status === DeckStatus.Paused ||
+      (!hasEntryInProgress.value && data.value?.entries.some((e) => e.isCurrent && e.state === MediaListEntryState.Dropped))
+  );
   const startLabel = computed(() => {
     if (canResume.value) return 'Start over';
     return data.value?.entries.some((e) => e.state === MediaListEntryState.Completed) ? words.value.again : words.value.start;
@@ -294,7 +303,7 @@
         >
           <div class="flex items-center gap-2">
             <span class="font-semibold text-sm">{{ ordinal(index + 1) }} {{ words.noun }}</span>
-            <Tag :value="stateLabel[entry.state]" :severity="stateSeverity[entry.state]" class="!text-xs" />
+            <Tag :value="entryLabel(entry)" :severity="entrySeverity(entry)" class="!text-xs" />
             <span v-if="entry.isCurrent && data.entries.length > 1" class="text-xs text-gray-500 dark:text-gray-400">Current</span>
             <Button
               icon="pi pi-trash"

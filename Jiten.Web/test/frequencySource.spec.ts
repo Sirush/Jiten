@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { ResolvedFrequencyRank } from '../app/types/types';
-import { frequencySourcePatch, frequencySourceValue, rowRankLabel } from '../app/utils/frequencySource';
+import { fallbackRankHint, frequencySourcePatch, frequencySourceValue, rowRankLabel } from '../app/utils/frequencySource';
 
 describe('frequencySourceValue', () => {
   it('reads global as 0', () => {
@@ -48,7 +48,8 @@ describe('rowRankLabel', () => {
     const row = rowRankLabel({ frequencyRank: 330850, frequencyRankSource: 'global', isFrequencyFallback: true }, 'Anime');
     expect(row.rank).toBe('330,850');
     expect(row.source).toBe('global');
-    expect(row.hint).toBe('Not present in Anime yet, so this is the global rank instead.');
+    expect(row.hint).toBe(fallbackRankHint('Anime'));
+    expect(fallbackRankHint('Anime')).toBe('Not present in Anime yet, using the global rank instead.');
   });
 
   it('prints a dash for a word outside a custom list, keeping the list label', () => {

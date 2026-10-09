@@ -25,7 +25,7 @@ export const exampleSentenceDefaults: ExampleSentenceBlockOptions = {
   furigana: 'inherit',
 };
 export const frequencyRankDefaults: FrequencyRankBlockOptions = { onlyAfterFlip: true };
-export const definitionsDefaults: DefinitionsBlockOptions = { maxDefinitions: null, size: 'medium', spoiler: false };
+export const definitionsDefaults: DefinitionsBlockOptions = { maxDefinitions: null, size: 'medium', spoiler: false, hideCrossReferences: false };
 export const customMeaningDefaults: CustomMeaningBlockOptions = { size: 'medium', spoiler: false };
 export const etymologyDefaults: EtymologyBlockOptions = { spoiler: false };
 export const confusableReadingsDefaults: ConfusableReadingsBlockOptions = { spoiler: false };

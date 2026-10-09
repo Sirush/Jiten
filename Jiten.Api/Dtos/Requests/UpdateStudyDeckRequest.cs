@@ -26,4 +26,8 @@ public class UpdateStudyDeckRequest
 
     public int? FrequencyMediaType { get; set; }
     public long? FrequencyListId { get; set; }
+
+    /// <summary>Media types a media group deck keeps; null or empty keeps every type.</summary>
+    public List<int>? GroupMediaTypes { get; set; }
+    public List<int>? GroupExcludedDeckIds { get; set; }
 }

@@ -109,6 +109,16 @@
       </Card>
 
       <Card class="shadow-md">
+        <template #title>Series & Franchises</template>
+        <template #content>
+          <p class="mb-4">Manage series and settings, and open the franchise builder</p>
+          <div class="flex justify-center">
+            <Button label="Manage Series" icon="pi pi-sitemap" class="p-button-primary" @click="navigateTo('/dashboard/series')" />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
         <template #title>Word Sets</template>
         <template #content>
           <p class="mb-4">Create, edit, and manage word sets</p>

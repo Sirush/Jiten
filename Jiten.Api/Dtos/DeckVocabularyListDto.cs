@@ -5,7 +5,8 @@ namespace Jiten.Api.Dtos;
 public class DeckVocabularyListDto
 {
     public DeckDto? ParentDeck { get; set; }
-    public Deck Deck { get; set; } = new();
+    /// <summary>Null for word lists merged across several decks (media groups).</summary>
+    public Deck? Deck { get; set; } = new();
     public List<WordDto> Words { get; set; } = new();
 
     /// <summary>Media type the ranks were read from; null means the site-wide ranking</summary>

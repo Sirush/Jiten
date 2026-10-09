@@ -1548,7 +1548,7 @@
                   <label class="mb-2 block text-sm font-medium">
                     Pick titles from
                     <Tooltip
-                      content="'My list & similar' picks from titles you marked Planning, plus titles similar to the ones you marked Ongoing or Completed. 'Everything' searches the whole catalogue. Either way, Ongoing, Completed, Dropped and ignored titles are never suggested."
+                      content="'My list & similar' picks from titles you marked Planning, plus titles similar to the ones you marked Ongoing, Paused or Completed. 'Everything' searches the whole catalogue. Either way, Ongoing, Paused, Completed, Dropped and ignored titles are never suggested."
                       placement="top"
                     >
                       <i class="pi pi-info-circle ml-1 cursor-help text-xs text-surface-400" />

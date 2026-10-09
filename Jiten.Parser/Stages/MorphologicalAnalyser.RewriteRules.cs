@@ -119,6 +119,17 @@ public partial class MorphologicalAnalyser
                 RequireUnpinned: false)],
             [new TokenTemplate("", DictForm: "なし", NormalizedForm: "なし", Pin: 1529560)]),
 
+        // Standalone じゃが is the archaic conjunction (じゃが、…; 理由じゃが), not the potato; じゃがバター stays potato.
+        new RewriteRule("jaga-conjunction", RewritePhase.Cleanup,
+            [new TokenPattern(Text: "じゃが", Pos: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun], RequireUnpinned: false)],
+            [new TokenTemplate("", Pos: PartOfSpeech.Conjunction, Pin: 2856812)],
+            Next: new ContextCond(TextAnyOf: ["バター", "いも", "イモ", "芋"], Negate: true)),
+
+        // Pronoun おら/オラ is 俺; unpinned, katakana オラ's exact-surface match hands it to hola.
+        new RewriteRule("ora-pronoun", RewritePhase.Cleanup,
+            [new TokenPattern(TextAnyOf: ["おら", "オラ"], Pos: [PartOfSpeech.Pronoun], RequireUnpinned: false)],
+            [new TokenTemplate("", Pin: 2080360, PinReadingIndex: 3)]),
+
         // す before explanatory ん is contracted する (すんだ), not 酢/素/巣; hard, or す+んだ re-fuses into 済んだ.
         new RewriteRule("su-contracted-suru", RewritePhase.Cleanup,
             [new TokenPattern(Text: "す", Pos: [PartOfSpeech.Verb], DictFormAnyOf: ["する", "為る"])],

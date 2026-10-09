@@ -58,12 +58,12 @@ describe('encode / decode round-trip', () => {
     expect(decoded!.layout.front[1]!.options).toEqual({ layout: 'below', blur: false });
   });
 
-  it('round-trips the per-block size, spoiler, hideHeading, divider label and maxDefinitions options', () => {
+  it('round-trips the per-block size, spoiler, hideHeading, divider label, maxDefinitions and hideCrossReferences options', () => {
     const original = layout(
       [b('divider', { style: 'space', label: 'Notes' })],
       [
         b('headword', { size: 'large' }),
-        b('definitions', { size: 'small', spoiler: true, maxDefinitions: 3 }),
+        b('definitions', { size: 'small', spoiler: true, maxDefinitions: 3, hideCrossReferences: true }),
         b('pitchAccent', { hideHeading: true, spoiler: true }),
         b('customMeaning', { size: 'small', spoiler: true }),
       ]
@@ -71,7 +71,7 @@ describe('encode / decode round-trip', () => {
     const decoded = decodeLayoutShareCode(encodeLayoutShareCode(original));
     expect(decoded!.layout.front[0]!.options).toEqual({ style: 'space', label: 'Notes' });
     expect(decoded!.layout.back[0]!.options).toEqual({ size: 'large' });
-    expect(decoded!.layout.back[1]!.options).toEqual({ size: 'small', spoiler: true, maxDefinitions: 3 });
+    expect(decoded!.layout.back[1]!.options).toEqual({ size: 'small', spoiler: true, maxDefinitions: 3, hideCrossReferences: true });
     expect(decoded!.layout.back[2]!.options).toEqual({ hideHeading: true, spoiler: true });
     expect(decoded!.layout.back[3]!.options).toEqual({ size: 'small', spoiler: true });
   });

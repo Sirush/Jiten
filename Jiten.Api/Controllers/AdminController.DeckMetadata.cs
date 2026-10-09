@@ -2,6 +2,7 @@ using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Services;
 using Jiten.Core.Data;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Api.Controllers;
 
@@ -37,7 +38,8 @@ public partial class AdminController
     };
 
     [HttpPatch("deck/{id:int}/metadata")]
-    public async Task<IActionResult> PatchDeckMetadata(int id, [FromBody] DeckMetadataPatch patch, CancellationToken ct)
+    public async Task<IActionResult> PatchDeckMetadata(int id, [FromBody] DeckMetadataPatch patch,
+                                                       [FromServices] FranchiseSyncRunner franchiseSync, CancellationToken ct)
     {
         var deck = await deckMetadata.LoadForPatchAsync(id, ct);
         if (deck == null)
@@ -47,10 +49,16 @@ public partial class AdminController
         if (error != null)
             return BadRequest(new { Message = error });
 
+        var relationshipsChanged = RelationshipsChanged();
         await dbContext.SaveChangesAsync(ct);
+        if (relationshipsChanged)
+            await franchiseSync.RunAsync(ct);
 
         logger.LogInformation("Admin patched deck metadata: DeckId={DeckId}", id);
 
         return Ok(await deckMetadata.BuildResultAsync(id, ct));
     }
+
+    private bool RelationshipsChanged() =>
+        dbContext.ChangeTracker.Entries<DeckRelationship>().Any(e => e.State is EntityState.Added or EntityState.Deleted);
 }

@@ -1,7 +1,7 @@
 import { debounce } from 'perfect-debounce';
 import type { MediaSuggestion, MediaSuggestionsResponse } from '~/types/types';
 
-export function useMediaSuggestions() {
+export function useMediaSuggestions({ limit = 5 }: { limit?: number } = {}) {
   const { $api } = useNuxtApp();
 
   const suggestions = ref<MediaSuggestion[]>([]);
@@ -22,7 +22,7 @@ export function useMediaSuggestions() {
 
     try {
       const result = await $api<MediaSuggestionsResponse>('media-deck/search-suggestions', {
-        query: { query, limit: 5 },
+        query: { query, limit },
       });
       suggestions.value = result?.suggestions || [];
       totalCount.value = result?.totalCount || 0;

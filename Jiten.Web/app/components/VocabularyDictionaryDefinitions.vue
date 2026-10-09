@@ -15,8 +15,9 @@
       wordId?: number;
       hiddenBehaviour?: 'gray' | 'hide';
       fontControls?: boolean;
+      hideCrossReferences?: boolean;
     }>(),
-    { arrowKeyNav: true, maxDefinitions: null, fontControls: true }
+    { arrowKeyNav: true, maxDefinitions: null, fontControls: true, hideCrossReferences: false }
   );
 
   const store = useJitenStore();
@@ -87,6 +88,7 @@
       :readings="readings"
       :word-id="wordId"
       :hidden-behaviour="hiddenBehaviour"
+      :hide-cross-references="hideCrossReferences"
     />
   </template>
 
@@ -113,6 +115,7 @@
               :readings="readings"
               :word-id="wordId"
               :hidden-behaviour="hiddenBehaviour"
+              :hide-cross-references="hideCrossReferences"
             />
             <div
               v-else-if="group.customDefinitions"

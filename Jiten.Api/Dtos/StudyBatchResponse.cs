@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Jiten.Core.Data;
 using Jiten.Core.Data.FSRS;
 
 namespace Jiten.Api.Dtos;
@@ -212,5 +213,20 @@ public class StudyDeckDto
     public string? ParentRomajiTitle { get; set; }
     public string? ParentEnglishTitle { get; set; }
     public string? ParentCoverName { get; set; }
+    public MediaGroupKind? GroupKind { get; set; }
+    public int? GroupId { get; set; }
+
+    /// <summary>Franchise or series name, a line's anchor OriginalTitle; null when the group no longer exists.</summary>
+    public string? GroupName { get; set; }
+
+    /// <summary>Line anchor titles, for localisation.</summary>
+    public MediaGroupTitlesDto? GroupTitles { get; set; }
+
+    public int? GroupFranchiseId { get; set; }
+
+    /// <summary>Null means every media type.</summary>
+    public List<int>? GroupMediaTypes { get; set; }
+
+    public List<int>? GroupExcludedDeckIds { get; set; }
 }
 

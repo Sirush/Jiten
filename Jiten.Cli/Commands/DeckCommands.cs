@@ -7,8 +7,10 @@ using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.Providers;
 using Jiten.Core.Data.Providers.Jimaku;
+using Jiten.Core.Services;
 using Jiten.Parser;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 
 namespace Jiten.Cli.Commands;
 
@@ -21,6 +23,46 @@ public class DeckCommands(CliContext context)
         "OP", "字幕", "诸神", "负责", "阿里", "日校",
         "翻译", "校对", "片源", "◎", "m"
     ];
+
+    public async Task ConvertSeriesRelations(bool apply)
+    {
+        await using var db = await context.ContextFactory.CreateDbContextAsync();
+        var result = await SeriesRelationConversion.RunAsync(db, apply);
+
+        foreach (var group in result.Groups)
+        {
+            Console.WriteLine($"[{group.Kind}] {group.Name} ({group.Members.Count} decks)");
+            foreach (var member in group.Members)
+                Console.WriteLine($"    {member.DeckId,7}  {member.ReleaseDate:yyyy-MM-dd}  {member.Title}");
+        }
+
+        var seriesCount = result.Groups.Count(g => g.Kind == SeriesKind.Series);
+        var settingCount = result.Groups.Count - seriesCount;
+        var memberCount = result.Groups.Sum(g => g.Members.Count);
+        Console.WriteLine();
+        Console.WriteLine($"{result.RelationRows} relationship rows -> {seriesCount} series, {settingCount} settings, {memberCount} memberships.");
+
+        if (!apply)
+        {
+            Console.WriteLine("Dry run: rolled back. Rerun with --apply to commit.");
+            return;
+        }
+
+        Console.WriteLine("Committed. Syncing franchises...");
+        await SyncFranchises();
+    }
+
+    public async Task SyncFranchises()
+    {
+        await using var db = await context.ContextFactory.CreateDbContextAsync();
+        var userOptions = new DbContextOptionsBuilder<UserDbContext>()
+                          .UseNpgsql(context.Configuration.GetConnectionString("JitenDatabase"))
+                          .Options;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var summary = await FranchiseSync.RunAsync(db, () => new UserDbContext(userOptions));
+        Console.WriteLine($"Franchises: {summary.Created} created, {summary.Renamed} renamed, {summary.Merged} merged, {summary.Deleted} deleted, " +
+                          $"{summary.Unchanged} unchanged; {summary.DecksUpdated} decks moved in {stopwatch.ElapsedMilliseconds} ms.");
+    }
 
     public async Task BackfillVndbAnimeRelations(CliOptions options)
     {
@@ -56,6 +98,8 @@ public class DeckCommands(CliContext context)
         }
 
         Console.WriteLine($"Done. Scanned {processed} VN decks; {matched} had VNDB anime adaptations in the map.");
+        if (matched > 0)
+            await SyncFranchises();
     }
 
     public async Task BackfillSpeechStats(CliOptions options)

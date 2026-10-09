@@ -541,7 +541,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                                                     [FromServices] IReadableSentenceSearch search)
     {
         int[]? deckIds = null;
-        var statuses = request.Statuses.Where(s => s is DeckStatus.Planning or DeckStatus.Ongoing or DeckStatus.Completed).Distinct().ToList();
+        var statuses = request.Statuses.Where(s => s is DeckStatus.Planning or DeckStatus.Ongoing or DeckStatus.Paused or DeckStatus.Completed).Distinct().ToList();
         if (statuses.Count > 0)
         {
             var userId = currentUserService.UserId!;

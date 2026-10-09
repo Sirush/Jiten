@@ -10,4 +10,10 @@ public class UserSettings
     public string SmartDeckJson { get; set; } = "{}";
 
     public string DisplayProfilesJson { get; set; } = "{}";
+
+    /// <summary>JSON array of one-time notice keys the user has dismissed.</summary>
+    public string DismissedNoticesJson { get; set; } = "[]";
+
+    /// <summary>JSON array of granted notice keys, written by the migration that snapshots who a change affected at deploy time.</summary>
+    public string GrantedNoticesJson { get; set; } = "[]";
 }

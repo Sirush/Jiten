@@ -6,7 +6,7 @@
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { ordinal } from '~/utils/ordinal';
   import { getLinkLabel } from '~/utils/linkTypeMapper';
-  import { getDeckStatusText } from '~/utils/deckStatusMapper';
+  import { getDeckStatusText, isInProgressStatus } from '~/utils/deckStatusMapper';
   import { useJitenStore } from '~/stores/jitenStore';
   import { formatDateAsYyyyMmDd } from '~/utils/formatDateAsYyyyMmDd';
   import { useAuthStore } from '~/stores/authStore';
@@ -297,7 +297,7 @@
     },
   ]);
 
-  const statusOptions = [DeckStatus.None, DeckStatus.Planning, DeckStatus.Ongoing, DeckStatus.Completed, DeckStatus.Dropped];
+  const statusOptions = [DeckStatus.None, DeckStatus.Planning, DeckStatus.Ongoing, DeckStatus.Paused, DeckStatus.Completed, DeckStatus.Dropped];
 
   const currentStatus = computed(() => props.deck.status ?? DeckStatus.None);
 
@@ -329,7 +329,7 @@
   });
 
   const progressLabel = computed(() => entryProgressLabel(props.deck.listEntry, props.deck.characterCount));
-  const showLogProgress = computed(() => currentStatus.value === DeckStatus.Ongoing);
+  const showLogProgress = computed(() => isInProgressStatus(currentStatus.value));
 
   const listEntryLine = computed(() =>
     props.deck.listEntry && currentStatus.value !== DeckStatus.None ? listEntryFacts(props.deck.listEntry, props.deck.mediaType, props.deck.characterCount) : []
@@ -353,7 +353,7 @@
   const statusButtonLabel = computed(() => {
     if (currentStatus.value === DeckStatus.None) return 'Set status';
     const status = `Status: ${getDeckStatusText(currentStatus.value)}`;
-    return currentStatus.value === DeckStatus.Ongoing && progressLabel.value ? `${status}, ${progressLabel.value}` : status;
+    return isInProgressStatus(currentStatus.value) && progressLabel.value ? `${status}, ${progressLabel.value}` : status;
   });
 
   const statusColor = computed(() => {
@@ -364,6 +364,8 @@
         return 'text-gray-500 dark:text-gray-400';
       case DeckStatus.Ongoing:
         return 'text-yellow-500';
+      case DeckStatus.Paused:
+        return 'text-sky-600 dark:text-sky-400';
       case DeckStatus.Completed:
         return 'text-green-500';
       case DeckStatus.Dropped:
@@ -457,7 +459,7 @@
       case 'tags':
         return !store.hideTags && !!deck.tags?.length;
       case 'relations':
-        return !store.hideRelations && !!deck.relationships?.length;
+        return !store.hideRelations && (!!deck.relationships?.length || deck.franchiseId != null);
     }
   };
 
@@ -534,7 +536,7 @@
                     {{ getDeckStatusText(currentStatus) }}
                   </span>
                   <span
-                    v-if="currentStatus === DeckStatus.Ongoing && progressLabel"
+                    v-if="isInProgressStatus(currentStatus) && progressLabel"
                     class="text-xs font-semibold leading-none tabular-nums text-gray-600 dark:text-gray-300"
                   >
                     {{ progressLabel }}

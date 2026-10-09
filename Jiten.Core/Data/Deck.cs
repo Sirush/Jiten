@@ -256,10 +256,20 @@ public class Deck
     /// </summary>
     public ICollection<DeckRelationship> RelationshipsAsTarget { get; set; } = new List<DeckRelationship>();
 
+    public ICollection<SeriesMember> SeriesMemberships { get; set; } = new List<SeriesMember>();
+
+    /// <summary>Maintained by the franchise sync from story links and series membership; never set by hand.</summary>
+    public int? FranchiseId { get; set; }
+
+    public Franchise? Franchise { get; set; }
+
 
     private float _dialoguePercentage;
 
     public float GetDifficulty() => DifficultyOverride > -1 ? DifficultyOverride : Difficulty;
+
+    /// <summary>Includes the community vote adjustment; needs <see cref="DeckDifficulty"/> loaded.</summary>
+    public float GetAdjustedDifficulty() => GetDifficulty() + (float)(DeckDifficulty?.UserAdjustment ?? 0);
 
     /// <summary>Mean of a per-deck value weighted by CharacterCount; plain mean when no deck has characters.</summary>
     public static double WeightedByCharacters(IReadOnlyCollection<Deck> decks, Func<Deck, double> value)

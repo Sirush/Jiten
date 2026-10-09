@@ -2,6 +2,7 @@ using System.Net;
 using System.Net.Http.Json;
 using FluentAssertions;
 using Jiten.Api.Dtos;
+using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Parser.Tests.Integration.Infrastructure;
@@ -31,15 +32,17 @@ public class FranchiseTests(JitenWebApplicationFactory factory)
         await db.SaveChangesAsync();
         db.DeckRelationships.AddRange(relationships);
         await db.SaveChangesAsync();
+
+        await scope.ServiceProvider.GetRequiredService<FranchiseSyncRunner>().RunAsync();
     }
 
-    private static Deck Deck(int id, string title = "Deck", MediaType mediaType = MediaType.Anime) =>
-        new() { DeckId = id, OriginalTitle = title, MediaType = mediaType, Difficulty = 2.0f };
+    private static Deck Deck(int id, string title = "Deck", MediaType mediaType = MediaType.Anime, int releaseYear = 2000) =>
+        new() { DeckId = id, OriginalTitle = title, MediaType = mediaType, Difficulty = 2.0f, ReleaseDate = new DateOnly(releaseYear, 1, 1) };
 
     private static DeckRelationship Rel(int source, int target, DeckRelationshipType type) =>
         new() { SourceDeckId = source, TargetDeckId = target, RelationshipType = type };
 
-    private async Task<HttpResponseMessage> SendFranchiseAsync(int deckId)
+    private async Task<HttpResponseMessage> SendFranchiseIdAsync(int deckId)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, $"/api/media-deck/{deckId}/franchise");
         // Bypass the server response cache: tests reuse deckId=1, and the cached body would otherwise
@@ -48,13 +51,27 @@ public class FranchiseTests(JitenWebApplicationFactory factory)
         return await _client.SendAsync(request);
     }
 
+    private async Task<int?> GetFranchiseIdAsync(int deckId)
+    {
+        var response = await SendFranchiseIdAsync(deckId);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        return (await response.Content.ReadFromJsonAsync<DeckFranchiseDto>())!.FranchiseId;
+    }
+
     private async Task<FranchiseDto> GetFranchiseAsync(int deckId)
     {
-        var response = await SendFranchiseAsync(deckId);
-        response.StatusCode.Should().Be(HttpStatusCode.OK);
-        var dto = await response.Content.ReadFromJsonAsync<FranchiseDto>();
+        var franchiseId = await GetFranchiseIdAsync(deckId);
+        franchiseId.Should().NotBeNull();
+        var dto = await _client.GetFromJsonAsync<FranchiseDto>($"/api/franchise/{franchiseId}");
         dto.Should().NotBeNull();
         return dto!;
+    }
+
+    private async Task<FranchiseDto> GetBuilderAsync(int deckId)
+    {
+        var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, $"/api/admin/franchise-builder/{deckId}").WithAdmin());
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        return (await response.Content.ReadFromJsonAsync<FranchiseDto>())!;
     }
 
     [Fact]
@@ -70,7 +87,6 @@ public class FranchiseTests(JitenWebApplicationFactory factory)
             var dto = await GetFranchiseAsync(start);
             dto.Nodes.Select(n => n.DeckId).Should().BeEquivalentTo(new[] { 1, 2, 3 });
             dto.Edges.Should().HaveCount(2);
-            dto.Truncated.Should().BeFalse();
         }
     }
 
@@ -98,7 +114,6 @@ public class FranchiseTests(JitenWebApplicationFactory factory)
         dto.Edges.Should().HaveCount(3);
         dto.Nodes.Select(n => n.MediaType).Should()
            .Contain(new[] { MediaType.Novel, MediaType.Anime, MediaType.Manga });
-        dto.Truncated.Should().BeFalse();
     }
 
     [Fact]
@@ -131,7 +146,6 @@ public class FranchiseTests(JitenWebApplicationFactory factory)
         dto.Nodes.Select(n => n.DeckId).Should().BeEquivalentTo(new[] { 1, 2, 3 });
         dto.Edges.Should().HaveCount(3);
         dto.Nodes.Should().OnlyHaveUniqueItems(n => n.DeckId);
-        dto.Truncated.Should().BeFalse();
     }
 
     [Fact]
@@ -151,22 +165,11 @@ public class FranchiseTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task NoRelationships_ReturnsSelfNode_EmptyEdges()
-    {
-        await SeedAsync(new[] { Deck(1, "Lonely") }, Array.Empty<DeckRelationship>());
-
-        var dto = await GetFranchiseAsync(1);
-        dto.Nodes.Should().ContainSingle().Which.DeckId.Should().Be(1);
-        dto.Edges.Should().BeEmpty();
-        dto.Truncated.Should().BeFalse();
-    }
-
-    [Fact]
     public async Task UnknownDeck_Returns404()
     {
         await SeedAsync(new[] { Deck(1) }, Array.Empty<DeckRelationship>());
 
-        var response = await SendFranchiseAsync(999);
+        var response = await SendFranchiseIdAsync(999);
         response.StatusCode.Should().Be(HttpStatusCode.NotFound);
     }
 
@@ -192,7 +195,8 @@ public class FranchiseTests(JitenWebApplicationFactory factory)
             await userDb.SaveChangesAsync();
         }
 
-        var request = new HttpRequestMessage(HttpMethod.Get, "/api/media-deck/1/franchise").WithUser(TestUsers.UserA);
+        var franchiseId = await GetFranchiseIdAsync(1);
+        var request = new HttpRequestMessage(HttpMethod.Get, $"/api/franchise/{franchiseId}").WithUser(TestUsers.UserA);
         request.Headers.CacheControl = new System.Net.Http.Headers.CacheControlHeaderValue { NoCache = true };
         var response = await _client.SendAsync(request);
         response.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -206,10 +210,9 @@ public class FranchiseTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task ChainLongerThanCap_Truncates_AtCap()
+    public async Task LongChain_ReturnsEveryNode()
     {
-        const int cap = 100;
-        const int chainLength = cap + 30;
+        const int chainLength = 230;
 
         var decks = new List<Deck>();
         var rels = new List<DeckRelationship>();
@@ -223,7 +226,74 @@ public class FranchiseTests(JitenWebApplicationFactory factory)
         await SeedAsync(decks, rels);
 
         var dto = await GetFranchiseAsync(1);
-        dto.Truncated.Should().BeTrue();
-        dto.Nodes.Should().HaveCount(cap);
+        dto.Nodes.Should().HaveCount(chainLength);
+        dto.Lines.Should().ContainSingle().Which.AnchorDeckId.Should().Be(1);
+    }
+
+    [Fact]
+    public async Task DeckWithoutFranchise_HasNullId_AndBuildsAlone()
+    {
+        await SeedAsync(new[] { Deck(1, "Lonely"), Deck(2, "Other"), Deck(3, "Other 2") },
+                        new[] { Rel(2, 3, DeckRelationshipType.Sequel) });
+
+        (await GetFranchiseIdAsync(1)).Should().BeNull();
+
+        var dto = await GetBuilderAsync(1);
+        dto.FranchiseId.Should().BeNull();
+        dto.Name.Should().BeNull();
+        dto.Nodes.Should().ContainSingle().Which.DeckId.Should().Be(1);
+        dto.Edges.Should().BeEmpty();
+        dto.Lines.Should().ContainSingle().Which.DeckIds.Should().Equal(1);
+    }
+
+    [Fact]
+    public async Task FranchiseById_MatchesTheBuilder_AndCarriesNameAndLines()
+    {
+        // Line 1 -> 2 and line 3 (released earlier), joined by a series; 4 is unrelated.
+        await SeedAsync(new[]
+                        {
+                            Deck(1, "Saga One", releaseYear: 2001), Deck(2, "Saga Two", releaseYear: 2003), Deck(3, "Saga Zero", releaseYear: 1999),
+                            Deck(4, "Other")
+                        },
+                        new[] { Rel(1, 2, DeckRelationshipType.Sequel) });
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            var series = new Series { Name = "Saga", Kind = SeriesKind.Series };
+            series.Members.Add(new SeriesMember { DeckId = 2 });
+            series.Members.Add(new SeriesMember { DeckId = 3 });
+            db.Series.Add(series);
+            await db.SaveChangesAsync();
+            await scope.ServiceProvider.GetRequiredService<FranchiseSyncRunner>().RunAsync();
+        }
+
+        var byId = await GetFranchiseAsync(2);
+        byId.FranchiseId.Should().NotBeNull();
+        byId.Name.Should().Be("Saga");
+        byId.NameIsManual.Should().BeFalse();
+        byId.Nodes.Select(n => n.DeckId).Should().BeEquivalentTo(new[] { 1, 2, 3 });
+        byId.Lines.Select(l => (l.AnchorDeckId, string.Join(",", l.DeckIds))).Should().Equal((3, "3"), (1, "1,2"));
+
+        (await GetBuilderAsync(2)).Should().BeEquivalentTo(byId);
+
+        (await _client.GetAsync("/api/franchise/999")).StatusCode.Should().Be(HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task CachedFranchise_IsRefreshedBySync()
+    {
+        await SeedAsync(new[] { Deck(1, "A"), Deck(2, "B"), Deck(3, "C") }, new[] { Rel(1, 2, DeckRelationshipType.Sequel) });
+        var id = await GetFranchiseIdAsync(1);
+        (await _client.GetFromJsonAsync<FranchiseDto>($"/api/franchise/{id}"))!.Nodes.Should().HaveCount(2);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            db.DeckRelationships.Add(Rel(2, 3, DeckRelationshipType.Sequel));
+            await db.SaveChangesAsync();
+            await scope.ServiceProvider.GetRequiredService<FranchiseSyncRunner>().RunAsync();
+        }
+
+        (await _client.GetFromJsonAsync<FranchiseDto>($"/api/franchise/{id}"))!.Nodes.Should().HaveCount(3);
     }
 }

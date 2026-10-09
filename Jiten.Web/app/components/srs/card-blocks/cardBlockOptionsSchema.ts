@@ -68,6 +68,7 @@ export const blockOptionsSchema: Partial<Record<CardBlockType, OptionControl[]>>
     { key: 'maxDefinitions', label: 'Max definitions', type: 'number', min: 1, max: 50, nullable: true, placeholder: 'All' },
     sizeControl,
     spoilerControl,
+    { key: 'hideCrossReferences', label: 'Hide "See also" and synonyms', type: 'toggle' },
   ],
   customMeaning: [sizeControl, spoilerControl],
   etymology: [spoilerControl],

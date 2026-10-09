@@ -188,12 +188,16 @@ public class UserDbContext : IdentityDbContext<User>
                 entity.Property(us => us.MediaFilterPresetsJson).HasColumnType("jsonb").HasDefaultValue("{}");
                 entity.Property(us => us.SmartDeckJson).HasColumnType("jsonb").HasDefaultValue("{}");
                 entity.Property(us => us.DisplayProfilesJson).HasColumnType("jsonb").HasDefaultValue("{}");
+                entity.Property(us => us.DismissedNoticesJson).HasColumnType("jsonb").HasDefaultValue("[]");
+                entity.Property(us => us.GrantedNoticesJson).HasColumnType("jsonb").HasDefaultValue("[]");
             }
             else
             {
                 entity.Property(us => us.MediaFilterPresetsJson).HasDefaultValue("{}");
                 entity.Property(us => us.SmartDeckJson).HasDefaultValue("{}");
                 entity.Property(us => us.DisplayProfilesJson).HasDefaultValue("{}");
+                entity.Property(us => us.DismissedNoticesJson).HasDefaultValue("[]");
+                entity.Property(us => us.GrantedNoticesJson).HasDefaultValue("[]");
             }
 
             entity.HasOne<User>()

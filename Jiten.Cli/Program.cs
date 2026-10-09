@@ -399,6 +399,18 @@ public class Program
             return;
         }
 
+        if (options.ConvertSeriesRelations)
+        {
+            await deckCommands.ConvertSeriesRelations(options.Apply);
+            return;
+        }
+
+        if (options.SyncFranchises)
+        {
+            await deckCommands.SyncFranchises();
+            return;
+        }
+
         // WordSet commands
         if (options.CreateWordSetFromPos)
         {

@@ -198,6 +198,12 @@ describe('restartQuestion', () => {
     expect(restartQuestion(DeckStatus.Dropped, summary())).toBeNull();
     expect(restartQuestion(DeckStatus.Planning, summary())).toBeNull();
   });
+
+  it('asks nothing when switching between Ongoing and Paused on the same pass', () => {
+    const inProgress = summary({ state: MediaListEntryState.InProgress });
+    expect(restartQuestion(DeckStatus.Paused, inProgress)).toBeNull();
+    expect(restartQuestion(DeckStatus.Ongoing, inProgress)).toBeNull();
+  });
 });
 
 describe('dropQuestion', () => {
@@ -207,5 +213,6 @@ describe('dropQuestion', () => {
     expect(dropQuestion(DeckStatus.Ongoing, summary({ state: MediaListEntryState.InProgress }))).toBe('stopped');
     expect(dropQuestion(DeckStatus.Planning, summary({ state: MediaListEntryState.Dropped }))).toBeNull();
     expect(dropQuestion(DeckStatus.None, null)).toBeNull();
+    expect(dropQuestion(DeckStatus.Paused, summary({ state: MediaListEntryState.InProgress }))).toBe('stopped');
   });
 });

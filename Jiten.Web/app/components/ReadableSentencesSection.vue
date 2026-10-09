@@ -42,6 +42,7 @@
   const statusOptions = [
     { label: 'Planning', value: DeckStatus.Planning },
     { label: 'Ongoing', value: DeckStatus.Ongoing },
+    { label: 'Paused', value: DeckStatus.Paused },
     { label: 'Completed', value: DeckStatus.Completed },
   ];
 

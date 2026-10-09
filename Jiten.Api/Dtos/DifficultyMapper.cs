@@ -12,12 +12,7 @@ public static class DifficultyMapper
     /// <summary>
     /// Raw difficulty including the community vote adjustment (<see cref="DeckDifficulty.UserAdjustment"/>).
     /// </summary>
-    public static float GetAdjustedDifficulty(Deck deck)
-    {
-        var baseDifficulty = deck.GetDifficulty();
-        var adjustment = deck.DeckDifficulty?.UserAdjustment ?? 0;
-        return baseDifficulty + (float)adjustment;
-    }
+    public static float GetAdjustedDifficulty(Deck deck) => deck.GetAdjustedDifficulty();
 
     /// <summary>
     /// Remap the raw difficulty to a 0-5 int while taking into account the biases of the model.

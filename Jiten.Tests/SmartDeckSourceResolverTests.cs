@@ -28,6 +28,16 @@ public class SmartDeckSourceResolverTests
     }
 
     [Fact]
+    public void PausedParents_AreLeftOutUnlessIncluded()
+    {
+        var settings = new SmartDeckSettings { IncludedDeckIds = [3] };
+        var titles = SmartDeckSourceResolver.ResolveTitles(settings,
+            [Parent(1, DeckStatus.Ongoing), Parent(2, DeckStatus.Paused), Parent(3, DeckStatus.Paused)], Now);
+
+        titles.Select(t => t.ParentDeckId).Should().BeEquivalentTo([1, 3]);
+    }
+
+    [Fact]
     public void ExclusionWins_IncludeIgnoresStatus()
     {
         var settings = new SmartDeckSettings { ExcludedDeckIds = [1], IncludedDeckIds = [3, 9] };

@@ -1,4 +1,4 @@
-using Jiten.Core.Data;
+﻿using Jiten.Core.Data;
 
 namespace Jiten.Api.Dtos;
 
@@ -57,6 +57,12 @@ public class DeckDto : IDeckCoverageTarget
     public List<Genre> Genres { get; set; } = new();
     public List<TagWithPercentageDto> Tags { get; set; } = new();
     public List<DeckRelationshipDto> Relationships { get; set; } = new();
+
+    /// <summary>Series and settings the deck is a direct member of; filled by SeriesService.ApplyRefsAsync.</summary>
+    public List<SeriesRefDto> Series { get; set; } = new();
+
+    /// <summary>Null when the deck belongs to no franchise.</summary>
+    public int? FranchiseId { get; set; }
     public DeckStatus? Status { get; set; }
     public bool? IsFavourite { get; set; }
     public bool? IsIgnored { get; set; }
@@ -88,6 +94,7 @@ public class DeckDto : IDeckCoverageTarget
         RomajiTitle = deck.RomajiTitle!;
         EnglishTitle = deck.EnglishTitle!;
         Description = deck.Description ?? "";
+        FranchiseId = deck.FranchiseId;
         CharacterCount = deck.CharacterCount;
         WordCount = deck.WordCount;
         UniqueWordCount = deck.UniqueWordCount;
@@ -139,6 +146,7 @@ public class DeckDto : IDeckCoverageTarget
         RomajiTitle = deck.RomajiTitle!;
         EnglishTitle = deck.EnglishTitle!;
         Description = deck.Description ?? "";
+        FranchiseId = deck.FranchiseId;
         CharacterCount = deck.CharacterCount;
         WordCount = deck.WordCount;
         UniqueWordCount = deck.UniqueWordCount;

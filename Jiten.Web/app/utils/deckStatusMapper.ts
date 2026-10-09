@@ -8,6 +8,8 @@ export function getDeckStatusText(status: DeckStatus | undefined): string {
       return 'Planning';
     case DeckStatus.Ongoing:
       return 'Ongoing';
+    case DeckStatus.Paused:
+      return 'Paused';
     case DeckStatus.Completed:
       return 'Completed';
     case DeckStatus.Dropped:
@@ -15,4 +17,8 @@ export function getDeckStatusText(status: DeckStatus | undefined): string {
     default:
       return 'Unknown';
   }
+}
+
+export function isInProgressStatus(status: DeckStatus | undefined): boolean {
+  return status === DeckStatus.Ongoing || status === DeckStatus.Paused;
 }

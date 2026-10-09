@@ -1,4 +1,5 @@
 using System.Text;
+using Jiten.Api.Helpers;
 using Jiten.Api.Services.ExternalMediaList;
 using Jiten.Core.Data;
 using Microsoft.AspNetCore.Mvc;
@@ -47,7 +48,7 @@ public partial class UserController
                 continue;
             }
 
-            var strongest = StatusRank(entry.MappedStatus) > StatusRank(existing.MappedStatus) ? entry : existing;
+            var strongest = entry.MappedStatus.Rank() > existing.MappedStatus.Rank() ? entry : existing;
             byDeck[entry.DeckId] = strongest with
                                    {
                                        IsFavourite = existing.IsFavourite || entry.IsFavourite,
@@ -68,8 +69,10 @@ public partial class UserController
         var preferences = await userContext.UserDeckPreferences
                                            .AsNoTracking()
                                            .Where(p => p.UserId == userId && matchedDeckIds.Contains(p.DeckId))
-                                           .Select(p => new { p.DeckId, p.Status, p.IsIgnored, p.IsFavourite })
+                                           .Select(p => new { p.DeckId, p.Status, p.IsIgnored, p.IsFavourite, p.CurrentEntryId })
                                            .ToDictionaryAsync(p => p.DeckId);
+
+        var passesByDeck = await PassesByDeckAsync(userId, matchedDeckIds);
 
         var subdeckCounts = await jitenContext.Decks
                                               .AsNoTracking()
@@ -85,6 +88,10 @@ public partial class UserController
                           var deck = decks[kv.Key];
                           var pref = preferences.GetValueOrDefault(kv.Key);
                           var currentStatus = pref != null && pref.Status != DeckStatus.None ? pref.Status : (DeckStatus?)null;
+                          var datesTarget = currentStatus is { } status && pref is { IsIgnored: false }
+                              ? DatesTarget(status, pref.CurrentEntryId, passesByDeck.GetValueOrDefault(kv.Key) ?? [], kv.Value.MappedStatus)
+                              : null;
+                          var (startedOn, completedOn) = SourcePassDates(kv.Value);
                           return new
                                  {
                                      deckId = deck.DeckId,
@@ -96,8 +103,18 @@ public partial class UserController
                                      externalStatus = kv.Value.SourceStatus,
                                      mappedStatus = kv.Value.MappedStatus,
                                      finishedAt = (DateOnly?)null,
-                                     startedOn = kv.Value.StartedOn,
-                                     completedOn = kv.Value.FinishedOn,
+                                     startedOn,
+                                     completedOn,
+                                     startedPrecision = "day",
+                                     completedPrecision = "day",
+                                     datesTarget = datesTarget == null
+                                         ? null
+                                         : new
+                                           {
+                                               inProgress = datesTarget.State == MediaListEntryState.InProgress,
+                                               startedOn = datesTarget.StartedOn,
+                                               finishedOn = datesTarget.FinishedOn,
+                                           },
                                      repeatCount = RepeatsBeforeFromTimesCompleted(kv.Value.TimesCompleted, kv.Value.MappedStatus),
                                      charactersRead = kv.Value.CharactersRead,
                                      history = kv.Value.History,
@@ -137,6 +154,16 @@ public partial class UserController
                               unmatched,
                               counts = new { total = parsed.Entries.Count, matched = matched.Count, unmatched = unmatched.Count, conflicts },
                           });
+    }
+
+    private static (DateOnly? StartedOn, DateOnly? FinishedOn) SourcePassDates(JitenExportEntry entry)
+    {
+        if (entry.History is not { Count: > 0 } history)
+            return (entry.StartedOn, entry.FinishedOn);
+
+        var state = MediaListEntryHelper.EntryStateFor(entry.MappedStatus);
+        var pass = history.LastOrDefault(r => r.IsCurrent && r.State == state) ?? history.LastOrDefault(r => r.State == state);
+        return (pass?.StartedOn, pass?.FinishedOn);
     }
 
     /// <summary>A completed title's count includes the entry the status opens; any other title's completions all came before it.</summary>

@@ -106,23 +106,5 @@ public partial class UserSettingsController
         }
     }
 
-    /// <summary>Row-locks the settings row on Postgres so two devices writing different profiles cannot drop each other's change.</summary>
-    private async Task<UserSettings> LoadSettingsForUpdate(string userId)
-    {
-        if (context.Database.ProviderName?.Contains("Npgsql") == true)
-        {
-            var uuid = Guid.Parse(userId);
-            await context.Database.ExecuteSqlInterpolatedAsync(
-                $"""INSERT INTO "user"."UserSettings" ("UserId") VALUES ({uuid}) ON CONFLICT DO NOTHING""");
-            await context.Database.ExecuteSqlInterpolatedAsync(
-                $"""SELECT 1 FROM "user"."UserSettings" WHERE "UserId" = {uuid} FOR UPDATE""");
-        }
-
-        var settings = await context.UserSettings.FirstOrDefaultAsync(us => us.UserId == userId);
-        if (settings != null) return settings;
-
-        settings = new UserSettings { UserId = userId };
-        context.UserSettings.Add(settings);
-        return settings;
-    }
+    private Task<UserSettings> LoadSettingsForUpdate(string userId) => UserSettingsRows.LoadForUpdate(context, userId);
 }

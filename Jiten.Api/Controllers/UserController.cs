@@ -3446,7 +3446,7 @@ public partial class UserController(
     /// </summary>
     [HttpGet("profile/{username}/media-list")]
     [AllowAnonymous]
-    public async Task<IResult> GetUserMediaListByUsername(string username)
+    public async Task<IResult> GetUserMediaListByUsername(string username, [FromServices] SeriesService seriesService)
     {
         var (userId, _, allowed) = await ResolveMediaListAccessAsync(username);
         if (userId == null || !allowed)
@@ -3466,6 +3466,7 @@ public partial class UserController(
                                 })
                    .OrderBy(d => d.OriginalTitle)
                    .ToList();
+        await seriesService.ApplyRefsAsync(dtos);
 
         // Populate the viewer's coverage so cards render the coverage border, exactly like the catalogue.
         var viewerId = userService.UserId;
@@ -3493,11 +3494,12 @@ public partial class UserController(
         foreach (var (display, _, _) in entries)
         {
             var (words, error) = await deckWordResolver.ResolveDeckWords(new DeckWordResolveRequest(
-                display.DeckId, display, request.DownloadType, request.Order,
+                DeckWordSource.ForDeck(display.DeckId, display.WordCount), request.DownloadType, request.Order,
                 request.MinFrequency, request.MaxFrequency,
                 request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                 request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,
-                StartFromKnown: request.StartFromKnown, FrequencySource: request.FrequencySource));
+                StartFromKnown: request.StartFromKnown, BandSource: request.FrequencySource,
+                OrderSource: DeckWordResolveRequest.OrderFor(request.FrequencySource)));
 
             if (error != null)
                 return (new(), new(), error);
@@ -3736,15 +3738,6 @@ public partial class UserController(
                                              .Select(d => new { d.DeckId, d.ParentDeckId })
                                              .ToDictionaryAsync(d => d.DeckId, d => d.ParentDeckId);
 
-        static int Rank(DeckStatus s) => s switch
-                                         {
-                                             DeckStatus.Completed => 4,
-                                             DeckStatus.Ongoing => 3,
-                                             DeckStatus.Planning => 2,
-                                             DeckStatus.Dropped => 1,
-                                             _ => 0
-                                         };
-
         var agg = new Dictionary<int, (DeckStatus Status, bool Own, bool Fav)>();
         foreach (var p in prefs)
         {
@@ -3761,7 +3754,7 @@ public partial class UserController(
             var statusValue = cur.Status;
             if (isOwn && !cur.Own)
                 statusValue = p.Status;
-            else if (isOwn == cur.Own && Rank(p.Status) > Rank(cur.Status))
+            else if (isOwn == cur.Own && p.Status.Rank() > cur.Status.Rank())
                 statusValue = p.Status;
 
             agg[displayId] = (statusValue, cur.Own || isOwn, cur.Fav || p.IsFavourite);

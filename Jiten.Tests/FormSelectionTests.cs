@@ -2091,6 +2091,16 @@ public class FormSelectionTests
         // Kanji prefix + inflected verb is the prefixed verb (相 + 次い → 相次ぐ), not surname 相次 + stray い
         yield return ["母も姉もめっきり仕事が減り、予約の取り消しも相次いだ。", "相次いだ", 1400980, (byte)0];
         yield return ["戦闘で死亡するもの、伝染病で亡くなるもの、疲労で脱落したもの、自らの意思で脱走したものなどが相次いだのだ。", "相次いだ", 1400980, (byte)0];
+        // Standalone じゃが is the archaic conjunction (like だが), not the potato abbreviation
+        yield return ["じゃが、気をつけるのじゃぞ。", "じゃが", 2856812, (byte)0];
+        yield return ["「蒸留窯と錬金窯がポーション精製に必須な理由じゃが────」", "じゃが", 2856812, (byte)0];
+        yield return ["じゃが、その答えは君が、まだ世界を全く知らないから。", "じゃが", 2856812, (byte)0];
+        yield return ["じゃが光の神官達が使うものとは違うわい。", "じゃが", 2856812, (byte)0];
+        // Pronoun オラ is 俺 (おら), not the Spanish greeting hola
+        yield return ["オラの人生、最悪の日。", "オラ", 2080360, (byte)3];
+        yield return ["オラたちは…", "オラ", 2080360, (byte)3];
+        yield return ["オラドラゴンボール…", "オラ", 2080360, (byte)3];
+        yield return ["「オラを種馬として使うなら億はくだらねぇよ？」", "オラ", 2080360, (byte)3];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

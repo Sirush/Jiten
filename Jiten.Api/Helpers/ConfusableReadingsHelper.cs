@@ -1,6 +1,8 @@
 using Jiten.Core;
 using Jiten.Core.Data.JMDict;
+using Jiten.Parser;
 using Microsoft.EntityFrameworkCore;
+using WanaKanaShaapu;
 
 namespace Jiten.Api.Helpers;
 
@@ -139,7 +141,7 @@ public static class ConfusableReadingsHelper
             var readings = confIds
                 .Where(id => kanaByWord.ContainsKey(id) && usedKanjiByWordText.Contains((id, sourceText)))
                 .Select(id => (reading: kanaByWord[id], rank: freqByWord.GetValueOrDefault(id, int.MaxValue)))
-                .Where(x => ownReadings == null || !ownReadings.Contains(JapaneseTextHelper.KatakanaToHiragana(x.reading)))
+                .Where(x => ownReadings == null || !SpoilsOwnReading(JapaneseTextHelper.KatakanaToHiragana(x.reading), ownReadings))
                 .OrderBy(x => x.rank)
                 .Select(x => x.reading)
                 .ToList();
@@ -149,5 +151,27 @@ public static class ConfusableReadingsHelper
         }
 
         return result;
+    }
+
+    internal static bool SpoilsOwnReading(string confusable, IEnumerable<string> ownReadings)
+    {
+        var confusableKey = VowelLengthKey(confusable);
+        return ownReadings.Select(VowelLengthKey)
+            .Any(own => own == confusableKey || IsVowelExtension(own, confusableKey) || IsVowelExtension(confusableKey, own));
+    }
+
+    // Romaji with ー expanded and the ou/ei long-vowel spellings folded into oo/ee, so every long vowel is a doubled letter.
+    private static string VowelLengthKey(string kana) =>
+        WanaKana.ToRomaji(KanaNormalizer.Normalize(kana)).Replace("ou", "oo").Replace("ei", "ee");
+
+    private static bool IsVowelExtension(string shorter, string longer)
+    {
+        if (longer.Length != shorter.Length + 1) return false;
+
+        int i = 0;
+        while (i < shorter.Length && shorter[i] == longer[i]) i++;
+
+        return i > 0 && "aiueo".Contains(longer[i]) && longer[i] == longer[i - 1]
+               && longer.AsSpan(i + 1).SequenceEqual(shorter.AsSpan(i));
     }
 }

@@ -5,7 +5,7 @@
   import { LinkType } from '~/types';
   import { getAllGenres, getGenreText } from '~/utils/genreMapper';
   import { getLinkLabel, getLinkTypeText } from '~/utils/linkTypeMapper';
-  import { getRelationshipRoleLabel, relationshipRoleOptions, type RelationshipRoleOption } from '~/utils/relationshipRoles';
+  import { getRelationshipRoleLabel, isLegacyGroupRelationship, relationshipRoleOptions, type RelationshipRoleOption } from '~/utils/relationshipRoles';
   import { DEFAULT_TAG_PERCENTAGE, NOT_ORIGINALLY_JP_FALLBACK_NAME, NOT_ORIGINALLY_JP_TAG_ID } from '~/utils/tags';
 
   const props = defineProps<{ deck: Deck }>();
@@ -75,8 +75,6 @@
     if (!role || !target) return '';
     const thisTitle = draft.value.originalTitle || 'this deck';
     if (role.label === 'Alternative') return `${target} will be an alternative version of ${thisTitle}.`;
-    if (role.label === 'Same series') return `${target} will be in the same series as ${thisTitle}.`;
-    if (role.label === 'Same setting') return `${target} will share its setting with ${thisTitle}.`;
     return `${target} will be the ${role.label.toLowerCase()} of ${thisTitle}.`;
   });
 
@@ -291,17 +289,26 @@
 
     <div class="flex flex-wrap gap-1.5 items-center">
       <span class="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider mr-1 shrink-0 w-20">Related</span>
-      <button
-        v-for="(rel, index) in draft.relationships"
-        :key="`${rel.targetDeckId}-${rel.relationshipType}`"
-        type="button"
-        class="inline-flex items-center rounded-full text-xs py-0.5 px-2 transition-colors cursor-pointer bg-surface-100 dark:bg-surface-900/50 text-surface-700 dark:text-surface-200 hover:bg-surface-200 dark:hover:bg-surface-800/60"
-        @click="removeRelationship(index)"
-      >
-        <span class="font-medium">{{ getRelationshipRoleLabel(rel.relationshipType) }}:</span>
-        <span class="ml-1">{{ rel.targetTitle }}</span>
-        <i class="pi pi-times text-[10px] ml-1 opacity-70" />
-      </button>
+      <template v-for="(rel, index) in draft.relationships" :key="`${rel.targetDeckId}-${rel.relationshipType}`">
+        <Tooltip v-if="isLegacyGroupRelationship(rel.relationshipType)" content="Old link. It stays until the conversion turns it into a series membership.">
+          <span
+            class="inline-flex items-center rounded-full text-xs py-0.5 px-2 border border-dashed border-surface-300 dark:border-surface-600 text-surface-500 dark:text-surface-400"
+          >
+            <span class="font-medium">{{ getRelationshipRoleLabel(rel.relationshipType) }}:</span>
+            <span class="ml-1">{{ rel.targetTitle }}</span>
+          </span>
+        </Tooltip>
+        <button
+          v-else
+          type="button"
+          class="inline-flex items-center rounded-full text-xs py-0.5 px-2 transition-colors cursor-pointer bg-surface-100 dark:bg-surface-900/50 text-surface-700 dark:text-surface-200 hover:bg-surface-200 dark:hover:bg-surface-800/60"
+          @click="removeRelationship(index)"
+        >
+          <span class="font-medium">{{ getRelationshipRoleLabel(rel.relationshipType) }}:</span>
+          <span class="ml-1">{{ rel.targetTitle }}</span>
+          <i class="pi pi-times text-[10px] ml-1 opacity-70" />
+        </button>
+      </template>
       <Button label="Relation" icon="pi pi-plus" size="small" severity="secondary" text @click="openRelations" />
     </div>
 

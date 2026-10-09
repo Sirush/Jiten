@@ -2,6 +2,7 @@
   import { type Deck, DeckStatus, MediaType } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { listEntryFacts } from '~/utils/mediaListEntry';
+  import { isInProgressStatus } from '~/utils/deckStatusMapper';
   import Card from 'primevue/card';
   import { useAuthStore } from '~/stores/authStore';
   import { useJitenStore } from '~/stores/jitenStore';
@@ -18,7 +19,7 @@
     logProgress?: boolean;
   }>();
 
-  const showProgressButton = computed(() => props.logProgress && props.deck.status === DeckStatus.Ongoing);
+  const showProgressButton = computed(() => props.logProgress && isInProgressStatus(props.deck.status));
 
   const listEntryLine = computed(() => {
     const entry = props.deck.listEntry;

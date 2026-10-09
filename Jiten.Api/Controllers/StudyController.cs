@@ -36,6 +36,8 @@ public partial class StudyController(
     IHttpContextAccessor httpContextAccessor,
     IDeckWordResolver deckWordResolver,
     IStudyDeckReviewScope studyDeckReviewScope,
+    IStudyDeckWordSources wordSources,
+    MediaGroupService mediaGroupService,
     IFrequencySourceResolver frequencySource,
     IStudyDeckMembershipService deckMembership,
     IDeckDownloadService downloadService,
@@ -51,7 +53,7 @@ public partial class StudyController(
     Jiten.Api.Services.SmartDeck.ISmartDeckBuilder smartDeckBuilder,
     Jiten.Api.Services.SmartDeck.ISmartDeckDirtyService smartDeckDirty,
     StackExchange.Redis.IConnectionMultiplexer redis,
-    ISentenceStatsService sentenceStats,
+    ISentenceUnlockOrder sentenceUnlockOrder,
     IJitenPlusService jitenPlusService,
     ILogger<StudyController> logger) : ControllerBase
 {
@@ -239,6 +241,7 @@ public partial class StudyController(
         }
 
         var globalFrequencyKeysByRange = await LoadGlobalFrequencyRanges(studyDecks);
+        var sources = await wordSources.ResolveAsync(studyDecks);
 
         // Collect parallel tasks — each uses its own factory-created JitenDbContext
         var mediaDeckCountTasks = new List<(int StudyDeckId, Task<(int Count, HashSet<long> WordKeys)>)>();
@@ -248,32 +251,23 @@ public partial class StudyController(
 
         foreach (var sd in studyDecks)
         {
-            if (sd.DeckType == StudyDeckType.MediaDeck)
+            if (sd.DeckType.DrawsFromDecks())
             {
-                if (!sd.DeckId.HasValue || !decks.TryGetValue(sd.DeckId.Value, out var deck))
-                {
-                    resolvedDecks.Add((sd, null));
-                    continue;
-                }
+                var deck = sd.DeckType == StudyDeckType.MediaDeck && sd.DeckId.HasValue ? decks.GetValueOrDefault(sd.DeckId.Value) : null;
                 resolvedDecks.Add((sd, deck));
+                if (!sources.TryGetValue(sd.UserStudyDeckId, out var source))
+                    continue;
 
                 if ((DeckDownloadType)sd.DownloadType == DeckDownloadType.TargetCoverage && sd.TargetPercentage.HasValue)
                 {
                     mediaDeckCountTasks.Add((sd.UserStudyDeckId,
                         CountWithFactoryContext((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache, memoryCache)
-                            .CountTargetCoverageWords(sd.DeckId.Value, deck, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter, sd.StartFromKnown),
+                            .CountTargetCoverageWords(source, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter, sd.StartFromKnown),
                             deckQueryGate)));
                 }
                 else
                 {
-                    var request = new DeckWordResolveRequest(
-                        sd.DeckId.Value, deck,
-                        (DeckDownloadType)sd.DownloadType, (DeckOrder)sd.Order,
-                        sd.MinFrequency, sd.MaxFrequency,
-                        false, false,
-                        sd.TargetPercentage,
-                        sd.MinOccurrences, sd.MaxOccurrences,
-                        sd.PosFilter, sd.StartFromKnown);
+                    var request = DeckWordResolveRequest.ForStudyDeck(sd, source);
                     globalFrequencyKeysByRange.TryGetValue((sd.MinFrequency, sd.MaxFrequency), out var frequencyKeys);
                     mediaDeckCountTasks.Add((sd.UserStudyDeckId,
                         CountWithFactoryContext((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache, memoryCache)
@@ -346,6 +340,7 @@ public partial class StudyController(
         var result = resolvedDecks.Select(entry =>
         {
             var (sd, deck) = entry;
+            var group = sources.GetValueOrDefault(sd.UserStudyDeckId)?.Group;
             var dto = new StudyDeckDto
             {
                 UserStudyDeckId = sd.UserStudyDeckId,
@@ -353,7 +348,7 @@ public partial class StudyController(
                 Name = sd.Name,
                 Description = sd.Description,
                 DeckId = sd.DeckId,
-                Title = deck?.OriginalTitle ?? "",
+                Title = deck?.OriginalTitle ?? group?.Name ?? "",
                 RomajiTitle = deck?.RomajiTitle,
                 EnglishTitle = deck?.EnglishTitle,
                 CoverName = deck?.CoverName,
@@ -376,7 +371,14 @@ public partial class StudyController(
                 FrequencyListId = sd.FrequencyListId,
                 FrequencySourceName = sd.FrequencyListId.HasValue
                     ? frequencyListNames.GetValueOrDefault(sd.FrequencyListId.Value)
-                    : sd.FrequencyMediaType?.ToString()
+                    : sd.FrequencyMediaType?.ToString(),
+                GroupKind = sd.GroupKind,
+                GroupId = sd.GroupId,
+                GroupName = group?.Name,
+                GroupTitles = group?.Titles,
+                GroupFranchiseId = group?.FranchiseId,
+                GroupMediaTypes = StudyDeckGroupFilter.ParseIds(sd.GroupMediaTypes),
+                GroupExcludedDeckIds = StudyDeckGroupFilter.ParseIds(sd.GroupExcludedDeckIds)
             };
 
             if (deck?.ParentDeckId != null && parentDecks.TryGetValue(deck.ParentDeckId.Value, out var parent))
@@ -444,6 +446,25 @@ public partial class StudyController(
             if (!deckExists)
                 return Results.NotFound("Deck not found.");
         }
+        else if (request.DeckType == StudyDeckType.MediaGroup)
+        {
+            if (request.GroupKind == null || !request.GroupId.HasValue)
+                return Results.BadRequest("GroupKind and GroupId are required for media group decks.");
+            if (request.MaxFrequency > 0 && request.MinFrequency > request.MaxFrequency)
+                return Results.BadRequest("MinFrequency cannot exceed MaxFrequency.");
+
+            var groupError = await ValidateGroupFilter(new MediaGroupRef(request.GroupKind.Value, request.GroupId.Value),
+                                                       request.GroupMediaTypes, request.GroupExcludedDeckIds);
+            if (groupError != null) return groupError;
+
+            var mediaTypes = StudyDeckGroupFilter.Serialize(request.GroupMediaTypes);
+            var excluded = StudyDeckGroupFilter.Serialize(request.GroupExcludedDeckIds);
+            var exists = await userContext.UserStudyDecks
+                .AnyAsync(sd => sd.UserId == userId && sd.DeckType == StudyDeckType.MediaGroup && sd.GroupKind == request.GroupKind
+                                && sd.GroupId == request.GroupId && sd.GroupMediaTypes == mediaTypes && sd.GroupExcludedDeckIds == excluded);
+            if (exists)
+                return Results.BadRequest("This group is already in your study list with these filters.");
+        }
         else if (request.DeckType == StudyDeckType.GlobalDynamic)
         {
             if (string.IsNullOrWhiteSpace(request.Name))
@@ -481,7 +502,8 @@ public partial class StudyController(
         userContext.UserStudyDecks.Add(studyDeck);
         await userContext.SaveChangesAsync();
         await sessionService.BumpStudyOverviewVersion(userId);
-        logger.LogInformation("User added study deck: DeckType={DeckType}, DeckId={DeckId}", request.DeckType, request.DeckId);
+        logger.LogInformation("User added study deck: DeckType={DeckType}, DeckId={DeckId}, GroupKind={GroupKind}, GroupId={GroupId}",
+                              request.DeckType, request.DeckId, studyDeck.GroupKind, studyDeck.GroupId);
         return Results.Ok(new { studyDeck.UserStudyDeckId });
     }
 
@@ -637,7 +659,11 @@ public partial class StudyController(
             DeckType = request.DeckType,
             Name = request.Name ?? "",
             Description = request.Description,
-            DeckId = request.DeckId,
+            DeckId = request.DeckType == StudyDeckType.MediaGroup ? null : request.DeckId,
+            GroupKind = request.DeckType == StudyDeckType.MediaGroup ? request.GroupKind : null,
+            GroupId = request.DeckType == StudyDeckType.MediaGroup ? request.GroupId : null,
+            GroupMediaTypes = request.DeckType == StudyDeckType.MediaGroup ? StudyDeckGroupFilter.Serialize(request.GroupMediaTypes) : null,
+            GroupExcludedDeckIds = request.DeckType == StudyDeckType.MediaGroup ? StudyDeckGroupFilter.Serialize(request.GroupExcludedDeckIds) : null,
             SortOrder = sortOrder,
             DownloadType = request.DownloadType,
             Order = request.Order,
@@ -669,8 +695,17 @@ public partial class StudyController(
         if (studyDeck.DeckType == StudyDeckType.Smart)
             return Results.BadRequest("The Smart Deck has its own settings.");
 
-        if (studyDeck.DeckType == StudyDeckType.MediaDeck && request.MaxFrequency > 0 && request.MinFrequency > request.MaxFrequency)
+        if (studyDeck.DeckType.DrawsFromDecks() && request.MaxFrequency > 0 && request.MinFrequency > request.MaxFrequency)
             return Results.BadRequest("MinFrequency cannot exceed MaxFrequency.");
+
+        if (studyDeck.DeckType == StudyDeckType.MediaGroup)
+        {
+            if (StudyDeckWordSources.GroupOf(studyDeck) is not { } group)
+                return Results.NotFound("Media group not found.");
+
+            var groupError = await ValidateGroupFilter(group, request.GroupMediaTypes, request.GroupExcludedDeckIds);
+            if (groupError != null) return groupError;
+        }
 
         if (studyDeck.DeckType == StudyDeckType.GlobalDynamic)
         {
@@ -693,7 +728,7 @@ public partial class StudyController(
         if (request.Name != null) studyDeck.Name = request.Name;
         if (request.Description != null) studyDeck.Description = request.Description;
 
-        if (studyDeck.DeckType == StudyDeckType.MediaDeck)
+        if (studyDeck.DeckType.DrawsFromDecks())
         {
             studyDeck.DownloadType = request.DownloadType;
             studyDeck.Order = request.Order;
@@ -705,6 +740,12 @@ public partial class StudyController(
             studyDeck.MaxOccurrences = request.MaxOccurrences;
             studyDeck.PosFilter = request.PosFilter;
             studyDeck.ExcludeKana = request.ExcludeKana;
+
+            if (studyDeck.DeckType == StudyDeckType.MediaGroup)
+            {
+                studyDeck.GroupMediaTypes = StudyDeckGroupFilter.Serialize(request.GroupMediaTypes);
+                studyDeck.GroupExcludedDeckIds = StudyDeckGroupFilter.Serialize(request.GroupExcludedDeckIds);
+            }
         }
         else if (studyDeck.DeckType == StudyDeckType.GlobalDynamic)
         {
@@ -1304,12 +1345,13 @@ public partial class StudyController(
         switch (studyDeck.DeckType)
         {
             case StudyDeckType.MediaDeck:
+            case StudyDeckType.MediaGroup:
             {
-                if (studyDeck.DeckId == null)
+                if (studyDeck.DeckType == StudyDeckType.MediaDeck && studyDeck.DeckId == null)
                     return Results.BadRequest("Media deck not linked.");
 
-                var query = context.DeckWords.AsNoTracking()
-                    .Where(dw => dw.DeckId == studyDeck.DeckId);
+                var source = await wordSources.ResolveAsync(studyDeck) ?? DeckWordSource.Merged([]);
+                var query = deckWordResolver.QuerySource(source);
 
                 if (!string.IsNullOrEmpty(studyDeck.PosFilter))
                 {
@@ -1337,8 +1379,7 @@ public partial class StudyController(
                         break;
                     case DeckDownloadType.TopDeckFrequency:
                     {
-                        var rangeIds = await context.DeckWords.AsNoTracking()
-                            .Where(dw => dw.DeckId == studyDeck.DeckId)
+                        var rangeIds = await deckWordResolver.QuerySource(source)
                             .OrderByDescending(dw => dw.Occurrences)
                             .ThenBy(dw => context.WordFormFrequencies
                                                  .Where(wff => wff.WordId == dw.WordId
@@ -1356,8 +1397,7 @@ public partial class StudyController(
                     }
                     case DeckDownloadType.TopChronological:
                     {
-                        var rangeIds = await context.DeckWords.AsNoTracking()
-                            .Where(dw => dw.DeckId == studyDeck.DeckId)
+                        var rangeIds = await deckWordResolver.QuerySource(source)
                             .OrderBy(dw => dw.DeckWordId)
                             .Skip(studyDeck.MinFrequency)
                             .Take(studyDeck.MaxFrequency - studyDeck.MinFrequency)
@@ -1374,6 +1414,8 @@ public partial class StudyController(
                         break;
                 }
 
+                var sortScope = sortBy == "globalFreq" ? await frequencySource.Resolve(userId) : default;
+
                 IOrderedQueryable<DeckWord> sorted = sortBy switch
                 {
                     // The study order starts from deck frequency; ranked words are moved ahead once the list is filtered.
@@ -1381,6 +1423,7 @@ public partial class StudyController(
                     "deckFreq" => sortOrder == SortOrder.Ascending
                         ? query.OrderByDescending(d => d.Occurrences).ThenBy(d => d.DeckWordId)
                         : query.OrderBy(d => d.Occurrences).ThenBy(d => d.DeckWordId),
+                    "globalFreq" when !sortScope.IsGlobal => query.OrderBy(d => d.DeckWordId),
                     "globalFreq" => sortOrder == SortOrder.Ascending
                         ? query.OrderBy(d => context.WordFormFrequencies
                             .Where(wff => wff.WordId == d.WordId && wff.ReadingIndex == (short)d.ReadingIndex)
@@ -1399,17 +1442,14 @@ public partial class StudyController(
                     .Select(d => new { d.WordId, ReadingIndex = (short)d.ReadingIndex, d.Occurrences })
                     .ToListAsync();
                 allItems = mediaDeckItems.Select(d => (d.WordId, d.ReadingIndex, d.Occurrences)).ToList();
+                if (!sortScope.IsGlobal)
+                    allItems = await SortByFrequency(allItems, sortScope, sortOrder);
 
                 if ((DeckDownloadType)studyDeck.DownloadType == DeckDownloadType.TargetCoverage && studyDeck.TargetPercentage.HasValue)
                 {
-                    var deck = await context.Decks.AsNoTracking()
-                        .FirstOrDefaultAsync(d => d.DeckId == studyDeck.DeckId);
-                    if (deck != null)
-                    {
-                        var (_, targetKeys) = await deckWordResolver.CountTargetCoverageWords(
-                            studyDeck.DeckId!.Value, deck, studyDeck.TargetPercentage.Value, false, studyDeck.PosFilter, studyDeck.StartFromKnown);
-                        allItems = allItems.Where(i => targetKeys.Contains(WordFormHelper.EncodeWordKey(i.WordId, i.ReadingIndex))).ToList();
-                    }
+                    var (_, targetKeys) = await deckWordResolver.CountTargetCoverageWords(
+                        source, studyDeck.TargetPercentage.Value, false, studyDeck.PosFilter, studyDeck.StartFromKnown);
+                    allItems = allItems.Where(i => targetKeys.Contains(WordFormHelper.EncodeWordKey(i.WordId, i.ReadingIndex))).ToList();
                 }
 
                 if (studyDeck.ExcludeKana)
@@ -1419,10 +1459,9 @@ public partial class StudyController(
                         allItems = allItems.Where(i => !kanaFormKeys.Contains(WordFormHelper.EncodeWordKey(i.WordId, i.ReadingIndex))).ToList();
                 }
 
-                if (sortBy == "sentenceUnlock")
+                if (sortBy == "sentenceUnlock" && studyDeck.DeckId.HasValue)
                 {
-                    if (await SentenceUnlockRanks(userId, studyDeck.DeckId.Value) is { } ranks)
-                        allItems = allItems.OrderBy(i => SentenceUnlockRank(ranks, i.WordId, (byte)i.ReadingIndex)).ToList();
+                    allItems = await sentenceUnlockOrder.OrderAsync(studyDeck.DeckId.Value, allItems, i => (i.WordId, (byte)i.ReadingIndex));
                     if (sortOrder == SortOrder.Descending) allItems.Reverse();
                 }
 
@@ -1523,7 +1562,15 @@ public partial class StudyController(
 
                 allItems = rawItems.Select(d => (d.WordId, d.ReadingIndex, d.Occurrences)).ToList();
 
-                if (needsInMemorySort)
+                var listSortScope = needsInMemorySort && studyDeck.DeckType == StudyDeckType.StaticWordList
+                    ? await frequencySource.Resolve(userId)
+                    : default;
+
+                if (needsInMemorySort && !listSortScope.IsGlobal)
+                {
+                    allItems = await SortByFrequency(allItems, listSortScope, sortOrder);
+                }
+                else if (needsInMemorySort)
                 {
                     var wordIds = allItems.Select(i => i.WordId).Distinct().ToList();
                     var freqMap = await WordFormHelper.LoadWordFormFrequencies(context, wordIds);
@@ -1741,22 +1788,38 @@ public partial class StudyController(
         {
             return Results.BadRequest("Preview count is not supported for static word list decks.");
         }
-        else // MediaDeck (default)
+        else // MediaDeck (default) or MediaGroup
         {
-            if (!request.DeckId.HasValue)
-                return Results.BadRequest("DeckId is required for media deck preview.");
+            DeckWordSource source;
+            if (request.DeckType == StudyDeckType.MediaGroup)
+            {
+                if (request.GroupKind == null || !request.GroupId.HasValue)
+                    return Results.BadRequest("GroupKind and GroupId are required for media group preview.");
 
-            var deck = await context.Decks.AsNoTracking().FirstOrDefaultAsync(d => d.DeckId == request.DeckId.Value);
-            if (deck == null) return Results.NotFound("Deck not found.");
+                var group = new MediaGroupRef(request.GroupKind.Value, request.GroupId.Value);
+                var groupError = await ValidateGroupFilter(group, request.GroupMediaTypes, request.GroupExcludedDeckIds);
+                if (groupError != null) return groupError;
+
+                source = DeckWordSource.Merged(await mediaGroupService.ResolveDeckIdsAsync(group,
+                    request.GroupMediaTypes?.Select(t => (MediaType)t).ToList(), request.GroupExcludedDeckIds) ?? []);
+            }
+            else
+            {
+                if (!request.DeckId.HasValue)
+                    return Results.BadRequest("DeckId is required for media deck preview.");
+
+                var deck = await context.Decks.AsNoTracking().FirstOrDefaultAsync(d => d.DeckId == request.DeckId.Value);
+                if (deck == null) return Results.NotFound("Deck not found.");
+                source = DeckWordSource.ForDeck(deck.DeckId, deck.WordCount);
+            }
 
             if ((DeckDownloadType)request.DownloadType == DeckDownloadType.TargetCoverage && request.TargetPercentage.HasValue)
             {
                 var (_, targetKeys) = await deckWordResolver.CountTargetCoverageWords(
-                    request.DeckId.Value, deck, request.TargetPercentage.Value, false, request.PosFilter, request.StartFromKnown);
+                    source, request.TargetPercentage.Value, false, request.PosFilter, request.StartFromKnown);
                 if (targetKeys.Count == 0) return Results.Ok(new { total = 0, unlearned = 0 });
 
-                var allDeckWords = await context.DeckWords.AsNoTracking()
-                    .Where(dw => dw.DeckId == request.DeckId.Value)
+                var allDeckWords = await deckWordResolver.QuerySource(source)
                     .Select(dw => new { dw.WordId, dw.ReadingIndex })
                     .ToListAsync();
 
@@ -1768,7 +1831,7 @@ public partial class StudyController(
             else
             {
                 var (words, error) = await deckWordResolver.ResolveDeckWords(new DeckWordResolveRequest(
-                    request.DeckId.Value, deck,
+                    source,
                     (DeckDownloadType)request.DownloadType, (DeckOrder)request.Order,
                     request.MinFrequency, request.MaxFrequency,
                     false, false,
@@ -2000,6 +2063,10 @@ public partial class StudyController(
                     .Take(reviewBudget)
                     .ToListAsync();
 
+                // Recent mistakes keeps its due-date order unless the user picked a different review order.
+                if (settings.ReviewSortOrder != StudyReviewSortOrder.RetrievabilityAscending)
+                    mistakeCards = await OrderDueReviews(mistakeCards, settings.ReviewSortOrder, memoryScheduler, now, dueCutoff);
+
                 totalDueCount = mistakeCards.Count;
                 foreach (var card in mistakeCards)
                 {
@@ -2028,7 +2095,7 @@ public partial class StudyController(
             if (settings.ReviewFrom == StudyReviewFrom.StudyDecksOnly)
             {
                 var mediaDecks = activeStudyDecks
-                    .Where(sd => sd.DeckType == StudyDeckType.MediaDeck && sd.DeckId.HasValue)
+                    .Where(sd => sd.DeckType.DrawsFromDecks())
                     .ToList();
                 studyDeckWordKeys = await GetFilteredMediaWordKeys(mediaDecks);
 
@@ -2088,29 +2155,7 @@ public partial class StudyController(
                     .ToListAsync();
             }
 
-            // Sort: learning/relearning steps first (by due), then reviews by relative overdueness; cards
-            // served ahead of their step come last so they never push a due card out of the batch.
-            // Add slight randomness so batches don't always come in the exact same order
-            var rng = Random.Shared;
-            dueCards = dueCards
-                .OrderBy(c => c.Due <= dueCutoff ? 0 : 1)
-                .ThenBy(c => c.State is FsrsState.Learning or FsrsState.Relearning ? 0 : 1)
-                .ThenByDescending(c =>
-                {
-                    double overdueness;
-                    if (c.Stability is > 0 && c.LastReview.HasValue && memoryScheduler.GetStabilityDays(c) is > 0 and var stabilityDays)
-                    {
-                        var elapsed = (now - c.LastReview.Value).TotalDays;
-                        overdueness = elapsed / stabilityDays;
-                    }
-                    else
-                    {
-                        overdueness = (now - c.Due).TotalDays;
-                    }
-                    // ±10% jitter so similarly-overdue cards shuffle around between sessions
-                    return overdueness * (0.9 + rng.NextDouble() * 0.2);
-                })
-                .ToList();
+            dueCards = await OrderDueReviews(dueCards, settings.ReviewSortOrder, memoryScheduler, now, dueCutoff);
 
             foreach (var card in dueCards)
             {
@@ -2125,10 +2170,9 @@ public partial class StudyController(
         if (newCardBudget > 0)
         {
             var activeDecks = studyDecks.Where(sd => sd.IsActive).ToList();
-            var mediaDeckIds = activeDecks.Where(sd => sd.DeckType == StudyDeckType.MediaDeck && sd.DeckId.HasValue).Select(sd => sd.DeckId!.Value).ToList();
-            var deckMap = await context.Decks.AsNoTracking()
-                .Where(d => mediaDeckIds.Contains(d.DeckId))
-                .ToDictionaryAsync(d => d.DeckId);
+            var deckSources = await wordSources.ResolveAsync(activeDecks);
+            var sourceDeckIds = deckSources.Values.SelectMany(src => src.DeckIds).Distinct().ToList();
+            var frequencyOrderSource = await frequencySource.Resolve(userId);
 
             var isCrossDeck = settings.NewCardGathering == StudyNewCardGathering.CrossDeckFrequency;
             var isRoundRobin = settings.NewCardGathering == StudyNewCardGathering.RoundRobin;
@@ -2141,23 +2185,17 @@ public partial class StudyController(
             {
                 List<(int WordId, byte ReadingIndex)>? wordPairs = null;
 
-                if (studyDeck.DeckType == StudyDeckType.MediaDeck)
+                if (studyDeck.DeckType.DrawsFromDecks())
                 {
-                    if (!studyDeck.DeckId.HasValue || !deckMap.TryGetValue(studyDeck.DeckId.Value, out var deck)) continue;
+                    if (!deckSources.TryGetValue(studyDeck.UserStudyDeckId, out var source)) continue;
 
-                    var (words, error) = await deckWordResolver.ResolveDeckWords(new DeckWordResolveRequest(
-                        studyDeck.DeckId.Value, deck,
-                        (DeckDownloadType)studyDeck.DownloadType, (DeckOrder)studyDeck.Order,
-                        studyDeck.MinFrequency, studyDeck.MaxFrequency,
-                        false, false,
-                        studyDeck.TargetPercentage,
-                        studyDeck.MinOccurrences, studyDeck.MaxOccurrences,
-                        studyDeck.PosFilter, studyDeck.StartFromKnown));
+                    var (words, error) = await deckWordResolver.ResolveDeckWords(
+                        DeckWordResolveRequest.ForStudyDeck(studyDeck, source, frequencyOrderSource));
 
                     if (error != null || words == null) continue;
                     wordPairs = words.Select(w => (w.WordId, w.ReadingIndex)).ToList();
-                    if (studyDeck.Order == (int)DeckOrder.SentenceUnlock)
-                        wordPairs = await OrderBySentenceUnlock(userId, studyDeck.DeckId.Value, wordPairs);
+                    if (studyDeck.Order == (int)DeckOrder.SentenceUnlock && studyDeck.DeckId.HasValue)
+                        wordPairs = await sentenceUnlockOrder.OrderAsync(studyDeck.DeckId.Value, wordPairs, w => w);
                 }
                 else if (studyDeck.DeckType == StudyDeckType.GlobalDynamic)
                 {
@@ -2170,7 +2208,8 @@ public partial class StudyController(
                 }
                 else if (studyDeck.DeckType.HasMaterialisedWords())
                 {
-                    var resolved = await deckWordResolver.ResolveStaticDeckWords(studyDeck.UserStudyDeckId, studyDeck.Order);
+                    var resolved = await deckWordResolver.ResolveStaticDeckWords(studyDeck.UserStudyDeckId, studyDeck.Order,
+                        orderSource: StaticOrderSource(studyDeck, frequencyOrderSource));
                     wordPairs = resolved.Select(w => (w.WordId, w.ReadingIndex)).ToList();
                 }
 
@@ -2186,12 +2225,10 @@ public partial class StudyController(
                         filtered = wordPairs.Where(w => !kanaFormKeys.Contains(WordFormHelper.EncodeWordKey(w.WordId, w.ReadingIndex)));
                 }
 
-                var deckName = studyDeck.DeckType == StudyDeckType.MediaDeck && studyDeck.DeckId.HasValue && deckMap.TryGetValue(studyDeck.DeckId.Value, out var deckForName)
-                    ? deckForName.OriginalTitle
-                    : studyDeck.Name;
+                var deckName = deckSources.GetValueOrDefault(studyDeck.UserStudyDeckId)?.Title ?? studyDeck.Name;
 
                 var claimsOnScan = !isRoundRobin && !isCrossDeck;
-                var namesOnScan = claimsOnScan || (isCrossDeck && studyDeck.DeckType == StudyDeckType.MediaDeck);
+                var namesOnScan = claimsOnScan || (isCrossDeck && studyDeck.DeckType.DrawsFromDecks());
                 var deckCandidates = new List<(int WordId, byte ReadingIndex)>();
                 foreach (var word in filtered)
                 {
@@ -2206,7 +2243,7 @@ public partial class StudyController(
                 if (!namesOnScan)
                     laneSources[studyDeck.UserStudyDeckId] = (deckName, studyDeck.DeckType == StudyDeckType.Smart);
 
-                if (isCrossDeck && studyDeck.DeckType == StudyDeckType.MediaDeck)
+                if (isCrossDeck && studyDeck.DeckType.DrawsFromDecks())
                 {
                     foreach (var c in deckCandidates)
                         allEligibleMediaKeys!.Add(WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex));
@@ -2226,7 +2263,7 @@ public partial class StudyController(
             {
                 var crossDeckOccurrences = await context.DeckWords
                     .AsNoTracking()
-                    .Where(dw => mediaDeckIds.Contains(dw.DeckId))
+                    .Where(dw => sourceDeckIds.Contains(dw.DeckId))
                     .GroupBy(dw => new { dw.WordId, dw.ReadingIndex })
                     .Select(g => new
                     {
@@ -2245,8 +2282,8 @@ public partial class StudyController(
                         ranked.Add((item.WordId, (byte)item.ReadingIndex));
                 }
 
-                // Every media deck shares one ranked lane; the first media deck by sort order identifies it for the cursor.
-                var firstMedia = activeDecks.First(sd => sd.DeckType == StudyDeckType.MediaDeck && sd.DeckId.HasValue && deckMap.ContainsKey(sd.DeckId.Value));
+                // Every media and media group deck shares one ranked lane; the first of them by sort order identifies it for the cursor.
+                var firstMedia = activeDecks.First(sd => sd.DeckType.DrawsFromDecks() && deckSources.ContainsKey(sd.UserStudyDeckId));
                 lanes.Insert(0, new NewCardLane(firstMedia.UserStudyDeckId, firstMedia.SortOrder, ranked));
             }
 
@@ -2335,7 +2372,7 @@ public partial class StudyController(
         var freqs = await frequencySource.LoadFrequencies(context, wordIds);
         var confusables = await confusablesTask;
 
-        var occDeckIds = studyDecks.Where(sd => sd.DeckId.HasValue).Select(sd => sd.DeckId!.Value).ToList();
+        var occDeckIds = (await wordSources.ResolveAsync(studyDecks)).Values.SelectMany(src => src.DeckIds).Distinct().ToList();
         var deckOccurrences = occDeckIds.Count > 0
             ? await context.DeckWords
                 .AsNoTracking()
@@ -3050,7 +3087,7 @@ public partial class StudyController(
                     derivationKnownKeys, existingKeys);
 
                 var mediaDecks = studyDecks
-                    .Where(sd => sd.DeckType == StudyDeckType.MediaDeck && sd.DeckId.HasValue)
+                    .Where(sd => sd.DeckType.DrawsFromDecks())
                     .ToList();
 
                 var allCandidateKeys = new HashSet<long>();
@@ -4018,6 +4055,25 @@ public partial class StudyController(
                 || !c.LastReview.HasValue
                 || c.LastReview < todayStart;
 
+    private static FrequencyScope StaticOrderSource(UserStudyDeck studyDeck, FrequencyScope accountDefault) =>
+        studyDeck.DeckType == StudyDeckType.StaticWordList ? accountDefault : default;
+
+    private async Task<List<(int WordId, short ReadingIndex, int Occurrences)>> SortByFrequency(
+        List<(int WordId, short ReadingIndex, int Occurrences)> items, FrequencyScope scope, SortOrder sortOrder)
+    {
+        var keys = await deckWordResolver.LoadFrequencyOrderKeys(items.Select(i => i.WordId).Distinct().ToList(), scope);
+        if (sortOrder == SortOrder.Ascending)
+            return items.OrderBy(i => keys.For(i.WordId, (byte)i.ReadingIndex)).ToList();
+
+        return items.Select(i => (Item: i, Key: keys.For(i.WordId, (byte)i.ReadingIndex)))
+                    .OrderBy(x => x.Key.Scoped == int.MaxValue)
+                    .ThenByDescending(x => x.Key.Scoped)
+                    .ThenBy(x => x.Key.Global == int.MaxValue)
+                    .ThenByDescending(x => x.Key.Global)
+                    .Select(x => x.Item)
+                    .ToList();
+    }
+
     private static SrsDueWindow GetDueWindow(DateTime utcNow, StudySettingsDto settings)
         => SrsDueWindow.At(utcNow, settings);
 
@@ -4240,16 +4296,16 @@ public partial class StudyController(
             sentence.IsIPlusOne = unknownCounts.GetValueOrDefault((sentence.SentenceId, wordId), -1) == 0;
     }
 
-    /// <summary>Active media study decks and an active Smart Deck's source titles, plus their subdecks, since a series keeps its sentences on its volumes.</summary>
+    /// <summary>Active media study decks, active media group decks' members and an active Smart Deck's source titles, plus their subdecks, since a multi-volume title keeps its sentences on its volumes.</summary>
     private async Task<int[]> ActiveStudyDeckSentenceSources(string userId)
     {
         var activeDecks = await userContext.UserStudyDecks
             .AsNoTracking()
-            .Where(sd => sd.UserId == userId && sd.IsActive && (sd.DeckId.HasValue || sd.DeckType == StudyDeckType.Smart))
-            .Select(sd => new { sd.DeckId, sd.DeckType })
+            .Where(sd => sd.UserId == userId && sd.IsActive
+                         && (sd.DeckType == StudyDeckType.MediaDeck || sd.DeckType == StudyDeckType.MediaGroup || sd.DeckType == StudyDeckType.Smart))
             .ToListAsync();
 
-        var deckIds = activeDecks.Where(sd => sd.DeckId.HasValue).Select(sd => sd.DeckId!.Value).ToList();
+        var deckIds = (await wordSources.ResolveAsync(activeDecks)).Values.SelectMany(src => src.DeckIds).ToList();
         if (activeDecks.Any(sd => sd.DeckType == StudyDeckType.Smart))
         {
             var sources = await smartDeckBuilder.LoadSourcesCached(userId);
@@ -4440,6 +4496,28 @@ public partial class StudyController(
     private Task<IResult?> ValidateFrequencySource(string userId, int? frequencyMediaType, long? frequencyListId)
         => FrequencySourceValidator.Validate(userContext, backgroundJobs, userId, frequencyMediaType, frequencyListId);
 
+    /// <summary>Null when the group exists, the media types are known and every excluded deck sits in the group; otherwise the error to return.</summary>
+    private async Task<IResult?> ValidateGroupFilter(MediaGroupRef group, List<int>? mediaTypes, List<int>? excludedDeckIds)
+    {
+        var members = await mediaGroupService.ResolveDeckIdsAsync(group);
+        if (members == null)
+            return Results.NotFound("Media group not found.");
+
+        var unknownTypes = mediaTypes?.Where(t => !Enum.IsDefined((MediaType)t)).ToList();
+        if (unknownTypes is { Count: > 0 })
+            return Results.BadRequest($"Unknown media types: {string.Join(", ", unknownTypes)}.");
+
+        if (excludedDeckIds is { Count: > 0 })
+        {
+            var memberSet = members.ToHashSet();
+            var outside = excludedDeckIds.Where(id => !memberSet.Contains(id)).ToList();
+            if (outside.Count > 0)
+                return Results.BadRequest($"Decks {string.Join(", ", outside)} are not in this group.");
+        }
+
+        return null;
+    }
+
     /// <summary>Null when the user may pick the sentence unlock order for this deck type; otherwise the error to return.</summary>
     private async Task<IResult?> ValidateSentenceUnlockOrder(string userId, StudyDeckType deckType)
     {
@@ -4458,25 +4536,6 @@ public partial class StudyController(
             message = "This feature requires Jiten+."
         }, statusCode: StatusCodes.Status403Forbidden);
     }
-
-    /// <summary>Null when Jiten+ has lapsed or the title has no sentence profiles yet; callers then keep deck-frequency order.</summary>
-    private async Task<IReadOnlyDictionary<int, int>?> SentenceUnlockRanks(string userId, int deckId)
-    {
-        if (await jitenPlusService.GetTierAsync(userId) < JitenPlusTier.Trial) return null;
-
-        var ranks = await sentenceStats.GetUnlockRanksAsync(deckId);
-        return ranks is { Count: > 0 } ? ranks : null;
-    }
-
-    private static int SentenceUnlockRank(IReadOnlyDictionary<int, int> ranks, int wordId, byte readingIndex) =>
-        ranks.TryGetValue(ExampleSentenceTokens.WordKey(wordId, readingIndex), out var rank) ? rank : int.MaxValue;
-
-    // OrderBy is stable, so unranked words keep their deck-frequency order after the ranked ones.
-    private async Task<List<(int WordId, byte ReadingIndex)>> OrderBySentenceUnlock(string userId, int deckId,
-                                                                                   List<(int WordId, byte ReadingIndex)> wordPairs) =>
-        await SentenceUnlockRanks(userId, deckId) is { } ranks
-            ? wordPairs.OrderBy(w => SentenceUnlockRank(ranks, w.WordId, w.ReadingIndex)).ToList()
-            : wordPairs;
 
     private static bool IsValidPosFilter(string? posFilter)
     {
@@ -4739,19 +4798,54 @@ public partial class StudyController(
                 }
 
                 var (words, error) = await deckWordResolver.ResolveDeckWords(new DeckWordResolveRequest(
-                    studyDeck.DeckId.Value, deck,
+                    DeckWordSource.ForDeck(deck.DeckId, deck.WordCount),
                     request.DownloadType, request.Order,
                     request.MinFrequency, request.MaxFrequency,
                     request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                     request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,
-                    studyDeck.PosFilter, studyDeck.StartFromKnown, request.FrequencySource));
+                    studyDeck.PosFilter, studyDeck.StartFromKnown, request.FrequencySource,
+                    DeckWordResolveRequest.OrderFor(request.FrequencySource)));
                 if (error != null) return error;
 
                 deckWords = words!.Select(dw => (dw.WordId, dw.ReadingIndex, dw.Occurrences)).ToList();
+                if (request.Order == DeckOrder.SentenceUnlock)
+                    deckWords = await sentenceUnlockOrder.OrderAsync(deck.DeckId, deckWords, w => (w.WordId, w.ReadingIndex));
                 sentenceDeckIds = deck.Children.Count != 0
                     ? deck.Children.Select(c => c.DeckId).ToList()
                     : [studyDeck.DeckId.Value];
                 deckTitle = deck.OriginalTitle;
+                break;
+            }
+            case StudyDeckType.MediaGroup:
+            {
+                var source = await wordSources.ResolveAsync(studyDeck);
+                if (source == null) return Results.NotFound("Linked media group not found.");
+
+                var (words, error) = await deckWordResolver.ResolveDeckWords(new DeckWordResolveRequest(
+                    source,
+                    request.DownloadType, request.Order,
+                    request.MinFrequency, request.MaxFrequency,
+                    request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
+                    request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,
+                    studyDeck.PosFilter, studyDeck.StartFromKnown, request.FrequencySource,
+                    DeckWordResolveRequest.OrderFor(request.FrequencySource)));
+                if (error != null) return error;
+
+                deckWords = words!.Select(dw => (dw.WordId, dw.ReadingIndex, dw.Occurrences)).ToList();
+                deckTitle = source.Title ?? studyDeck.Name;
+
+                if (request.Format == DeckFormat.Yomitan)
+                {
+                    var yomitanBytes = await YomitanHelper.GenerateYomitanFrequencyDeckFromWords(contextFactory, deckWords,
+                                                                                                 deckTitle[..Math.Min(deckTitle.Length, 30)]);
+                    return Results.File(yomitanBytes, "application/zip", $"freq_{deckTitle}.zip");
+                }
+
+                var memberChildren = await context.Decks.AsNoTracking()
+                    .Where(d => d.ParentDeckId.HasValue && source.DeckIds.Contains(d.ParentDeckId.Value))
+                    .Select(d => d.DeckId)
+                    .ToListAsync();
+                sentenceDeckIds = source.DeckIds.Union(memberChildren).ToList();
                 break;
             }
             case StudyDeckType.GlobalDynamic:
@@ -4838,19 +4932,23 @@ public partial class StudyController(
         switch (studyDeck.DeckType)
         {
             case StudyDeckType.MediaDeck:
+            case StudyDeckType.MediaGroup:
             {
-                if (!studyDeck.DeckId.HasValue) return Results.BadRequest("Study deck has no linked media deck.");
+                if (studyDeck.DeckType == StudyDeckType.MediaDeck && !studyDeck.DeckId.HasValue)
+                    return Results.BadRequest("Study deck has no linked media deck.");
 
-                var deck = await context.Decks.AsNoTracking().FirstOrDefaultAsync(d => d.DeckId == studyDeck.DeckId.Value);
-                if (deck == null) return Results.NotFound("Linked media deck not found.");
+                var source = await wordSources.ResolveAsync(studyDeck);
+                if (source == null)
+                    return Results.NotFound(studyDeck.DeckType == StudyDeckType.MediaDeck ? "Linked media deck not found." : "Linked media group not found.");
 
                 var (words, error) = await deckWordResolver.ResolveDeckWords(new DeckWordResolveRequest(
-                    studyDeck.DeckId.Value, deck,
+                    source,
                     request.DownloadType, request.Order,
                     request.MinFrequency, request.MaxFrequency,
                     request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                     request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,
-                    studyDeck.PosFilter, request.StartFromKnown, request.FrequencySource));
+                    studyDeck.PosFilter, request.StartFromKnown, request.FrequencySource,
+                    DeckWordResolveRequest.OrderFor(request.FrequencySource)));
                 if (error != null) return error;
 
                 resolvedWords = words!;
@@ -4924,13 +5022,14 @@ public partial class StudyController(
         switch (studyDeck.DeckType)
         {
             case StudyDeckType.MediaDeck:
+            case StudyDeckType.MediaGroup:
             {
-                if (!studyDeck.DeckId.HasValue) return Results.BadRequest();
-                var deck = await context.Decks.AsNoTracking().FirstOrDefaultAsync(d => d.DeckId == studyDeck.DeckId.Value);
-                if (deck == null) return Results.NotFound();
+                if (studyDeck.DeckType == StudyDeckType.MediaDeck && !studyDeck.DeckId.HasValue) return Results.BadRequest();
+                var source = await wordSources.ResolveAsync(studyDeck);
+                if (source == null) return Results.NotFound();
 
                 var (words, error) = await deckWordResolver.ResolveDeckWords(new DeckWordResolveRequest(
-                    studyDeck.DeckId.Value, deck,
+                    source,
                     request.DownloadType, DeckOrder.DeckFrequency,
                     request.MinFrequency, request.MaxFrequency,
                     request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
@@ -5018,16 +5117,16 @@ public partial class StudyController(
             return Results.Ok(staticCount);
         }
 
-        if (studyDeck.DeckType != StudyDeckType.MediaDeck || !studyDeck.DeckId.HasValue)
+        var source = studyDeck.DeckType.DrawsFromDecks() ? await wordSources.ResolveAsync(studyDeck) : null;
+        if (source == null)
         {
             var totalWords = await userContext.UserStudyDeckWords
                 .CountAsync(w => w.UserStudyDeckId == id);
             return Results.Ok(totalWords);
         }
 
-        var count = await context.DeckWords.AsNoTracking()
-            .Where(dw => dw.DeckId == studyDeck.DeckId.Value &&
-                         context.WordFormFrequencies
+        var count = await deckWordResolver.QuerySource(source)
+            .Where(dw => context.WordFormFrequencies
                              .Any(wff => wff.WordId == dw.WordId &&
                                          wff.ReadingIndex == (short)dw.ReadingIndex &&
                                          wff.FrequencyRank >= minFrequency &&
@@ -5059,14 +5158,15 @@ public partial class StudyController(
             return Results.Ok(await staticQuery.CountAsync());
         }
 
-        if (studyDeck.DeckType != StudyDeckType.MediaDeck || !studyDeck.DeckId.HasValue)
+        var source = studyDeck.DeckType.DrawsFromDecks() ? await wordSources.ResolveAsync(studyDeck) : null;
+        if (source == null)
         {
             var totalWords = await userContext.UserStudyDeckWords
                 .CountAsync(w => w.UserStudyDeckId == id);
             return Results.Ok(totalWords);
         }
 
-        var query = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == studyDeck.DeckId.Value);
+        var query = deckWordResolver.QuerySource(source);
         if (minOccurrences.HasValue)
             query = query.Where(dw => dw.Occurrences >= minOccurrences.Value);
         if (maxOccurrences.HasValue)

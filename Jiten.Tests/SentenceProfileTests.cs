@@ -117,6 +117,19 @@ public class SentenceProfileTests
     }
 
     [Fact]
+    public void Calculator_UnboundedRun_RanksEveryUnknownWordAndKeepsTheBoundedPrefix()
+    {
+        var sentences = Enumerable.Range(2, 2500).Select(w => new[] { 1, w, w + 1 }).ToArray();
+        var profile = Profile(sentences);
+
+        var bounded = SentenceStatsCalculator.Compute([profile], Knows(1), learnNextCount: 2000, maxSteps: 2000);
+        var full = SentenceStatsCalculator.Compute([profile], Knows(1), learnNextCount: int.MaxValue, maxSteps: int.MaxValue);
+
+        full.LearnNext.Should().HaveCount(2501);
+        full.LearnNext.Take(2000).Select(l => l.WordKey).Should().Equal(bounded.LearnNext.Select(l => l.WordKey));
+    }
+
+    [Fact]
     public void Calculator_ProjectionStartsAtTheReadableCountAndEndsWithEverything()
     {
         var stats = SentenceStatsCalculator.Compute([Profile([1], [2, 3], [3, 4], [5])], Knows(1));
