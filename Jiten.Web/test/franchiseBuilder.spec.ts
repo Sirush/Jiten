@@ -41,6 +41,7 @@ import { parseBuilderCommand, resolveDeckName, type CommandContext } from '../ap
 const { Sequel, SideStory, Adaptation, Alternative, Fandisc, Spinoff } = DeckRelationshipType;
 const choice = (key: string) => linkChoiceByKey(key)!;
 const name = (id: number) => `D${id}`;
+const originalOf = (t: { originalTitle: string }) => t.originalTitle;
 const edge = (sourceDeckId: number, targetDeckId: number, relationshipType: DeckRelationshipType) => ({ sourceDeckId, targetDeckId, relationshipType });
 
 const stateWith = (edges: ReturnType<typeof edge>[], board = [1, 2, 3, 4, 5]): BuilderState => ({
@@ -240,9 +241,9 @@ describe('pending state', () => {
 
 describe('putLinesInSeries', () => {
   const groups: BuilderSeries[] = [
-    { seriesId: 10, name: 'A', kind: SeriesKind.Series },
-    { seriesId: 11, name: 'B', kind: SeriesKind.Series },
-    { seriesId: 20, name: 'World', kind: SeriesKind.Setting },
+    { seriesId: 10, originalTitle: 'A', kind: SeriesKind.Series },
+    { seriesId: 11, originalTitle: 'B', kind: SeriesKind.Series },
+    { seriesId: 20, originalTitle: 'World', kind: SeriesKind.Setting },
   ];
   const withMembers = (members: [number, number][]): BuilderState => ({
     ...stateWith([edge(2, 1, Sequel)]),
@@ -299,9 +300,9 @@ describe('putLinesInSeries', () => {
 
 describe('line helpers', () => {
   const groups: BuilderSeries[] = [
-    { seriesId: 10, name: 'A', kind: SeriesKind.Series },
-    { seriesId: 11, name: 'B', kind: SeriesKind.Series },
-    { seriesId: 20, name: 'World', kind: SeriesKind.Setting },
+    { seriesId: 10, originalTitle: 'A', kind: SeriesKind.Series },
+    { seriesId: 11, originalTitle: 'B', kind: SeriesKind.Series },
+    { seriesId: 20, originalTitle: 'World', kind: SeriesKind.Setting },
   ];
 
   it('finds the line of a deck, its series entries and the other series it sits in', () => {
@@ -339,13 +340,15 @@ describe('builderStateFromFranchise', () => {
     const node = (deckId: number) => ({ deckId }) as Franchise['nodes'][number];
     const franchise = {
       franchiseId: 1,
-      name: 'S',
+      originalTitle: 'S',
+      romajiTitle: null,
+      englishTitle: null,
       nameIsManual: false,
       nodes: [node(1), node(2), node(3)],
       edges: [edge(2, 1, Sequel), edge(1, 3, DeckRelationshipType.SameSeries)],
       lines: [],
-      series: [{ seriesId: 10, name: 'S', memberDeckIds: [1] }],
-      settings: [{ seriesId: 20, name: 'World', memberDeckIds: [3], outside: [], outsideCount: 0 }],
+      series: [{ seriesId: 10, originalTitle: 'S', memberDeckIds: [1] }],
+      settings: [{ seriesId: 20, originalTitle: 'World', memberDeckIds: [3], outside: [], outsideCount: 0 }],
       preferredView: 'timeline',
     } as Franchise;
     const state = builderStateFromFranchise(franchise);
@@ -361,7 +364,9 @@ describe('builderStateFromFranchise', () => {
     const node = (deckId: number) => ({ deckId }) as Franchise['nodes'][number];
     const franchise = {
       franchiseId: null,
-      name: null,
+      originalTitle: null,
+      romajiTitle: null,
+      englishTitle: null,
       nameIsManual: false,
       nodes: [node(1), node(2)],
       edges: [],
@@ -427,10 +432,10 @@ describe('builderChecks', () => {
 
 describe('layoutBoard', () => {
   const series: BuilderSeries[] = [
-    { seriesId: 10, name: 'Main', kind: SeriesKind.Series },
-    { seriesId: 11, name: 'Other', kind: SeriesKind.Series },
+    { seriesId: 10, originalTitle: 'Main', kind: SeriesKind.Series },
+    { seriesId: 11, originalTitle: 'Other', kind: SeriesKind.Series },
   ];
-  const base = { year: (id: number) => 2000 + id, title: name, compareRelease: (a: number, b: number) => a - b, width: 1200, series };
+  const base = { year: (id: number) => 2000 + id, title: name, localise: originalOf, compareRelease: (a: number, b: number) => a - b, width: 1200, series };
 
   it('places a sequel to the right of its prequel, and an adaptation right of its source', () => {
     const layout = layoutBoard({ ...base, board: [1, 2, 3], edges: [edge(2, 1, Sequel), edge(1, 3, Adaptation)], members: [] });
@@ -472,8 +477,8 @@ describe('layoutBoard', () => {
 
 describe('cardRemoveAction', () => {
   const series: BuilderSeries[] = [
-    { seriesId: 10, name: 'Main', kind: SeriesKind.Series },
-    { seriesId: 20, name: 'World', kind: SeriesKind.Setting },
+    { seriesId: 10, originalTitle: 'Main', kind: SeriesKind.Series },
+    { seriesId: 20, originalTitle: 'World', kind: SeriesKind.Setting },
   ];
   const layoutOf = (state: BuilderState) =>
     layoutBoard({
@@ -483,6 +488,7 @@ describe('cardRemoveAction', () => {
       series,
       year: () => null,
       title: name,
+      localise: originalOf,
       compareRelease: (a, b) => a - b,
       width: 1200,
     });

@@ -293,8 +293,8 @@ export interface DeckMetadataPatchResult {
 export interface FranchiseNode {
   deckId: number;
   originalTitle: string;
-  romajiTitle: string;
-  englishTitle: string;
+  romajiTitle: string | null;
+  englishTitle: string | null;
   coverName: string;
   mediaType: MediaType;
   releaseDate: string;
@@ -313,7 +313,10 @@ export interface FranchiseEdge {
 export interface Franchise {
   /** Null on a franchise builder response for a deck that belongs to no franchise yet. */
   franchiseId: number | null;
-  name: string | null;
+  /** Null with franchiseId. */
+  originalTitle: string | null;
+  romajiTitle: string | null;
+  englishTitle: string | null;
   nameIsManual: boolean;
   nodes: FranchiseNode[];
   edges: FranchiseEdge[];
@@ -1345,8 +1348,7 @@ export interface StudyDeckDto {
   parentCoverName?: string;
   groupKind?: MediaGroupKind | null;
   groupId?: number | null;
-  /** Franchise or series name; null when the group no longer exists. */
-  groupName?: string | null;
+  /** Null when the group no longer exists. */
   groupTitles?: MediaGroupTitles | null;
   groupFranchiseId?: number | null;
   /** Null means every media type. */

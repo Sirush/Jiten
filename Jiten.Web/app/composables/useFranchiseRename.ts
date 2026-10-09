@@ -1,32 +1,31 @@
-import type { FranchiseSummary } from '~/types';
+import type { FranchiseSummary, MediaGroupTitles } from '~/types';
 import { apiErrorMessage } from '~/utils/apiErrorMessage';
-
-export const FRANCHISE_NAME_MAX_LENGTH = 200;
+import { sameTitles, titlesDraft, titlesFromDraft } from '~/utils/groupTitles';
 
 interface RenameTarget {
   franchiseId: number;
-  name: string;
+  titles: MediaGroupTitles;
   nameIsManual: boolean;
 }
 
-/** Admin franchise rename form; saving a null name returns the franchise to automatic naming. */
-export function useFranchiseRename(handlers: { saved: (name: string | null) => unknown; close: () => unknown }) {
+/** Admin franchise rename form; saving null titles returns the franchise to automatic naming. */
+export function useFranchiseRename(handlers: { saved: (titles: MediaGroupTitles | null) => unknown; close: () => unknown }) {
   const { $api } = useNuxtApp();
-  const value = ref('');
+  const value = ref(titlesDraft());
   const error = ref('');
   const busy = ref(false);
 
-  function reset(name: string) {
-    value.value = name;
+  function reset(titles: MediaGroupTitles) {
+    value.value = titlesDraft(titles);
     error.value = '';
   }
 
-  async function save(franchiseId: number, name: string | null) {
+  async function save(franchiseId: number, titles: MediaGroupTitles | null) {
     busy.value = true;
     error.value = '';
     try {
-      await $api<FranchiseSummary>(`admin/franchise/${franchiseId}`, { method: 'PATCH', body: { name } });
-      await handlers.saved(name);
+      await $api<FranchiseSummary>(`admin/franchise/${franchiseId}`, { method: 'PATCH', body: titles ?? { originalTitle: null } });
+      await handlers.saved(titles);
     } catch (e) {
       error.value = apiErrorMessage(e, 'The name was not saved.');
     } finally {
@@ -35,16 +34,16 @@ export function useFranchiseRename(handlers: { saved: (name: string | null) => u
   }
 
   function submit(target: RenameTarget) {
-    const name = value.value.trim();
-    if (!name) {
-      error.value = 'Give it a name, or use the automatic one.';
+    const titles = titlesFromDraft(value.value);
+    if (!titles.originalTitle) {
+      error.value = 'Give it an original title, or use the automatic name.';
       return;
     }
-    if (name === target.name && target.nameIsManual) {
+    if (sameTitles(titles, target.titles) && target.nameIsManual) {
       handlers.close();
       return;
     }
-    save(target.franchiseId, name);
+    save(target.franchiseId, titles);
   }
 
   return { value, error, busy, reset, save, submit };

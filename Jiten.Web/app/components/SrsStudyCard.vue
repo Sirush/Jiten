@@ -33,6 +33,7 @@
   const srsStore = useSrsStore();
   const jitenStore = useJitenStore();
   const authStore = useAuthStore();
+  const localiseTitle = useLocaliseTitle();
   const { $api } = useNuxtApp();
 
   // Write-in input phase: a write-in card that hasn't been revealed yet.

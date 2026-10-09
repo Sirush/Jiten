@@ -282,7 +282,9 @@
   };
 
   const activeMemberships = computed(() =>
-    activeNode.value == null ? [] : franchisePopoverMemberships(props.franchise, activeNode.value, titleOf, layout.value.deckSeries.get(activeNode.value) ?? [])
+    activeNode.value == null
+      ? []
+      : franchisePopoverMemberships(props.franchise, activeNode.value, localiseTitle, titleOf, layout.value.deckSeries.get(activeNode.value) ?? [])
   );
 
   function onMembership(m: FranchisePopoverMembership) {
@@ -321,14 +323,14 @@
           :aria-pressed="activeSetting === s.seriesId"
           @click="toggleSetting(s.seriesId)"
         >
-          {{ s.name }}
+          <span v-bind="japaneseTextAttrs(localiseTitle(s))">{{ localiseTitle(s) }}</span>
         </button>
       </div>
     </div>
 
     <section v-for="section in sections" :key="section.key" class="flex flex-col gap-1">
       <h2 v-if="section.group" :id="`${uid}-series-${section.group.seriesId}`" class="flex scroll-mt-20 flex-wrap items-baseline gap-x-2 text-base font-bold">
-        <span v-bind="japaneseTextAttrs(section.group.name)">{{ section.group.name }}</span>
+        <span v-bind="japaneseTextAttrs(localiseTitle(section.group))">{{ localiseTitle(section.group) }}</span>
         <span class="rounded bg-primary-50 px-1.5 py-0.5 text-[11px] font-bold text-primary-700 dark:bg-primary-950/40 dark:text-primary-300">Series</span>
         <span class="text-sm font-normal text-gray-500 dark:text-gray-400">{{ groupMeta.get(section.group.seriesId) }}</span>
       </h2>
@@ -365,7 +367,7 @@
                 aria-hidden="true"
               />
               <span class="text-sm font-bold" v-bind="japaneseTextAttrs(rowName(row))">{{ rowName(row) }}</span>
-              <span class="text-xs text-gray-500 dark:text-gray-400">{{ rowMeta.get(row.key) }}</span>
+              <span v-if="!section.group || section.rows.length > 1" class="text-xs text-gray-500 dark:text-gray-400">{{ rowMeta.get(row.key) }}</span>
               <span v-if="rowHasCurrent(row.deckIds)" class="text-[11px] font-bold text-primary">You are here</span>
             </button>
 
@@ -508,7 +510,7 @@
           :class="settingStyle(i).border"
         >
           <div class="flex flex-wrap items-baseline gap-2">
-            <span class="text-sm font-bold" v-bind="japaneseTextAttrs(s.name)">{{ s.name }}</span>
+            <span class="text-sm font-bold" v-bind="japaneseTextAttrs(localiseTitle(s))">{{ localiseTitle(s) }}</span>
             <span class="text-[11px] font-bold" :class="settingStyle(i).label">Setting</span>
             <button
               type="button"

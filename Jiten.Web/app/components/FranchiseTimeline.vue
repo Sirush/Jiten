@@ -156,7 +156,7 @@
   const activeCaptions = computed(() => (activeNode.value == null ? [] : captionsFor(activeNode.value)));
   const activeMemberships = computed(() => {
     if (activeNode.value == null) return [];
-    return franchisePopoverMemberships(props.franchise, activeNode.value).map((m) =>
+    return franchisePopoverMemberships(props.franchise, activeNode.value, localiseTitle).map((m) =>
       m.kind === 'series'
         ? { ...m, to: { query: { ...route.query, scope: formatScope({ kind: MediaGroupKind.Series, id: m.seriesId }), offset: undefined } } }
         : { ...m, inert: true }

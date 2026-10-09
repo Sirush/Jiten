@@ -1,8 +1,10 @@
 import { DeckRelationshipType } from '~/types/enums';
 import type { MediaType } from '~/types/enums';
 import { SeriesKind } from '~/types/series';
+import type { MediaGroupTitles } from '~/types/mediaGroup';
 import type { Franchise, FranchiseEdge } from '~/types/types';
 import { layoutStoryLine, releaseYearOf } from '~/utils/franchiseLayout';
+import { pickTitles } from '~/utils/localiseTitle';
 import { getEdgeFlow, isLegacyGroupRelationship, linkTypeInfo, type LinkTone } from '~/utils/relationshipRoles';
 import { UnionFind } from '~/utils/unionFind';
 
@@ -68,9 +70,8 @@ export function toBuilderDeck(d: BuilderDeckSource): BuilderDeck {
   };
 }
 
-export interface BuilderSeries {
+export interface BuilderSeries extends MediaGroupTitles {
   seriesId: number;
-  name: string;
   kind: SeriesKind;
   /** Setting members outside this franchise, as last loaded. */
   outsideCount?: number;
@@ -80,7 +81,7 @@ export interface SeriesDialogRequest {
   mode: 'create' | 'rename';
   kind: SeriesKind;
   seriesId: number | null;
-  name: string;
+  titles: MediaGroupTitles;
 }
 
 /** Text colour per tone; edges and arrowheads draw with currentColor. */
@@ -485,14 +486,12 @@ export function builderStateFromFranchise(franchise: Franchise): BuilderState {
 
 export function builderSeriesFromFranchise(franchise: Franchise): BuilderSeries[] {
   return [
-    ...(franchise.series ?? []).map((s) => ({ seriesId: s.seriesId, name: s.name, kind: SeriesKind.Series })),
-    ...(franchise.settings ?? []).map((s) => ({ seriesId: s.seriesId, name: s.name, kind: SeriesKind.Setting, outsideCount: s.outsideCount })),
+    ...(franchise.series ?? []).map((s) => ({ ...pickTitles(s), seriesId: s.seriesId, kind: SeriesKind.Series })),
+    ...(franchise.settings ?? []).map((s) => ({ ...pickTitles(s), seriesId: s.seriesId, kind: SeriesKind.Setting, outsideCount: s.outsideCount })),
   ];
 }
 
-export type BuilderCheck =
-  | { kind: 'branch'; deckId: number; sequels: number[] }
-  | { kind: 'order'; edge: BuilderEdge };
+export type BuilderCheck = { kind: 'branch'; deckId: number; sequels: number[] } | { kind: 'order'; edge: BuilderEdge };
 
 export function builderChecks(state: BuilderState, year: (deckId: number) => number | null): BuilderCheck[] {
   const out: BuilderCheck[] = [];
@@ -575,6 +574,7 @@ export interface BoardLayoutInput {
   series: BuilderSeries[];
   year: (deckId: number) => number | null;
   title: (deckId: number) => string;
+  localise: (titles: MediaGroupTitles) => string;
   /** Breaks slot ties inside a story line, as the public Series view does. */
   compareRelease: (a: number, b: number) => number;
   width: number;
@@ -587,10 +587,14 @@ export function byRelease(ids: number[], input: Pick<BoardLayoutInput, 'year' | 
 }
 
 /** Series (settings excluded) by their first release, then by name. */
-export function orderSeries(series: BuilderSeries[], firstYear: (seriesId: number) => number | null): BuilderSeries[] {
+export function orderSeries(
+  series: BuilderSeries[],
+  firstYear: (seriesId: number) => number | null,
+  localise: (titles: MediaGroupTitles) => string
+): BuilderSeries[] {
   return series
     .filter((s) => s.kind === SeriesKind.Series)
-    .sort((a, b) => yearKey(firstYear(a.seriesId)) - yearKey(firstYear(b.seriesId)) || a.name.localeCompare(b.name));
+    .sort((a, b) => yearKey(firstYear(a.seriesId)) - yearKey(firstYear(b.seriesId)) || localise(a).localeCompare(localise(b)));
 }
 
 export function layoutBoard(input: BoardLayoutInput): BoardLayout {
@@ -619,7 +623,7 @@ export function layoutBoard(input: BoardLayoutInput): BoardLayout {
       .filter((y): y is number => y != null);
     return ys.length ? Math.min(...ys) : null;
   };
-  const order = orderSeries(input.series, firstYearOfSeries);
+  const order = orderSeries(input.series, firstYearOfSeries, input.localise);
   const orderIndex = new Map(order.map((s, i) => [s.seriesId, i]));
 
   // A line spanning several series is listed under the first of them.

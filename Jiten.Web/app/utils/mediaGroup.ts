@@ -85,7 +85,7 @@ export function buildScopeChips(franchise: Pick<Franchise, 'nodes' | 'series' | 
   const franchiseDeckIds = deckIdSet(franchise);
   for (const series of franchise.series ?? []) {
     const scope = { kind: MediaGroupKind.Series, id: series.seriesId };
-    push({ key: formatScope(scope)!, scope, label: series.name, deckIds: seriesDeckIds(series.memberDeckIds, franchiseDeckIds) });
+    push({ key: formatScope(scope)!, scope, label: localise(series), deckIds: seriesDeckIds(series.memberDeckIds, franchiseDeckIds) });
   }
 
   const lines = (franchise.lines ?? [])
@@ -116,15 +116,13 @@ export function mediaGroupKindWord(kind: MediaGroupKind | null | undefined): str
 interface StoredGroup {
   groupKind?: MediaGroupKind | null;
   groupId?: number | null;
-  groupName?: string | null;
   groupTitles?: MediaGroupTitles | null;
   groupFranchiseId?: number | null;
 }
 
 /** Null when the group no longer exists. */
 export function mediaGroupName(group: StoredGroup, localise: Localise): string | null {
-  if (group.groupKind === MediaGroupKind.Line) return group.groupTitles ? localise(group.groupTitles) : (group.groupName ?? null);
-  return group.groupName ?? null;
+  return group.groupTitles ? localise(group.groupTitles) : null;
 }
 
 export function mediaGroupLabel(group: StoredGroup, localise: Localise): string {
@@ -135,7 +133,7 @@ export function mediaGroupLabel(group: StoredGroup, localise: Localise): string 
 
 export function mediaGroupLink(group: StoredGroup): string | null {
   if (group.groupId == null) return null;
-  if (group.groupKind === MediaGroupKind.Franchise) return group.groupName ? franchisePath(group.groupId) : null;
+  if (group.groupKind === MediaGroupKind.Franchise) return group.groupTitles ? franchisePath(group.groupId) : null;
   if (group.groupFranchiseId == null) return null;
   return franchisePath(group.groupFranchiseId, { kind: group.groupKind ?? MediaGroupKind.Franchise, id: group.groupId });
 }

@@ -60,7 +60,7 @@ public class SeriesTests(JitenWebApplicationFactory factory)
 
     private static Series Group(int id, string name, SeriesKind kind, params int[] deckIds)
     {
-        var series = new Series { SeriesId = id, Name = name, Kind = kind };
+        var series = new Series { SeriesId = id, OriginalTitle = name, Kind = kind };
         foreach (var deckId in deckIds)
             series.Members.Add(new SeriesMember { SeriesId = id, DeckId = deckId });
         return series;
@@ -167,7 +167,7 @@ public class SeriesTests(JitenWebApplicationFactory factory)
 
         var detail = await GetAsync<SeriesDetailDto>("/api/admin/series/1", admin: true);
 
-        detail.Name.Should().Be("Final Fantasy");
+        detail.OriginalTitle.Should().Be("Final Fantasy");
         detail.Kind.Should().Be(SeriesKind.Series);
         detail.Members.Select(m => m.DeckId).Should().Equal(1);
         detail.FranchiseId.Should().BeNull();
@@ -182,7 +182,7 @@ public class SeriesTests(JitenWebApplicationFactory factory)
 
         var detail = await GetAsync<PaginatedResponse<DeckDetailDto>>("/api/media-deck/1/detail");
 
-        detail.Data.MainDeck.Series.Select(s => (s.SeriesId, s.Name, s.Kind))
+        detail.Data.MainDeck.Series.Select(s => (s.SeriesId, s.OriginalTitle, s.Kind))
               .Should().Equal((2, "Compilation", SeriesKind.Series), (3, "Gaia", SeriesKind.Setting));
     }
 
@@ -193,25 +193,34 @@ public class SeriesTests(JitenWebApplicationFactory factory)
 
         var list = await GetAsync<PaginatedResponse<List<DeckDto>>>("/api/media-deck/get-media-decks");
 
-        list.Data.Single(d => d.DeckId == 1).Series.Should().ContainSingle().Which.Name.Should().Be("Final Fantasy");
+        list.Data.Single(d => d.DeckId == 1).Series.Should().ContainSingle().Which.OriginalTitle.Should().Be("Final Fantasy");
         list.Data.Single(d => d.DeckId == 2).Series.Should().BeEmpty();
     }
 
     [Fact]
     public async Task AdminSeries_CreateRenameAndDelete()
     {
-        var created = await AdminSendAsync(HttpMethod.Post, "/api/admin/series", new { name = " Saga ", kind = 1 });
+        var created = await AdminSendAsync(HttpMethod.Post, "/api/admin/series",
+                                           new { originalTitle = " サーガ ", romajiTitle = "Saaga", englishTitle = " ", kind = 1 });
         created.StatusCode.Should().Be(HttpStatusCode.OK);
         var saga = (await created.Content.ReadFromJsonAsync<SeriesRefDto>())!;
-        saga.Should().BeEquivalentTo(new { Name = "Saga", Kind = SeriesKind.Series });
+        saga.Should().BeEquivalentTo(new { OriginalTitle = "サーガ", RomajiTitle = "Saaga", EnglishTitle = (string?)null, Kind = SeriesKind.Series });
 
-        (await AdminSendAsync(HttpMethod.Post, "/api/admin/series", new { name = "World", kind = 2 })).StatusCode.Should().Be(HttpStatusCode.OK);
-        (await AdminSendAsync(HttpMethod.Post, "/api/admin/series", new { name = "Bad", kind = 9 })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
-        (await AdminSendAsync(HttpMethod.Post, "/api/admin/series", new { name = " ", kind = 1 })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await AdminSendAsync(HttpMethod.Post, "/api/admin/series", new { originalTitle = "World", kind = 2 })).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await AdminSendAsync(HttpMethod.Post, "/api/admin/series", new { originalTitle = "Bad", kind = 9 })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+        (await AdminSendAsync(HttpMethod.Post, "/api/admin/series", new { originalTitle = " ", englishTitle = "Saga", kind = 1 }))
+            .StatusCode.Should().Be(HttpStatusCode.BadRequest);
 
-        var renamed = await AdminSendAsync(HttpMethod.Patch, $"/api/admin/series/{saga.SeriesId}", new { name = "Renamed" });
+        var untouched = await AdminSendAsync(HttpMethod.Patch, $"/api/admin/series/{saga.SeriesId}", new { });
+        (await untouched.Content.ReadFromJsonAsync<SeriesRefDto>())!.RomajiTitle.Should().Be("Saaga");
+
+        var renamed = await AdminSendAsync(HttpMethod.Patch, $"/api/admin/series/{saga.SeriesId}", new { originalTitle = "Renamed", englishTitle = "Renamed EN" });
         renamed.StatusCode.Should().Be(HttpStatusCode.OK);
-        (await renamed.Content.ReadFromJsonAsync<SeriesRefDto>())!.Name.Should().Be("Renamed");
+        (await renamed.Content.ReadFromJsonAsync<SeriesRefDto>())!.Should()
+            .BeEquivalentTo(new { OriginalTitle = "Renamed", RomajiTitle = (string?)null, EnglishTitle = "Renamed EN" });
+
+        var search = await GetAsync<PaginatedResponse<List<SeriesSummaryDto>>>("/api/admin/series?query=renamed%20en", admin: true);
+        search.Data.Should().ContainSingle().Which.SeriesId.Should().Be(saga.SeriesId);
 
         (await AdminSendAsync(HttpMethod.Delete, $"/api/admin/series/{saga.SeriesId}")).StatusCode.Should().Be(HttpStatusCode.NoContent);
         (await AdminSendAsync(HttpMethod.Delete, $"/api/admin/series/{saga.SeriesId}")).StatusCode.Should().Be(HttpStatusCode.NotFound);
@@ -325,7 +334,7 @@ public class SeriesTests(JitenWebApplicationFactory factory)
         response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
         var franchise = await response.Content.ReadFromJsonAsync<FranchiseDto>();
         franchise!.FranchiseId.Should().NotBeNull();
-        franchise.Name.Should().Be("Saga");
+        franchise.OriginalTitle.Should().Be("Saga");
         franchise.Nodes.Select(n => n.DeckId).Should().BeEquivalentTo([1, 2, 3]);
         franchise.Edges.Should().ContainSingle();
         franchise.Series.Single().MemberDeckIds.Should().BeEquivalentTo([2, 3]);
@@ -380,6 +389,16 @@ public class SeriesTests(JitenWebApplicationFactory factory)
             removeMembers = Array.Empty<object>(),
             boardDeckIds = board
         });
+
+    [Fact]
+    public async Task FranchiseBuilder_RejectsBoardWithoutAnchor()
+    {
+        await SeedAsync([Deck(1, "Movie"), Deck(2, "Novel"), Deck(3, "Visual Novel")], [Rel(3, 2, DeckRelationshipType.Adaptation)], []);
+
+        var response = await SaveBoardAsync(1, 2, 3);
+
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
 
     [Fact]
     public async Task FranchiseBuilder_BoardBecomesOneFranchise_AcrossUnrelatedSeries()
@@ -531,7 +550,7 @@ public class SeriesTests(JitenWebApplicationFactory factory)
         animeOnly.Data.Words.Select(w => w.WordId).Should().BeEquivalentTo([1, 2]);
 
         var search = await GetAsync<PaginatedResponse<List<SeriesSummaryDto>>>("/api/admin/series?query=sag&kind=1&limit=20", admin: true);
-        search.Data.Should().ContainSingle().Which.Should().BeEquivalentTo(new { Name = "Saga", DeckCount = 3 });
+        search.Data.Should().ContainSingle().Which.Should().BeEquivalentTo(new { OriginalTitle = "Saga", DeckCount = 3 });
     }
 
     [Fact]
@@ -572,7 +591,7 @@ public class SeriesTests(JitenWebApplicationFactory factory)
 
         await MetadataProviderHelper.ProcessRelations(db, 1, [Ser(2)]);
         var first = await db.Series.AsNoTracking().Include(s => s.Members).SingleAsync();
-        first.Name.Should().Be("VN 2");
+        first.OriginalTitle.Should().Be("VN 2");
         first.Kind.Should().Be(SeriesKind.Series);
         first.Members.Select(m => m.DeckId).Should().BeEquivalentTo([1, 2]);
 

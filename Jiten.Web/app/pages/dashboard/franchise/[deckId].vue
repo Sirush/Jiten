@@ -13,6 +13,8 @@
   import BuilderSettingsPanel from '~/components/dashboard/franchise/BuilderSettingsPanel.vue';
   import { SeriesKind, type SeriesRef } from '~/types/series';
   import type { Franchise, FranchiseEdge } from '~/types/types';
+  import type { MediaGroupTitles } from '~/types/mediaGroup';
+  import { pickTitles } from '~/utils/localiseTitle';
   import { getEdgeFlow, type LinkTone } from '~/utils/relationshipRoles';
   import { compareFranchiseRelease, franchiseDisplayName } from '~/utils/franchiseLayout';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
@@ -76,7 +78,10 @@
   const year = (id: number) => decks.value[id]?.year ?? null;
   const deck = (id: number) => decks.value[id];
   const seriesById = computed(() => new Map(series.value.map((s) => [s.seriesId, s])));
-  const seriesName = (id: number) => seriesById.value.get(id)?.name ?? `Series #${id}`;
+  const seriesName = (id: number) => {
+    const s = seriesById.value.get(id);
+    return s ? localiseTitle(s) : `Series #${id}`;
+  };
   const onBoard = (id: number) => state.value.board.includes(id);
   const releaseOrder = (ids: number[]) => byRelease(ids, { year, title });
   const compareRelease = (a: number, b: number) =>
@@ -104,7 +109,9 @@
 
   const anchorTitle = computed(() => (decks.value[anchorDeckId] ? title(anchorDeckId) : `Deck #${anchorDeckId}`));
   const franchiseId = computed(() => franchise.value?.franchiseId ?? null);
-  const pageTitle = computed(() => (franchise.value?.franchiseId ? franchiseDisplayName(franchise.value, localiseTitle) || anchorTitle.value : anchorTitle.value));
+  const pageTitle = computed(() =>
+    franchise.value?.franchiseId ? franchiseDisplayName(franchise.value, localiseTitle) || anchorTitle.value : anchorTitle.value
+  );
   useHead({ title: computed(() => `${pageTitle.value} - Franchise builder - Jiten`) });
 
   const renaming = ref(false);
@@ -116,14 +123,27 @@
     renameButton.value?.$el?.focus();
   }
 
-  async function onRenamed(name: string | null) {
+  const franchiseTitles = computed<MediaGroupTitles>(() => ({
+    originalTitle: franchise.value?.originalTitle ?? '',
+    romajiTitle: franchise.value?.romajiTitle ?? null,
+    englishTitle: franchise.value?.englishTitle ?? null,
+  }));
+
+  async function onRenamed(titles: MediaGroupTitles | null) {
     const current = franchise.value;
-    if (current && name) franchise.value = { ...current, name, nameIsManual: true };
+    if (current && titles) franchise.value = { ...current, ...pickTitles(titles), nameIsManual: true };
     else if (current) {
       const fresh = await $api<Franchise>(`admin/franchise-builder/${anchorDeckId}`).catch(() => null);
-      franchise.value = { ...current, name: fresh?.name ?? current.name, nameIsManual: false };
+      const source = fresh ?? current;
+      franchise.value = {
+        ...current,
+        originalTitle: source.originalTitle,
+        romajiTitle: source.romajiTitle,
+        englishTitle: source.englishTitle,
+        nameIsManual: false,
+      };
     }
-    flash(name ? `Renamed the franchise to ${name}` : 'The franchise is named automatically again');
+    flash(titles ? `Renamed the franchise to ${localiseTitle(titles)}` : 'The franchise is named automatically again');
     await stopRename();
   }
 
@@ -176,6 +196,7 @@
       series: series.value,
       year,
       title,
+      localise: localiseTitle,
       compareRelease,
       width: boardWidth.value,
     })
@@ -183,8 +204,8 @@
 
   const seriesOnly = computed(() => series.value.filter((s) => s.kind === SeriesKind.Series));
   const settingsOnly = computed(() => series.value.filter((s) => s.kind === SeriesKind.Setting));
-  const seriesOrder = computed(() => orderSeries(series.value, () => null));
-  const seriesOptions = computed(() => seriesOrder.value.map((s) => ({ value: s.seriesId, label: s.name })));
+  const seriesOrder = computed(() => orderSeries(series.value, () => null, localiseTitle));
+  const seriesOptions = computed(() => seriesOrder.value.map((s) => ({ value: s.seriesId, label: localiseTitle(s) })));
 
   const stats = computed(() => {
     const links = activeEdges(state.value).length;
@@ -469,36 +490,36 @@
   const seriesDialog = ref<SeriesDialogRequest | null>(null);
 
   function openCreateSeries(kind: SeriesKind) {
-    seriesDialog.value = { mode: 'create', kind, seriesId: null, name: '' };
+    seriesDialog.value = { mode: 'create', kind, seriesId: null, titles: { originalTitle: '' } };
   }
 
   function openRename(seriesId: number) {
     const s = seriesById.value.get(seriesId);
     if (!s) return;
-    seriesDialog.value = { mode: 'rename', kind: s.kind, seriesId, name: s.name };
+    seriesDialog.value = { mode: 'rename', kind: s.kind, seriesId, titles: pickTitles(s) };
   }
 
   function addExistingSeries(entry: SeriesRef) {
     if (seriesById.value.has(entry.seriesId)) return;
-    series.value = [...series.value, { seriesId: entry.seriesId, name: entry.name, kind: entry.kind }];
+    series.value = [...series.value, { ...pickTitles(entry), seriesId: entry.seriesId, kind: entry.kind }];
   }
 
   function onSeriesPicked(entry: SeriesRef) {
     addExistingSeries(entry);
-    flash(`${entry.name} is on the board. Drop decks on it to add them.`);
+    flash(`${localiseTitle(entry)} is on the board. Drop decks on it to add them.`);
     seriesDialog.value = null;
   }
 
   function onSeriesCreated(created: SeriesRef) {
     addExistingSeries(created);
-    flash(`Created ${created.name}`);
+    flash(`Created ${localiseTitle(created)}`);
     seriesDialog.value = null;
   }
 
   function onSeriesRenamed(updated: SeriesRef) {
     const id = seriesDialog.value?.seriesId;
-    series.value = series.value.map((s) => (s.seriesId === id ? { ...s, name: updated.name } : s));
-    flash(`Renamed to ${updated.name}`);
+    series.value = series.value.map((s) => (s.seriesId === id ? { ...s, ...pickTitles(updated) } : s));
+    flash(`Renamed to ${localiseTitle(updated)}`);
     seriesDialog.value = null;
   }
 
@@ -574,12 +595,18 @@
     saving.value = true;
     saveError.value = '';
     try {
+      const board = state.value.board;
+      const anchor = board.includes(anchorDeckId) ? anchorDeckId : (releaseOrder(board)[0] ?? anchorDeckId);
       const saved = await $api<Franchise>('admin/franchise-builder/save', {
         method: 'POST',
-        body: buildSaveRequest(anchorDeckId, state.value),
+        body: buildSaveRequest(anchor, state.value),
       });
       applyFranchise(saved);
       closeFloating();
+      if (anchor !== anchorDeckId) {
+        await navigateTo(`/dashboard/franchise/${anchor}`, { replace: true });
+        return;
+      }
       flash(`Saved ${n} ${n === 1 ? 'change' : 'changes'}`);
     } catch (e) {
       saveError.value = apiErrorMessage(e, 'Saving failed. Nothing was changed.');
@@ -695,7 +722,7 @@
             v-if="renaming && franchise?.franchiseId"
             class="mt-2"
             :franchise-id="franchise.franchiseId"
-            :name="franchise.name ?? ''"
+            :titles="franchiseTitles"
             :name-is-manual="franchise.nameIsManual"
             @saved="onRenamed"
             @close="stopRename"

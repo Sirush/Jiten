@@ -7,15 +7,16 @@ public class MediaGroupTitlesDto
     public string OriginalTitle { get; set; } = "";
     public string? RomajiTitle { get; set; }
     public string? EnglishTitle { get; set; }
+
+    public static MediaGroupTitlesDto From(GroupTitles titles) =>
+        new() { OriginalTitle = titles.OriginalTitle, RomajiTitle = titles.RomajiTitle, EnglishTitle = titles.EnglishTitle };
 }
 
-public class MediaGroupMembersDto
+/// <summary>Titles are the franchise's or series', a line's anchor titles.</summary>
+public class MediaGroupMembersDto : MediaGroupTitlesDto
 {
     public MediaGroupKind Kind { get; set; }
     public int Id { get; set; }
-
-    /// <summary>Franchise or series name; a line's anchor OriginalTitle.</summary>
-    public string Name { get; set; } = "";
 
     public int? FranchiseId { get; set; }
 

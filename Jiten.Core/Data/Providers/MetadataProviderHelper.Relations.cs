@@ -61,7 +61,7 @@ public static partial class MetadataProviderHelper
         {
             var decks = await context.Decks.AsNoTracking()
                                      .Where(d => d.DeckId == deckA || d.DeckId == deckB)
-                                     .Select(d => new { d.DeckId, d.OriginalTitle, d.ReleaseDate })
+                                     .Select(d => new { d.DeckId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle, d.ReleaseDate })
                                      .ToListAsync();
             if (decks.Count < 2)
                 return;
@@ -69,11 +69,9 @@ public static partial class MetadataProviderHelper
             var earliest = decks.OrderBy(d => FranchiseNaming.ReleaseOrder(d.ReleaseDate))
                                 .ThenBy(d => d.DeckId)
                                 .First();
-            var name = earliest.OriginalTitle.Length > FranchiseNaming.MaxNameLength
-                ? earliest.OriginalTitle[..FranchiseNaming.MaxNameLength]
-                : earliest.OriginalTitle;
 
-            var series = new Series { Name = name, Kind = kind };
+            var series = new Series { Kind = kind };
+            series.SetTitles(GroupTitles.Of(earliest.OriginalTitle, earliest.RomajiTitle, earliest.EnglishTitle));
             series.Members.Add(new SeriesMember { DeckId = deckA });
             series.Members.Add(new SeriesMember { DeckId = deckB });
             context.Series.Add(series);

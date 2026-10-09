@@ -19,7 +19,7 @@ public class FranchiseSuggestionDeckDto
 {
     public FranchiseNodeDto Deck { get; set; } = new();
     public int? FranchiseId { get; set; }
-    public string? FranchiseName { get; set; }
+    public MediaGroupTitlesDto? FranchiseTitles { get; set; }
     public List<LinkType> LinkTypes { get; set; } = new();
 }
 

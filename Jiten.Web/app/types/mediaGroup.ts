@@ -25,10 +25,10 @@ export interface FranchiseLine {
   deckIds: number[];
 }
 
-export interface MediaGroupMembers {
+/** Titles are the franchise's or series', a line's anchor titles. */
+export interface MediaGroupMembers extends MediaGroupTitles {
   kind: MediaGroupKind;
   id: number;
-  name: string;
   franchiseId: number | null;
   members: FranchiseNode[];
 }
@@ -40,16 +40,13 @@ export interface MediaGroupStats {
   difficulty: number;
 }
 
-export interface FranchiseSummary {
+export interface FranchiseSummary extends MediaGroupTitles {
   franchiseId: number;
-  name: string;
   nameIsManual: boolean;
   deckCount: number;
   seriesCount: number;
   /** Any member deck, to open the franchise builder on. */
   firstDeckId: number | null;
-  /** Titles of the member deck the name was taken from; null when the name is not a deck title. */
-  nameTitles: MediaGroupTitles | null;
 }
 
 export type FranchiseListSort = 'name' | 'decks' | 'series';
@@ -65,7 +62,7 @@ export interface FranchiseSyncSummary {
 export interface FranchiseSuggestionDeck {
   deck: FranchiseNode;
   franchiseId: number | null;
-  franchiseName: string | null;
+  franchiseTitles: MediaGroupTitles | null;
   linkTypes: LinkType[];
 }
 

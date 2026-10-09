@@ -240,7 +240,7 @@ public class FranchiseTests(JitenWebApplicationFactory factory)
 
         var dto = await GetBuilderAsync(1);
         dto.FranchiseId.Should().BeNull();
-        dto.Name.Should().BeNull();
+        dto.OriginalTitle.Should().BeNull();
         dto.Nodes.Should().ContainSingle().Which.DeckId.Should().Be(1);
         dto.Edges.Should().BeEmpty();
         dto.Lines.Should().ContainSingle().Which.DeckIds.Should().Equal(1);
@@ -259,7 +259,7 @@ public class FranchiseTests(JitenWebApplicationFactory factory)
         using (var scope = factory.Services.CreateScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
-            var series = new Series { Name = "Saga", Kind = SeriesKind.Series };
+            var series = new Series { OriginalTitle = "Saga", Kind = SeriesKind.Series };
             series.Members.Add(new SeriesMember { DeckId = 2 });
             series.Members.Add(new SeriesMember { DeckId = 3 });
             db.Series.Add(series);
@@ -269,7 +269,7 @@ public class FranchiseTests(JitenWebApplicationFactory factory)
 
         var byId = await GetFranchiseAsync(2);
         byId.FranchiseId.Should().NotBeNull();
-        byId.Name.Should().Be("Saga");
+        byId.OriginalTitle.Should().Be("Saga");
         byId.NameIsManual.Should().BeFalse();
         byId.Nodes.Select(n => n.DeckId).Should().BeEquivalentTo(new[] { 1, 2, 3 });
         byId.Lines.Select(l => (l.AnchorDeckId, string.Join(",", l.DeckIds))).Should().Equal((3, "3"), (1, "1,2"));

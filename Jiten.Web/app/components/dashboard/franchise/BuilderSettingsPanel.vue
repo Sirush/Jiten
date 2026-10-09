@@ -22,6 +22,7 @@
     leave: [seriesId: number, deckId: number];
   }>();
 
+  const localiseTitle = useLocaliseTitle();
   const query = ref<SeriesSummary | string | null>(null);
   const { suggestions, fetchSuggestions } = useSeriesSuggestions(SeriesKind.Setting);
   watch(query, (v) => {
@@ -34,6 +35,7 @@
   const rows = computed(() =>
     props.settings.map((s) => ({
       setting: s,
+      name: localiseTitle(s),
       members: props.state.members.filter((m) => m.seriesId === s.seriesId && props.state.board.includes(m.deckId)),
       outside: s.outsideCount ?? 0,
       options: props
@@ -53,14 +55,14 @@
     <AutoComplete
       v-model="query"
       :suggestions="suggestions"
-      option-label="name"
+      :option-label="localiseTitle"
       placeholder="Find an existing setting…"
       class="w-full"
       input-class="w-full"
       @complete="(e: { query: string }) => fetchSuggestions(e.query)"
     >
       <template #option="{ option }">
-        <span class="truncate text-sm">{{ option.name }}</span>
+        <span class="truncate text-sm" v-bind="japaneseTextAttrs(localiseTitle(option))">{{ localiseTitle(option) }}</span>
         <span class="ml-2 text-xs text-gray-500 dark:text-gray-400">{{ option.deckCount }} decks</span>
       </template>
     </AutoComplete>
@@ -77,9 +79,9 @@
       "
     >
       <div class="flex items-center justify-between gap-2">
-        <span class="truncate text-[13px] font-semibold">{{ row.setting.name }}</span>
+        <span class="truncate text-[13px] font-semibold" v-bind="japaneseTextAttrs(row.name)">{{ row.name }}</span>
         <Tooltip content="Rename">
-          <Button size="small" text severity="secondary" :aria-label="`Rename ${row.setting.name}`" @click="emit('rename', row.setting.seriesId)">
+          <Button size="small" text severity="secondary" :aria-label="`Rename ${row.name}`" @click="emit('rename', row.setting.seriesId)">
             <Icon name="material-symbols:edit-outline-rounded" />
           </Button>
         </Tooltip>
@@ -102,7 +104,7 @@
             v-if="m.status !== 'removed'"
             type="button"
             class="grid h-4 w-4 place-items-center rounded-sm text-gray-500 hover:bg-red-50 hover:text-red-700 dark:text-gray-400 dark:hover:bg-red-950 dark:hover:text-red-400"
-            :aria-label="`Take ${title(m.deckId)} out of ${row.setting.name}`"
+            :aria-label="`Take ${title(m.deckId)} out of ${row.name}`"
             @click="emit('leave', row.setting.seriesId, m.deckId)"
           >
             <Icon name="material-symbols:close-rounded" size="12" />
@@ -121,7 +123,7 @@
         placeholder="Add a deck from the board"
         size="small"
         class="w-full"
-        :aria-label="`Add a deck to ${row.setting.name}`"
+        :aria-label="`Add a deck to ${row.name}`"
         @update:model-value="(id: number | null) => id != null && emit('add', row.setting.seriesId, id)"
       />
     </div>

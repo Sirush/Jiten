@@ -2,6 +2,7 @@ import type { RouteLocationRaw } from 'vue-router';
 import { DeckRelationshipType } from '~/types/enums';
 import type { Franchise, FranchiseEdge, FranchiseNode } from '~/types/types';
 import type { FranchiseViewKind } from '~/types/series';
+import type { MediaGroupTitles } from '~/types/mediaGroup';
 import { difficultyBand, difficultyNames } from '~/utils/difficultyColours';
 import { getEdgeFlow, isLegacyGroupRelationship, relationshipLinkTypes } from '~/utils/relationshipRoles';
 
@@ -81,13 +82,11 @@ export function franchiseFirstNode<T extends ReleaseOrdered>(nodes: T[]): T | nu
   return first;
 }
 
-/** The stored name (localised when it is an entry's title, lowest deck id first, as the admin list does), else the earliest entry's title. */
-export function franchiseDisplayName(franchise: Pick<Franchise, 'name' | 'nodes'>, localise: (node: FranchiseNode) => string): string {
-  if (franchise.name) {
-    let source: FranchiseNode | null = null;
-    for (const n of franchise.nodes) if (n.originalTitle === franchise.name && (!source || n.deckId < source.deckId)) source = n;
-    return source ? localise(source) : franchise.name;
-  }
+type Localise = (titles: MediaGroupTitles) => string;
+
+/** The franchise's own titles, else the earliest entry's. */
+export function franchiseDisplayName(franchise: Pick<Franchise, 'originalTitle' | 'romajiTitle' | 'englishTitle' | 'nodes'>, localise: Localise): string {
+  if (franchise.originalTitle) return localise({ ...franchise, originalTitle: franchise.originalTitle });
   const first = franchiseFirstNode(franchise.nodes);
   return first ? localise(first) : '';
 }
@@ -121,11 +120,12 @@ export function franchiseDerivedChips(edges: FranchiseEdge[], nodeById: Map<numb
 export function franchisePopoverMemberships(
   franchise: Pick<Franchise, 'series' | 'settings'>,
   deckId: number,
+  localise: Localise,
   title?: (deckId: number) => string | null,
   links?: DeckSeriesLink[]
 ): FranchisePopoverMembership[] {
   const series = franchise.series ?? [];
-  const names = new Map(series.map((s) => [s.seriesId, s.name]));
+  const names = new Map(series.map((s) => [s.seriesId, localise(s)]));
   const own = links ?? series.filter((s) => s.memberDeckIds.includes(deckId)).map((s) => ({ seriesId: s.seriesId, viaDeckId: null }));
   const out: FranchisePopoverMembership[] = [];
   for (const link of own) {
@@ -135,7 +135,7 @@ export function franchisePopoverMemberships(
     out.push({ key: `s-${link.seriesId}`, kind: 'series', seriesId: link.seriesId, label: 'Series', name: via ? `${name} (through ${via})` : name });
   }
   for (const s of franchise.settings ?? []) {
-    if (s.memberDeckIds.includes(deckId)) out.push({ key: `t-${s.seriesId}`, kind: 'setting', seriesId: s.seriesId, label: 'Setting', name: s.name });
+    if (s.memberDeckIds.includes(deckId)) out.push({ key: `t-${s.seriesId}`, kind: 'setting', seriesId: s.seriesId, label: 'Setting', name: localise(s) });
   }
   return out;
 }
@@ -240,9 +240,8 @@ export interface SeriesRow {
   entryId: number;
 }
 
-export interface SeriesGroup {
+export interface SeriesGroup extends MediaGroupTitles {
   seriesId: number;
-  name: string;
   rows: SeriesRow[];
   deckIds: number[];
 }
@@ -338,7 +337,14 @@ export function buildFranchiseSeriesLayout(franchise: Pick<Franchise, 'nodes' | 
     .sort((a, b) => byEntry(a.lines[0]!, b.lines[0]!))
     .map(({ series, lines: own }): SeriesGroup => {
       const rows = toRows(own);
-      return { seriesId: series.seriesId, name: series.name, rows, deckIds: rows.flatMap((r) => r.deckIds) };
+      return {
+        seriesId: series.seriesId,
+        originalTitle: series.originalTitle,
+        romajiTitle: series.romajiTitle,
+        englishTitle: series.englishTitle,
+        rows,
+        deckIds: rows.flatMap((r) => r.deckIds),
+      };
     });
 
   const unassigned = toRows(unassignedLines.sort((a, b) => byRank(a[0]!, b[0]!)));

@@ -11,8 +11,8 @@ namespace Jiten.Api.Services;
 /// <summary>A franchise, a series, or a line identified by its anchor deck.</summary>
 public readonly record struct MediaGroupRef(MediaGroupKind Kind, int Id);
 
-/// <summary>An existing group's label and every deck it holds, filters not applied.</summary>
-public sealed record MediaGroupDescription(string Name, MediaGroupTitlesDto? Titles, int? FranchiseId, IReadOnlyList<int> DeckIds);
+/// <summary>An existing group's titles (a line's are its anchor's) and every deck it holds, filters not applied.</summary>
+public sealed record MediaGroupDescription(MediaGroupTitlesDto Titles, int? FranchiseId, IReadOnlyList<int> DeckIds);
 
 public sealed record MediaGroupFilter(IReadOnlyCollection<MediaType>? MediaTypes, IReadOnlyCollection<int>? ExcludedDeckIds);
 
@@ -45,17 +45,19 @@ public sealed class MediaGroupService(JitenDbContext db, IMemoryCache memoryCach
         var franchiseIds = IdsOf(MediaGroupKind.Franchise);
         if (franchiseIds.Count > 0)
         {
-            var names = await db.Franchises.AsNoTracking()
-                                .Where(f => franchiseIds.Contains(f.FranchiseId))
-                                .ToDictionaryAsync(f => f.FranchiseId, f => f.Name, ct);
+            var franchises = await db.Franchises.AsNoTracking()
+                                     .Where(f => franchiseIds.Contains(f.FranchiseId))
+                                     .Select(f => new { f.FranchiseId, f.OriginalTitle, f.RomajiTitle, f.EnglishTitle })
+                                     .ToListAsync(ct);
             var decks = (await db.Decks.AsNoTracking()
                                  .Where(d => d.FranchiseId != null && franchiseIds.Contains(d.FranchiseId.Value))
                                  .Select(d => new { d.DeckId, FranchiseId = d.FranchiseId!.Value })
                                  .ToListAsync(ct))
                         .ToLookup(d => d.FranchiseId, d => d.DeckId);
 
-            foreach (var (id, name) in names)
-                result[new MediaGroupRef(MediaGroupKind.Franchise, id)] = new MediaGroupDescription(name, null, id, decks[id].ToList());
+            foreach (var f in franchises)
+                result[new MediaGroupRef(MediaGroupKind.Franchise, f.FranchiseId)] =
+                    new MediaGroupDescription(Titles(f.OriginalTitle, f.RomajiTitle, f.EnglishTitle), f.FranchiseId, decks[f.FranchiseId].ToList());
         }
 
         var seriesIds = IdsOf(MediaGroupKind.Series);
@@ -63,7 +65,7 @@ public sealed class MediaGroupService(JitenDbContext db, IMemoryCache memoryCach
         {
             var series = await db.Series.AsNoTracking()
                                  .Where(s => seriesIds.Contains(s.SeriesId))
-                                 .Select(s => new { s.SeriesId, s.Name })
+                                 .Select(s => new { s.SeriesId, s.OriginalTitle, s.RomajiTitle, s.EnglishTitle })
                                  .ToListAsync(ct);
             var members = (await db.SeriesMembers.AsNoTracking()
                                    .Where(m => seriesIds.Contains(m.SeriesId))
@@ -74,7 +76,8 @@ public sealed class MediaGroupService(JitenDbContext db, IMemoryCache memoryCach
 
             foreach (var s in series)
                 result[new MediaGroupRef(MediaGroupKind.Series, s.SeriesId)] =
-                    new MediaGroupDescription(s.Name, null, homes.TryGetValue(s.SeriesId, out var home) ? home : null, members[s.SeriesId].ToList());
+                    new MediaGroupDescription(Titles(s.OriginalTitle, s.RomajiTitle, s.EnglishTitle),
+                                              homes.TryGetValue(s.SeriesId, out var home) ? home : null, members[s.SeriesId].ToList());
         }
 
         var anchorIds = IdsOf(MediaGroupKind.Line);
@@ -87,18 +90,16 @@ public sealed class MediaGroupService(JitenDbContext db, IMemoryCache memoryCach
             var lines = await StoryLines.LinesOfAsync(db, anchors.Select(a => a.DeckId).ToList(), ct);
 
             foreach (var anchor in anchors)
-            {
-                var titles = new MediaGroupTitlesDto
-                {
-                    OriginalTitle = anchor.OriginalTitle, RomajiTitle = anchor.RomajiTitle, EnglishTitle = anchor.EnglishTitle
-                };
                 result[new MediaGroupRef(MediaGroupKind.Line, anchor.DeckId)] =
-                    new MediaGroupDescription(anchor.OriginalTitle, titles, anchor.FranchiseId, lines[anchor.DeckId]);
-            }
+                    new MediaGroupDescription(Titles(anchor.OriginalTitle, anchor.RomajiTitle, anchor.EnglishTitle), anchor.FranchiseId,
+                                              lines[anchor.DeckId]);
         }
 
         return result;
     }
+
+    private static MediaGroupTitlesDto Titles(string originalTitle, string? romajiTitle, string? englishTitle) =>
+        MediaGroupTitlesDto.From(GroupTitles.Of(originalTitle, romajiTitle, englishTitle));
 
     /// <summary>Each deck set narrowed by its filters, with one media type query for all of them.</summary>
     public async Task<List<int>[]> NarrowAsync(IReadOnlyList<(IReadOnlyList<int> DeckIds, MediaGroupFilter Filter)> sets, CancellationToken ct = default)

@@ -54,9 +54,12 @@ public sealed class FranchiseSuggestionService(JitenDbContext db, FranchiseServi
 
         var nodes = (await franchise.LoadNodesAsync(pageDeckIds, ct)).ToDictionary(n => n.DeckId);
         var franchiseIds = pageDeckIds.Select(id => decks[id].FranchiseId).OfType<int>().Distinct().ToList();
-        var franchiseNames = await db.Franchises.AsNoTracking()
-                                     .Where(f => franchiseIds.Contains(f.FranchiseId))
-                                     .ToDictionaryAsync(f => f.FranchiseId, f => f.Name, ct);
+        var franchiseTitles = await db.Franchises.AsNoTracking()
+                                      .Where(f => franchiseIds.Contains(f.FranchiseId))
+                                      .ToDictionaryAsync(f => f.FranchiseId, f => new MediaGroupTitlesDto
+                                      {
+                                          OriginalTitle = f.OriginalTitle, RomajiTitle = f.RomajiTitle, EnglishTitle = f.EnglishTitle
+                                      }, ct);
         var linkTypes = (await db.Set<Link>().AsNoTracking()
                                  .Where(l => pageDeckIds.Contains(l.DeckId))
                                  .Select(l => new { l.DeckId, l.LinkType })
@@ -77,7 +80,7 @@ public sealed class FranchiseSuggestionService(JitenDbContext db, FranchiseServi
                 {
                     Deck = nodes[id],
                     FranchiseId = decks[id].FranchiseId,
-                    FranchiseName = decks[id].FranchiseId is { } f ? franchiseNames.GetValueOrDefault(f) : null,
+                    FranchiseTitles = decks[id].FranchiseId is { } f ? franchiseTitles.GetValueOrDefault(f) : null,
                     LinkTypes = linkTypes.GetValueOrDefault(id) ?? []
                 }).ToList()
             };

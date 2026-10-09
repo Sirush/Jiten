@@ -24,7 +24,9 @@ public partial class AdminController
         if (!string.IsNullOrWhiteSpace(query))
         {
             var needle = query.Trim().ToLower();
-            filtered = filtered.Where(f => f.Name.ToLower().Contains(needle) ||
+            filtered = filtered.Where(f => f.OriginalTitle.ToLower().Contains(needle) ||
+                                           (f.RomajiTitle != null && f.RomajiTitle.ToLower().Contains(needle)) ||
+                                           (f.EnglishTitle != null && f.EnglishTitle.ToLower().Contains(needle)) ||
                                            f.Decks.Any(d => d.OriginalTitle.ToLower().Contains(needle) ||
                                                             (d.RomajiTitle != null && d.RomajiTitle.ToLower().Contains(needle)) ||
                                                             (d.EnglishTitle != null && d.EnglishTitle.ToLower().Contains(needle))));
@@ -51,16 +53,14 @@ public partial class AdminController
 
     /// <summary>Mirrors the client's title localisation so the name sort matches what the admin reads.</summary>
     private static string DisplayName(FranchiseSummaryDto franchise, TitleLanguage language) =>
-        franchise.NameTitles is not { } titles
-            ? franchise.Name
-            : language switch
-            {
-                TitleLanguage.Romaji => titles.RomajiTitle ?? titles.OriginalTitle,
-                TitleLanguage.English => titles.EnglishTitle ?? titles.RomajiTitle ?? titles.OriginalTitle,
-                _ => titles.OriginalTitle
-            };
+        language switch
+        {
+            TitleLanguage.Romaji => franchise.RomajiTitle ?? franchise.OriginalTitle,
+            TitleLanguage.English => franchise.EnglishTitle ?? franchise.RomajiTitle ?? franchise.OriginalTitle,
+            _ => franchise.OriginalTitle
+        };
 
-    /// <summary>A non-empty name becomes manual and survives syncs; an empty one returns the franchise to its automatic name.</summary>
+    /// <summary>Non-empty titles become manual and survive syncs; a blank original title returns the franchise to automatic titles.</summary>
     [HttpPatch("franchise/{id:int}")]
     public async Task<IActionResult> UpdateFranchise(int id, [FromBody] UpdateFranchiseRequest request,
                                                      [FromServices] FranchiseSyncRunner franchiseSync,
@@ -70,8 +70,7 @@ public partial class AdminController
         if (entity == null)
             return NotFound();
 
-        var name = request.Name?.Trim();
-        if (string.IsNullOrEmpty(name))
+        if (string.IsNullOrWhiteSpace(request.OriginalTitle))
         {
             entity.NameIsManual = false;
             entity.UpdatedAt = DateTime.UtcNow;
@@ -80,10 +79,10 @@ public partial class AdminController
         }
         else
         {
-            if (SeriesService.ValidateName(name) is { } nameError)
-                return BadRequest(new { Message = nameError });
+            if (request.Validate() is { } titleError)
+                return BadRequest(new { Message = titleError });
 
-            entity.Name = name;
+            entity.SetTitles(request.ToTitles());
             entity.NameIsManual = true;
             entity.UpdatedAt = DateTime.UtcNow;
             await dbContext.SaveChangesAsync();
@@ -101,7 +100,9 @@ public partial class AdminController
         var summaries = await franchises.Select(f => new FranchiseSummaryDto
         {
             FranchiseId = f.FranchiseId,
-            Name = f.Name,
+            OriginalTitle = f.OriginalTitle,
+            RomajiTitle = f.RomajiTitle,
+            EnglishTitle = f.EnglishTitle,
             NameIsManual = f.NameIsManual
         }).ToListAsync();
 
@@ -120,13 +121,6 @@ public partial class AdminController
                                           .Select(g => new { FranchiseId = g.Key, Count = g.Count() })
                                           .ToDictionaryAsync(g => g.FranchiseId, g => g.Count);
 
-        var nameDecks = (await franchises.Join(dbContext.Decks, f => (int?)f.FranchiseId, d => d.FranchiseId, (f, d) => new { f, d })
-                                         .Where(x => x.d.OriginalTitle == x.f.Name)
-                                         .Select(x => new { x.f.FranchiseId, x.d.DeckId, x.d.OriginalTitle, x.d.RomajiTitle, x.d.EnglishTitle })
-                                         .ToListAsync())
-                        .GroupBy(d => d.FranchiseId)
-                        .ToDictionary(g => g.Key, g => g.MinBy(d => d.DeckId)!);
-
         foreach (var summary in summaries)
         {
             summary.SeriesCount = seriesCounts.GetValueOrDefault(summary.FranchiseId);
@@ -135,13 +129,6 @@ public partial class AdminController
                 summary.DeckCount = stats.Count;
                 summary.FirstDeckId = stats.FirstDeckId;
             }
-            if (nameDecks.TryGetValue(summary.FranchiseId, out var deck))
-                summary.NameTitles = new MediaGroupTitlesDto
-                {
-                    OriginalTitle = deck.OriginalTitle,
-                    RomajiTitle = string.IsNullOrWhiteSpace(deck.RomajiTitle) ? null : deck.RomajiTitle,
-                    EnglishTitle = string.IsNullOrWhiteSpace(deck.EnglishTitle) ? null : deck.EnglishTitle
-                };
         }
 
         return summaries;

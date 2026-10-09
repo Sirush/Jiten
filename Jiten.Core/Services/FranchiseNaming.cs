@@ -1,10 +1,11 @@
 using System.Globalization;
+using Jiten.Core.Data;
 
 namespace Jiten.Core.Services;
 
 public static class FranchiseNaming
 {
-    public const int MaxNameLength = 200;
+    public const int MaxNameLength = GroupTitles.MaxLength;
     public const int MinPrefixLength = 3;
     public const double PrefixShare = 0.6;
 
@@ -16,27 +17,48 @@ public static class FranchiseNaming
     public static (bool Unknown, DateOnly Date) ReleaseOrder(DateOnly releaseDate) => (releaseDate < UnknownReleaseCutoff, releaseDate);
 
     /// <summary>
-    /// The series name when the component touches exactly one series; else the longest title prefix (trailing numbering and separators trimmed, 3+ characters)
-    /// shared by 60 % of the members and at least two; else the earliest member's title.
+    /// The series titles when the component touches exactly one series; else the longest original title prefix (trailing numbering and separators trimmed,
+    /// 3+ characters) shared by 60 % of the members and at least two; else the earliest member's titles.
+    /// A prefix that is a member's whole original title takes that member's other titles.
     /// </summary>
-    public static string Suggest(IReadOnlyList<(string OriginalTitle, DateOnly ReleaseDate, int DeckId)> members,
-                                 IReadOnlyList<string> seriesNames)
+    public static GroupTitles Suggest(IReadOnlyList<(GroupTitles Titles, DateOnly ReleaseDate, int DeckId)> members,
+                                      IReadOnlyList<GroupTitles> series)
     {
-        if (seriesNames.Count == 1 && !string.IsNullOrWhiteSpace(seriesNames[0]))
-            return Clamp(seriesNames[0].Trim());
+        if (series.Count == 1 && !string.IsNullOrWhiteSpace(series[0].OriginalTitle))
+            return GroupTitles.Of(series[0].OriginalTitle, series[0].RomajiTitle, series[0].EnglishTitle);
 
-        var prefix = SharedPrefix(members.Select(m => m.OriginalTitle).ToList());
-        if (prefix != null)
-            return Clamp(prefix);
+        var ordered = members.OrderBy(m => ReleaseOrder(m.ReleaseDate)).ThenBy(m => m.DeckId).Select(m => m.Titles).ToList();
+        var prefix = SharedPrefix(ordered.Select(t => (string?)t.OriginalTitle).ToList());
+        if (prefix == null)
+            return ordered.Count == 0 ? GroupTitles.Of("", null, null) : Copy(ordered[0]);
 
-        var earliest = members.OrderBy(m => ReleaseOrder(m.ReleaseDate)).ThenBy(m => m.DeckId).FirstOrDefault();
-        return Clamp(earliest.OriginalTitle?.Trim() ?? "");
+        if (ordered.FirstOrDefault(t => t.OriginalTitle?.Trim() == prefix) is { } named)
+            return Copy(named);
+
+        var sharing = ordered.Where(t => t.OriginalTitle?.Trim().StartsWith(prefix, StringComparison.Ordinal) == true).ToList();
+        return GroupTitles.Of(prefix, WholeWordPrefix(sharing.Select(t => t.RomajiTitle)), WholeWordPrefix(sharing.Select(t => t.EnglishTitle)));
+    }
+
+    private static GroupTitles Copy(GroupTitles titles) => GroupTitles.Of(titles.OriginalTitle, titles.RomajiTitle, titles.EnglishTitle);
+
+    /// <summary>Prefix of every given title, cut at a word boundary; stricter than <see cref="SharedPrefix"/> as translations often share only "The" or "A Kiss".</summary>
+    private static string? WholeWordPrefix(IEnumerable<string?> titles)
+    {
+        var present = titles.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!.Trim()).ToList();
+        if (present.Count < 2)
+            return null;
+
+        var prefix = TrimTail(present.Aggregate(CommonPrefix));
+        if (prefix.Length < MinPrefixLength || prefix.Equals("The", StringComparison.OrdinalIgnoreCase))
+            return null;
+
+        return present.All(t => t.Length == prefix.Length || !char.IsLetterOrDigit(t[prefix.Length])) ? prefix : null;
     }
 
     /// <summary>In ordinal order, every k titles sharing a prefix sit in one window of k, so the window ends bound it.</summary>
-    private static string? SharedPrefix(List<string> titles)
+    private static string? SharedPrefix(List<string?> titles)
     {
-        var sorted = titles.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t.Trim()).Order(StringComparer.Ordinal).ToList();
+        var sorted = titles.Where(t => !string.IsNullOrWhiteSpace(t)).Select(t => t!.Trim()).Order(StringComparer.Ordinal).ToList();
         var needed = Math.Max(2, (int)Math.Ceiling(titles.Count * PrefixShare - 1e-9));
         if (sorted.Count < needed)
             return null;
@@ -75,7 +97,6 @@ public static class FranchiseNaming
         return prefix;
     }
 
-    private static string Clamp(string name) => name.Length > MaxNameLength ? name[..MaxNameLength] : name;
 }
 
 /// <summary>Orders names by their first letter or digit, so quotes and brackets around a title do not pull it to the top; full and half width, case and kana type compare equal.</summary>

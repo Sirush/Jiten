@@ -1,13 +1,13 @@
 <script setup lang="ts">
   import { ref, computed, watch } from 'vue';
   import Button from 'primevue/button';
-  import InputText from 'primevue/inputtext';
   import Dialog from 'primevue/dialog';
   import AutoComplete from 'primevue/autocomplete';
   import Message from 'primevue/message';
   import { SeriesKind, type SeriesRef, type SeriesSummary } from '~/types/series';
   import type { SeriesDialogRequest } from '~/utils/franchiseBuilder';
   import { apiErrorMessage } from '~/utils/apiErrorMessage';
+  import { titlesDraft, titlesFromDraft } from '~/utils/groupTitles';
   import { seriesKindLabel } from '~/utils/seriesKind';
 
   const props = defineProps<{ request: SeriesDialogRequest | null }>();
@@ -15,7 +15,8 @@
 
   const { $api } = useNuxtApp();
   const { error, busy, create } = useSeriesCreate();
-  const name = ref('');
+  const localiseTitle = useLocaliseTitle();
+  const draft = ref(titlesDraft());
   const existing = ref<SeriesSummary | string | null>(null);
   const kind = computed(() => props.request?.kind ?? SeriesKind.Series);
   const kindWord = computed(() => seriesKindLabel(kind.value).toLowerCase());
@@ -25,7 +26,7 @@
   watch(
     () => props.request,
     (r) => {
-      name.value = r?.name ?? '';
+      draft.value = titlesDraft(r?.titles);
       existing.value = null;
       error.value = '';
     }
@@ -40,20 +41,20 @@
         emit('picked', pickedExisting.value);
         return;
       }
-      const created = await create(name.value, r.kind, failMessage);
+      const created = await create(draft.value, r.kind, failMessage);
       if (created) emit('created', created);
       return;
     }
-    const trimmed = name.value.trim();
-    if (!trimmed) {
-      error.value = 'Give it a name.';
+    const titles = titlesFromDraft(draft.value);
+    if (!titles.originalTitle) {
+      error.value = 'Give it an original title.';
       return;
     }
     if (r.seriesId == null) return;
     busy.value = true;
     error.value = '';
     try {
-      emit('renamed', await $api<SeriesRef>(`admin/series/${r.seriesId}`, { method: 'PATCH', body: { name: trimmed } }));
+      emit('renamed', await $api<SeriesRef>(`admin/series/${r.seriesId}`, { method: 'PATCH', body: titles }));
     } catch (e) {
       error.value = apiErrorMessage(e, failMessage);
     } finally {
@@ -71,24 +72,21 @@
     @update:visible="(v: boolean) => !v && emit('close')"
   >
     <form v-if="request" class="flex flex-col gap-3" @submit.prevent="submit">
-      <div class="flex flex-col gap-1.5">
-        <label for="fb-series-name" class="text-sm font-medium">Name</label>
-        <InputText id="fb-series-name" v-model="name" autofocus class="w-full" :invalid="!!error" />
-      </div>
+      <GroupTitlesFields v-model="draft" :invalid="!!error && !draft.originalTitle.trim()" autofocus />
       <div v-if="request.mode === 'create' && request.kind === SeriesKind.Series" class="flex flex-col gap-1.5">
         <label for="fb-series-existing" class="text-sm font-medium">Or use an existing series</label>
         <AutoComplete
           v-model="existing"
           input-id="fb-series-existing"
           :suggestions="suggestions"
-          option-label="name"
+          :option-label="localiseTitle"
           placeholder="Search series…"
           class="w-full"
           input-class="w-full"
           @complete="(e: { query: string }) => fetchSuggestions(e.query)"
         >
           <template #option="{ option }">
-            <span class="truncate text-sm">{{ option.name }}</span>
+            <span class="truncate text-sm" v-bind="japaneseTextAttrs(localiseTitle(option))">{{ localiseTitle(option) }}</span>
             <span class="ml-2 text-xs text-gray-500 dark:text-gray-400">{{ option.deckCount }} decks</span>
           </template>
         </AutoComplete>
