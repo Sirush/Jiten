@@ -26,6 +26,7 @@
   import {
     getInverseRelationshipType,
     getRelationshipRoleLabel as getRelationshipTypeLabel,
+    isLegacyGroupRelationship,
     relationshipRoleOptions,
     toCanonicalEdge,
     type RelationshipRoleOption,
@@ -606,8 +607,6 @@
     if (!role || !target) return '';
     const thisTitle = originalTitle.value || 'this deck';
     if (role.label === 'Alternative') return `${target} will be an alternative version of ${thisTitle}.`;
-    if (role.label === 'Same series') return `${target} will be in the same series as ${thisTitle}.`;
-    if (role.label === 'Same setting') return `${target} will share its setting with ${thisTitle}.`;
     return `${target} will be the ${role.label.toLowerCase()} of ${thisTitle}.`;
   });
 
@@ -906,12 +905,14 @@
       });
 
       const currentDeckId = parseInt(mediaId as string);
-      relationships.value.forEach((rel, index) => {
-        const edge = toCanonicalEdge(currentDeckId, rel);
-        formData.append(`relationships[${index}].sourceDeckId`, edge.sourceDeckId.toString());
-        formData.append(`relationships[${index}].targetDeckId`, edge.targetDeckId.toString());
-        formData.append(`relationships[${index}].relationshipType`, edge.relationshipType.toString());
-      });
+      relationships.value
+        .map((rel) => toCanonicalEdge(currentDeckId, rel))
+        .filter((edge) => !isLegacyGroupRelationship(edge.relationshipType))
+        .forEach((edge, index) => {
+          formData.append(`relationships[${index}].sourceDeckId`, edge.sourceDeckId.toString());
+          formData.append(`relationships[${index}].targetDeckId`, edge.targetDeckId.toString());
+          formData.append(`relationships[${index}].relationshipType`, edge.relationshipType.toString());
+        });
 
       if (subdecks.value.length > 0) {
         for (let i = 0; i < subdecks.value.length; i++) {
@@ -957,7 +958,11 @@
       <div class="flex items-center mb-6">
         <Button icon="pi pi-arrow-left" class="p-button-text mr-2" @click="navigateTo('/dashboard')" />
         <h1 class="text-3xl font-bold">Edit Media</h1>
-        <div class="ml-auto">
+        <div class="ml-auto flex flex-wrap gap-2 justify-end">
+          <Button severity="secondary" @click="navigateTo(`/dashboard/franchise/${mediaId}`)">
+            <Icon name="material-symbols:account-tree-outline" />
+            Franchise builder
+          </Button>
           <Button @click="navigateTo(`/decks/media/${mediaId}/detail`)">
             <Icon name="ic:baseline-remove-red-eye" />
             View Deck
@@ -1455,7 +1460,10 @@
                     {{ rel.targetTitle }}
                   </NuxtLink>
                 </div>
-                <Button severity="danger" text @click="removeRelationship(index)">
+                <span v-if="isLegacyGroupRelationship(rel.relationshipType)" class="text-xs text-gray-500 dark:text-gray-400">
+                  Kept until it is converted to a series
+                </span>
+                <Button v-else severity="danger" text @click="removeRelationship(index)">
                   <Icon name="material-symbols-light:delete" size="1.5em" />
                 </Button>
               </li>

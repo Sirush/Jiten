@@ -7,6 +7,7 @@ using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.Billing;
 using Jiten.Core.Data.User;
+using Jiten.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 
@@ -24,11 +25,11 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
 
     public async Task<(List<DeckWord>? Words, IResult? Error)> ResolveDeckWords(DeckWordResolveRequest request)
     {
-        var (deckId, deck, downloadType, order, minFrequency, maxFrequency,
+        var (source, downloadType, order, minFrequency, maxFrequency,
             excludeMatureMasteredBlacklisted, excludeAllTrackedWords,
             targetPercentage, minOccurrences, maxOccurrences, posFilter, startFromKnown, frequencySource) = request;
 
-        IQueryable<DeckWord> deckWordsQuery = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == deckId);
+        var deckWordsQuery = QuerySource(source);
 
         if (!string.IsNullOrEmpty(posFilter))
         {
@@ -94,7 +95,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                                    .Select(kvp => WordFormHelper.EncodeWordKey(kvp.Key.WordId, kvp.Key.ReadingIndex))
                                    .ToHashSet();
 
-                int totalOccurrences = deck.WordCount;
+                int totalOccurrences = await TotalOccurrences(source);
                 double targetCoverage = targetPercentage.Value;
 
                 var resultWords = CollectCoverageWords(
@@ -178,6 +179,27 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         }
 
         return (deckWordsRaw, null);
+    }
+
+    public IQueryable<DeckWord> QuerySource(DeckWordSource source)
+    {
+        if (source.DeckId is { } deckId)
+            return context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == deckId);
+
+        var deckIds = source.DeckIds;
+        return MediaGroupStats.MergeWords(context.DeckWords.AsNoTracking().Where(dw => deckIds.Contains(dw.DeckId)), context.Decks);
+    }
+
+    private async Task<int> TotalOccurrences(DeckWordSource source)
+    {
+        if (source.WordCount is { } wordCount)
+            return wordCount;
+
+        var deckIds = source.DeckIds;
+        var total = await context.Decks.AsNoTracking()
+                                 .Where(d => deckIds.Contains(d.DeckId))
+                                 .SumAsync(d => (long)d.WordCount);
+        return (int)Math.Min(total, int.MaxValue);
     }
 
     public static void ShuffleInPlace<T>(List<T> items)
@@ -717,11 +739,11 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
      public async Task<(int Count, HashSet<long> WordKeys)> CountDeckWords(DeckWordResolveRequest request, bool excludeKana,
                                                                           HashSet<long>? globalFrequencyKeys = null)
     {
-        var (deckId, deck, downloadType, order, minFrequency, maxFrequency,
+        var (source, downloadType, order, minFrequency, maxFrequency,
             excludeMatureMasteredBlacklisted, excludeAllTrackedWords,
             targetPercentage, minOccurrences, maxOccurrences, posFilter, startFromKnown, frequencySource) = request;
 
-        IQueryable<DeckWord> query = context.DeckWords.AsNoTracking().Where(dw => dw.DeckId == deckId);
+        var query = QuerySource(source);
 
         switch (downloadType)
         {
@@ -805,13 +827,12 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         return false;
     }
 
-    public async Task<(int Count, HashSet<long> WordKeys)> CountTargetCoverageWords(int deckId, Deck deck, float targetPercentage, bool excludeKana, string? posFilter = null, bool startFromKnown = false)
+    public async Task<(int Count, HashSet<long> WordKeys)> CountTargetCoverageWords(DeckWordSource source, float targetPercentage, bool excludeKana, string? posFilter = null, bool startFromKnown = false)
     {
         if (!currentUserService.IsAuthenticated)
             return (0, []);
 
-        IQueryable<DeckWord> deckWordsQuery = context.DeckWords.AsNoTracking()
-            .Where(dw => dw.DeckId == deckId);
+        var deckWordsQuery = QuerySource(source);
 
         if (!string.IsNullOrEmpty(posFilter))
         {
@@ -837,7 +858,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             .ThenBy(dw => dw.ReadingIndex)
             .ToList();
 
-        int totalOccurrences = deck.WordCount;
+        int totalOccurrences = await TotalOccurrences(source);
 
         var keysWithOccurrences = allDeckWords
             .Select(dw => (Key: WordFormHelper.EncodeWordKey(dw.WordId, dw.ReadingIndex), dw.Occurrences))

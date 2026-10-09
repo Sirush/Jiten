@@ -1,3 +1,5 @@
+import type { FranchiseSeries, FranchiseSetting, SeriesRef } from './series';
+import type { FranchiseLine, MediaGroupKind, MediaGroupTitles } from './mediaGroup';
 import type {
   ComparisonOutcome,
   MediaListEntryState,
@@ -15,6 +17,7 @@ import type {
   RequestAction,
   RequestKind,
   RequestStatus,
+  StudyDeckType,
   WordSetStateType,
 } from '~/types';
 
@@ -127,6 +130,10 @@ export interface Deck {
   genres?: Genre[];
   tags?: TagWithPercentage[];
   relationships?: DeckRelationship[];
+  /** Series and settings the deck is listed in; deck detail endpoint only. */
+  series?: SeriesRef[];
+  /** Deck detail endpoint only; null when the deck has no franchise. */
+  franchiseId?: number | null;
   status?: DeckStatus;
   isFavourite?: boolean;
   isIgnored?: boolean;
@@ -193,7 +200,7 @@ export interface DescriptionSearchResponse {
 export interface DeckVocabularyList {
   parentDeck: Deck | null;
   deck: Deck;
-  words: DeckWord[];
+  words: Word[];
   appliedFrequencySource?: MediaType | null;
 }
 
@@ -293,9 +300,6 @@ export interface FranchiseNode {
   releaseDate: string;
   difficulty: number;
   difficultyRaw: number;
-  characterCount: number;
-  wordCount: number;
-  childrenDeckCount: number;
   coverage: number;
   uniqueCoverage: number;
 }
@@ -307,9 +311,16 @@ export interface FranchiseEdge {
 }
 
 export interface Franchise {
+  /** Null on a franchise builder response for a deck that belongs to no franchise yet. */
+  franchiseId: number | null;
+  name: string | null;
+  nameIsManual: boolean;
   nodes: FranchiseNode[];
   edges: FranchiseEdge[];
-  truncated: boolean;
+  lines: FranchiseLine[];
+  series: FranchiseSeries[];
+  settings: FranchiseSetting[];
+  preferredView: 'timeline' | 'series';
 }
 
 export interface MetadataTag {
@@ -1330,6 +1341,15 @@ export interface StudyDeckDto {
   parentRomajiTitle?: string;
   parentEnglishTitle?: string;
   parentCoverName?: string;
+  groupKind?: MediaGroupKind | null;
+  groupId?: number | null;
+  /** Franchise or series name; null when the group no longer exists. */
+  groupName?: string | null;
+  groupTitles?: MediaGroupTitles | null;
+  groupFranchiseId?: number | null;
+  /** Null means every media type. */
+  groupMediaTypes?: MediaType[] | null;
+  groupExcludedDeckIds?: number[] | null;
 }
 
 export interface SmartDeckSettings {
@@ -2009,6 +2029,10 @@ export interface AddStudyDeckRequest {
   posFilter?: string;
   frequencyMediaType?: MediaType;
   frequencyListId?: number;
+  groupKind?: MediaGroupKind;
+  groupId?: number;
+  groupMediaTypes?: MediaType[];
+  groupExcludedDeckIds?: number[];
 }
 
 export interface BatchAddStudyDecksRequest {
@@ -2044,6 +2068,8 @@ export interface UpdateStudyDeckRequest {
   posFilter?: string;
   frequencyMediaType?: MediaType;
   frequencyListId?: number;
+  groupMediaTypes?: MediaType[];
+  groupExcludedDeckIds?: number[];
 }
 
 export interface CorpusSnippet {

@@ -14,7 +14,8 @@ public class ParseJob(
     IBackgroundJobClient backgroundJobs,
     IPendingCoverageQueue pendingCoverageQueue,
     IPendingEmbeddingQueue pendingEmbeddingQueue,
-    IIndexNowService indexNow)
+    IIndexNowService indexNow,
+    ILogger<ParseJob> logger)
 {
     [Queue("parse")]
     public Task Parse(Metadata metadata, MediaType deckType, bool storeRawText) => Parse(metadata, deckType, storeRawText, null);
@@ -154,7 +155,8 @@ public class ParseJob(
         if (metadata.Relations.Count > 0)
         {
             await using var relationContext = await contextFactory.CreateDbContextAsync();
-            await MetadataProviderHelper.ProcessRelations(relationContext, deck.DeckId, metadata.Relations);
+            await MetadataProviderHelper.ProcessRelations(relationContext, deck.DeckId, metadata.Relations, logger);
+            FranchiseSyncJob.Enqueue(backgroundJobs);
         }
 
         // Enqueue decks for the periodic coverage sweeper (coalesces per-user work)

@@ -99,6 +99,7 @@ export enum StudyDeckType {
   GlobalDynamic = 1,
   StaticWordList = 2,
   Smart = 3,
+  MediaGroup = 4,
 }
 
 export enum SortOrder {

@@ -4,9 +4,30 @@ using Jiten.Core.Data.User;
 
 namespace Jiten.Api.Services;
 
+/// <summary>Words a media or media group study deck draws from: one deck as stored, or several decks merged per word.</summary>
+public sealed record DeckWordSource
+{
+    public int? DeckId { get; private init; }
+    public IReadOnlyList<int> DeckIds { get; private init; } = [];
+
+    /// <summary>Target-coverage denominator of a single deck; a merged source sums its decks' word counts instead.</summary>
+    public int? WordCount { get; private init; }
+
+    /// <summary>The media deck's title or the group's name; null when the caller did not supply it.</summary>
+    public string? Title { get; private init; }
+
+    /// <summary>Set for a media group source.</summary>
+    public MediaGroupDescription? Group { get; private init; }
+
+    public static DeckWordSource ForDeck(int deckId, int wordCount, string? title = null) =>
+        new() { DeckId = deckId, DeckIds = [deckId], WordCount = wordCount, Title = title };
+
+    public static DeckWordSource Merged(IReadOnlyList<int> deckIds, MediaGroupDescription? group = null) =>
+        new() { DeckIds = deckIds, Group = group, Title = group?.Name };
+}
+
 public record DeckWordResolveRequest(
-    int DeckId,
-    Deck Deck,
+    DeckWordSource Source,
     DeckDownloadType DownloadType,
     DeckOrder Order,
     int MinFrequency,
@@ -18,7 +39,12 @@ public record DeckWordResolveRequest(
     int? MaxOccurrences = null,
     string? PosFilter = null,
     bool StartFromKnown = false,
-    MediaType? FrequencySource = null);
+    MediaType? FrequencySource = null)
+{
+    public static DeckWordResolveRequest ForStudyDeck(UserStudyDeck sd, DeckWordSource source) =>
+        new(source, (DeckDownloadType)sd.DownloadType, (DeckOrder)sd.Order, sd.MinFrequency, sd.MaxFrequency, false, false,
+            sd.TargetPercentage, sd.MinOccurrences, sd.MaxOccurrences, sd.PosFilter, sd.StartFromKnown);
+}
 
 public class ResolvedWord
 {
@@ -42,6 +68,9 @@ public readonly record struct FrequencyScope(MediaType? MediaType, long? Frequen
 public interface IDeckWordResolver
 {
     Task<(List<DeckWord>? Words, IResult? Error)> ResolveDeckWords(DeckWordResolveRequest request);
+
+    /// <summary>Rows of the source; a merged source yields one row per word with DeckWordId set to its release-ordered chrono key, not a real row id.</summary>
+    IQueryable<DeckWord> QuerySource(DeckWordSource source);
     Task<HashSet<long>> GetStudyDeckWordKeys(List<int> deckIds);
     Task<HashSet<long>> GetStaticDeckWordKeys(List<int> studyDeckIds);
     Task<GlobalDynamicResult> ResolveGlobalDynamicWords(int? minFreq, int? maxFreq, string? posFilter,
@@ -66,7 +95,7 @@ public interface IDeckWordResolver
     Task<IReadOnlyDictionary<long, int>> GetListRankMap(long listId);
     Task<(int Count, HashSet<long> WordKeys)> CountDeckWords(DeckWordResolveRequest request, bool excludeKana,
                                                              HashSet<long>? globalFrequencyKeys = null);
-    Task<(int Count, HashSet<long> WordKeys)> CountTargetCoverageWords(int deckId, Deck deck, float targetPercentage, bool excludeKana, string? posFilter = null, bool startFromKnown = false);
+    Task<(int Count, HashSet<long> WordKeys)> CountTargetCoverageWords(DeckWordSource source, float targetPercentage, bool excludeKana, string? posFilter = null, bool startFromKnown = false);
     Task<(int Count, HashSet<long> WordKeys)> CountStaticDeckWords(int studyDeckId, bool excludeKana,
         bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false);
 }

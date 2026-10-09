@@ -227,6 +227,9 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
         db.MediaRequestBoosts.RemoveRange(db.MediaRequestBoosts);
         db.MediaRequests.RemoveRange(db.MediaRequests);
         db.DeckActivityDailies.RemoveRange(db.DeckActivityDailies);
+        await db.SeriesMembers.ExecuteDeleteAsync();
+        await db.Series.ExecuteDeleteAsync();
+        await db.Franchises.ExecuteDeleteAsync();
         db.Decks.RemoveRange(db.Decks);
         await db.SaveChangesAsync();
 

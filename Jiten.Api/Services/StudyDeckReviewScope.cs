@@ -13,7 +13,7 @@ public interface IStudyDeckReviewScope
 {
     Task<List<UserStudyDeck>> LoadActiveStudyDecks(string userId);
 
-    /// <summary>Word keys of the active media and static decks; global-dynamic membership is matched per caller.</summary>
+    /// <summary>Word keys of the active media, media group and static decks; global-dynamic membership is matched per caller.</summary>
     Task<HashSet<long>> GetStudyDeckBaseKeys(List<UserStudyDeck> activeStudyDecks);
 
     /// <summary>Base keys plus the global-dynamic matches among <paramref name="cardKeys"/>.</summary>
@@ -33,6 +33,8 @@ public class StudyDeckReviewScope(
     IDbContextFactory<UserDbContext> userContextFactory,
     IHttpContextAccessor httpContextAccessor,
     IDeckWordResolver deckWordResolver,
+    IStudyDeckWordSources wordSources,
+    IStudyDeckMembershipService deckMembership,
     IWordFormSiblingCache wordFormCache,
     IDerivationLinkCache derivationCache,
     IMemoryCache memoryCache) : IStudyDeckReviewScope
@@ -49,7 +51,7 @@ public class StudyDeckReviewScope(
     public async Task<HashSet<long>> GetStudyDeckBaseKeys(List<UserStudyDeck> activeStudyDecks)
     {
         var mediaDecks = activeStudyDecks
-            .Where(sd => sd.DeckType == StudyDeckType.MediaDeck && sd.DeckId.HasValue)
+            .Where(sd => sd.DeckType.DrawsFromDecks())
             .ToList();
         var wordKeys = await GetFilteredMediaWordKeys(mediaDecks);
 
@@ -102,37 +104,31 @@ public class StudyDeckReviewScope(
         var wordKeys = new HashSet<long>();
         if (mediaStudyDecks.Count == 0) return wordKeys;
 
-        var deckIds = mediaStudyDecks.Select(sd => sd.DeckId!.Value).Distinct().ToList();
-        var wordCounts = await context.Decks.AsNoTracking()
-            .Where(d => deckIds.Contains(d.DeckId))
-            .Select(d => new { d.DeckId, d.WordCount })
-            .ToDictionaryAsync(d => d.DeckId, d => d.WordCount);
+        // Group decks merge every member deck per query; their known-word-independent sets come from the membership cache instead.
+        var cached = mediaStudyDecks.Where(sd => sd.DeckType == StudyDeckType.MediaGroup && !DependsOnKnownWords(sd)).ToList();
+        foreach (var sd in cached)
+            wordKeys.UnionWith(await deckMembership.GetDeckSet(sd));
 
-        var globalFrequencyKeysByRange = await LoadGlobalFrequencyRanges(mediaStudyDecks);
+        var live = mediaStudyDecks.Except(cached).ToList();
+        var sources = await wordSources.ResolveAsync(live);
+
+        var globalFrequencyKeysByRange = await LoadGlobalFrequencyRanges(live);
         var deckQueryGate = new SemaphoreSlim(MaxConcurrentDeckQueries);
         var countTasks = new List<Task<(int Count, HashSet<long> WordKeys)>>();
 
-        foreach (var sd in mediaStudyDecks)
+        foreach (var sd in live)
         {
-            if (!wordCounts.TryGetValue(sd.DeckId!.Value, out var wordCount)) continue;
-            var deck = new Deck { DeckId = sd.DeckId.Value, WordCount = wordCount };
+            if (!sources.TryGetValue(sd.UserStudyDeckId, out var source)) continue;
 
             if ((DeckDownloadType)sd.DownloadType == DeckDownloadType.TargetCoverage && sd.TargetPercentage.HasValue)
             {
                 countTasks.Add(CountWithFactoryContext((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache, memoryCache)
-                    .CountTargetCoverageWords(sd.DeckId.Value, deck, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter, sd.StartFromKnown),
+                    .CountTargetCoverageWords(source, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter, sd.StartFromKnown),
                     deckQueryGate));
             }
             else
             {
-                var request = new DeckWordResolveRequest(
-                    sd.DeckId.Value, deck,
-                    (DeckDownloadType)sd.DownloadType, (DeckOrder)sd.Order,
-                    sd.MinFrequency, sd.MaxFrequency,
-                    false, false,
-                    sd.TargetPercentage,
-                    sd.MinOccurrences, sd.MaxOccurrences,
-                    sd.PosFilter, sd.StartFromKnown);
+                var request = DeckWordResolveRequest.ForStudyDeck(sd, source);
                 globalFrequencyKeysByRange.TryGetValue((sd.MinFrequency, sd.MaxFrequency), out var frequencyKeys);
                 countTasks.Add(CountWithFactoryContext((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache, memoryCache)
                     .CountDeckWords(request, sd.ExcludeKana, frequencyKeys),
@@ -146,10 +142,13 @@ public class StudyDeckReviewScope(
         return wordKeys;
     }
 
+    private static bool DependsOnKnownWords(UserStudyDeck sd) =>
+        (DeckDownloadType)sd.DownloadType == DeckDownloadType.TargetCoverage && sd.TargetPercentage.HasValue && sd.StartFromKnown;
+
     public async Task<Dictionary<(int Min, int Max), HashSet<long>>> LoadGlobalFrequencyRanges(List<UserStudyDeck> studyDecks)
     {
         var ranges = studyDecks
-            .Where(sd => sd.DeckType == StudyDeckType.MediaDeck
+            .Where(sd => sd.DeckType.DrawsFromDecks()
                          && (DeckDownloadType)sd.DownloadType == DeckDownloadType.TopGlobalFrequency)
             .Select(sd => (Min: sd.MinFrequency, Max: sd.MaxFrequency))
             .Distinct()

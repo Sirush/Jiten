@@ -459,7 +459,7 @@
       case 'tags':
         return !store.hideTags && !!deck.tags?.length;
       case 'relations':
-        return !store.hideRelations && !!deck.relationships?.length;
+        return !store.hideRelations && (!!deck.relationships?.length || deck.franchiseId != null);
     }
   };
 

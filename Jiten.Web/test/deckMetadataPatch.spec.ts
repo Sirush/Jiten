@@ -111,6 +111,30 @@ describe('buildDeckMetadataPatch', () => {
     });
   });
 
+  it('leaves legacy same series and same setting rows out of the patch', () => {
+    const original = baseDraft();
+    original.relationships = [...original.relationships, { targetDeckId: 20, relationshipType: DeckRelationshipType.SameSeries, isInverse: false }];
+    expect(buildDeckMetadataPatch(DECK_ID, original, { ...baseDraft(), relationships: [...original.relationships] })).toEqual({});
+
+    const draft = {
+      ...baseDraft(),
+      relationships: [...original.relationships, { targetDeckId: 12, relationshipType: DeckRelationshipType.Fandisc, isInverse: false }],
+    };
+    draft.relationships.push({ targetDeckId: 21, relationshipType: DeckRelationshipType.SameSetting, isInverse: true });
+    expect(buildDeckMetadataPatch(DECK_ID, original, draft)).toEqual({
+      relationships: [
+        { sourceDeckId: DECK_ID, targetDeckId: 9, relationshipType: DeckRelationshipType.Sequel },
+        { sourceDeckId: DECK_ID, targetDeckId: 12, relationshipType: DeckRelationshipType.Fandisc },
+      ],
+    });
+  });
+
+  it('no longer offers same series or same setting as a role', () => {
+    expect(relationshipRoleOptions.some((r) => r.primaryType === DeckRelationshipType.SameSeries || r.primaryType === DeckRelationshipType.SameSetting)).toBe(
+      false
+    );
+  });
+
   it('sends a changed description on its own', () => {
     const draft = baseDraft();
     draft.description = 'Rewritten.';

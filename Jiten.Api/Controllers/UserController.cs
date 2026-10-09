@@ -3446,7 +3446,7 @@ public partial class UserController(
     /// </summary>
     [HttpGet("profile/{username}/media-list")]
     [AllowAnonymous]
-    public async Task<IResult> GetUserMediaListByUsername(string username)
+    public async Task<IResult> GetUserMediaListByUsername(string username, [FromServices] SeriesService seriesService)
     {
         var (userId, _, allowed) = await ResolveMediaListAccessAsync(username);
         if (userId == null || !allowed)
@@ -3466,6 +3466,7 @@ public partial class UserController(
                                 })
                    .OrderBy(d => d.OriginalTitle)
                    .ToList();
+        await seriesService.ApplyRefsAsync(dtos);
 
         // Populate the viewer's coverage so cards render the coverage border, exactly like the catalogue.
         var viewerId = userService.UserId;
@@ -3493,7 +3494,7 @@ public partial class UserController(
         foreach (var (display, _, _) in entries)
         {
             var (words, error) = await deckWordResolver.ResolveDeckWords(new DeckWordResolveRequest(
-                display.DeckId, display, request.DownloadType, request.Order,
+                DeckWordSource.ForDeck(display.DeckId, display.WordCount), request.DownloadType, request.Order,
                 request.MinFrequency, request.MaxFrequency,
                 request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
                 request.TargetPercentage, request.MinOccurrences, request.MaxOccurrences,

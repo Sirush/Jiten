@@ -1,4 +1,5 @@
 ﻿using System.ComponentModel.DataAnnotations;
+using Jiten.Core.Data;
 
 namespace Jiten.Api.Dtos.Requests;
 
@@ -30,4 +31,14 @@ public class AddStudyDeckRequest
 
     public int? FrequencyMediaType { get; set; }
     public long? FrequencyListId { get; set; }
+
+    public MediaGroupKind? GroupKind { get; set; }
+
+    /// <summary>Franchise id, series id, or the line's anchor deck id.</summary>
+    public int? GroupId { get; set; }
+
+    /// <summary>Media types a media group deck keeps; null or empty keeps every type.</summary>
+    public List<int>? GroupMediaTypes { get; set; }
+
+    public List<int>? GroupExcludedDeckIds { get; set; }
 }

@@ -55,6 +55,9 @@ public class JitenDbContext : DbContext
     public DbSet<ExternalTagMapping> ExternalTagMappings { get; set; }
 
     public DbSet<DeckRelationship> DeckRelationships { get; set; }
+    public DbSet<Franchise> Franchises { get; set; }
+    public DbSet<Series> Series { get; set; }
+    public DbSet<SeriesMember> SeriesMembers { get; set; }
 
     public DbSet<WebNovelSource> WebNovelSources { get; set; }
     public DbSet<WebNovelChapter> WebNovelChapters { get; set; }
@@ -930,6 +933,48 @@ public class JitenDbContext : DbContext
 
             entity.HasIndex(dr => dr.SourceDeckId).HasDatabaseName("IX_DeckRelationships_SourceDeckId");
             entity.HasIndex(dr => dr.TargetDeckId).HasDatabaseName("IX_DeckRelationships_TargetDeckId");
+        });
+
+        modelBuilder.Entity<Franchise>(entity =>
+        {
+            entity.ToTable("Franchises", "jiten");
+            entity.HasKey(f => f.FranchiseId);
+            entity.Property(f => f.FranchiseId).ValueGeneratedOnAdd();
+            entity.Property(f => f.Name).IsRequired().HasMaxLength(200);
+            entity.Property(f => f.NameIsManual).HasDefaultValue(false);
+
+            entity.HasMany(f => f.Decks)
+                  .WithOne(d => d.Franchise)
+                  .HasForeignKey(d => d.FranchiseId)
+                  .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<Deck>().HasIndex(d => d.FranchiseId).HasDatabaseName("IX_Decks_FranchiseId");
+
+        modelBuilder.Entity<Series>(entity =>
+        {
+            entity.ToTable("Series", "jiten");
+            entity.HasKey(s => s.SeriesId);
+            entity.Property(s => s.SeriesId).ValueGeneratedOnAdd();
+            entity.Property(s => s.Name).IsRequired().HasMaxLength(200);
+        });
+
+        modelBuilder.Entity<SeriesMember>(entity =>
+        {
+            entity.ToTable("SeriesMembers", "jiten");
+            entity.HasKey(m => new { m.SeriesId, m.DeckId });
+
+            entity.HasOne(m => m.Series)
+                  .WithMany(s => s.Members)
+                  .HasForeignKey(m => m.SeriesId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(m => m.Deck)
+                  .WithMany(d => d.SeriesMemberships)
+                  .HasForeignKey(m => m.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(m => m.DeckId).HasDatabaseName("IX_SeriesMembers_DeckId");
         });
 
         modelBuilder.Entity<WordSet>(entity =>

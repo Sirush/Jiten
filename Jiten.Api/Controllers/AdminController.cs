@@ -316,7 +316,7 @@ public partial class AdminController(
     }
 
     [HttpGet("deck/{id}")]
-    public async Task<IActionResult> GetDeck(int id)
+    public async Task<IActionResult> GetDeck(int id, [FromServices] SeriesService seriesService)
     {
         var deck = await dbContext.Decks.AsNoTracking()
                             .Include(d => d.Children)
@@ -350,6 +350,8 @@ public partial class AdminController(
         foreach (var subDeck in subDecks)
             subDeckDtos.Add(new DeckDto(subDeck) { OriginalFileName = subDeck.OriginalFileName });
 
+        await seriesService.ApplyRefsAsync([mainDeckDto, ..subDeckDtos]);
+
         var dto = new DeckDetailDto { MainDeck = mainDeckDto, SubDecks = subDeckDtos };
 
         return Ok(dto);
@@ -358,7 +360,7 @@ public partial class AdminController(
     [HttpPost("update-deck")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(254857600)]
-    public async Task<IActionResult> UpdateMediaDeck([FromForm] UpdateMediaRequest model)
+    public async Task<IActionResult> UpdateMediaDeck([FromForm] UpdateMediaRequest model, [FromServices] FranchiseSyncRunner franchiseSync)
     {
         if (!ModelState.IsValid)
         {
@@ -561,7 +563,10 @@ public partial class AdminController(
             }
         }
 
+        var relationshipsChanged = RelationshipsChanged();
         await dbContext.SaveChangesAsync();
+        if (relationshipsChanged)
+            await franchiseSync.RunAsync();
 
         if (removedSubdeckIds.Count > 0)
         {

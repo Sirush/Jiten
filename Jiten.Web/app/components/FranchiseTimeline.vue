@@ -1,32 +1,62 @@
 <script setup lang="ts">
   import type { Franchise, FranchiseNode, FranchiseEdge, MediaType } from '~/types';
+  import { MediaGroupKind } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
-  import { useJitenStore } from '~/stores/jitenStore';
-  import { useAuthStore } from '~/stores/authStore';
+  import { coverUrl } from '~/utils/coverImage';
   import { useFranchiseGraph } from '~/composables/useFranchiseGraph';
+  import { useFranchiseHover } from '~/composables/useFranchiseHover';
+  import { useFranchiseDisplay } from '~/composables/useFranchiseDisplay';
+  import {
+    compareFranchiseRelease,
+    franchiseDerivedChips,
+    franchiseDerivedLabel,
+    franchiseHasSideLinks,
+    franchisePopoverMemberships,
+    isStoryRelation,
+    releaseYearOf,
+    verticalConnector,
+    type ConnectorBox,
+    type FranchiseLinkMode,
+  } from '~/utils/franchiseLayout';
+  import { countByMediaType, formatScope } from '~/utils/mediaGroup';
+  import { getEdgeFlow, linkTypeInfo } from '~/utils/relationshipRoles';
 
   const props = defineProps<{
     franchise: Franchise;
-    currentDeckId: number;
+    currentDeckId?: number | null;
+    scopeDeckIds?: number[] | null;
   }>();
 
-  const store = useJitenStore();
-  const authStore = useAuthStore();
+  const route = useRoute();
+
+  const rootRef = ref<HTMLElement | null>(null);
+  const {
+    activeNode,
+    popoverStyle,
+    popoverRef,
+    flashNode,
+    isCoarsePointer,
+    nodeEl,
+    cancelClear,
+    scheduleClear,
+    onCardEnter,
+    onCardLeave,
+    onCardClick,
+    scrollToNode,
+    onRowHover,
+    cancelRowHover,
+  } = useFranchiseHover(rootRef);
 
   const franchiseRef = computed(() => props.franchise);
-  const { localiseTitle, edges, nodeById, releaseYear, coverSrc, captionsFor, useAdjacentNodes, edgeActive: edgeActiveOf } = useFranchiseGraph(franchiseRef);
+  const { localiseTitle, edges, nodeById, outOfScope, captionsFor, activeNodeData, edgeActive, nodeDimmed, showCoverage } = useFranchiseGraph(franchiseRef, {
+    deckIds: () => props.scopeDeckIds,
+    activeNode,
+  });
 
   // Chronological RANK of release date (not linear time) — gives evenly spaced rows
   // regardless of multi-decade gaps. Nodes sharing a release date share a row.
   // Unknown dates sort last.
-  const sortedNodes = computed<FranchiseNode[]>(() =>
-    [...props.franchise.nodes].sort((a, b) => {
-      const va = releaseYear(a) == null ? Number.POSITIVE_INFINITY : Date.parse(a.releaseDate);
-      const vb = releaseYear(b) == null ? Number.POSITIVE_INFINITY : Date.parse(b.releaseDate);
-      if (va !== vb) return va - vb;
-      return a.deckId - b.deckId;
-    })
-  );
+  const sortedNodes = computed<FranchiseNode[]>(() => [...props.franchise.nodes].sort(compareFranchiseRelease));
 
   // deckId -> row index (chronological rank, deduped by identical release date).
   const rowOf = computed<Map<number, number>>(() => {
@@ -34,7 +64,7 @@
     let row = -1;
     let prevKey: string | null = null;
     for (const n of sortedNodes.value) {
-      const key = releaseYear(n) == null ? `unknown` : n.releaseDate.slice(0, 10);
+      const key = releaseYearOf(n.releaseDate) == null ? `unknown` : n.releaseDate.slice(0, 10);
       if (key !== prevKey) {
         row++;
         prevKey = key;
@@ -57,7 +87,7 @@
     for (const n of sortedNodes.value) {
       const row = rowOf.value.get(n.deckId)!;
       if (!assigned[row]) {
-        years[row] = releaseYear(n);
+        years[row] = releaseYearOf(n.releaseDate);
         assigned[row] = true;
       }
     }
@@ -69,18 +99,9 @@
     });
   });
 
-  // Media-type columns, ordered as the types first appear chronologically.
-  const columns = computed<MediaType[]>(() => {
-    const seen = new Set<MediaType>();
-    const order: MediaType[] = [];
-    for (const n of sortedNodes.value) {
-      if (!seen.has(n.mediaType)) {
-        seen.add(n.mediaType);
-        order.push(n.mediaType);
-      }
-    }
-    return order;
-  });
+  // Per-type deck counts; Map keeps the order in which the types first appear chronologically, which is the column order.
+  const columnCounts = computed(() => countByMediaType(sortedNodes.value));
+  const columns = computed<MediaType[]>(() => [...columnCounts.value.keys()]);
 
   const columnOf = computed<Map<number, number>>(() => {
     const colIndex = new Map<MediaType, number>();
@@ -108,180 +129,83 @@
     return [...groups.values()];
   });
 
+  const display = useFranchiseDisplay();
+  const cardSize = display.cardSize;
+  // Without side links the Display popover offers no link setting, so a stored None must not hide every link.
+  const linkMode = computed<FranchiseLinkMode>(() => (franchiseHasSideLinks(edges.value) ? display.linkMode.value : 'all'));
+  const compact = computed(() => cardSize.value === 'compact');
+  const showColumnHeads = computed(() => columns.value.length > 1);
+  const headRows = computed(() => (showColumnHeads.value ? 1 : 0));
+
+  // Outside All, side works are named on their card instead of drawn, which keeps a hub with dozens of side stories readable.
+  const derivedCaptions = computed(() => {
+    const m = new Map<number, { label: string; origin: string; title: string }>();
+    if (linkMode.value === 'all') return m;
+    for (const [deckId, chip] of franchiseDerivedChips(edges.value, nodeById.value)) {
+      const label = franchiseDerivedLabel(chip.type) ?? '';
+      const originTitle = localiseTitle(nodeById.value.get(chip.originId)!);
+      m.set(deckId, { label, origin: chip.extra ? `${originTitle} +${chip.extra}` : originTitle, title: `${label} ${originTitle}` });
+    }
+    return m;
+  });
+
   const isCurrent = (id: number) => id === props.currentDeckId;
 
-  function showCoverage(node: FranchiseNode): boolean {
-    return authStore.isAuthenticated && !store.hideCoverageBorders && (node.coverage !== 0 || node.uniqueCoverage !== 0);
-  }
-
-  // ---- Hover / focus highlighting + relations popover ----
   // The popover lists the hovered node's relations by NAME, so long connectors whose other
-  // end is scrolled off-screen stay interpretable. Clearing is delayed so the pointer can
-  // travel from the card onto the popover without dismissing it.
-  const activeNode = ref<number | null>(null);
-  const popoverStyle = ref<Record<string, string>>({});
-  let clearTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const activeNodeData = computed(() => (activeNode.value == null ? null : (nodeById.value.get(activeNode.value) ?? null)));
+  // end is scrolled off-screen stay interpretable.
   const activeCaptions = computed(() => (activeNode.value == null ? [] : captionsFor(activeNode.value)));
+  const activeMemberships = computed(() => {
+    if (activeNode.value == null) return [];
+    return franchisePopoverMemberships(props.franchise, activeNode.value).map((m) =>
+      m.kind === 'series'
+        ? { ...m, to: { query: { ...route.query, scope: formatScope({ kind: MediaGroupKind.Series, id: m.seriesId }), offset: undefined } } }
+        : { ...m, inert: true }
+    );
+  });
 
-  function cancelClear() {
-    if (clearTimer != null) {
-      clearTimeout(clearTimer);
-      clearTimer = null;
-    }
-  }
-
-  function scheduleClear() {
-    cancelClear();
-    clearTimer = setTimeout(() => {
-      activeNode.value = null;
-    }, 200);
-  }
-
-  function activate(id: number) {
-    cancelClear();
-    activeNode.value = id;
-    positionPopover(id);
-  }
-
-  // Coarse-pointer (touch) gate: first tap activates, second tap on the active card navigates.
-  // Tracked live (not just at mount) so DevTools device emulation toggles are picked up.
-  const isCoarsePointer = ref(false);
-  let coarseMq: MediaQueryList | null = null;
-  const onCoarseChange = (e: MediaQueryListEvent) => {
-    isCoarsePointer.value = e.matches;
-  };
-
-  // Bound in the CAPTURE phase: NuxtLink's own navigate handler is merged before fallthrough
-  // listeners, so a bubble-phase preventDefault would come too late to stop the router.
-  function onCardClick(e: MouseEvent, id: number) {
-    if (!isCoarsePointer.value) return; // fine pointers keep click = navigate
-    if (activeNode.value === id) return; // second tap on active card: let the link navigate
-    e.preventDefault();
-    activate(id);
-  }
-
-  const adjacentNodes = useAdjacentNodes(activeNode);
-
-  function edgeActive(e: FranchiseEdge): boolean {
-    return edgeActiveOf(e, activeNode.value);
-  }
-
-  function nodeDimmed(id: number): boolean {
-    return activeNode.value != null && !adjacentNodes.value.has(id);
-  }
-
-  // Brief flash to locate a node after a popover row scrolls it into view.
-  const flashNode = ref<number | null>(null);
-  let flashTimer: ReturnType<typeof setTimeout> | null = null;
-
-  function scrollToNode(id: number) {
-    const el = nodeEls.value.get(id);
-    if (!el) return;
-    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    flashNode.value = id;
-    if (flashTimer != null) clearTimeout(flashTimer);
-    flashTimer = setTimeout(() => {
-      flashNode.value = null;
-    }, 1600);
-  }
-
-  // Hovering a popover row brings its target into view, debounced so skimming the list
-  // doesn't thrash the scroll position.
-  let hoverScrollTimer: ReturnType<typeof setTimeout> | null = null;
-
-  function onRowHover(id: number) {
-    if (hoverScrollTimer != null) clearTimeout(hoverScrollTimer);
-    hoverScrollTimer = setTimeout(() => scrollToNode(id), 150);
-  }
-
-  function cancelRowHover() {
-    if (hoverScrollTimer != null) {
-      clearTimeout(hoverScrollTimer);
-      hoverScrollTimer = null;
-    }
+  function edgeVisible(e: FranchiseEdge): boolean {
+    if (edgeActive(e) || linkMode.value === 'all') return true;
+    return linkMode.value === 'story' && isStoryRelation(e.relationshipType);
   }
 
   // ---- SVG overlay geometry (client-only DOM measurement) ----
   const gridRef = ref<HTMLElement | null>(null);
-  const nodeEls = ref<Map<number, HTMLElement>>(new Map());
 
-  function setNodeEl(id: number, el: Element | null) {
-    if (el) nodeEls.value.set(id, el as HTMLElement);
-    else nodeEls.value.delete(id);
-  }
-
-  function nodeRect(id: number): { left: number; right: number; top: number; bottom: number; x: number; y: number } | null {
+  function nodeRect(id: number): ConnectorBox | null {
     const grid = gridRef.value;
-    const el = nodeEls.value.get(id);
+    const el = nodeEl(id);
     if (!grid || !el) return null;
     const base = grid.getBoundingClientRect();
     const r = el.getBoundingClientRect();
-    return {
-      left: r.left - base.left,
-      right: r.left - base.left + r.width,
-      top: r.top - base.top,
-      bottom: r.top - base.top + r.height,
-      x: r.left - base.left + r.width / 2,
-      y: r.top - base.top + r.height / 2,
-    };
-  }
-
-  // Fixed (viewport-anchored) popover so scrolling the page underneath — e.g. while hover-
-  // scrolling a relation into view — does not slide the popover out from under the pointer.
-  function positionPopover(id: number) {
-    if (!import.meta.client) return;
-    const el = nodeEls.value.get(id);
-    if (!el) return;
-    const r = el.getBoundingClientRect();
-    const popWidth = 260;
-    const margin = 8;
-    const vw = window.innerWidth;
-    const vh = window.innerHeight;
-    // Prefer the right side of the card; flip left when it would overflow the viewport.
-    let left = r.right + margin;
-    if (left + popWidth > vw) left = r.left - margin - popWidth;
-    left = Math.max(margin, Math.min(left, vw - popWidth - margin));
-    const top = Math.max(margin, Math.min(r.top, vh - 16));
-    popoverStyle.value = {
-      left: `${left}px`,
-      top: `${top}px`,
-      width: `${popWidth}px`,
-    };
+    return { left: r.left - base.left, right: r.right - base.left, top: r.top - base.top, bottom: r.bottom - base.top };
   }
 
   interface EdgeGeom {
     edge: FranchiseEdge;
     path: string;
+    mid: { x: number; y: number };
+    directed: boolean;
   }
 
   const svgSize = ref({ w: 0, h: 0 });
   const edgeGeoms = ref<EdgeGeom[]>([]);
+  const visibleEdgeGeoms = computed(() => edgeGeoms.value.filter((g) => edgeVisible(g.edge)));
+  const activeEdgeGeoms = computed(() => edgeGeoms.value.filter((g) => edgeActive(g.edge)));
 
   function measure() {
     if (!import.meta.client) return;
     const grid = gridRef.value;
     if (!grid) return;
-    svgSize.value = { w: grid.scrollWidth, h: grid.scrollHeight };
+    // The overlay itself overflows the grid, so scroll sizes would keep a stale height after the grid shrinks.
+    svgSize.value = { w: grid.offsetWidth, h: grid.offsetHeight };
 
     const geoms: EdgeGeom[] = [];
     for (const e of edges.value) {
-      const a = nodeRect(e.sourceDeckId);
-      const b = nodeRect(e.targetDeckId);
+      const flow = getEdgeFlow(e);
+      const a = nodeRect(flow.from);
+      const b = nodeRect(flow.to);
       if (!a || !b) continue;
-
-      // Anchor on the facing top/bottom edges so connectors flow mostly top->bottom.
-      const topToBottom = a.y <= b.y;
-      const y1 = topToBottom ? a.bottom : a.top;
-      const y2 = topToBottom ? b.top : b.bottom;
-      const x1 = a.x;
-      const x2 = b.x;
-      const dy = Math.max(Math.abs(y2 - y1) * 0.5, 40);
-      const c1y = topToBottom ? y1 + dy : y1 - dy;
-      const c2y = topToBottom ? y2 - dy : y2 + dy;
-      const path = `M ${x1} ${y1} C ${x1} ${c1y}, ${x2} ${c2y}, ${x2} ${y2}`;
-      geoms.push({ edge: e, path });
+      geoms.push({ edge: e, ...verticalConnector(a, b, 40), directed: flow.directed });
     }
     edgeGeoms.value = geoms;
   }
@@ -298,60 +222,33 @@
     });
   }
 
-  // Closing the touch popover when tapping outside it / the active card.
-  function onDocumentPointerDown(e: PointerEvent) {
-    if (activeNode.value == null) return;
-    const target = e.target as Node | null;
-    if (!target) return;
-    if (popoverRef.value?.contains(target)) return;
-    const activeEl = activeNode.value != null ? nodeEls.value.get(activeNode.value) : null;
-    if (activeEl?.contains(target)) return;
-    activeNode.value = null;
-  }
-
-  const popoverRef = ref<HTMLElement | null>(null);
-
   onMounted(() => {
-    if (!import.meta.client) return;
-    coarseMq = window.matchMedia('(pointer: coarse)');
-    isCoarsePointer.value = coarseMq.matches;
-    coarseMq.addEventListener('change', onCoarseChange);
     nextTick(() => {
       measure();
-      // Scroll the current deck into view using natural window scrolling.
-      const el = nodeEls.value.get(props.currentDeckId);
-      el?.scrollIntoView({ block: 'center' });
+      if (props.currentDeckId != null) nodeEl(props.currentDeckId)?.scrollIntoView({ block: 'center' });
     });
     if (gridRef.value) {
       resizeObserver = new ResizeObserver(scheduleMeasure);
       resizeObserver.observe(gridRef.value);
     }
-    document.addEventListener('pointerdown', onDocumentPointerDown);
   });
 
   onBeforeUnmount(() => {
     resizeObserver?.disconnect();
     if (rafId != null) cancelAnimationFrame(rafId);
-    cancelClear();
-    cancelRowHover();
-    if (flashTimer != null) clearTimeout(flashTimer);
-    if (import.meta.client) {
-      document.removeEventListener('pointerdown', onDocumentPointerDown);
-      coarseMq?.removeEventListener('change', onCoarseChange);
-    }
   });
 
   // Re-measure when the data (and therefore the rendered grid) changes.
-  watch([sortedNodes, columns], () => {
+  watch([sortedNodes, columns, cardSize], () => {
     nextTick(scheduleMeasure);
   });
 </script>
 
 <template>
-  <div class="pt-4">
+  <div ref="rootRef" class="flex flex-col gap-2">
     <!-- Vertical chronological timeline: time flows downward, media types are columns.
          Natural window scrolling; horizontal overflow only when many media types are present. -->
-    <div class="overflow-x-auto pb-2">
+    <div class="scrollbar-styled overflow-x-auto pb-2">
       <div
         ref="gridRef"
         class="relative grid w-max gap-x-4 gap-y-6 sm:gap-x-6"
@@ -365,38 +262,59 @@
           :viewBox="`0 0 ${svgSize.w} ${svgSize.h}`"
           aria-hidden="true"
         >
+          <defs>
+            <marker id="franchise-arrow" class="text-gray-400" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0L10 5L0 10z" fill="currentColor" />
+            </marker>
+            <marker id="franchise-arrow-active" class="text-primary" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto">
+              <path d="M0 0L10 5L0 10z" fill="currentColor" />
+            </marker>
+          </defs>
           <path
-            v-for="(g, i) in edgeGeoms"
+            v-for="(g, i) in visibleEdgeGeoms"
             :key="i"
             :d="g.path"
             fill="none"
             stroke="currentColor"
             :stroke-width="edgeActive(g.edge) ? 2.5 : 1.5"
+            :stroke-dasharray="g.directed ? undefined : '5 4'"
+            :marker-end="g.directed ? (edgeActive(g.edge) ? 'url(#franchise-arrow-active)' : 'url(#franchise-arrow)') : undefined"
             :class="[edgeActive(g.edge) ? 'text-primary' : activeNode != null ? 'text-gray-300 dark:text-gray-700' : 'text-gray-400 dark:text-gray-400']"
             :style="{ opacity: activeNode != null && !edgeActive(g.edge) ? 0.25 : 1 }"
           />
         </svg>
+        <span
+          v-for="(g, i) in activeEdgeGeoms"
+          :key="`label-${i}`"
+          class="pointer-events-none absolute z-20 -translate-x-1/2 -translate-y-1/2 rounded bg-surface-0 px-1 text-[10px] font-semibold whitespace-nowrap text-primary dark:bg-surface-900"
+          :style="{ left: `${g.mid.x}px`, top: `${g.mid.y}px` }"
+        >
+          {{ linkTypeInfo(g.edge.relationshipType).label }}
+        </span>
 
         <!-- Column headers (media types) — first grid row. -->
-        <div
-          class="z-10 flex items-center pl-1 text-[11px] font-semibold whitespace-nowrap text-gray-400 dark:text-gray-400"
-          :style="{ gridColumn: 1, gridRow: 1 }"
-        />
-        <div
-          v-for="(type, colIdx) in columns"
-          :key="`head-${type}`"
-          class="z-10 flex items-center justify-center pb-1 text-xs font-semibold whitespace-nowrap text-gray-500 dark:text-gray-400"
-          :style="{ gridColumn: colIdx + 2, gridRow: 1 }"
-        >
-          {{ getMediaTypeText(type) }}
-        </div>
+        <template v-if="showColumnHeads">
+          <div
+            class="z-10 flex items-center pl-1 text-[11px] font-semibold whitespace-nowrap text-gray-400 dark:text-gray-400"
+            :style="{ gridColumn: 1, gridRow: 1 }"
+          />
+          <div
+            v-for="(type, colIdx) in columns"
+            :key="`head-${type}`"
+            class="z-10 flex items-center justify-center pb-1 text-xs font-semibold whitespace-nowrap text-gray-500 dark:text-gray-400"
+            :style="{ gridColumn: colIdx + 2, gridRow: 1 }"
+          >
+            {{ getMediaTypeText(type) }}
+            <span class="ml-1 font-normal">{{ columnCounts.get(type) }}</span>
+          </div>
+        </template>
 
         <!-- Year axis labels (first column, offset by the header row). -->
         <div
           v-for="(label, row) in rowYearLabels"
           :key="`year-${row}`"
           class="z-10 flex items-center pr-1 text-xs whitespace-nowrap text-gray-400 dark:text-gray-400"
-          :style="{ gridColumn: 1, gridRow: row + 2 }"
+          :style="{ gridColumn: 1, gridRow: row + 1 + headRows }"
         >
           {{ label }}
         </div>
@@ -407,42 +325,51 @@
           v-for="cell in cellGroups"
           :key="`cell-${cell.row}-${cell.col}`"
           class="z-10 flex items-start gap-2"
-          :style="{ gridColumn: cell.col + 2, gridRow: cell.row + 2 }"
+          :style="{ gridColumn: cell.col + 2, gridRow: cell.row + 1 + headRows }"
         >
           <NuxtLink
             v-for="node in cell.nodes"
             :key="node.deckId"
-            :ref="(el: any) => setNodeEl(node.deckId, el?.$el ?? el)"
+            :data-franchise-deck="node.deckId"
             :to="`/decks/media/${node.deckId}/detail`"
-            class="group relative flex w-24 flex-col rounded-md border bg-surface-0 transition sm:w-28 md:w-34 dark:bg-surface-900"
+            class="group relative flex rounded-md border bg-surface-0 transition dark:bg-surface-900"
             :class="[
+              compact ? 'w-44 flex-row sm:w-52' : 'w-24 flex-col sm:w-28 md:w-34',
               isCurrent(node.deckId) ? 'border-primary ring-2 ring-primary' : 'border-surface-200 dark:border-surface-700 hover:border-primary',
               flashNode === node.deckId ? 'ring-2 ring-amber-400 dark:ring-amber-300' : '',
-              nodeDimmed(node.deckId) ? 'opacity-30' : 'opacity-100',
+              nodeDimmed(node.deckId) ? 'opacity-30' : outOfScope(node.deckId) ? 'opacity-40' : 'opacity-100',
             ]"
-            @mouseenter="!isCoarsePointer && activate(node.deckId)"
-            @mouseleave="!isCoarsePointer && scheduleClear()"
-            @focus="!isCoarsePointer && activate(node.deckId)"
-            @blur="!isCoarsePointer && scheduleClear()"
+            @mouseenter="onCardEnter(node.deckId)"
+            @mouseleave="onCardLeave"
+            @focus="onCardEnter(node.deckId)"
+            @blur="onCardLeave"
             @click.capture="onCardClick($event, node.deckId)"
           >
             <img
-              :src="coverSrc(node)"
+              :src="coverUrl(node.coverName)"
               :alt="localiseTitle(node)"
-              class="h-28 w-full rounded-t-md object-cover sm:h-32 md:h-40"
+              :class="compact ? 'h-16 w-12 shrink-0 rounded-l-md object-cover' : 'h-28 w-full rounded-t-md object-cover sm:h-32 md:h-40'"
               loading="lazy"
               decoding="async"
               width="136"
               height="160"
             />
-            <div class="flex flex-col gap-0.5 p-1.5">
+            <div class="flex min-w-0 flex-col gap-0.5 p-1.5">
               <span class="line-clamp-2 text-xs font-medium leading-tight" :title="localiseTitle(node)" v-bind="japaneseTextAttrs(localiseTitle(node))">
                 {{ localiseTitle(node) }}
               </span>
               <div class="flex items-center justify-between gap-1 text-[11px]">
-                <span class="text-gray-500 dark:text-gray-400">{{ releaseYear(node) ?? '?' }}</span>
+                <span class="text-gray-500 dark:text-gray-400">{{ releaseYearOf(node.releaseDate) ?? '?' }}</span>
                 <DifficultyDisplay v-if="node.difficulty >= 0" :difficulty="node.difficulty" :difficulty-raw="node.difficultyRaw" class="text-[11px]" />
               </div>
+              <span
+                v-if="!compact && derivedCaptions.has(node.deckId)"
+                class="truncate text-[10px] text-gray-500 dark:text-gray-400"
+                :title="derivedCaptions.get(node.deckId)!.title"
+              >
+                <span class="font-semibold">{{ derivedCaptions.get(node.deckId)!.label }}</span>
+                {{ derivedCaptions.get(node.deckId)!.origin }}
+              </span>
             </div>
             <CoverageStrip v-if="showCoverage(node)" :coverage="node.coverage" class="absolute inset-x-0 bottom-0 rounded-b-md" />
           </NuxtLink>
@@ -450,40 +377,19 @@
       </div>
     </div>
 
-    <!-- Relations popover: names for every connection of the hovered/active node. FIXED to the
-         viewport so the page can scroll underneath without dragging the popover off the pointer.
-         Rows bring their target into view (hover, debounced) or navigate via the header link. -->
-    <div
+    <FranchisePopover
       v-if="activeNode != null && activeNodeData"
       ref="popoverRef"
-      class="fixed z-50 flex max-h-72 flex-col overflow-y-auto rounded-md border border-surface-200 bg-surface-0 shadow-lg dark:border-surface-700 dark:bg-surface-900"
       :style="popoverStyle"
+      :deck-id="activeNode"
+      :title="localiseTitle(activeNodeData)"
+      :captions="activeCaptions"
+      :memberships="activeMemberships"
       @mouseenter="!isCoarsePointer && cancelClear()"
       @mouseleave="!isCoarsePointer && scheduleClear()"
-    >
-      <!-- Header: hovered deck title + explicit open link (touch navigation path). -->
-      <div class="flex items-baseline justify-between gap-2 border-b border-surface-200 px-2 py-1.5 dark:border-surface-700">
-        <span class="truncate text-xs font-semibold" :title="localiseTitle(activeNodeData)" v-bind="japaneseTextAttrs(localiseTitle(activeNodeData))">{{ localiseTitle(activeNodeData) }}</span>
-        <NuxtLink :to="`/decks/media/${activeNode}/detail`" class="shrink-0 text-xs font-semibold text-primary hover:underline">Open →</NuxtLink>
-      </div>
-      <div v-if="activeCaptions.length" class="flex flex-col gap-1 p-2">
-        <button
-          v-for="(c, i) in activeCaptions"
-          :key="i"
-          type="button"
-          class="flex w-full items-baseline gap-1.5 rounded px-1 py-0.5 text-left text-xs hover:bg-surface-100 dark:hover:bg-surface-800"
-          :title="`Go to ${c.otherTitle}`"
-          @mouseenter="onRowHover(c.otherId)"
-          @mouseleave="cancelRowHover"
-          @click="scrollToNode(c.otherId)"
-        >
-          <span class="shrink-0 font-semibold text-gray-500 dark:text-gray-400">{{ c.label }}:</span>
-          <span class="truncate text-surface-700 dark:text-surface-200">{{ c.otherTitle }}</span>
-        </button>
-      </div>
-      <p v-else class="px-2 py-1.5 text-xs text-gray-500 dark:text-gray-400">No direct relations.</p>
-    </div>
+      @goto="scrollToNode"
+      @row-hover="onRowHover"
+      @row-leave="cancelRowHover"
+    />
   </div>
 </template>
-
-<style scoped></style>

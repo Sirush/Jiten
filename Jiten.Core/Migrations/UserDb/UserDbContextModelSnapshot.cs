@@ -942,6 +942,18 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<short?>("FrequencyMediaType")
                         .HasColumnType("smallint");
 
+                    b.Property<string>("GroupExcludedDeckIds")
+                        .HasColumnType("text");
+
+                    b.Property<int?>("GroupId")
+                        .HasColumnType("integer");
+
+                    b.Property<short?>("GroupKind")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("GroupMediaTypes")
+                        .HasColumnType("text");
+
                     b.Property<bool>("IsActive")
                         .HasColumnType("boolean");
 

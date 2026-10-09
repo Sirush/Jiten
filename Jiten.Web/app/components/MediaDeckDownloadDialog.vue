@@ -3,6 +3,7 @@
   import { SelectButton, Select, Slider, InputNumber, Checkbox, Dialog, Button, ProgressSpinner } from 'primevue';
   import { debounce } from 'perfect-debounce';
   import { useAuthStore } from '~/stores/authStore';
+  import { studyDeckPresentation } from '~/utils/studyDeckPresentation';
   import { useConfirm } from 'primevue/useconfirm';
   import { useToast } from 'primevue/usetoast';
   import { computed, onMounted, ref, watch } from 'vue';
@@ -15,7 +16,7 @@
 
   const isStudyDeckMode = computed(() => !!props.studyDeck);
   const isMediaListMode = computed(() => !!props.mediaList);
-  const isMediaStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.MediaDeck);
+  const isGroupStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.MediaGroup);
   const isSmartStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.Smart);
   const isStaticStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.StaticWordList || isSmartStudyDeck.value);
   const isGlobalDynamicStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.GlobalDynamic);
@@ -31,15 +32,7 @@
   );
   const baseFileName = computed(() => {
     if (isMediaListMode.value) return props.mediaList!.title.substring(0, 40);
-    if (isStudyDeckMode.value) {
-      return isMediaStudyDeck.value
-        ? localiseTitle({
-            originalTitle: props.studyDeck!.title,
-            romajiTitle: props.studyDeck!.romajiTitle,
-            englishTitle: props.studyDeck!.englishTitle,
-          }).substring(0, 30)
-        : props.studyDeck!.name.substring(0, 30);
-    }
+    if (isStudyDeckMode.value) return studyDeckPresentation(props.studyDeck!, localiseTitle).name.substring(0, 30);
     return localiseTitle(props.deck!).substring(0, 30);
   });
 
@@ -194,6 +187,7 @@
   const showStrategyAndOptions = computed(() => !isOccurrences.value && !isGlobalDynamicStudyDeck.value);
   const hasExampleSentences = computed(() => {
     if (isMediaListMode.value) return props.mediaList!.hasExampleSentences;
+    if (isGroupStudyDeck.value) return true;
     const mt = props.deck?.mediaType ?? props.studyDeck?.mediaType;
     return (
       mt === MediaType.Novel ||

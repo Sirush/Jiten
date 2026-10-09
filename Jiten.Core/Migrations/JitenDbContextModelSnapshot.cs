@@ -99,6 +99,9 @@ namespace Jiten.Core.Migrations
                     b.Property<byte>("ExternalRating")
                         .HasColumnType("smallint");
 
+                    b.Property<int?>("FranchiseId")
+                        .HasColumnType("integer");
+
                     b.Property<bool>("HideAverageSentenceLength")
                         .HasColumnType("boolean");
 
@@ -194,6 +197,9 @@ namespace Jiten.Core.Migrations
 
                     b.HasIndex("ExternalRating")
                         .HasDatabaseName("IX_ExternalRating");
+
+                    b.HasIndex("FranchiseId")
+                        .HasDatabaseName("IX_Decks_FranchiseId");
 
                     b.HasIndex("MediaType")
                         .HasDatabaseName("IX_MediaType");
@@ -900,6 +906,35 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_ExternalTagMapping_Provider_ExternalName_TagId");
 
                     b.ToTable("ExternalTagMappings", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.Franchise", b =>
+                {
+                    b.Property<int>("FranchiseId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("FranchiseId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("NameIsManual")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("FranchiseId");
+
+                    b.ToTable("Franchises", "jiten");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictCrossReference", b =>
@@ -1999,6 +2034,49 @@ namespace Jiten.Core.Migrations
                     b.ToTable("RequestActivityLogs", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.Series", b =>
+                {
+                    b.Property<int>("SeriesId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("SeriesId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<short>("Kind")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("SeriesId");
+
+                    b.ToTable("Series", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.SeriesMember", b =>
+                {
+                    b.Property<int>("SeriesId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("SeriesId", "DeckId");
+
+                    b.HasIndex("DeckId")
+                        .HasDatabaseName("IX_SeriesMembers_DeckId");
+
+                    b.ToTable("SeriesMembers", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.SiteUpdate", b =>
                 {
                     b.Property<int>("Id")
@@ -2490,10 +2568,17 @@ namespace Jiten.Core.Migrations
 
             modelBuilder.Entity("Jiten.Core.Data.Deck", b =>
                 {
+                    b.HasOne("Jiten.Core.Data.Franchise", "Franchise")
+                        .WithMany("Decks")
+                        .HasForeignKey("FranchiseId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Jiten.Core.Data.Deck", "ParentDeck")
                         .WithMany("Children")
                         .HasForeignKey("ParentDeckId")
                         .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Franchise");
 
                     b.Navigation("ParentDeck");
                 });
@@ -2931,6 +3016,25 @@ namespace Jiten.Core.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.SeriesMember", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", "Deck")
+                        .WithMany("SeriesMemberships")
+                        .HasForeignKey("DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Jiten.Core.Data.Series", "Series")
+                        .WithMany("Members")
+                        .HasForeignKey("SeriesId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Deck");
+
+                    b.Navigation("Series");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.WebNovel.WebNovelChapter", b =>
                 {
                     b.HasOne("Jiten.Core.Data.WebNovel.WebNovelSource", "Source")
@@ -3012,6 +3116,8 @@ namespace Jiten.Core.Migrations
 
                     b.Navigation("RelationshipsAsTarget");
 
+                    b.Navigation("SeriesMemberships");
+
                     b.Navigation("SubtitleTrack");
 
                     b.Navigation("Titles");
@@ -3020,6 +3126,11 @@ namespace Jiten.Core.Migrations
             modelBuilder.Entity("Jiten.Core.Data.DifficultyRankGroup", b =>
                 {
                     b.Navigation("Items");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.Franchise", b =>
+                {
+                    b.Navigation("Decks");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.JMDict.JmDictWord", b =>
@@ -3059,6 +3170,11 @@ namespace Jiten.Core.Migrations
             modelBuilder.Entity("Jiten.Core.Data.Poll", b =>
                 {
                     b.Navigation("Options");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.Series", b =>
+                {
+                    b.Navigation("Members");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.Tag", b =>

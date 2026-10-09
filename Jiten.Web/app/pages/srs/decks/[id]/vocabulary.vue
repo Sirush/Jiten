@@ -7,6 +7,7 @@
   import { useConfirm } from 'primevue/useconfirm';
   import { debounce } from 'perfect-debounce';
   import { parseStringArray, toBooleanOrNull } from '~/utils/queryParams';
+  import { studyDeckPresentation } from '~/utils/studyDeckPresentation';
 
   definePageMeta({ middleware: ['auth'] });
 
@@ -31,19 +32,17 @@
 
   srsStore.fetchSettings();
 
-  const deckName = computed(() => {
-    const d = deck.value;
-    if (!d) return 'Vocabulary';
-    if (d.deckType === StudyDeckType.MediaDeck) {
-      return localiseTitle({ originalTitle: d.title, romajiTitle: d.romajiTitle, englishTitle: d.englishTitle });
-    }
-    return d.name;
-  });
+  const presentation = computed(() => (deck.value ? studyDeckPresentation(deck.value, localiseTitle) : null));
+  const deckName = computed(() => presentation.value?.title ?? 'Vocabulary');
 
   useHead(() => ({ title: `${deckName.value} - Vocabulary` }));
 
   const breadcrumbHome = { icon: 'pi pi-home', route: '/' };
-  const breadcrumbItems = computed(() => [{ label: 'Decks', route: '/srs/decks' }, { label: deckName.value }, { label: 'Vocabulary' }]);
+  const breadcrumbItems = computed(() => [
+    { label: 'Decks', route: '/srs/decks' },
+    { label: deckName.value, route: presentation.value?.link ?? undefined },
+    { label: 'Vocabulary' },
+  ]);
 
   const { fetched: planFetched, hasFeature } = useJitenPlus();
   const hasSentenceOrder = computed(() => deck.value?.deckType === StudyDeckType.MediaDeck && deck.value.order === DeckOrder.SentenceUnlock);
@@ -57,6 +56,7 @@
 
     switch (d.deckType) {
       case StudyDeckType.MediaDeck:
+      case StudyDeckType.MediaGroup:
         return [
           ...(usesSentenceOrder.value ? [{ label: getDeckOrderText(DeckOrder.SentenceUnlock), value: 'sentenceUnlock' }] : []),
           { label: 'Chronological', value: 'chrono' },
@@ -103,6 +103,7 @@
     if (!d) return 'globalFreq';
     switch (d.deckType) {
       case StudyDeckType.MediaDeck:
+      case StudyDeckType.MediaGroup:
         if (usesSentenceOrder.value) return 'sentenceUnlock';
         return sentenceOrderLapsed.value ? 'deckFreq' : 'chrono';
       case StudyDeckType.GlobalDynamic:
@@ -373,7 +374,7 @@
       <div class="flex items-center justify-between gap-2 min-h-[2.5rem]">
         <h1 class="text-lg font-bold md:text-2xl truncate">
           <span v-bind="japaneseTextAttrs(deckName)">{{ deckName }}</span>
-          <span class="hidden md:inline">- Vocabulary List</span>
+          <span class="hidden md:inline"> - Vocabulary List</span>
         </h1>
         <div v-if="isStaticDeck" class="flex gap-2 shrink-0">
           <Button icon="pi pi-plus" label="Add Words" class="!hidden sm:!inline-flex" @click="showAddDialog = true" />

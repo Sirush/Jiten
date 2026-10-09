@@ -21,7 +21,13 @@
     </div>
     <GenreTagDisplay v-else-if="section === 'genres'" :genres="deck.genres" label="Genres" />
     <GenreTagDisplay v-else-if="section === 'tags'" :tags="deck.tags" label="Tags" />
-    <RelatedMediaDisplay v-else-if="section === 'relations'" :relationships="deck.relationships!" :deck-id="deck.deckId" />
+    <RelatedMediaDisplay
+      v-else-if="section === 'relations'"
+      :relationships="deck.relationships ?? []"
+      :series="deck.series"
+      :franchise-id="deck.franchiseId"
+      :deck-id="deck.deckId"
+    />
   </div>
 </template>
 

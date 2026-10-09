@@ -403,6 +403,36 @@ a:not(.p-button) {
   background: transparent;
 }
 
+.scrollbar-styled {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--p-primary-color) 45%, transparent) transparent;
+}
+
+.scrollbar-styled:hover {
+  scrollbar-color: var(--p-primary-color) transparent;
+}
+
+/* Safari ignores scrollbar-color, and Chromium ignores these pseudo-elements once it is set. */
+@supports not (scrollbar-color: auto) {
+  .scrollbar-styled::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  .scrollbar-styled::-webkit-scrollbar-thumb {
+    background-color: color-mix(in srgb, var(--p-primary-color) 45%, transparent);
+    border-radius: 9999px;
+  }
+
+  .scrollbar-styled:hover::-webkit-scrollbar-thumb {
+    background-color: var(--p-primary-color);
+  }
+
+  .scrollbar-styled::-webkit-scrollbar-track {
+    background: transparent;
+  }
+}
+
 /* Guides (Nuxt Content) prose. Body links inherit the global blue a:not(.p-button) rule (it
    out-specifies the typography :where() selectors and is already dark-mode aware). We only
    re-theme the parts the plugin would otherwise leave invisible on the dark background. */

@@ -21,13 +21,16 @@ public interface IStudyDeckMembershipService
 
     /// <summary>Evicts the cached materialised word set for a media study deck (call on config change / removal).</summary>
     Task Invalidate(string userId, int studyDeckId);
+
+    /// <summary>The cached word-key set of a media or media group study deck, built on a miss; TargetCoverage ignores StartFromKnown.</summary>
+    Task<HashSet<long>> GetDeckSet(UserStudyDeck studyDeck);
 }
 
 public class StudyDeckMembershipService(
-    JitenDbContext context,
     UserDbContext userContext,
     ICurrentUserService currentUserService,
     IDeckWordResolver deckWordResolver,
+    IStudyDeckWordSources wordSources,
     IConnectionMultiplexer redis,
     IMemoryCache memoryCache,
     ILogger<StudyDeckMembershipService> logger) : IStudyDeckMembershipService
@@ -103,7 +106,7 @@ public class StudyDeckMembershipService(
         // Media decks: the resolved set can't be cheaply scoped (TargetCoverage needs the whole deck ordered),
         // so the full word-key set is materialised once and cached, then intersected in-process.
         var mediaDecks = studyDecks
-            .Where(sd => sd.DeckType == StudyDeckType.MediaDeck && sd.DeckId.HasValue)
+            .Where(sd => sd.DeckType.DrawsFromDecks())
             .ToList();
         foreach (var sd in mediaDecks)
         {
@@ -132,6 +135,8 @@ public class StudyDeckMembershipService(
             logger.LogWarning(ex, "Failed deleting deck-set cache for {CacheKey}", cacheKey);
         }
     }
+
+    public Task<HashSet<long>> GetDeckSet(UserStudyDeck studyDeck) => GetCachedMediaDeckSet(studyDeck.UserId, studyDeck);
 
     private static void AddMembership(
         Dictionary<(int WordId, byte ReadingIndex), List<int>> result,
@@ -188,39 +193,21 @@ public class StudyDeckMembershipService(
 
     private async Task<HashSet<long>> MaterialiseMediaDeckSet(UserStudyDeck sd)
     {
-        if (!sd.DeckId.HasValue)
+        // Runs only on a cache miss, keeping the hot cache-hit path free of any Decks or media group query.
+        var source = await wordSources.ResolveAsync(sd);
+        if (source == null)
             return [];
-
-        // Only WordCount is needed downstream; project it (single row) rather than fetching the wide Deck row.
-        // This runs only on a cache miss, keeping the hot cache-hit path free of any Decks query.
-        var wordCount = await context.Decks
-            .AsNoTracking()
-            .Where(d => d.DeckId == sd.DeckId.Value)
-            .Select(d => (int?)d.WordCount)
-            .FirstOrDefaultAsync();
-        if (wordCount is null)
-            return [];
-
-        var deck = new Deck { DeckId = sd.DeckId.Value, WordCount = wordCount.Value };
 
         if ((DeckDownloadType)sd.DownloadType == DeckDownloadType.TargetCoverage && sd.TargetPercentage.HasValue)
         {
             // Review-independent on purpose: startFromKnown is forced false so the set depends only on the deck's
             // configuration and content, never on the user's known-words. This keeps the cache valid across reviews.
             var (_, coverageKeys) = await deckWordResolver.CountTargetCoverageWords(
-                sd.DeckId.Value, deck, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter, startFromKnown: false);
+                source, sd.TargetPercentage.Value, sd.ExcludeKana, sd.PosFilter, startFromKnown: false);
             return coverageKeys;
         }
 
-        var request = new DeckWordResolveRequest(
-            sd.DeckId.Value, deck,
-            (DeckDownloadType)sd.DownloadType, (DeckOrder)sd.Order,
-            sd.MinFrequency, sd.MaxFrequency,
-            false, false,
-            sd.TargetPercentage,
-            sd.MinOccurrences, sd.MaxOccurrences,
-            sd.PosFilter, sd.StartFromKnown);
-        var (_, mediaKeys) = await deckWordResolver.CountDeckWords(request, sd.ExcludeKana);
+        var (_, mediaKeys) = await deckWordResolver.CountDeckWords(DeckWordResolveRequest.ForStudyDeck(sd, source), sd.ExcludeKana);
         return mediaKeys;
     }
 }
