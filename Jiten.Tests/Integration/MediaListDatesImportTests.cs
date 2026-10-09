@@ -203,4 +203,54 @@ public class MediaListDatesImportTests(JitenWebApplicationFactory factory)
         rows[dated].GetProperty("completedPrecision").GetString().Should().Be("day");
         rows[differs].GetProperty("datesTarget").ValueKind.Should().Be(JsonValueKind.Null);
     }
+
+    private async Task<Dictionary<int, JsonElement>> FilePreviewRows(string content, string fileName)
+    {
+        var file = new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes(content));
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/user/media-list/import/file-preview")
+                      { Content = new MultipartFormDataContent { { file, "file", fileName } } }
+                      .WithUser(TestUsers.UserA);
+        var response = await _client.SendAsync(request);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        return body.GetProperty("matched").EnumerateArray().ToDictionary(r => r.GetProperty("deckId").GetInt32());
+    }
+
+    [Fact]
+    public async Task FilePreview_CsvReportsThePassToDateAndItsDates()
+    {
+        var deckId = await SeedDeck("Show");
+        await SeedTitle(deckId, DeckStatus.Completed, passes: new UserMediaListEntry { State = MediaListEntryState.Completed });
+
+        var rows = await FilePreviewRows($"DeckId,Status,StartedOn,FinishedOn\n{deckId},Completed,2023-02-10,2023-03-20\n", "list.csv");
+
+        var row = rows[deckId];
+        row.GetProperty("startedOn").GetString().Should().Be("2023-02-10");
+        row.GetProperty("completedOn").GetString().Should().Be("2023-03-20");
+        row.GetProperty("completedPrecision").GetString().Should().Be("day");
+        var target = row.GetProperty("datesTarget");
+        target.GetProperty("inProgress").GetBoolean().Should().BeFalse();
+        target.GetProperty("finishedOn").ValueKind.Should().Be(JsonValueKind.Null);
+    }
+
+    [Fact]
+    public async Task FilePreview_JsonTakesTheDatesOfThePassTheStatusRefersTo()
+    {
+        var deckId = await SeedDeck("Show");
+        await SeedTitle(deckId, DeckStatus.Ongoing, passes: new UserMediaListEntry { State = MediaListEntryState.InProgress });
+
+        var json = $$"""
+                     [{ "deckId": {{deckId}}, "status": "Ongoing", "startedOn": "2023-05-01", "finishedOn": "2020-01-31",
+                        "history": [
+                          { "state": "Completed", "startedOn": "2020-01-01", "finishedOn": "2020-01-31", "isCurrent": false },
+                          { "state": "InProgress", "startedOn": "2023-05-01", "finishedOn": null, "isCurrent": true }
+                        ] }]
+                     """;
+        var rows = await FilePreviewRows(json, "list.json");
+
+        var row = rows[deckId];
+        row.GetProperty("startedOn").GetString().Should().Be("2023-05-01");
+        row.GetProperty("completedOn").ValueKind.Should().Be(JsonValueKind.Null);
+        row.GetProperty("datesTarget").GetProperty("inProgress").GetBoolean().Should().BeTrue();
+    }
 }

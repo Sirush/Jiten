@@ -79,6 +79,8 @@
 
   const sourceColumnLabel = computed(() => (isFile.value ? 'File' : providerName.value));
 
+  const sourceOwner = computed(() => (isFile.value ? "the file's" : `your ${providerName.value}`));
+
   const panelTitle = computed(() => (isFile.value ? 'Restore from a Jiten export' : `Import from ${providerName.value}`));
 
   const identifierHint = computed(() =>
@@ -146,7 +148,7 @@
     { label: 'Type', value: 'type' },
     ...(mode.value === 'dates' ? [] : [{ label: 'Source status', value: 'source' as SortKey }]),
     { label: 'Action', value: 'action' },
-    ...(isFile.value ? [] : [{ label: 'Date', value: 'finished' as SortKey }]),
+    ...(isFile.value && mode.value !== 'dates' ? [] : [{ label: 'Date', value: 'finished' as SortKey }]),
   ]);
 
   const defaultSortDir: Record<SortKey, SortDir> = { title: 'asc', type: 'asc', source: 'asc', action: 'asc', finished: 'desc' };
@@ -631,10 +633,12 @@
       }
     };
 
+    const sortDate = (row: PreviewRow) => (isFile.value ? (row.completedOn ?? row.startedOn ?? null) : row.finishedAt);
+
     if (sortKey.value === 'finished') {
       rows.sort((a, b) => {
-        const left = a.finishedAt ? Date.parse(a.finishedAt) : Number.NaN;
-        const right = b.finishedAt ? Date.parse(b.finishedAt) : Number.NaN;
+        const left = Date.parse(sortDate(a) ?? '');
+        const right = Date.parse(sortDate(b) ?? '');
         // Entries with no date stay at the bottom whichever way the column is sorted.
         if (Number.isNaN(left) && Number.isNaN(right)) return byTitle(a, b);
         if (Number.isNaN(left)) return 1;
@@ -800,7 +804,7 @@
             <Button label="Start over" severity="secondary" text size="small" class="ml-auto" @click="startOver" />
           </div>
 
-          <div v-if="!isFile" class="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
             <SelectButton
               v-model="mode"
               :options="[
@@ -814,7 +818,7 @@
             />
             <span class="text-sm text-gray-500 dark:text-gray-400">
               <template v-if="mode === 'status'">Add titles to your list or update their status.</template>
-              <template v-else>Add your {{ providerName }} dates to titles already on your list. Your statuses and existing dates stay as they are.</template>
+              <template v-else>Add {{ sourceOwner }} dates to titles already on your list. Your statuses and existing dates stay as they are.</template>
             </span>
           </div>
 
@@ -878,8 +882,9 @@
             </div>
 
             <p v-if="mode === 'dates'" class="text-xs text-gray-500 dark:text-gray-400">
-              Only empty dates are filled, on the history entry that matches your {{ providerName }} status. Titles with a date missing its day or month start
-              unticked; tick them to add that date as the 1st.
+              Only empty dates are filled, on the history entry that matches {{ sourceOwner }} status.<template v-if="!isFile">
+                Titles with a date missing its day or month start unticked; tick them to add that date as the 1st.</template
+              >
             </p>
 
             <template v-else>
@@ -914,7 +919,7 @@
                   {{ historyRowCount }} titles have dates, repeat counts or character counts. They'll be added to your history, except on titles that already
                   have one on Jiten.
                 </template>
-                <template v-if="!isFile"> To date titles already on your list, switch to Dates only.</template>
+                To date titles already on your list, switch to Dates only.
               </p>
 
               <div v-if="partialDateRowCount > 0" class="flex flex-wrap items-center gap-2">
