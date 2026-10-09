@@ -1926,7 +1926,8 @@ public class MediaDeckController(
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
-    public async Task<IResult> DownloadDeck(int id, [FromBody] DeckDownloadRequest request)
+    public async Task<IResult> DownloadDeck(int id, [FromBody] DeckDownloadRequest request,
+                                            [FromServices] ISentenceUnlockOrder sentenceUnlockOrder)
     {
         var deck = await context.Decks
                                 .AsNoTracking()
@@ -1954,6 +1955,9 @@ public class MediaDeckController(
 
         if (error != null)
             return error;
+
+        if (request.Order == DeckOrder.SentenceUnlock)
+            deckWordsRaw = await sentenceUnlockOrder.OrderAsync(id, deckWordsRaw!, dw => (dw.WordId, dw.ReadingIndex));
 
         var wordIds = deckWordsRaw!.Select(dw => (long)dw.WordId).ToList();
 

@@ -48,9 +48,6 @@ public class SentenceStatsService(
 
     private const int SentencesPerWordFirst = 3;
 
-    /// <summary>A study session only ever draws the next few new cards, so ranking further than this is wasted work.</summary>
-    private const int UnlockOrderLength = 2000;
-
     /// <summary>Known words drift slowly and already-carded words are filtered out anyway, so a stale order is harmless.</summary>
     private static readonly TimeSpan UnlockOrderTtl = TimeSpan.FromMinutes(10);
 
@@ -118,7 +115,7 @@ public class SentenceStatsService(
                                  .ToDictionaryAsync(p => p.DeckId, p => p.Profile!);
         var profiles = parts.Where(p => blobs.ContainsKey(p.DeckId)).Select(p => SentenceProfileCodec.Decode(blobs[p.DeckId])).ToList();
         var isKnown = await KnownLookup(profiles.SelectMany(p => p.Keys));
-        var stats = SentenceStatsCalculator.Compute(profiles, isKnown, learnNextCount: UnlockOrderLength, maxSteps: UnlockOrderLength);
+        var stats = SentenceStatsCalculator.Compute(profiles, isKnown, learnNextCount: int.MaxValue, maxSteps: int.MaxValue);
 
         var ranks = new Dictionary<int, int>(stats.LearnNext.Count);
         for (int i = 0; i < stats.LearnNext.Count; i++)

@@ -482,6 +482,7 @@ builder.Services.AddSingleton<ReadableSentenceListingCache>();
 builder.Services.AddScoped<IReadableSentenceSearch, ReadableSentenceSearch>();
 builder.Services.AddSingleton<SentenceStatsCache>();
 builder.Services.AddScoped<ISentenceStatsService, SentenceStatsService>();
+builder.Services.AddScoped<ISentenceUnlockOrder, SentenceUnlockOrder>();
 builder.Services.AddScoped<ISentenceTokenService, SentenceTokenService>();
 builder.Services.Configure<Jiten.Core.Services.JitenPlusLimitsOptions>(
     builder.Configuration.GetSection(Jiten.Core.Services.JitenPlusLimitsOptions.SectionName));

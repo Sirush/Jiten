@@ -53,7 +53,7 @@ public partial class StudyController(
     Jiten.Api.Services.SmartDeck.ISmartDeckBuilder smartDeckBuilder,
     Jiten.Api.Services.SmartDeck.ISmartDeckDirtyService smartDeckDirty,
     StackExchange.Redis.IConnectionMultiplexer redis,
-    ISentenceStatsService sentenceStats,
+    ISentenceUnlockOrder sentenceUnlockOrder,
     IJitenPlusService jitenPlusService,
     ILogger<StudyController> logger) : ControllerBase
 {
@@ -1456,8 +1456,7 @@ public partial class StudyController(
 
                 if (sortBy == "sentenceUnlock" && studyDeck.DeckId.HasValue)
                 {
-                    if (await SentenceUnlockRanks(userId, studyDeck.DeckId.Value) is { } ranks)
-                        allItems = allItems.OrderBy(i => SentenceUnlockRank(ranks, i.WordId, (byte)i.ReadingIndex)).ToList();
+                    allItems = await sentenceUnlockOrder.OrderAsync(studyDeck.DeckId.Value, allItems, i => (i.WordId, (byte)i.ReadingIndex));
                     if (sortOrder == SortOrder.Descending) allItems.Reverse();
                 }
 
@@ -2181,7 +2180,7 @@ public partial class StudyController(
                     if (error != null || words == null) continue;
                     wordPairs = words.Select(w => (w.WordId, w.ReadingIndex)).ToList();
                     if (studyDeck.Order == (int)DeckOrder.SentenceUnlock && studyDeck.DeckId.HasValue)
-                        wordPairs = await OrderBySentenceUnlock(userId, studyDeck.DeckId.Value, wordPairs);
+                        wordPairs = await sentenceUnlockOrder.OrderAsync(studyDeck.DeckId.Value, wordPairs, w => w);
                 }
                 else if (studyDeck.DeckType == StudyDeckType.GlobalDynamic)
                 {
@@ -4503,25 +4502,6 @@ public partial class StudyController(
         }, statusCode: StatusCodes.Status403Forbidden);
     }
 
-    /// <summary>Null when Jiten+ has lapsed or the title has no sentence profiles yet; callers then keep deck-frequency order.</summary>
-    private async Task<IReadOnlyDictionary<int, int>?> SentenceUnlockRanks(string userId, int deckId)
-    {
-        if (await jitenPlusService.GetTierAsync(userId) < JitenPlusTier.Trial) return null;
-
-        var ranks = await sentenceStats.GetUnlockRanksAsync(deckId);
-        return ranks is { Count: > 0 } ? ranks : null;
-    }
-
-    private static int SentenceUnlockRank(IReadOnlyDictionary<int, int> ranks, int wordId, byte readingIndex) =>
-        ranks.TryGetValue(ExampleSentenceTokens.WordKey(wordId, readingIndex), out var rank) ? rank : int.MaxValue;
-
-    // OrderBy is stable, so unranked words keep their deck-frequency order after the ranked ones.
-    private async Task<List<(int WordId, byte ReadingIndex)>> OrderBySentenceUnlock(string userId, int deckId,
-                                                                                   List<(int WordId, byte ReadingIndex)> wordPairs) =>
-        await SentenceUnlockRanks(userId, deckId) is { } ranks
-            ? wordPairs.OrderBy(w => SentenceUnlockRank(ranks, w.WordId, w.ReadingIndex)).ToList()
-            : wordPairs;
-
     private static bool IsValidPosFilter(string? posFilter)
     {
         if (string.IsNullOrEmpty(posFilter)) return true;
@@ -4792,6 +4772,8 @@ public partial class StudyController(
                 if (error != null) return error;
 
                 deckWords = words!.Select(dw => (dw.WordId, dw.ReadingIndex, dw.Occurrences)).ToList();
+                if (request.Order == DeckOrder.SentenceUnlock)
+                    deckWords = await sentenceUnlockOrder.OrderAsync(deck.DeckId, deckWords, w => (w.WordId, w.ReadingIndex));
                 sentenceDeckIds = deck.Children.Count != 0
                     ? deck.Children.Select(c => c.DeckId).ToList()
                     : [studyDeck.DeckId.Value];

@@ -133,6 +133,97 @@ public class SentenceUnlockOrderTests(JitenWebApplicationFactory factory)
         update.StatusCode.Should().Be(HttpStatusCode.Forbidden, await update.Content.ReadAsStringAsync());
     }
 
+    [Fact]
+    public async Task MediaDeckDownload_WithJitenPlus_FollowsTheOrder()
+    {
+        await MakeTrial(TestUsers.UserA);
+
+        var words = await DownloadWords($"/api/media-deck/{MediaDeckId}/download", SentenceUnlock);
+
+        words.Should().Equal(5, 6, 1, 2, 3, 4, 7, 8);
+    }
+
+    [Fact]
+    public async Task MediaDeckDownload_WithoutJitenPlus_KeepsDeckFrequency()
+    {
+        var words = await DownloadWords($"/api/media-deck/{MediaDeckId}/download", SentenceUnlock);
+
+        words.Should().Equal(1, 2, 3, 4, 5, 6, 7, 8);
+    }
+
+    [Fact]
+    public async Task MediaDeckDownload_WithoutSentenceProfiles_KeepsDeckFrequency()
+    {
+        await MakeTrial(TestUsers.UserA);
+        using (var scope = factory.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<JitenDbContext>().DeckSentenceProfiles.ExecuteDeleteAsync();
+
+        var words = await DownloadWords($"/api/media-deck/{MediaDeckId}/download", SentenceUnlock);
+
+        words.Should().Equal(1, 2, 3, 4, 5, 6, 7, 8);
+    }
+
+    [Fact]
+    public async Task MediaDeckDownload_TargetCoverage_ReordersTheDeckFrequencyPick()
+    {
+        await MakeTrial(TestUsers.UserA);
+        var coverage = new { downloadType = 5, targetPercentage = 95, startFromKnown = false };
+
+        var byFrequency = await DownloadWords($"/api/media-deck/{MediaDeckId}/download", DeckFrequency, coverage);
+        var byUnlock = await DownloadWords($"/api/media-deck/{MediaDeckId}/download", SentenceUnlock, coverage);
+
+        byFrequency.Should().Contain(5);
+        byUnlock.Should().BeEquivalentTo(byFrequency);
+        byUnlock.First().Should().Be(5);
+    }
+
+    [Fact]
+    public async Task StudyDeckDownload_WithJitenPlus_FollowsTheOrderNewCardsArriveIn()
+    {
+        await MakeTrial(TestUsers.UserA);
+        var add = await AddMediaDeck(SentenceUnlock);
+        add.IsSuccessStatusCode.Should().BeTrue(await add.Content.ReadAsStringAsync());
+        var id = (await add.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("userStudyDeckId").GetInt32();
+
+        var downloaded = await DownloadWords($"/api/srs/study-decks/{id}/download", SentenceUnlock);
+        var newCards = await FetchNewCards();
+
+        downloaded.Should().Equal(5, 6, 1, 2, 3, 4, 7, 8);
+        downloaded.Take(newCards.Count).Should().Equal(newCards);
+    }
+
+    [Fact]
+    public async Task StudyDeckDownload_AfterJitenPlusLapses_KeepsDeckFrequency()
+    {
+        await MakeTrial(TestUsers.UserA);
+        var add = await AddMediaDeck(SentenceUnlock);
+        add.IsSuccessStatusCode.Should().BeTrue(await add.Content.ReadAsStringAsync());
+        var id = (await add.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("userStudyDeckId").GetInt32();
+        await ResetBilling();
+
+        var words = await DownloadWords($"/api/srs/study-decks/{id}/download", SentenceUnlock);
+
+        words.Should().Equal(1, 2, 3, 4, 5, 6, 7, 8);
+    }
+
+    /// <summary>Word ids of a TXT download, in file order.</summary>
+    private async Task<List<int>> DownloadWords(string url, int order, object? options = null)
+    {
+        var body = JsonSerializer.SerializeToElement(options ?? new { downloadType = 1 })
+                                 .EnumerateObject()
+                                 .ToDictionary(p => p.Name, p => (object)p.Value);
+        body["format"] = 3;
+        body["order"] = order;
+
+        var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, url)
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(body));
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        var lines = (await response.Content.ReadAsStringAsync()).Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return lines.Select(l => int.Parse(l["word".Length..])).ToList();
+    }
+
     private async Task Seed()
     {
         using var scope = factory.Services.CreateScope();

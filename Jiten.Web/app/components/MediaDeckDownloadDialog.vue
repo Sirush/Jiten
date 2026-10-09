@@ -73,14 +73,28 @@
     return Math.ceil(coverage * 10) / 10;
   });
 
+  const { hasFeature, fetched: jitenPlusFetched, refresh: refreshJitenPlus } = useJitenPlus();
+  const offersSentenceUnlock = computed(() => (props.studyDeck ? props.studyDeck.deckType === StudyDeckType.MediaDeck : !!props.deck));
+  const canUseSentenceOrder = computed(() => hasFeature('sentence-order'));
+
   // Import Order only exists for word lists; word lists have no chronological position beyond it.
   const deckOrders = computed(() => {
-    const orders = getEnumOptions(DeckOrder, (o) => (isSmartStudyDeck.value && o === DeckOrder.ImportOrder ? 'Smart Order' : getDeckOrderText(o)));
-    const downloadable = orders.filter((o) => o.value !== DeckOrder.SentenceUnlock);
+    const orders = getEnumOptions(DeckOrder, (o) => (isSmartStudyDeck.value && o === DeckOrder.ImportOrder ? 'Smart Order' : getDeckOrderText(o))).map(
+      (o): { value: number; label: string; plusOnly?: boolean; disabled?: boolean } =>
+        o.value === DeckOrder.SentenceUnlock ? { ...o, plusOnly: !canUseSentenceOrder.value, disabled: !canUseSentenceOrder.value } : o
+    );
+    const downloadable = offersSentenceUnlock.value ? orders : orders.filter((o) => o.value !== DeckOrder.SentenceUnlock);
     return isStaticStudyDeck.value
       ? downloadable.filter((o) => o.value !== DeckOrder.Chronological)
       : downloadable.filter((o) => o.value !== DeckOrder.ImportOrder);
   });
+
+  async function studyDeckOrder(): Promise<DeckOrder | null> {
+    if (!props.studyDeck) return null;
+    if (props.studyDeck.order === DeckOrder.SentenceUnlock && !jitenPlusFetched.value) await refreshJitenPlus();
+    const own = deckOrders.value.find((o) => o.value === props.studyDeck!.order);
+    return own && !own.disabled ? (own.value as DeckOrder) : null;
+  }
   const downloadTypes = computed(() =>
     getEnumOptions(DeckDownloadType, getDownloadTypeText).filter(
       (d) => d.value != DeckDownloadType.TargetCoverage && d.value != DeckDownloadType.OccurrenceCount
@@ -294,8 +308,11 @@
       frequencySource.value = srsStore.studySettings.defaultFrequencyMediaType ?? 0;
     }
 
-    // Imported lists carry a meaningful order of their own; occurrence sort is arbitrary for hand-typed ones.
-    if (isStaticStudyDeck.value && deckOrder.value === DeckOrder.DeckFrequency) {
+    const ownOrder = await studyDeckOrder();
+    if (ownOrder !== null) {
+      deckOrder.value = ownOrder;
+    } else if (isStaticStudyDeck.value && deckOrder.value === DeckOrder.DeckFrequency) {
+      // Imported lists carry a meaningful order of their own; occurrence sort is arbitrary for hand-typed ones.
       deckOrder.value = DeckOrder.ImportOrder;
     }
 
@@ -916,7 +933,19 @@
               </div>
               <div class="flex flex-col gap-1 mt-4">
                 <label class="text-xs text-gray-500 dark:text-gray-400 font-medium">Then Sort By</label>
-                <Select v-model="deckOrder" :options="deckOrders" option-value="value" option-label="label" class="w-full text-sm" size="small" />
+                <Select
+                  v-model="deckOrder"
+                  :options="deckOrders"
+                  option-value="value"
+                  option-label="label"
+                  option-disabled="disabled"
+                  class="w-full text-sm"
+                  size="small"
+                >
+                  <template #option="{ option }">
+                    <span class="flex items-center gap-2">{{ option.label }} <JitenPlusBadge v-if="option.plusOnly" :link="false" /></span>
+                  </template>
+                </Select>
               </div>
             </div>
 
@@ -952,7 +981,19 @@
                 </div>
                 <div class="flex flex-col gap-1">
                   <label class="text-xs text-gray-500 dark:text-gray-400 font-medium">Then Sort By</label>
-                  <Select v-model="deckOrder" :options="deckOrders" option-value="value" option-label="label" class="w-full text-sm" size="small" />
+                  <Select
+                    v-model="deckOrder"
+                    :options="deckOrders"
+                    option-value="value"
+                    option-label="label"
+                    option-disabled="disabled"
+                    class="w-full text-sm"
+                    size="small"
+                  >
+                    <template #option="{ option }">
+                      <span class="flex items-center gap-2">{{ option.label }} <JitenPlusBadge v-if="option.plusOnly" :link="false" /></span>
+                    </template>
+                  </Select>
                 </div>
               </div>
             </div>
@@ -966,7 +1007,19 @@
                 </div>
                 <div class="flex flex-col gap-1">
                   <label class="text-xs text-gray-500 dark:text-gray-400 font-medium">Then Sort By</label>
-                  <Select v-model="deckOrder" :options="deckOrders" option-value="value" option-label="label" class="w-full text-sm" size="small" />
+                  <Select
+                    v-model="deckOrder"
+                    :options="deckOrders"
+                    option-value="value"
+                    option-label="label"
+                    option-disabled="disabled"
+                    class="w-full text-sm"
+                    size="small"
+                  >
+                    <template #option="{ option }">
+                      <span class="flex items-center gap-2">{{ option.label }} <JitenPlusBadge v-if="option.plusOnly" :link="false" /></span>
+                    </template>
+                  </Select>
                 </div>
               </div>
 
