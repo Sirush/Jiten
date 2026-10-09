@@ -221,6 +221,7 @@ describe('pending state', () => {
       removeEdges: [edge(2, 1, Sequel)],
       addMembers: [{ seriesId: 10, deckId: 1 }],
       removeMembers: [{ seriesId: 10, deckId: 5 }],
+      boardDeckIds: [1, 2, 3, 4, 5],
     });
   });
 

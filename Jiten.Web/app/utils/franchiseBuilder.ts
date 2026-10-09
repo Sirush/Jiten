@@ -27,6 +27,7 @@ export interface FranchiseBuilderSaveRequest {
   removeEdges: FranchiseEdge[];
   addMembers: FranchiseBuilderMember[];
   removeMembers: FranchiseBuilderMember[];
+  boardDeckIds: number[];
 }
 
 export interface BuilderState {
@@ -442,6 +443,7 @@ export function buildSaveRequest(anchorDeckId: number, state: BuilderState): Fra
     removeEdges: state.edges.filter((e) => e.status === 'removed').map(pickEdge),
     addMembers: state.members.filter((m) => m.status === 'new').map(member),
     removeMembers: state.members.filter((m) => m.status === 'removed').map(member),
+    boardDeckIds: [...state.board],
   };
 }
 

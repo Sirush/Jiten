@@ -76,6 +76,25 @@ public sealed class FranchiseService(JitenDbContext db, UserDbContext userContex
         return await BuildForMembersAsync([deckId], ct);
     }
 
+    /// <summary>The deck's franchise widened to the given decks, with their links and memberships; null when the deck does not exist.</summary>
+    public async Task<FranchiseDto?> BuildForBoardAsync(int deckId, IReadOnlyCollection<int> boardDeckIds, CancellationToken ct = default)
+    {
+        var franchise = await BuildForDeckAsync(deckId, ct);
+        if (franchise == null)
+            return null;
+
+        var deckIds = franchise.Nodes.Select(n => n.DeckId).ToHashSet();
+        if (boardDeckIds.All(deckIds.Contains))
+            return franchise;
+
+        deckIds.UnionWith(boardDeckIds);
+        var dto = await BuildForMembersAsync(deckIds.ToList(), ct);
+        dto.FranchiseId = franchise.FranchiseId;
+        dto.Name = franchise.Name;
+        dto.NameIsManual = franchise.NameIsManual;
+        return dto;
+    }
+
     private async Task<FranchiseDto> BuildForMembersAsync(List<int> deckIds, CancellationToken ct)
     {
         var members = deckIds.ToHashSet();

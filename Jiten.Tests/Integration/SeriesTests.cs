@@ -332,6 +332,32 @@ public class SeriesTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task FranchiseBuilder_SaveKeepsBoardDecksOutsideTheAnchorFranchise()
+    {
+        await SeedAsync([Deck(1, "Anchor"), Deck(2, "B"), Deck(3, "C")], series: [Group(1, "Saga", SeriesKind.Series)]);
+
+        var response = await AdminSendAsync(HttpMethod.Post, "/api/admin/franchise-builder/save", new
+        {
+            anchorDeckId = 1,
+            addEdges = new[] { new { sourceDeckId = 3, targetDeckId = 2, relationshipType = 1 } },
+            removeEdges = Array.Empty<object>(),
+            addMembers = new[] { new { seriesId = 1, deckId = 2 } },
+            removeMembers = Array.Empty<object>(),
+            boardDeckIds = new[] { 1, 2, 3 }
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        var saved = (await response.Content.ReadFromJsonAsync<FranchiseDto>())!;
+        saved.Nodes.Select(n => n.DeckId).Should().BeEquivalentTo([1, 2, 3]);
+        saved.Edges.Should().ContainSingle();
+        saved.Series.Single().MemberDeckIds.Should().BeEquivalentTo([2]);
+
+        var reloaded = await GetAsync<FranchiseDto>("/api/admin/franchise-builder/1?add=2&add=3", admin: true);
+        reloaded.Nodes.Select(n => n.DeckId).Should().BeEquivalentTo([1, 2, 3]);
+        reloaded.Series.Single().MemberDeckIds.Should().BeEquivalentTo([2]);
+    }
+
+    [Fact]
     public async Task FranchiseBuilder_RejectsCyclesAndLegacyTypes()
     {
         await SeedAsync([Deck(1, "A"), Deck(2, "B"), Deck(3, "C")],

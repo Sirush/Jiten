@@ -145,9 +145,12 @@ public partial class AdminController
     }
 
     [HttpGet("franchise-builder/{deckId:int}")]
-    public async Task<IActionResult> GetFranchiseBuilder(int deckId, [FromServices] FranchiseService franchise)
+    public async Task<IActionResult> GetFranchiseBuilder(int deckId, [FromQuery] List<int> add, [FromServices] FranchiseService franchise)
     {
-        var dto = await franchise.BuildForDeckAsync(deckId);
+        if (add.Count > FranchiseSuggestionService.MaxDismissDecks)
+            return BadRequest(new { Message = $"Add at most {FranchiseSuggestionService.MaxDismissDecks} decks." });
+
+        var dto = await franchise.BuildForBoardAsync(deckId, add);
         return dto == null ? NotFound() : Ok(dto);
     }
 
@@ -165,6 +168,9 @@ public partial class AdminController
                                                           [FromServices] FranchiseService franchise,
                                                           [FromServices] FranchiseSyncRunner franchiseSync)
     {
+        if (request.BoardDeckIds.Count > FranchiseSuggestionService.MaxDismissDecks)
+            return BadRequest(new { Message = $"The board holds at most {FranchiseSuggestionService.MaxDismissDecks} decks." });
+
         foreach (var edge in request.AddEdges.Concat(request.RemoveEdges))
             if (DeckRelationship.ValidateEdge(edge.SourceDeckId, edge.TargetDeckId, edge.RelationshipType) is { } edgeError)
                 return BadRequest(new { Message = edgeError });
@@ -249,7 +255,7 @@ public partial class AdminController
         logger.LogInformation("Admin saved franchise builder for deck {DeckId}: +{AddEdges}/-{RemoveEdges} edges, {Members} series touched",
                               request.AnchorDeckId, addedEdges.Count, removedEdges.Count, touchedSeries);
 
-        return Ok(await franchise.BuildForDeckAsync(request.AnchorDeckId));
+        return Ok(await franchise.BuildForBoardAsync(request.AnchorDeckId, request.BoardDeckIds));
     }
 
     /// <summary>Path from <paramref name="from"/> to <paramref name="to"/> along story flow (earlier -> later) over every directed type, both ends included; null when none.</summary>
