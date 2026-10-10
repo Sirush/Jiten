@@ -1587,7 +1587,7 @@ export type TimedRevealAction = 'Reveal' | 'FailLearn' | 'Nudge';
 export type TimedAnswerAction = 'SoftFail' | 'HardFail';
 export type ExampleSentencePosition = 'Hidden' | 'Back' | 'Front';
 
-export type CardImageLayout = 'beside' | 'below';
+export type CardImageLayout = 'beside' | 'below' | 'background';
 export type CardImagePosition = 'Front' | 'Back';
 export type CardAudioAutoPlayPosition = 'Front' | 'Back' | 'Both';
 export type ExampleSentenceSorting = 'Random' | 'EasiestFirst' | 'HardestFirst';

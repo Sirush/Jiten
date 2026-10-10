@@ -1,0 +1,15 @@
+.background-top-area,
+.background-answer-area {
+  border-radius: 0.75rem;
+  border-top-color: rgb(255 255 255 / 0.25);
+  background: rgb(0 0 0 / 0.42);
+  padding: 1rem 0.75rem 0.75rem;
+  color: rgb(255 255 255 / 0.92);
+}
+
+:is(.background-top-area, .background-answer-area) :deep(.text-gray-400:not(button:hover)),
+:is(.background-top-area, .background-answer-area) :deep(.text-gray-500:not(button:hover)),
+:is(.background-top-area, .background-answer-area) :deep(.text-surface-400:not(button:hover)),
+:is(.background-top-area, .background-answer-area) :deep(.text-surface-500:not(button:hover)) {
+  color: rgb(255 255 255 / 0.68) !important;
+}

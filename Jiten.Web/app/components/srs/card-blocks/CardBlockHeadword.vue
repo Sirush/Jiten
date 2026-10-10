@@ -20,6 +20,7 @@
     customAudioPlaying,
     playCustomAudio,
     showBesideImage,
+    showBackgroundImage,
     imageBlurred,
     cardImageUrl,
     onImageError,
@@ -109,7 +110,7 @@
   <!-- Plain text before flip, ruby text after flip. -->
   <div class="mb-2 flex items-center justify-center gap-4 md:grid md:grid-cols-[1fr_auto_1fr]">
     <div class="hidden md:block" aria-hidden="true" />
-    <div ref="headwordWrapRef" class="relative flex flex-col items-center">
+    <div ref="headwordWrapRef" class="relative flex flex-col items-center" :class="showBackgroundImage ? 'background-headword text-white' : undefined">
       <div v-if="showRubyOnFront" class="text-center font-noto-sans head-word" :class="sizeClass" lang="ja" v-html="frontRubyHtml" />
       <div v-else-if="!isFlipped" class="text-center font-noto-sans" :class="sizeClass" lang="ja">
         {{ frontPlain }}
@@ -177,6 +178,10 @@
     font-size: calc(0.35em * var(--jiten-furigana-scale, 1)) !important;
     font-weight: 700;
     color: light-dark(var(--p-surface-700), var(--p-surface-400));
+  }
+
+  .background-headword .head-word :deep(rt) {
+    color: rgb(255 255 255 / 0.9) !important;
   }
 
   .head-word.pitch-coloured :deep(rt),
