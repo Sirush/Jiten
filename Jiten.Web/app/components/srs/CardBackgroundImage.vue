@@ -18,7 +18,7 @@
 
 <template>
   <div class="pointer-events-none absolute inset-x-0 top-0 z-0 overflow-hidden rounded-t-2xl">
-    <div class="relative w-full">
+    <div class="card-background-image relative w-full">
       <SrsCardImage
         ref="mediaRef"
         class="w-full"
@@ -29,29 +29,23 @@
         @error="emit('error')"
         @reveal="emit('reveal')"
       />
-      <div class="card-background-fade pointer-events-none absolute inset-x-0 bottom-0 z-20 h-[72%]" />
     </div>
   </div>
 </template>
 
 <style scoped>
-  .card-background-fade {
-    --fade-color: 0 0 0;
-    background: linear-gradient(
+  .card-background-image {
+    mask-image: linear-gradient(
       to bottom,
-      transparent 0%,
-      rgb(var(--fade-color) / 0.04) 12%,
-      rgb(var(--fade-color) / 0.1) 25%,
-      rgb(var(--fade-color) / 0.22) 40%,
-      rgb(var(--fade-color) / 0.4) 55%,
-      rgb(var(--fade-color) / 0.62) 70%,
-      rgb(var(--fade-color) / 0.8) 84%,
-      rgb(var(--fade-color) / 0.94) 94%,
-      rgb(var(--fade-color)) 100%
+      black 28%,
+      rgb(0 0 0 / 0.96) 36.64%,
+      rgb(0 0 0 / 0.9) 46%,
+      rgb(0 0 0 / 0.78) 56.8%,
+      rgb(0 0 0 / 0.6) 67.6%,
+      rgb(0 0 0 / 0.38) 78.4%,
+      rgb(0 0 0 / 0.2) 88.48%,
+      rgb(0 0 0 / 0.06) 95.68%,
+      transparent 100%
     );
-  }
-
-  :root:not(.dark-mode) .card-background-fade {
-    --fade-color: 248 250 252;
   }
 </style>
