@@ -376,7 +376,8 @@
         return;
       }
       const extension = filename.split('.').pop()?.toLowerCase() ?? '';
-      const blob = new Blob([base64ToBytes(base64) as BlobPart], { type: PREVIEW_MIME[extension] ?? '' });
+      const mime = extension === 'webm' && kind === 'image' ? 'video/webm' : (PREVIEW_MIME[extension] ?? '');
+      const blob = new Blob([base64ToBytes(base64) as BlobPart], { type: mime });
       preview.url = URL.createObjectURL(blob);
     } catch {
       preview.error = 'Could not reach Anki.';
@@ -1261,8 +1262,17 @@
                       @click="togglePreview('image')"
                     />
                     <p v-if="mediaPreviews.image.error" class="text-sm text-red-600 dark:text-red-400">{{ mediaPreviews.image.error }}</p>
+                    <video
+                      v-if="mediaPreviews.image.url && previewFilename('image')?.toLowerCase().endsWith('.webm')"
+                      :src="mediaPreviews.image.url"
+                      autoplay
+                      loop
+                      muted
+                      playsinline
+                      class="max-h-48 max-w-full rounded border border-surface-200 dark:border-surface-700"
+                    />
                     <img
-                      v-if="mediaPreviews.image.url"
+                      v-else-if="mediaPreviews.image.url"
                       :src="mediaPreviews.image.url"
                       alt="Card image preview"
                       class="max-h-48 max-w-full rounded border border-surface-200 dark:border-surface-700"

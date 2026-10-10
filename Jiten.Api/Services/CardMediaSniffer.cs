@@ -55,11 +55,71 @@ public static class CardMediaSniffer
         if (Ascii(bytes, 4, "ftyp"))
             return new Sniffed(CardMediaKind.Audio, "m4a", "audio/mp4");
 
-        // Matroska / WebM (audio): EBML header.
+        // Matroska / WebM. An Anki image field can contain an animated WebM, so distinguish it from
+        // audio WebM by its TrackType.
         if (StartsWith(bytes, 0x1A, 0x45, 0xDF, 0xA3))
+        {
+            if (ContainsVideoTrack(bytes))
+                return new Sniffed(CardMediaKind.Image, "webm", "video/webm");
             return new Sniffed(CardMediaKind.Audio, "webm", "audio/webm");
+        }
 
         return null;
+    }
+
+    // Only descend Segment -> Tracks -> TrackEntry; padding and media packets can contain the same bytes.
+    private static bool ContainsVideoTrack(ReadOnlySpan<byte> bytes, ulong parent = 0)
+    {
+        while (!bytes.IsEmpty)
+        {
+            if (!ReadEbmlInteger(ref bytes, elementId: true, out var id, out _)
+                || !ReadEbmlInteger(ref bytes, elementId: false, out var size, out var unknownSize))
+                return false;
+
+            if (unknownSize)
+            {
+                if (id != 0x18538067) return false;
+                size = (ulong)bytes.Length;
+            }
+            if (size > (ulong)bytes.Length) return false;
+
+            var data = bytes[..(int)size];
+            if ((parent == 0 && id == 0x18538067
+                 || parent == 0x18538067 && id == 0x1654AE6B
+                 || parent == 0x1654AE6B && id == 0xAE)
+                && ContainsVideoTrack(data, id))
+                return true;
+
+            if (parent == 0xAE && id == 0x83 && data.Length is >= 1 and <= 8
+                && data[^1] == 1 && data[..^1].IndexOfAnyExcept((byte)0) < 0)
+                return true;
+
+            bytes = bytes[(int)size..];
+        }
+
+        return false;
+    }
+
+    private static bool ReadEbmlInteger(ref ReadOnlySpan<byte> bytes, bool elementId, out ulong value, out bool unknownSize)
+    {
+        value = 0;
+        unknownSize = false;
+        if (bytes.IsEmpty || bytes[0] == 0) return false;
+
+        var length = 1;
+        var marker = 0x80;
+        while ((bytes[0] & marker) == 0)
+        {
+            marker >>= 1;
+            length++;
+        }
+        if (length > (elementId ? 4 : 8) || length > bytes.Length) return false;
+
+        value = elementId ? bytes[0] : (ulong)(bytes[0] & (marker - 1));
+        for (var i = 1; i < length; i++) value = (value << 8) | bytes[i];
+        unknownSize = !elementId && value == (1UL << (7 * length)) - 1;
+        bytes = bytes[length..];
+        return true;
     }
 
     // Sequence brands (heim/heis/avis) count too: ImageMagick would still hand them to libheif.

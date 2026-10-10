@@ -364,19 +364,13 @@
 
         <!-- Thumbnail -->
         <div class="shrink-0">
-          <Image v-if="item.image" preview>
-            <template #image>
-              <img
-                :src="item.image.url"
-                loading="lazy"
-                alt="Card image"
-                class="h-12 w-12 rounded-md object-cover border border-surface-200 dark:border-surface-700"
-              />
-            </template>
-            <template #preview="slotProps">
-              <img :src="item.image.url" alt="Card image" :style="slotProps.style" />
-            </template>
-          </Image>
+          <SrsCardImage
+            v-if="item.image"
+            :url="item.image.url"
+            :content-type="item.image.contentType"
+            loading="lazy"
+            img-class="h-12 w-12 rounded-md object-cover border border-surface-200 dark:border-surface-700"
+          />
           <div
             v-else
             class="h-12 w-12 rounded-md border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800 flex items-center justify-center text-surface-400 dark:text-surface-400"
