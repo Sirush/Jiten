@@ -47,7 +47,8 @@ export function useSwipeGesture(options: SwipeGestureOptions) {
     if (!el) return;
 
     const target = e.target as HTMLElement | null;
-    if (target?.closest('button, a, [role="tab"], [data-pc-name="tab"], [data-pc-name="tablist"]')) return;
+    const interactiveTarget = target?.closest('button, a, [role="tab"], [data-pc-name="tab"], [data-pc-name="tablist"]');
+    if (interactiveTarget && !interactiveTarget.classList.contains('p-image-preview-mask')) return;
 
     startX = e.clientX;
     startY = e.clientY;
