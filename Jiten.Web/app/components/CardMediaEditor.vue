@@ -142,7 +142,7 @@
     const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
     // Extension is the most reliable signal; MIME is a fallback for files without one. Both are
     // matched against the supported set only, so unsupported audio/image subtypes fail here.
-    if (IMAGE_EXT.includes(ext)) return 'image';
+    if (IMAGE_EXT.includes(ext) || (ext === 'webm' && type === 'video/webm')) return 'image';
     if (AUDIO_EXT.includes(ext)) return 'audio';
     if (IMAGE_MIME.includes(type)) return 'image';
     if (AUDIO_MIME.includes(type)) return 'audio';
@@ -156,7 +156,7 @@
       toast.add({
         severity: 'error',
         summary: 'Unsupported file',
-        detail: 'Choose an image (jpg, png, webp, gif, heic, avif) or audio (mp3, m4a, ogg, opus, webm, wav, flac) file.',
+        detail: 'Choose an image or animation (jpg, png, webp, gif, webm, heic, avif) or audio (mp3, m4a, ogg, opus, webm, wav, flac) file.',
         life: 4000,
       });
       return;
@@ -440,7 +440,7 @@
     <template v-else-if="compact">
       <div class="flex flex-wrap items-center gap-2">
         <div v-if="image" class="flex items-center gap-0.5 rounded-md border border-surface-200 dark:border-surface-700 p-1">
-          <SrsCardImage :url="image.url" img-class="h-10 min-w-10 max-w-20 w-auto rounded object-contain" />
+          <SrsCardImage :url="image.url" :content-type="image.contentType" img-class="h-10 min-w-10 max-w-20 w-auto rounded object-contain" />
           <Tooltip
             v-if="image.inherited"
             :content="`Inherited ${inheritedLabel(image)}. Deleting removes it from that form; uploading sets an image just for this form.`"
@@ -538,6 +538,7 @@
           <div v-if="image" class="flex items-start gap-3">
             <SrsCardImage
               :url="image.url"
+              :content-type="image.contentType"
               img-class="max-h-20 min-w-20 max-w-full w-auto rounded-md object-contain border border-surface-200 dark:border-surface-700"
             />
             <div class="flex flex-col gap-1.5 min-w-0">
@@ -572,7 +573,7 @@
               </div>
             </div>
           </div>
-          <span v-else class="text-sm text-surface-400 dark:text-surface-400">No image</span>
+          <span v-else class="text-sm text-surface-400 dark:text-surface-400">No image or animation</span>
         </div>
       </div>
 
@@ -662,7 +663,12 @@
           <i class="pi pi-spin pi-spinner text-2xl" />
           <span class="text-xs text-center px-4">Converting to JPEG…</span>
         </div>
-        <SrsCardImage v-else-if="pending.kind === 'image'" :url="pending.url" img-class="max-h-52 min-w-52 max-w-full w-auto rounded-md object-contain" />
+        <SrsCardImage
+          v-else-if="pending.kind === 'image'"
+          :url="pending.url"
+          :content-type="pending.file.type"
+          img-class="max-h-52 min-w-52 max-w-full w-auto rounded-md object-contain"
+        />
         <audio v-else :src="pending.url" controls class="w-full" />
         <p class="text-xs text-surface-500 dark:text-surface-400 self-start truncate w-full">{{ pending.file.name }}</p>
       </div>

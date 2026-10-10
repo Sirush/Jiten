@@ -18,6 +18,7 @@
   <div v-if="cardImage" class="my-2 flex w-full justify-center" :class="{ 'md:hidden': imageBesideLayout }" @click.stop>
     <SrsCardImage
       :url="cardImageUrl"
+      :content-type="cardImage.contentType"
       :blurred="imageBlurred"
       img-class="max-h-[40vh] w-auto rounded-lg object-contain"
       @error="onImageError"

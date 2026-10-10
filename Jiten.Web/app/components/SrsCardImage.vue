@@ -2,14 +2,18 @@
   const props = withDefaults(
     defineProps<{
       url: string;
+      contentType?: string;
       // Blur + click-to-reveal (Front position only). While blurred, preview is disabled and a click
       // reveals instead of enlarging.
       blurred?: boolean;
       imgClass?: string;
+      loading?: 'eager' | 'lazy';
     }>(),
     {
       blurred: false,
       imgClass: '',
+      contentType: 'image/*',
+      loading: 'eager',
     }
   );
 
@@ -20,6 +24,16 @@
 
   function onClick() {
     if (props.blurred) emit('reveal');
+  }
+
+  const videoPreviewOpen = ref(false);
+
+  function openVideoPreview() {
+    if (props.blurred) {
+      emit('reveal');
+      return;
+    }
+    videoPreviewOpen.value = true;
   }
 
   // Scroll-wheel / trackpad-pinch zoom inside the opened preview, composed on top of PrimeVue's own
@@ -40,10 +54,26 @@
 </script>
 
 <template>
-  <div class="inline-flex" :class="{ 'cursor-pointer select-none': blurred }" @click.stop="onClick">
-    <Image :preview="!blurred" @show="resetZoom" @hide="resetZoom">
+  <div class="inline-flex" :class="{ 'cursor-pointer select-none': blurred || contentType === 'video/webm' }" @click.stop="onClick">
+    <template v-if="contentType === 'video/webm'">
+      <video
+        :src="url"
+        autoplay
+        loop
+        muted
+        playsinline
+        preload="metadata"
+        :class="[imgClass, 'block', { 'blur-md': blurred }]"
+        @click.stop="openVideoPreview"
+        @error="emit('error')"
+      />
+      <Dialog v-model:visible="videoPreviewOpen" modal dismissable-mask header="Card animation" :style="{ width: 'min(90vw, 60rem)' }">
+        <video :src="url" autoplay loop muted playsinline class="max-h-[80vh] max-w-full w-full object-contain" @error="emit('error')" />
+      </Dialog>
+    </template>
+    <Image v-else :preview="!blurred" @show="resetZoom" @hide="resetZoom">
       <template #image>
-        <img :src="url" alt="Card image" :class="[imgClass, { 'blur-md': blurred }]" @error="emit('error')" />
+        <img :src="url" alt="Card image" :loading="loading" :class="[imgClass, { 'blur-md': blurred }]" @error="emit('error')" />
       </template>
       <template #preview="slotProps">
         <img :src="url" alt="Card image" :style="previewStyle(slotProps.style)" @click="slotProps.previewCallback" @wheel.prevent="onWheel" />

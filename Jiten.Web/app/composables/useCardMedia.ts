@@ -11,10 +11,10 @@ const inFlightKeys = new Set<string>();
 // refresh re-warms naturally while the same signed URL is never requested twice.
 const warmedUrls = new Set<string>();
 // Warm elements are pinned briefly so the GC can't collect them mid-download and abort the request.
-const warmPins: (HTMLImageElement | HTMLAudioElement)[] = [];
+const warmPins: (HTMLImageElement | HTMLAudioElement | HTMLVideoElement)[] = [];
 const WARM_PIN_LIMIT = 16;
 
-function pinWarm(el: HTMLImageElement | HTMLAudioElement) {
+function pinWarm(el: HTMLImageElement | HTMLAudioElement | HTMLVideoElement) {
   warmPins.push(el);
   if (warmPins.length > WARM_PIN_LIMIT) warmPins.shift();
 }
@@ -87,9 +87,17 @@ export function useCardMedia() {
     const imageUrl = entry.image?.url;
     if (imageUrl && !warmedUrls.has(imageUrl)) {
       warmedUrls.add(imageUrl);
-      const img = new Image();
-      img.src = imageUrl;
-      pinWarm(img);
+      if (entry.image?.contentType === 'video/webm') {
+        const video = document.createElement('video');
+        video.preload = 'auto';
+        video.src = imageUrl;
+        video.load();
+        pinWarm(video);
+      } else {
+        const img = new Image();
+        img.src = imageUrl;
+        pinWarm(img);
+      }
     }
     const audioUrl = entry.audio?.url;
     if (audioUrl && !warmedUrls.has(audioUrl)) {

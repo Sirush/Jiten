@@ -549,7 +549,10 @@ builder.Services.AddSingleton<IParseThrottleService, ParseThrottleService>();
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     ConnectionMultiplexer.Connect(sp.GetRequiredService<IConfiguration>().GetConnectionString("Redis")!));
 builder.Services.AddScoped<WordReplacementService>();
-builder.Services.AddScoped<ICdnService, BunnyCdnService>();
+if (builder.Configuration.GetValue<bool>("UseBunnyCdn"))
+    builder.Services.AddScoped<ICdnService, BunnyCdnService>();
+else
+    builder.Services.AddSingleton<ICdnService, LocalCdnService>();
 builder.Services.AddScoped<Jiten.Core.Services.RequestActivityService>();
 builder.Services.AddScoped<Jiten.Core.Services.NotificationService>();
 builder.Services.AddSingleton<StartupReadiness>();
