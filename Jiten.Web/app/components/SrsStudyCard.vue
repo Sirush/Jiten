@@ -72,6 +72,7 @@
   const wordLoadFailed = ref(false);
   const wordLoading = computed(() => !wordData.value && !wordLoadFailed.value);
   const showMenu = ref(false);
+  const backgroundMediaRef = ref<{ openPreview: () => void } | null>(null);
 
   function onClickOutsideMenu() {
     showMenu.value = false;
@@ -247,6 +248,10 @@
 
   const imageBlurred = computed(() => imageOnFront.value && imageBlurEnabled.value && !props.isFlipped && !imageManuallyRevealed.value);
   const showBesideImage = computed(() => !!cardImage.value && !!cardImageBlock.value && imageBesideLayout.value && (imageOnFront.value || props.isFlipped));
+
+  const showBackgroundImage = computed(
+    () => !!cardImage.value && cardImageBlock.value?.options?.layout === 'background' && (imageOnFront.value || props.isFlipped)
+  );
 
   function playCustomAudio() {
     wordAudio.playWord({
@@ -464,6 +469,7 @@
     imageBlurred,
     showBesideImage,
     imageBesideLayout,
+    showBackgroundImage,
     hasCardMedia,
     canEditCardMedia: computed(() => authStore.isAuthenticated && canEditMedia.value),
     openMediaEditor: () => {
@@ -487,75 +493,108 @@
   <div class="w-full mx-auto">
     <div
       class="relative bg-surface-0 dark:bg-transparent rounded-2xl shadow-lg dark:shadow-none border border-surface-200 dark:border-surface-700 p-6 md:p-8"
+      :class="{ isolate: showBackgroundImage }"
       @dragover="onCardDragOver"
       @drop="onCardDrop"
     >
+      <SrsCardBackgroundImage
+        v-if="showBackgroundImage"
+        ref="backgroundMediaRef"
+        :url="cardImageUrl"
+        :blurred="imageBlurred"
+        @error="onImageError"
+        @reveal="imageManuallyRevealed = true"
+      />
+
       <!-- Screen-reader announcement when the answer is revealed -->
       <div class="sr-only" role="status" aria-live="polite">{{ answerAnnouncement }}</div>
 
-      <!-- Top bar: frequency rank + menu -->
-      <div class="flex justify-end items-center gap-2 min-h-[1.25rem]">
-        <div v-if="showFrequencyRankChrome && card.frequencyRank > 0" class="text-xs text-gray-400">#{{ card.frequencyRank.toLocaleString() }}</div>
-        <button
-          class="text-surface-400 hover:text-surface-600 dark:text-surface-400 dark:hover:text-surface-300 p-1 -mr-1 relative"
-          @pointerdown.stop
-          @click.stop="showMenu = !showMenu"
-        >
-          <i class="pi pi-ellipsis-h text-sm" />
-        </button>
-        <div
-          v-if="showMenu"
-          class="absolute right-4 top-10 z-10 bg-surface-0 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg shadow-lg py-1 min-w-[160px]"
-          @pointerdown.stop
-        >
-          <NuxtLink
-            :to="`/vocabulary/${card.wordId}/${card.readingIndex}`"
-            target="_blank"
-            class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors"
-            @click="showMenu = false"
+      <div :class="showBackgroundImage ? 'background-top-area relative z-40' : undefined">
+        <!-- Top bar: frequency rank + menu -->
+        <div class="relative z-40 flex justify-end items-center gap-2 min-h-[1.25rem]">
+          <div v-if="showFrequencyRankChrome && card.frequencyRank > 0" class="text-xs text-gray-400" :class="showBackgroundImage ? '!text-white' : undefined">
+            #{{ card.frequencyRank.toLocaleString() }}
+          </div>
+          <button
+            v-if="showBackgroundImage"
+            type="button"
+            class="inline-flex h-9 w-9 items-center justify-center rounded-xl transition-colors cursor-pointer text-white hover:bg-white/10 focus-visible:bg-white/10"
+            aria-label="Open card media preview"
+            title="Open card media preview"
+            @pointerdown.stop
+            @click.stop="backgroundMediaRef?.openPreview()"
           >
-            <i class="pi pi-external-link text-xs" />
-            Open vocabulary page
-          </NuxtLink>
-          <NuxtLink
-            :to="`/vocabulary/${card.wordId}/${card.readingIndex}/reviews`"
-            target="_blank"
-            class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors"
-            @click="showMenu = false"
+            <i class="pi pi-image text-sm" />
+          </button>
+          <button
+            type="button"
+            class="inline-flex h-9 w-9 items-center justify-center rounded-xl transition-colors cursor-pointer"
+            :class="
+              showBackgroundImage
+                ? 'text-white hover:bg-white/10 focus-visible:bg-white/10'
+                : 'text-surface-400 hover:bg-surface-100 hover:text-surface-600 dark:hover:bg-surface-800 dark:hover:text-surface-300'
+            "
+            aria-label="Card options"
+            title="Card options"
+            @pointerdown.stop
+            @click.stop="showMenu = !showMenu"
           >
-            <i class="pi pi-history text-xs" />
-            Review history
-          </NuxtLink>
-        </div>
-      </div>
-
-      <!-- Front (always visible) -->
-      <div
-        class="flex flex-col items-center"
-        :class="{ 'cursor-pointer': !isFlipped && !inputPhase, 'min-h-[50vh]': !isFlipped }"
-        :role="!isFlipped && !inputPhase ? 'button' : undefined"
-        :tabindex="!isFlipped && !inputPhase ? 0 : undefined"
-        :aria-label="!isFlipped && !inputPhase ? 'Reveal answer' : undefined"
-        @click="!isFlipped && !inputPhase && emit('flip')"
-      >
-        <template v-for="block in frontBlocks" :key="block.id">
+            <i class="pi pi-ellipsis-h text-sm" />
+          </button>
           <div
-            v-if="frontBlockMasked(block)"
-            class="my-2 inline-flex items-center gap-1.5 rounded-full bg-surface-100 px-3 py-1 text-xs text-surface-400 dark:bg-surface-800 dark:text-surface-400"
+            v-if="showMenu"
+            class="absolute right-4 top-10 z-10 bg-surface-0 dark:bg-surface-800 border border-surface-200 dark:border-surface-700 rounded-lg shadow-lg py-1 min-w-[160px]"
+            @pointerdown.stop
           >
-            <i class="pi pi-eye-slash text-[0.7rem]" />
-            Hidden during write-in
+            <NuxtLink
+              :to="`/vocabulary/${card.wordId}/${card.readingIndex}`"
+              target="_blank"
+              class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors"
+              @click="showMenu = false"
+            >
+              <i class="pi pi-external-link text-xs" />
+              Open vocabulary page
+            </NuxtLink>
+            <NuxtLink
+              :to="`/vocabulary/${card.wordId}/${card.readingIndex}/reviews`"
+              target="_blank"
+              class="flex items-center gap-2 px-3 py-2 text-sm hover:bg-surface-100 dark:hover:bg-surface-700 transition-colors"
+              @click="showMenu = false"
+            >
+              <i class="pi pi-history text-xs" />
+              Review history
+            </NuxtLink>
           </div>
-          <component :is="cardBlockRegistry[block.type].component" v-else :block="block" side="front" />
-          <!-- Inline write-in input (sits directly under the word during the input phase) -->
-          <div v-if="block.type === 'headword' && inputPhase && $slots.writeInput" class="mt-5 w-full" @click.stop>
-            <slot name="writeInput" />
-          </div>
-        </template>
+        </div>
 
-        <div v-if="!isFlipped && !inputPhase" class="text-sm text-surface-500 dark:text-surface-300 mt-6">
-          <span class="md:hidden">Tap to reveal</span>
-          <span class="hidden md:inline">Click or press {{ displayKeyName(srsStore.studySettings.keybinds.flipCard) }} to reveal</span>
+        <!-- Front (always visible) -->
+        <div
+          class="relative z-30 flex flex-col items-center"
+          :class="{ 'cursor-pointer': !isFlipped && !inputPhase, 'min-h-[50vh]': !isFlipped }"
+          :role="!isFlipped && !inputPhase ? 'button' : undefined"
+          :tabindex="!isFlipped && !inputPhase ? 0 : undefined"
+          :aria-label="!isFlipped && !inputPhase ? 'Reveal answer' : undefined"
+          @click="!isFlipped && !inputPhase && emit('flip')"
+        >
+          <template v-for="block in frontBlocks" :key="block.id">
+            <div
+              v-if="frontBlockMasked(block)"
+              class="my-2 inline-flex items-center gap-1.5 rounded-full bg-surface-100 px-3 py-1 text-xs text-surface-400 dark:bg-surface-800 dark:text-surface-400"
+            >
+              <i class="pi pi-eye-slash text-[0.7rem]" />
+              Hidden during write-in
+            </div>
+            <component :is="cardBlockRegistry[block.type].component" v-else :block="block" side="front" />
+            <!-- Inline write-in input (sits directly under the word during the input phase) -->
+            <div v-if="block.type === 'headword' && inputPhase && $slots.writeInput" class="mt-5 w-full" @click.stop>
+              <slot name="writeInput" />
+            </div>
+          </template>
+
+          <div v-if="!isFlipped && !inputPhase" class="text-sm text-surface-500 dark:text-surface-300 mt-6">
+            <span class="md:hidden">Tap to reveal</span>
+            <span class="hidden md:inline">Click or press {{ displayKeyName(srsStore.studySettings.keybinds.flipCard) }} to reveal</span>
+          </div>
         </div>
       </div>
 
@@ -567,7 +606,8 @@
           role="region"
           aria-label="Answer"
           tabindex="-1"
-          class="mt-6 pt-6 border-t border-surface-200 dark:border-surface-700 focus:outline-none"
+          class="relative z-30 mt-6 pt-6 border-t border-surface-200 dark:border-surface-700 focus:outline-none"
+          :class="showBackgroundImage ? 'background-answer-area' : undefined"
         >
           <template v-for="block in backBlocks" :key="block.id">
             <component :is="cardBlockRegistry[block.type].component" :block="block" side="back" />
@@ -581,6 +621,8 @@
     </Dialog>
   </div>
 </template>
+
+<style scoped src="../assets/css/srsCardBackground.css" />
 
 <style scoped>
   /* Reveal animation for the answer side (enter only, so card advance stays snappy). */

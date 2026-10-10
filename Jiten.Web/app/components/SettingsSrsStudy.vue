@@ -115,6 +115,7 @@
   const cardImageLayoutOptions = [
     { label: 'Beside word', value: 'beside' },
     { label: 'Below word', value: 'below' },
+    { label: 'In background', value: 'background' },
   ];
 
   const cardImagePositionOptions = [
@@ -1206,7 +1207,7 @@
                   <label class="text-sm mb-1 block">
                     Layout
                     <Tooltip
-                      content="Where your uploaded card image appears.<br>**Beside word** — to the right of the word on wider screens (stacks below on mobile).<br>**Below word** — centred under the word."
+                      content="Where your uploaded card image appears.<br>**Beside word** — to the right of the word on wider screens (stacks below on mobile).<br>**Below word** — centred under the word.<br>**In background** — fills the card behind its content."
                       placement="right"
                     >
                       <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />

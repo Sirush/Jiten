@@ -6,10 +6,12 @@
       // reveals instead of enlarging.
       blurred?: boolean;
       imgClass?: string;
+      fill?: boolean;
     }>(),
     {
       blurred: false,
       imgClass: '',
+      fill: false,
     }
   );
 
@@ -21,6 +23,18 @@
   function onClick() {
     if (props.blurred) emit('reveal');
   }
+
+  const imagePreviewRef = ref<{ onImageClick?: () => void } | null>(null);
+
+  function openPreview() {
+    if (props.blurred) {
+      emit('reveal');
+      return;
+    }
+    imagePreviewRef.value?.onImageClick?.();
+  }
+
+  defineExpose({ openPreview });
 
   // Scroll-wheel / trackpad-pinch zoom inside the opened preview, composed on top of PrimeVue's own
   // rotate/scale transform (from its toolbar buttons) rather than reaching into its internal scale.
@@ -41,7 +55,7 @@
 
 <template>
   <div class="inline-flex" :class="{ 'cursor-pointer select-none': blurred }" @click.stop="onClick">
-    <Image :preview="!blurred" @show="resetZoom" @hide="resetZoom">
+    <Image ref="imagePreviewRef" :class="{ 'block w-full': fill }" :preview="!blurred" @show="resetZoom" @hide="resetZoom">
       <template #image>
         <img :src="url" alt="Card image" :class="[imgClass, { 'blur-md': blurred }]" @error="emit('error')" />
       </template>

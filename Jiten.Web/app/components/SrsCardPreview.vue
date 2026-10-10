@@ -65,32 +65,43 @@
 
       <div
         class="relative bg-surface-0 dark:bg-transparent rounded-2xl shadow-lg dark:shadow-none border border-surface-200 dark:border-surface-700 p-5 lg:p-7"
+        :class="{ isolate: context.showBackgroundImage.value }"
       >
-        <!-- Top bar: frequency rank (back only) -->
-        <div class="flex justify-end items-center min-h-[1.25rem]">
-          <div v-if="showFrequencyRankChrome" class="text-xs text-gray-400">#{{ SAMPLE.frequencyRank.toLocaleString() }}</div>
-        </div>
+        <SrsCardBackgroundImage v-if="context.showBackgroundImage.value" :url="context.cardImageUrl.value" :blurred="context.imageBlurred.value" />
 
-        <!-- Front (always visible) -->
-        <div
-          class="flex flex-col items-center"
-          :class="{ 'cursor-pointer': !isFlipped }"
-          :role="!isFlipped ? 'button' : undefined"
-          :tabindex="!isFlipped ? 0 : undefined"
-          :aria-label="!isFlipped ? 'Reveal answer' : undefined"
-          @click="!isFlipped && (isFlipped = true)"
-          @keydown.enter="!isFlipped && (isFlipped = true)"
-          @keydown.space.prevent="!isFlipped && (isFlipped = true)"
-        >
-          <template v-for="block in frontBlocks" :key="block.id">
-            <component :is="cardBlockRegistry[block.type].component" :block="block" side="front" />
-          </template>
+        <div :class="context.showBackgroundImage.value ? 'background-top-area relative z-40' : undefined">
+          <!-- Top bar: frequency rank (back only) -->
+          <div class="relative z-30 flex justify-end items-center min-h-[1.25rem]">
+            <div v-if="showFrequencyRankChrome" class="text-xs text-gray-400" :class="context.showBackgroundImage.value ? '!text-white' : undefined">
+              #{{ SAMPLE.frequencyRank.toLocaleString() }}
+            </div>
+          </div>
 
-          <div v-if="!isFlipped" class="text-sm text-surface-500 dark:text-surface-300 mt-6">Click to reveal</div>
+          <!-- Front (always visible) -->
+          <div
+            class="relative z-30 flex flex-col items-center"
+            :class="{ 'cursor-pointer': !isFlipped }"
+            :role="!isFlipped ? 'button' : undefined"
+            :tabindex="!isFlipped ? 0 : undefined"
+            :aria-label="!isFlipped ? 'Reveal answer' : undefined"
+            @click="!isFlipped && (isFlipped = true)"
+            @keydown.enter="!isFlipped && (isFlipped = true)"
+            @keydown.space.prevent="!isFlipped && (isFlipped = true)"
+          >
+            <template v-for="block in frontBlocks" :key="block.id">
+              <component :is="cardBlockRegistry[block.type].component" :block="block" side="front" />
+            </template>
+
+            <div v-if="!isFlipped" class="text-sm text-surface-500 dark:text-surface-300 mt-6">Click to reveal</div>
+          </div>
         </div>
 
         <!-- Back (shown when flipped) -->
-        <div v-if="isFlipped" class="mt-6 pt-6 border-t border-surface-200 dark:border-surface-700">
+        <div
+          v-if="isFlipped"
+          class="relative z-30 mt-6 pt-6 border-t border-surface-200 dark:border-surface-700"
+          :class="context.showBackgroundImage.value ? 'background-answer-area' : undefined"
+        >
           <template v-for="block in backBlocks" :key="block.id">
             <component :is="cardBlockRegistry[block.type].component" :block="block" side="back" />
           </template>
@@ -99,3 +110,5 @@
     </div>
   </div>
 </template>
+
+<style scoped src="../assets/css/srsCardBackground.css" />
