@@ -241,6 +241,15 @@ export function useStudyTimer(cb: StudyTimerCallbacks) {
     durationMs.value = 0;
   }
 
+  // A manual grade overrides the answer timer's soft-fail countdown.
+  function cancelGrace() {
+    if (phase.value !== 'armed' || armedLocked.value) return;
+    stopTick();
+    phase.value = 'idle';
+    remainingMs.value = 0;
+    durationMs.value = 0;
+  }
+
   function startPhase() {
     stopTick();
     armedLocked.value = false;
@@ -367,5 +376,6 @@ export function useStudyTimer(cb: StudyTimerCallbacks) {
     armedLocked: readonly(armedLocked),
     paused: readonly(manualPaused),
     togglePause,
+    cancelGrace,
   };
 }

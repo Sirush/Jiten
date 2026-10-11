@@ -265,6 +265,7 @@
     armedLocked: timerLocked,
     paused: timerPaused,
     togglePause: toggleTimerPause,
+    cancelGrace: cancelTimerGrace,
   } = useStudyTimer({
     active: effectiveTimedActive,
     suspended: showSettingsDialog,
@@ -343,9 +344,10 @@
     if (!srsStore.isSessionComplete && (srsStore.currentCard || restored)) startElapsedTimer();
   });
 
-  async function handleGrade(rating: FsrsRating) {
+  function handleGrade(rating: FsrsRating) {
     cancelWriteInAuto();
-    const ok = await srsStore.gradeCard(rating);
+    const ok = srsStore.gradeCard(rating);
+    if (!srsStore.isFlipped) cancelTimerGrace();
     const wasDismissing = swipe.isDismissing.value;
     swipe.resetInstant();
     if (wasDismissing) {
