@@ -4126,20 +4126,20 @@ public partial class StudyController(
         var settings = await LoadStudySettings(userId);
         var randomSource = settings.ExampleSentenceSource == ExampleSentenceSource.Random;
 
-        var studyDeckIdArray = randomSource ? [] : await ActiveStudyDeckSentenceSources(userId);
+        var priorityDeckIds = await GetPrioritySentenceDeckIds(userId, settings.ExampleSentenceSource);
 
         var pairForms = remainingPairs.Select(p => (p.WordId, ReadingIndex: (byte)p.ReadingIndex)).Distinct().ToList();
 
         var servedKeys = await sessionService.GetServedCards(userId, pairForms.Select(f => WordFormHelper.EncodeWordKey(f.WordId, f.ReadingIndex)).ToList());
         bool IsServed(int wordId, byte readingIndex) => servedKeys.Contains(WordFormHelper.EncodeWordKey(wordId, readingIndex));
 
-        var studyCandidates = studyDeckIdArray.Length > 0
-            ? await StudyDeckCandidates(pairForms, studyDeckIdArray, IsServed)
+        var priorityCandidates = priorityDeckIds.Length > 0
+            ? await GetPrioritySentenceCandidates(pairForms, priorityDeckIds, IsServed)
             : new Dictionary<int, List<long>>();
-        var studyExampleIds = studyCandidates.Values.SelectMany(ids => ids).ToList();
+        var prioritySentenceIds = priorityCandidates.Values.SelectMany(ids => ids).ToList();
 
         var corpusExampleIds = new List<long>();
-        var corpusForms = pairForms.Where(f => !studyCandidates.ContainsKey(ExampleSentenceTokens.WordKey(f.WordId, f.ReadingIndex)));
+        var corpusForms = pairForms.Where(f => !priorityCandidates.ContainsKey(ExampleSentenceTokens.WordKey(f.WordId, f.ReadingIndex)));
         foreach (var group in corpusForms.GroupBy(f => IsServed(f.WordId, f.ReadingIndex)))
         {
             var want = group.Key ? IPlusOnePoolSize : randomSource ? RandomSourcePoolSize : 1;
@@ -4149,7 +4149,7 @@ public partial class StudyController(
             corpusExampleIds.AddRange(sampled.Values.SelectMany(ids => ids));
         }
 
-        var exampleIds = studyExampleIds.Concat(corpusExampleIds).Distinct().ToList();
+        var exampleIds = prioritySentenceIds.Concat(corpusExampleIds).Distinct().ToList();
 
         if (exampleIds.Count == 0)
             return Results.Ok(new CardExamplesResponse { Examples = result });
@@ -4159,13 +4159,12 @@ public partial class StudyController(
             .Where(es => exampleIds.Contains(es.SentenceId))
             .ToDictionaryAsync(es => es.SentenceId);
 
-        var studyIdSet = studyExampleIds.ToHashSet();
+        var prioritySentenceIdSet = prioritySentenceIds.ToHashSet();
 
-        // One sentence per form, picked at random so a form several study decks cover is not always answered by the
-        // same deck; study-deck candidates answer the form whenever any exist, the corpus sample only otherwise.
+        // Prefer candidates from the selected media source; use corpus candidates only when none match the form.
         var pools = FormMatches(sentences.Values, pairForms)
             .GroupBy(m => (m.WordId, m.ReadingIndex))
-            .Select(g => g.Where(m => studyIdSet.Contains(m.SentenceId)).ToList() is { Count: > 0 } study ? study : g.ToList())
+            .Select(g => g.Where(m => prioritySentenceIdSet.Contains(m.SentenceId)).ToList() is { Count: > 0 } preferred ? preferred : g.ToList())
             .ToList();
 
         var servedCandidates = pools.SelectMany(p => p).Where(m => IsServed(m.WordId, m.ReadingIndex)).ToList();
@@ -4211,8 +4210,8 @@ public partial class StudyController(
     }
 
     /// <summary>
-    /// Extra example sentences for one form. Active study decks come first only when the sentence origin
-    /// setting is StudyDecks; under Random the study decks carry no weight at all.
+    /// Extra example sentences for one form, preferring active study media or completed media according to the source setting.
+    /// Random mode gives no media priority.
     /// </summary>
     [HttpPost("word-example-sentences")]
     [EnableRateLimiting("heavy")]
@@ -4226,9 +4225,7 @@ public partial class StudyController(
         if (request.ExcludedDeckIds.Count > 500) return Results.BadRequest();
 
         var settings = await LoadStudySettings(userId);
-        var studyDeckIds = settings.ExampleSentenceSource == ExampleSentenceSource.Random
-            ? []
-            : await ActiveStudyDeckSentenceSources(userId);
+        var priorityDeckIds = await GetPrioritySentenceDeckIds(userId, settings.ExampleSentenceSource);
 
         var take = Math.Clamp(request.Take, 1, 20);
         var readingIndex = (byte)request.ReadingIndex;
@@ -4236,7 +4233,7 @@ public partial class StudyController(
 
         // Only the first page of a served card leads with i+1 sentences; later pages stay random or walk the difficulty bands.
         var readable = request.ReadableFirst && served
-            ? await exampleSentences.GetReadableAsync(request.WordId, request.ReadingIndex, request.ExcludedDeckIds, take, studyDeckIds)
+            ? await exampleSentences.GetReadableAsync(request.WordId, request.ReadingIndex, request.ExcludedDeckIds, take, priorityDeckIds)
             : [];
         var remaining = take - readable.Count;
         var excludedDeckIds = request.ExcludedDeckIds
@@ -4247,7 +4244,7 @@ public partial class StudyController(
         if (request.Sorting == ExampleSentenceSorting.Random)
         {
             var sentences = remaining > 0
-                ? await exampleSentences.GetRandomAsync(request.WordId, request.ReadingIndex, excludedDeckIds, null, remaining, studyDeckIds)
+                ? await exampleSentences.GetRandomAsync(request.WordId, request.ReadingIndex, excludedDeckIds, null, remaining, priorityDeckIds)
                 : [];
             if (served) await FlagIPlusOne(request.WordId, sentences, sentenceTokens);
             return Results.Ok(new ExampleSentencesByDifficultyResponse { Sentences = [..readable, ..sentences] });
@@ -4273,7 +4270,7 @@ public partial class StudyController(
 
         var byDifficulty = await exampleSentences.GetByDifficultyAsync(request.WordId, request.ReadingIndex, excludedDeckIds,
                                                                        null, request.MinDifficulty, request.MaxDifficulty,
-                                                                       request.Descending, remaining, studyDeckIds);
+                                                                       request.Descending, remaining, priorityDeckIds);
         if (served) await FlagIPlusOne(request.WordId, byDifficulty.Sentences, sentenceTokens);
         byDifficulty.Sentences = [..readableByDifficulty, ..byDifficulty.Sentences];
         return Results.Ok(byDifficulty);
@@ -4295,20 +4292,30 @@ public partial class StudyController(
             sentence.IsIPlusOne = unknownCounts.GetValueOrDefault((sentence.SentenceId, wordId), -1) == 0;
     }
 
-    /// <summary>Active media study decks, active media group decks' members and an active Smart Deck's source titles, plus their subdecks, since a multi-volume title keeps its sentences on its volumes.</summary>
-    private async Task<int[]> ActiveStudyDeckSentenceSources(string userId)
+    /// <summary>Deck IDs from active study sources or completed media; Random returns none. Includes subdecks because series store sentences on their volumes.</summary>
+    private async Task<int[]> GetPrioritySentenceDeckIds(string userId, ExampleSentenceSource sentenceSource)
     {
-        var activeDecks = await userContext.UserStudyDecks
-            .AsNoTracking()
-            .Where(sd => sd.UserId == userId && sd.IsActive
-                         && (sd.DeckType == StudyDeckType.MediaDeck || sd.DeckType == StudyDeckType.MediaGroup || sd.DeckType == StudyDeckType.Smart))
-            .ToListAsync();
+        if (sentenceSource == ExampleSentenceSource.Random) return [];
 
-        var deckIds = (await wordSources.ResolveAsync(activeDecks)).Values.SelectMany(src => src.DeckIds).ToList();
-        if (activeDecks.Any(sd => sd.DeckType == StudyDeckType.Smart))
+        List<int> deckIds;
+        if (sentenceSource == ExampleSentenceSource.CompletedMedia)
         {
-            var sources = await smartDeckBuilder.LoadSourcesCached(userId);
-            deckIds.AddRange(sources.Titles.Select(t => t.ParentDeckId));
+            deckIds = await MediaListEntryHelper.CompletedDeckIds(userContext, userId).ToListAsync();
+        }
+        else
+        {
+            var activeStudyDecks = await userContext.UserStudyDecks
+                .AsNoTracking()
+                .Where(sd => sd.UserId == userId && sd.IsActive
+                             && (sd.DeckType == StudyDeckType.MediaDeck || sd.DeckType == StudyDeckType.MediaGroup || sd.DeckType == StudyDeckType.Smart))
+                .ToListAsync();
+
+            deckIds = (await wordSources.ResolveAsync(activeStudyDecks)).Values.SelectMany(src => src.DeckIds).ToList();
+            if (activeStudyDecks.Any(sd => sd.DeckType == StudyDeckType.Smart))
+            {
+                var smartDeckSources = await smartDeckBuilder.LoadSourcesCached(userId);
+                deckIds.AddRange(smartDeckSources.Titles.Select(t => t.ParentDeckId));
+            }
         }
 
         deckIds = deckIds.Distinct().ToList();
@@ -4341,7 +4348,7 @@ public partial class StudyController(
     private record FormMatch(long SentenceId, int WordId, byte ReadingIndex, byte Position, byte Length);
 
     /// <summary>Up to a pool of random sentences per form from the given study decks, keyed by WordKey; a wider pool for served cards, which get an i+1 pick.</summary>
-    private async Task<Dictionary<int, List<long>>> StudyDeckCandidates(List<(int WordId, byte ReadingIndex)> forms, int[] studyDeckIds,
+    private async Task<Dictionary<int, List<long>>> GetPrioritySentenceCandidates(List<(int WordId, byte ReadingIndex)> forms, int[] priorityDeckIds,
                                                        Func<int, byte, bool> isServed)
     {
         List<KeyedSentenceRow> rows;
@@ -4355,7 +4362,7 @@ public partial class StudyController(
                     FROM unnest({0}::int[], {1}::smallint[]) AS v(wid, ri)
                     JOIN jiten.""DeckWords"" dw
                       ON dw.""WordId"" = v.wid AND dw.""ReadingIndex"" = v.ri AND dw.""DeckId"" = ANY({2})
-                ", forms.Select(f => f.WordId).ToArray(), forms.Select(f => (short)f.ReadingIndex).ToArray(), studyDeckIds)
+                ", forms.Select(f => f.WordId).ToArray(), forms.Select(f => (short)f.ReadingIndex).ToArray(), priorityDeckIds)
                 .ToListAsync();
             if (held.Count == 0) return new();
 
@@ -4377,7 +4384,7 @@ public partial class StudyController(
             var keys = forms.Select(f => ExampleSentenceTokens.WordKey(f.WordId, f.ReadingIndex)).ToArray();
             rows = await context.ExampleSentences
                 .AsNoTracking()
-                .Where(es => studyDeckIds.Contains(es.DeckId) && es.WordKeys.Any(k => keys.Contains(k)))
+                .Where(es => priorityDeckIds.Contains(es.DeckId) && es.WordKeys.Any(k => keys.Contains(k)))
                 .Select(es => new KeyedSentenceRow { SentenceId = es.SentenceId, WordKeys = es.WordKeys })
                 .ToListAsync();
         }

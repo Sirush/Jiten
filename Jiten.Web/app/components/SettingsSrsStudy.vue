@@ -162,6 +162,7 @@
 
   const exampleSentenceSourceOptions = [
     { label: 'Study decks', value: 'StudyDecks' },
+    { label: 'Completed media', value: 'CompletedMedia' },
     { label: 'Random', value: 'Random' },
   ];
 
@@ -1289,7 +1290,7 @@
             <label class="text-sm mb-1 block">
               Sentence origin
               <Tooltip
-                content='Where the card&apos;s sentence comes from, and the first sentences that will be under "See more sentences".<br>**Study decks** — a sentence from one of your active study decks. Extra sentences show your study decks first.<br>**Random** — ignores your decks entirely, for the card and the extra sentences.<br>Either way, the card prefers a sentence where you already know every other word, and marks it i+1. Your own custom sentences always win.'
+                content='Where the card&apos;s sentence comes from, and the first sentences that will be under "See more sentences".<br>**Study decks** — prefers sentences from media you are studying through active SRS study decks, including Smart Deck sources.<br>**Completed media** — prefers sentences from media you have finished.<br>**Random** — ignores your decks entirely, for the card and the extra sentences.<br>In all modes, the card prefers a sentence where you already know every other word, and marks it i+1. Your own custom sentences always win.'
                 placement="right"
               >
                 <i class="pi pi-info-circle text-xs text-surface-400 ml-1 cursor-help" />
