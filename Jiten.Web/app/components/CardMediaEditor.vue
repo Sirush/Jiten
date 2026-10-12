@@ -149,14 +149,32 @@
     return null;
   }
 
+  // Browsers label every .webm as video/webm, so only decoding tells an animation from an audio clip.
+  function webmHasVideoTrack(file: File): Promise<boolean> {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      const url = URL.createObjectURL(file);
+      const done = (hasVideo: boolean) => {
+        URL.revokeObjectURL(url);
+        video.removeAttribute('src');
+        resolve(hasVideo);
+      };
+      video.preload = 'metadata';
+      video.muted = true;
+      video.onloadedmetadata = () => done(video.videoWidth > 0);
+      video.onerror = () => done(false);
+      video.src = url;
+    });
+  }
+
   async function stageFile(file: File) {
     if (!canUpload.value) return;
-    const kind = detectKind(file);
+    let kind = detectKind(file);
     if (!kind) {
       toast.add({
         severity: 'error',
         summary: 'Unsupported file',
-        detail: 'Choose an image (jpg, png, webp, gif, heic, avif) or audio (mp3, m4a, ogg, opus, webm, wav, flac) file.',
+        detail: 'Choose an image or animation (jpg, png, webp, gif, webm, heic, avif) or audio (mp3, m4a, ogg, opus, webm, wav, flac) file.',
         life: 4000,
       });
       return;
@@ -164,6 +182,8 @@
 
     clearPending();
     const token = stageToken;
+
+    if (kind === 'audio' && file.name.toLowerCase().endsWith('.webm') && (await webmHasVideoTrack(file))) kind = 'image';
 
     // HEIC/AVIF get the size check after conversion, which shrinks them to at most 1600 px.
     if (kind !== 'image' || !(await isHeifBlob(file).catch(() => false))) {
@@ -440,7 +460,7 @@
     <template v-else-if="compact">
       <div class="flex flex-wrap items-center gap-2">
         <div v-if="image" class="flex items-center gap-0.5 rounded-md border border-surface-200 dark:border-surface-700 p-1">
-          <SrsCardImage :url="image.url" img-class="h-10 min-w-10 max-w-20 w-auto rounded object-contain" />
+          <SrsCardImage :url="image.url" :content-type="image.contentType" img-class="h-10 min-w-10 max-w-20 w-auto rounded object-contain" />
           <Tooltip
             v-if="image.inherited"
             :content="`Inherited ${inheritedLabel(image)}. Deleting removes it from that form; uploading sets an image just for this form.`"
@@ -538,6 +558,7 @@
           <div v-if="image" class="flex items-start gap-3">
             <SrsCardImage
               :url="image.url"
+              :content-type="image.contentType"
               img-class="max-h-20 min-w-20 max-w-full w-auto rounded-md object-contain border border-surface-200 dark:border-surface-700"
             />
             <div class="flex flex-col gap-1.5 min-w-0">
@@ -572,7 +593,7 @@
               </div>
             </div>
           </div>
-          <span v-else class="text-sm text-surface-400 dark:text-surface-400">No image</span>
+          <span v-else class="text-sm text-surface-400 dark:text-surface-400">No image or animation</span>
         </div>
       </div>
 
@@ -662,7 +683,12 @@
           <i class="pi pi-spin pi-spinner text-2xl" />
           <span class="text-xs text-center px-4">Converting to JPEG…</span>
         </div>
-        <SrsCardImage v-else-if="pending.kind === 'image'" :url="pending.url" img-class="max-h-52 min-w-52 max-w-full w-auto rounded-md object-contain" />
+        <SrsCardImage
+          v-else-if="pending.kind === 'image'"
+          :url="pending.url"
+          :content-type="pending.file.type"
+          img-class="max-h-52 min-w-52 max-w-full w-auto rounded-md object-contain"
+        />
         <audio v-else :src="pending.url" controls class="w-full" />
         <p class="text-xs text-surface-500 dark:text-surface-400 self-start truncate w-full">{{ pending.file.name }}</p>
       </div>

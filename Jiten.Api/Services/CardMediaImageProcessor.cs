@@ -26,7 +26,9 @@ public static class CardMediaImageProcessor
     {
         var original = new Processed(bytes, extension, contentType);
 
-        if (kind != CardMediaKind.Image)
+        // WebM is stored in the image slot so the card can display its video track, but it must not
+        // be handed to ImageMagick: decoding/re-encoding it could discard the animation or audio track.
+        if (kind != CardMediaKind.Image || contentType == "video/webm")
             return original;
 
         try
