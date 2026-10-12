@@ -9,7 +9,7 @@
   import { useToast } from 'primevue/usetoast';
 
   definePageMeta({ middleware: ['auth'] });
-  useHead({ title: 'Study' });
+  useHead({ title: 'Study', htmlAttrs: { class: 'stable-gutter' } });
 
   const srsStore = useSrsStore();
   useSrsSessionCache();

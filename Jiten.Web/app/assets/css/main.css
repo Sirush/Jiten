@@ -37,6 +37,9 @@
   --jiten-page-bg: var(--p-neutral-50);
   background-color: var(--jiten-page-bg);
   font-family: var(--font-noto-sans);
+}
+
+:root.stable-gutter {
   scrollbar-gutter: stable;
 }
 
