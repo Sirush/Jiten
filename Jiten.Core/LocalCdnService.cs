@@ -4,13 +4,12 @@ namespace Jiten.Core;
 
 /// <summary>
 /// Local-development replacement for Bunny. Files are stored below StaticFilesPath and served by the
-/// API's /static middleware. This is intentionally selected only when UseBunnyCdn is false; production
-/// should use BunnyCdnService so user media remains private and CDN-backed.
+/// API's /static middleware without auth, so it is only registered in Development with UseBunnyCdn false.
 /// </summary>
 public sealed class LocalCdnService(IConfiguration configuration) : ICdnService
 {
-    private readonly string root = Path.GetFullPath(
-        configuration["StaticFilesPath"] ?? throw new InvalidOperationException("StaticFilesPath is required for local CDN storage."));
+    private readonly string root = Path.TrimEndingDirectorySeparator(Path.GetFullPath(
+        configuration["StaticFilesPath"] ?? throw new InvalidOperationException("StaticFilesPath is required for local CDN storage.")));
     // The web app runs on a different origin in development, so a root-relative URL would be handled
     // by Nuxt/Vue Router instead of the API's static-file middleware.
     private readonly string baseUrl = (configuration["ApiBaseUrl"]
