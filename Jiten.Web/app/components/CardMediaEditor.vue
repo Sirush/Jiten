@@ -142,16 +142,34 @@
     const ext = file.name.split('.').pop()?.toLowerCase() ?? '';
     // Extension is the most reliable signal; MIME is a fallback for files without one. Both are
     // matched against the supported set only, so unsupported audio/image subtypes fail here.
-    if (IMAGE_EXT.includes(ext) || (ext === 'webm' && type === 'video/webm')) return 'image';
+    if (IMAGE_EXT.includes(ext)) return 'image';
     if (AUDIO_EXT.includes(ext)) return 'audio';
     if (IMAGE_MIME.includes(type)) return 'image';
     if (AUDIO_MIME.includes(type)) return 'audio';
     return null;
   }
 
+  // Browsers label every .webm as video/webm, so only decoding tells an animation from an audio clip.
+  function webmHasVideoTrack(file: File): Promise<boolean> {
+    return new Promise((resolve) => {
+      const video = document.createElement('video');
+      const url = URL.createObjectURL(file);
+      const done = (hasVideo: boolean) => {
+        URL.revokeObjectURL(url);
+        video.removeAttribute('src');
+        resolve(hasVideo);
+      };
+      video.preload = 'metadata';
+      video.muted = true;
+      video.onloadedmetadata = () => done(video.videoWidth > 0);
+      video.onerror = () => done(false);
+      video.src = url;
+    });
+  }
+
   async function stageFile(file: File) {
     if (!canUpload.value) return;
-    const kind = detectKind(file);
+    let kind = detectKind(file);
     if (!kind) {
       toast.add({
         severity: 'error',
@@ -164,6 +182,8 @@
 
     clearPending();
     const token = stageToken;
+
+    if (kind === 'audio' && file.name.toLowerCase().endsWith('.webm') && (await webmHasVideoTrack(file))) kind = 'image';
 
     // HEIC/AVIF get the size check after conversion, which shrinks them to at most 1600 px.
     if (kind !== 'image' || !(await isHeifBlob(file).catch(() => false))) {
