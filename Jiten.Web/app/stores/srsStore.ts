@@ -1814,6 +1814,7 @@ export const useSrsStore = defineStore('srs', () => {
     currentBatch,
     currentCardIndex,
     isFlipped,
+    cardShownAt,
     isLoading,
     isSessionComplete,
     isWrappingUp,
