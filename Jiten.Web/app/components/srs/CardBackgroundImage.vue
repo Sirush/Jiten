@@ -17,8 +17,8 @@
 </script>
 
 <template>
-  <div class="pointer-events-none absolute inset-x-0 top-0 z-0 overflow-hidden rounded-t-2xl">
-    <div class="card-background-image relative w-full">
+  <div class="pointer-events-none absolute inset-0 z-0 overflow-hidden rounded-2xl">
+    <div class="card-background-image relative max-h-full w-full overflow-hidden">
       <SrsCardImage
         ref="mediaRef"
         class="w-full"

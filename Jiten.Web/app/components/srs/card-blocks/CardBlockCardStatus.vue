@@ -19,7 +19,7 @@
 
 <template>
   <div class="flex items-center gap-2 text-sm mb-4 uppercase tracking-wider">
-    <span :class="isAgain ? 'text-red-400 dark:text-red-400' : showBackgroundImage ? 'text-white/90' : 'text-surface-400 dark:text-surface-300'">
+    <span :class="isAgain ? 'text-red-400 dark:text-red-400' : showBackgroundImage ? 'text-surface-600 dark:text-white/90' : 'text-surface-400 dark:text-surface-300'">
       {{ statusLabel }}
     </span>
     <span

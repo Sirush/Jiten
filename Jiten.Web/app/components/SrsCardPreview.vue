@@ -72,7 +72,7 @@
         <div :class="context.showBackgroundImage.value ? 'background-top-area relative z-40' : undefined">
           <!-- Top bar: frequency rank (back only) -->
           <div class="relative z-30 flex justify-end items-center min-h-[1.25rem]">
-            <div v-if="showFrequencyRankChrome" class="text-xs text-gray-400" :class="context.showBackgroundImage.value ? '!text-white' : undefined">
+            <div v-if="showFrequencyRankChrome" class="text-xs text-gray-400" :class="context.showBackgroundImage.value ? 'dark:!text-white' : undefined">
               #{{ SAMPLE.frequencyRank.toLocaleString() }}
             </div>
           </div>

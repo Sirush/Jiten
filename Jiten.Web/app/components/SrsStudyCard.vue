@@ -512,13 +512,13 @@
       <div :class="showBackgroundImage ? 'background-top-area relative z-40' : undefined">
         <!-- Top bar: frequency rank + menu -->
         <div class="relative z-40 flex justify-end items-center gap-2 min-h-[1.25rem]">
-          <div v-if="showFrequencyRankChrome && card.frequencyRank > 0" class="text-xs text-gray-400" :class="showBackgroundImage ? '!text-white' : undefined">
+          <div v-if="showFrequencyRankChrome && card.frequencyRank > 0" class="text-xs text-gray-400" :class="showBackgroundImage ? 'dark:!text-white' : undefined">
             #{{ card.frequencyRank.toLocaleString() }}
           </div>
           <button
             v-if="showBackgroundImage"
             type="button"
-            class="inline-flex h-9 w-9 items-center justify-center rounded-xl transition-colors cursor-pointer text-white hover:bg-white/10 focus-visible:bg-white/10"
+            class="inline-flex h-9 w-9 items-center justify-center rounded-xl transition-colors cursor-pointer text-surface-600 hover:bg-black/5 focus-visible:bg-black/5 dark:text-white dark:hover:bg-white/10 dark:focus-visible:bg-white/10"
             aria-label="Open card media preview"
             title="Open card media preview"
             @pointerdown.stop
@@ -531,7 +531,7 @@
             class="inline-flex h-9 w-9 items-center justify-center rounded-xl transition-colors cursor-pointer"
             :class="
               showBackgroundImage
-                ? 'text-white hover:bg-white/10 focus-visible:bg-white/10'
+                ? 'text-surface-600 hover:bg-black/5 focus-visible:bg-black/5 dark:text-white dark:hover:bg-white/10 dark:focus-visible:bg-white/10'
                 : 'text-surface-400 hover:bg-surface-100 hover:text-surface-600 dark:hover:bg-surface-800 dark:hover:text-surface-300'
             "
             aria-label="Card options"
