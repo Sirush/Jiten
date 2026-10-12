@@ -14,6 +14,19 @@ namespace Jiten.Core;
 /// </summary>
 public static class DeckFilterHelper
 {
+    // Compares dates rather than ReleaseDate.Year: an unset DateOnly is stored as -infinity, and date_part(...)::int overflows on it.
+    public static IQueryable<Deck> ReleasedFromYear(this IQueryable<Deck> query, int year)
+    {
+        var from = new DateOnly(Math.Clamp(year, 1, 9999), 1, 1);
+        return query.Where(d => d.ReleaseDate >= from);
+    }
+
+    public static IQueryable<Deck> ReleasedUpToYear(this IQueryable<Deck> query, int year)
+    {
+        var to = new DateOnly(Math.Clamp(year, 1, 9999), 12, 31);
+        return query.Where(d => d.ReleaseDate <= to);
+    }
+
     /// <summary>
     /// Builds the filtered primary-deck query (does not enumerate). Hand-picked mode restricts to the
     /// definition's <see cref="FrequencyListDefinition.DeckIds"/> intersected with existing primary decks.
@@ -35,10 +48,10 @@ public static class DeckFilterHelper
         }
 
         if (def.YearFrom.HasValue)
-            query = query.Where(d => d.ReleaseDate.Year >= def.YearFrom.Value);
+            query = query.ReleasedFromYear(def.YearFrom.Value);
 
         if (def.YearTo.HasValue)
-            query = query.Where(d => d.ReleaseDate.Year <= def.YearTo.Value);
+            query = query.ReleasedUpToYear(def.YearTo.Value);
 
         if (def.DifficultyMin.HasValue)
         {
