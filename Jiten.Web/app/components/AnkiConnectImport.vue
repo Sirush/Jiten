@@ -1269,6 +1269,7 @@
                       loop
                       muted
                       playsinline
+                      aria-label="Card animation preview"
                       class="max-h-48 max-w-full rounded border border-surface-200 dark:border-surface-700"
                     />
                     <img

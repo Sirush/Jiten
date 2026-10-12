@@ -27,6 +27,13 @@
   }
 
   const videoPreviewOpen = ref(false);
+  const videoEl = ref<HTMLVideoElement | null>(null);
+  const motionAllowed = ref(false);
+
+  onMounted(() => {
+    motionAllowed.value = !window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    if (motionAllowed.value) videoEl.value?.play().catch(() => {});
+  });
 
   function openVideoPreview() {
     if (props.blurred) {
@@ -56,19 +63,37 @@
 <template>
   <div class="inline-flex" :class="{ 'cursor-pointer select-none': blurred || contentType === 'video/webm' }" @click.stop="onClick">
     <template v-if="contentType === 'video/webm'">
-      <video
-        :src="url"
-        autoplay
-        loop
-        muted
-        playsinline
-        preload="metadata"
-        :class="[imgClass, 'block', { 'blur-md': blurred }]"
+      <button
+        type="button"
+        :aria-label="blurred ? 'Reveal card animation' : 'Enlarge card animation'"
+        class="inline-flex p-0 border-0 bg-transparent rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
         @click.stop="openVideoPreview"
-        @error="emit('error')"
-      />
+      >
+        <video
+          ref="videoEl"
+          :src="url"
+          :autoplay="motionAllowed"
+          loop
+          muted
+          playsinline
+          preload="metadata"
+          aria-hidden="true"
+          :class="[imgClass, 'block', { 'blur-md': blurred }]"
+          @error="emit('error')"
+        />
+      </button>
       <Dialog v-model:visible="videoPreviewOpen" modal dismissable-mask header="Card animation" :style="{ width: 'min(90vw, 60rem)' }">
-        <video :src="url" autoplay loop muted playsinline class="max-h-[80vh] max-w-full w-full object-contain" @error="emit('error')" />
+        <video
+          :src="url"
+          :autoplay="motionAllowed"
+          loop
+          muted
+          playsinline
+          controls
+          aria-label="Card animation"
+          class="max-h-[80vh] max-w-full w-full object-contain"
+          @error="emit('error')"
+        />
       </Dialog>
     </template>
     <Image v-else :preview="!blurred" @show="resetZoom" @hide="resetZoom">
