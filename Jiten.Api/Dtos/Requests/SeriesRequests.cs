@@ -47,6 +47,12 @@ public class FranchiseBuilderSaveRequest
     public List<FranchiseBuilderMember> AddMembers { get; set; } = new();
     public List<FranchiseBuilderMember> RemoveMembers { get; set; } = new();
     public List<int> BoardDeckIds { get; set; } = new();
+    public List<FranchiseBuilderRename> RenameSeries { get; set; } = new();
+}
+
+public class FranchiseBuilderRename : GroupTitlesRequest
+{
+    public int SeriesId { get; set; }
 }
 
 /// <summary>A blank original title returns the franchise to automatic titles.</summary>

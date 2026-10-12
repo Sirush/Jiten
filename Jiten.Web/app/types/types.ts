@@ -132,6 +132,8 @@ export interface Deck {
   relationships?: DeckRelationship[];
   /** Series and settings the deck is listed in; deck detail endpoint only. */
   series?: SeriesRef[];
+  /** Decks sharing a setting with this one but outside its franchise. */
+  settingDecks?: DeckSummary[];
   /** Deck detail endpoint only; null when the deck has no franchise. */
   franchiseId?: number | null;
   status?: DeckStatus;

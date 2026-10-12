@@ -4,6 +4,7 @@ import { SeriesKind } from '~/types/series';
 import type { MediaGroupTitles } from '~/types/mediaGroup';
 import type { Franchise, FranchiseEdge } from '~/types/types';
 import { layoutStoryLine, releaseYearOf } from '~/utils/franchiseLayout';
+import { sameTitles } from '~/utils/groupTitles';
 import { pickTitles } from '~/utils/localiseTitle';
 import { getEdgeFlow, isLegacyGroupRelationship, linkTypeInfo, type LinkTone } from '~/utils/relationshipRoles';
 import { UnionFind } from '~/utils/unionFind';
@@ -23,6 +24,11 @@ export interface BuilderMembership {
 
 export type FranchiseBuilderMember = Omit<BuilderMembership, 'status'>;
 
+export interface SeriesRename {
+  seriesId: number;
+  titles: MediaGroupTitles;
+}
+
 export interface FranchiseBuilderSaveRequest {
   anchorDeckId: number;
   addEdges: FranchiseEdge[];
@@ -30,12 +36,14 @@ export interface FranchiseBuilderSaveRequest {
   addMembers: FranchiseBuilderMember[];
   removeMembers: FranchiseBuilderMember[];
   boardDeckIds: number[];
+  renameSeries: (MediaGroupTitles & { seriesId: number })[];
 }
 
 export interface BuilderState {
   board: number[];
   edges: BuilderEdge[];
   members: BuilderMembership[];
+  renames?: SeriesRename[];
   /** Decks in the franchise as last saved; a board that differs from it has pending changes. */
   savedBoard?: number[];
 }
@@ -82,6 +90,8 @@ export interface SeriesDialogRequest {
   kind: SeriesKind;
   seriesId: number | null;
   titles: MediaGroupTitles;
+  /** Decks that join the series once it is created or picked. */
+  deckIds?: number[];
 }
 
 /** Text colour per tone; edges and arrowheads draw with currentColor. */
@@ -410,6 +420,19 @@ export function putLinesInSeries(
   return entries;
 }
 
+/** Queues a series rename; renaming back to the saved titles drops it. */
+export function renameSeries(state: BuilderState, seriesId: number, titles: MediaGroupTitles, saved: MediaGroupTitles): void {
+  const rest = (state.renames ?? []).filter((r) => r.seriesId !== seriesId);
+  state.renames = sameTitles(titles, saved) ? rest : [...rest, { seriesId, titles: pickTitles(titles) }];
+}
+
+/** Series with their unsaved renames applied. */
+export function withRenames(series: BuilderSeries[], renames: SeriesRename[] | undefined): BuilderSeries[] {
+  if (!renames?.length) return series;
+  const byId = new Map(renames.map((r) => [r.seriesId, r.titles]));
+  return series.map((s) => (byId.has(s.seriesId) ? { ...s, ...pickTitles(byId.get(s.seriesId)!) } : s));
+}
+
 export function revertLink(state: BuilderState, id: number): void {
   const edge = state.edges.find((e) => e.id === id);
   if (!edge) return;
@@ -439,12 +462,14 @@ export function discardPending(state: BuilderState): void {
   if (state.savedBoard) state.board = [...state.savedBoard];
   state.edges = state.edges.filter((e) => e.status !== 'new').map((e) => ({ ...e, status: 'saved' }));
   state.members = state.members.filter((m) => m.status !== 'new').map((m) => ({ ...m, status: 'saved' }));
+  state.renames = [];
 }
 
 export type PendingChange =
   | { kind: 'link'; edge: BuilderEdge }
   | { kind: 'member'; member: BuilderMembership }
-  | { kind: 'deck'; deckId: number; joining: boolean };
+  | { kind: 'deck'; deckId: number; joining: boolean }
+  | { kind: 'rename'; rename: SeriesRename };
 
 export function pendingChanges(state: BuilderState): PendingChange[] {
   const saved = state.savedBoard;
@@ -453,6 +478,7 @@ export function pendingChanges(state: BuilderState): PendingChange[] {
     ...(saved ? saved.filter((id) => !state.board.includes(id)).map((deckId): PendingChange => ({ kind: 'deck', deckId, joining: false })) : []),
     ...state.edges.filter((e) => e.status !== 'saved').map((edge): PendingChange => ({ kind: 'link', edge })),
     ...state.members.filter((m) => m.status !== 'saved').map((member): PendingChange => ({ kind: 'member', member })),
+    ...(state.renames ?? []).map((rename): PendingChange => ({ kind: 'rename', rename })),
   ];
 }
 
@@ -465,6 +491,7 @@ export function buildSaveRequest(anchorDeckId: number, state: BuilderState): Fra
     addMembers: state.members.filter((m) => m.status === 'new').map(member),
     removeMembers: state.members.filter((m) => m.status === 'removed').map(member),
     boardDeckIds: [...state.board],
+    renameSeries: (state.renames ?? []).map((r) => ({ seriesId: r.seriesId, ...pickTitles(r.titles) })),
   };
 }
 
@@ -481,6 +508,7 @@ export function builderStateFromFranchise(franchise: Franchise): BuilderState {
       ...(franchise.series ?? []).flatMap((s) => s.memberDeckIds.map((deckId) => ({ seriesId: s.seriesId, deckId, status: 'saved' as const }))),
       ...(franchise.settings ?? []).flatMap((s) => s.memberDeckIds.map((deckId) => ({ seriesId: s.seriesId, deckId, status: 'saved' as const }))),
     ],
+    renames: [],
   };
 }
 

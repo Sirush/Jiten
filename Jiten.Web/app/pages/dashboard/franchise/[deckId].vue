@@ -46,10 +46,12 @@
     otherSeriesOfLine,
     pendingChanges,
     putLinesInSeries,
+    renameSeries,
     revertDeck,
     revertLink,
     revertMembership,
     toBuilderDeck,
+    withRenames,
     type BuilderDeck,
     type BuilderSeries,
     type BuilderState,
@@ -77,7 +79,8 @@
   const title = (id: number) => (decks.value[id] ? localiseTitle(decks.value[id]!) : `#${id}`);
   const year = (id: number) => decks.value[id]?.year ?? null;
   const deck = (id: number) => decks.value[id];
-  const seriesById = computed(() => new Map(series.value.map((s) => [s.seriesId, s])));
+  const shownSeries = computed(() => withRenames(series.value, state.value.renames));
+  const seriesById = computed(() => new Map(shownSeries.value.map((s) => [s.seriesId, s])));
   const seriesName = (id: number) => {
     const s = seriesById.value.get(id);
     return s ? localiseTitle(s) : `Series #${id}`;
@@ -193,7 +196,7 @@
       board: state.value.board,
       edges: activeEdges(state.value),
       members: activeMembers(state.value),
-      series: series.value,
+      series: shownSeries.value,
       year,
       title,
       localise: localiseTitle,
@@ -202,9 +205,9 @@
     })
   );
 
-  const seriesOnly = computed(() => series.value.filter((s) => s.kind === SeriesKind.Series));
-  const settingsOnly = computed(() => series.value.filter((s) => s.kind === SeriesKind.Setting));
-  const seriesOrder = computed(() => orderSeries(series.value, () => null, localiseTitle));
+  const seriesOnly = computed(() => shownSeries.value.filter((s) => s.kind === SeriesKind.Series));
+  const settingsOnly = computed(() => shownSeries.value.filter((s) => s.kind === SeriesKind.Setting));
+  const seriesOrder = computed(() => orderSeries(shownSeries.value, () => null, localiseTitle));
   const seriesOptions = computed(() => seriesOrder.value.map((s) => ({ value: s.seriesId, label: localiseTitle(s) })));
 
   const stats = computed(() => {
@@ -504,23 +507,55 @@
     series.value = [...series.value, { ...pickTitles(entry), seriesId: entry.seriesId, kind: entry.kind }];
   }
 
+  /** Puts the decks the dialog was opened for into the series; returns how many lines joined. */
+  function joinDialogDecks(seriesId: number): number {
+    const ids = seriesDialog.value?.deckIds ?? [];
+    if (!ids.length) return 0;
+    const joined = putInSeries(seriesId, ids);
+    selected.value = [];
+    return joined.length;
+  }
+
   function onSeriesPicked(entry: SeriesRef) {
     addExistingSeries(entry);
-    flash(`${localiseTitle(entry)} is on the board. Drop decks on it to add them.`);
+    const joined = joinDialogDecks(entry.seriesId);
+    flash(
+      joined
+        ? `Put ${joined} ${joined === 1 ? 'line' : 'lines'} in ${localiseTitle(entry)}`
+        : `${localiseTitle(entry)} is on the board. Drop decks on it to add them.`,
+      joined > 0
+    );
     seriesDialog.value = null;
   }
 
   function onSeriesCreated(created: SeriesRef) {
     addExistingSeries(created);
-    flash(`Created ${localiseTitle(created)}`);
+    const joined = joinDialogDecks(created.seriesId);
+    flash(joined ? `Created ${localiseTitle(created)} with ${joined} ${joined === 1 ? 'line' : 'lines'}` : `Created ${localiseTitle(created)}`, joined > 0);
     seriesDialog.value = null;
   }
 
-  function onSeriesRenamed(updated: SeriesRef) {
+  function onSeriesRenamed(titles: MediaGroupTitles) {
     const id = seriesDialog.value?.seriesId;
-    series.value = series.value.map((s) => (s.seriesId === id ? { ...s, ...pickTitles(updated) } : s));
-    flash(`Renamed to ${localiseTitle(updated)}`);
+    const saved = series.value.find((s) => s.seriesId === id);
     seriesDialog.value = null;
+    if (id == null || !saved) return;
+    commit((s) => renameSeries(s, id, titles, saved));
+    flash(`Renamed to ${localiseTitle(titles)}`, true);
+  }
+
+  const suggesting = ref(false);
+
+  async function makeSeriesFromSelection() {
+    const ids = releaseOrder(selected.value);
+    if (!ids.length || suggesting.value) return;
+    suggesting.value = true;
+    try {
+      const titles = await $api<MediaGroupTitles>('admin/series/suggest-titles', { query: { deckIds: ids } }).catch(() => pickTitles(deck(ids[0]!)!));
+      seriesDialog.value = { mode: 'create', kind: SeriesKind.Series, seriesId: null, titles, deckIds: ids };
+    } finally {
+      suggesting.value = false;
+    }
   }
 
   const searchQuery = ref('');
@@ -571,13 +606,26 @@
     commit((s) => {
       if (change.kind === 'link') revertLink(s, change.edge.id);
       else if (change.kind === 'member') revertMembership(s, change.member.seriesId, change.member.deckId);
+      else if (change.kind === 'rename') s.renames = s.renames?.filter((r) => r.seriesId !== change.rename.seriesId);
       else revertDeck(s, change.deckId);
     });
+  }
+
+  function changeKey(c: (typeof changes.value)[number]) {
+    if (c.kind === 'link') return `l${c.edge.id}`;
+    if (c.kind === 'member') return `m${c.member.seriesId}-${c.member.deckId}`;
+    if (c.kind === 'rename') return `r${c.rename.seriesId}`;
+    return `d${c.deckId}`;
   }
 
   function discardAll() {
     commit((s) => discardPending(s));
     flash('Discarded all unsaved changes', true);
+  }
+
+  function renameChangeText(seriesId: number, titles: MediaGroupTitles) {
+    const saved = series.value.find((s) => s.seriesId === seriesId);
+    return `${saved ? localiseTitle(saved) : `Series #${seriesId}`} will be renamed to ${localiseTitle(titles)}`;
   }
 
   function memberChangeText(seriesId: number, deckId: number, joining: boolean) {
@@ -601,6 +649,7 @@
         method: 'POST',
         body: buildSaveRequest(anchor, state.value),
       });
+      series.value = withRenames(series.value, state.value.renames);
       applyFranchise(saved);
       closeFloating();
       if (anchor !== anchorDeckId) {
@@ -865,6 +914,7 @@
             <span class="font-medium">{{ selected.length }} selected</span>
             <Button v-if="selected.length >= 2" label="Chain as sequels" size="small" severity="secondary" outlined @click="chainSelection" />
             <Button v-else label="Link to…" size="small" severity="secondary" outlined @click="startLink(selected[0]!)" />
+            <Button label="Make a series" size="small" severity="secondary" outlined :loading="suggesting" @click="makeSeriesFromSelection" />
             <template v-if="seriesOptions.length">
               <Select
                 v-if="seriesOptions.length > 1"
@@ -951,7 +1001,7 @@
               </li>
               <li
                 v-for="c in changes"
-                :key="c.kind === 'link' ? `l${c.edge.id}` : c.kind === 'member' ? `m${c.member.seriesId}-${c.member.deckId}` : `d${c.deckId}`"
+                :key="changeKey(c)"
                 class="grid grid-cols-[auto_minmax(0,1fr)_auto] items-start gap-2.5 border-t border-gray-200 py-2 text-[13px] first:border-t-0 dark:border-gray-800"
               >
                 <template v-if="c.kind === 'link'">
@@ -976,6 +1026,10 @@
                     {{ c.joining ? '+' : '−' }}
                   </span>
                   <span>{{ title(c.deckId) }} {{ c.joining ? 'joins' : 'leaves' }} the franchise</span>
+                </template>
+                <template v-else-if="c.kind === 'rename'">
+                  <span class="w-4 text-center font-bold text-primary-700 dark:text-primary-300" aria-label="Renamed">~</span>
+                  <span>{{ renameChangeText(c.rename.seriesId, c.rename.titles) }}</span>
                 </template>
                 <template v-else>
                   <span

@@ -61,6 +61,9 @@ public class DeckDto : IDeckCoverageTarget
     /// <summary>Series and settings the deck is a direct member of; filled by SeriesService.ApplyRefsAsync.</summary>
     public List<SeriesRefDto> Series { get; set; } = new();
 
+    /// <summary>Decks sharing a setting with this one but outside its franchise, capped; filled by SeriesService.ApplyRefsAsync.</summary>
+    public List<DeckRefDto> SettingDecks { get; set; } = new();
+
     /// <summary>Null when the deck belongs to no franchise.</summary>
     public int? FranchiseId { get; set; }
     public DeckStatus? Status { get; set; }

@@ -82,10 +82,15 @@ describe('parseScope / formatScope', () => {
 });
 
 describe('scopeDeckIds', () => {
-  it('returns the members of a series that are in the franchise', () => {
-    expect(scopeDeckIds(franchise, { kind: MediaGroupKind.Series, id: 100 })).toEqual([1, 12, 20]);
-    const partial = { ...franchise, nodes: franchise.nodes.filter((n) => n.deckId !== 12) };
+  it('returns the members of a series that are in the franchise, with the rest of their story lines', () => {
+    expect(scopeDeckIds(franchise, { kind: MediaGroupKind.Series, id: 100 })).toEqual([1, 12, 20, 13]);
+    const partial = { ...franchise, nodes: franchise.nodes.filter((n) => n.deckId !== 12 && n.deckId !== 13) };
     expect(scopeDeckIds(partial, { kind: MediaGroupKind.Series, id: 100 })).toEqual([1, 20]);
+  });
+
+  it('leaves a line deck to the series it belongs to', () => {
+    const shared = { ...franchise, series: [...franchise.series, { seriesId: 102, originalTitle: 'Sequel', memberDeckIds: [13] }] } as ScopeFranchise;
+    expect(scopeDeckIds(shared, { kind: MediaGroupKind.Series, id: 100 })).toEqual([1, 12, 20]);
   });
 
   it('returns a line by any of its decks', () => {
@@ -111,6 +116,24 @@ describe('buildScopeChips', () => {
 
   it('drops a line covering the same decks as a series', () => {
     expect(chips.some((c) => c.key === 'line:7')).toBe(false);
+  });
+
+  it('drops a line a series reaches through one of its members', () => {
+    const baldr: ScopeFranchise = {
+      nodes: [node(1, '2002-01-01'), node(2, '2009-01-01'), node(3, '2009-06-01')],
+      edges: [],
+      series: [
+        { seriesId: 10, originalTitle: 'BALDR', memberDeckIds: [1] },
+        { seriesId: 11, originalTitle: 'BALDR SKY', memberDeckIds: [2] },
+      ],
+      lines: [
+        { anchorDeckId: 1, deckIds: [1] },
+        { anchorDeckId: 2, deckIds: [2, 3] },
+      ],
+    } as ScopeFranchise;
+    const baldrChips = buildScopeChips(baldr, localise);
+    expect(baldrChips.map((c) => c.key)).toEqual(['all', 'series:10', 'series:11']);
+    expect(baldrChips[2]!.deckIds).toEqual([2, 3]);
   });
 
   it('hides a series spanning the whole franchise', () => {

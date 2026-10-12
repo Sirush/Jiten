@@ -187,6 +187,22 @@ public class SeriesTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task DeckDetail_ListsSettingDecksOutsideItsFranchise()
+    {
+        await SeedAsync([Deck(1, "A"), Deck(2, "B"), Deck(50, "Elsewhere late", year: 2010), Deck(51, "Elsewhere early", year: 1990)],
+                        [Rel(1, 2, DeckRelationshipType.Sequel)],
+                        [Group(1, "Ivalice", SeriesKind.Setting, 1, 2, 50, 51)]);
+        using (var scope = factory.Services.CreateScope())
+            await scope.ServiceProvider.GetRequiredService<FranchiseSyncRunner>().RunAsync();
+
+        var inFranchise = await GetAsync<PaginatedResponse<DeckDetailDto>>("/api/media-deck/1/detail");
+        var loose = await GetAsync<PaginatedResponse<DeckDetailDto>>("/api/media-deck/50/detail");
+
+        inFranchise.Data.MainDeck.SettingDecks.Select(d => d.DeckId).Should().Equal(51, 50);
+        loose.Data.MainDeck.SettingDecks.Select(d => d.DeckId).Should().Equal(51, 1, 2);
+    }
+
+    [Fact]
     public async Task MediaList_ListsDirectSeriesOfEachDeck()
     {
         await SeedAsync([Deck(1, "A"), Deck(2, "B")], series: [Group(1, "Final Fantasy", SeriesKind.Series, 1)]);
@@ -365,6 +381,43 @@ public class SeriesTests(JitenWebApplicationFactory factory)
         var reloaded = await GetAsync<FranchiseDto>("/api/admin/franchise-builder/1", admin: true);
         reloaded.Nodes.Select(n => n.DeckId).Should().BeEquivalentTo([1, 2, 3]);
         reloaded.Series.Single().MemberDeckIds.Should().BeEquivalentTo([2]);
+    }
+
+    [Fact]
+    public async Task FranchiseBuilder_SaveRenamesSeries()
+    {
+        await SeedAsync([Deck(1, "A"), Deck(2, "B")], series: [Group(1, "Saga", SeriesKind.Series, 1, 2)]);
+
+        var response = await AdminSendAsync(HttpMethod.Post, "/api/admin/franchise-builder/save", new
+        {
+            anchorDeckId = 1,
+            boardDeckIds = new[] { 1, 2 },
+            renameSeries = new[] { new { seriesId = 1, originalTitle = "物語", romajiTitle = "Monogatari", englishTitle = (string?)null } }
+        });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+        var saved = (await response.Content.ReadFromJsonAsync<FranchiseDto>())!;
+        saved.Series.Single().OriginalTitle.Should().Be("物語");
+        saved.Series.Single().RomajiTitle.Should().Be("Monogatari");
+
+        var blank = await AdminSendAsync(HttpMethod.Post, "/api/admin/franchise-builder/save", new
+        {
+            anchorDeckId = 1,
+            boardDeckIds = new[] { 1, 2 },
+            renameSeries = new[] { new { seriesId = 1, originalTitle = " " } }
+        });
+        blank.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task SuggestSeriesTitles_UsesTheSharedTitlePrefix()
+    {
+        await SeedAsync([Deck(1, "ソードアート・オンライン 1", year: 2009), Deck(2, "ソードアート・オンライン 2", year: 2010), Deck(3, "Other")]);
+
+        var titles = await GetAsync<GroupTitles>("/api/admin/series/suggest-titles?deckIds=1&deckIds=2", admin: true);
+
+        titles.OriginalTitle.Should().Be("ソードアート・オンライン");
+        (await AdminSendAsync(HttpMethod.Get, "/api/admin/series/suggest-titles")).StatusCode.Should().Be(HttpStatusCode.BadRequest);
     }
 
     [Fact]
