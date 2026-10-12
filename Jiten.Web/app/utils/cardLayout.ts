@@ -39,6 +39,7 @@ function block(type: CardBlockType, options?: CardLayoutBlock['options']): CardL
 function cardImageOptionsFromLegacy(s: StudySettingsDto): CardBlockOptions | undefined {
   const options: CardBlockOptions = {};
   if (s.cardImageLayout === 'below') options.layout = 'below';
+  if (s.cardImageLayout === 'background') options.layout = 'background';
   if (s.blurCardImage === false) options.blur = false;
   return Object.keys(options).length ? options : undefined;
 }
@@ -257,7 +258,7 @@ export function setCardImagePosition(layout: CardLayout, pos: 'Front' | 'Back'):
 
 // Sets one image option across the (single) image block, re-adding it on the back when absent. A
 // default value (beside / blur=true) clears the key so the block round-trips like a legacy-derived one.
-export function setCardImageOption(layout: CardLayout, key: 'layout' | 'blur', value: 'beside' | 'below' | boolean): CardLayout {
+export function setCardImageOption(layout: CardLayout, key: 'layout' | 'blur', value: 'beside' | 'below' | 'background' | boolean): CardLayout {
   if (!getCardImageBlock(layout)) return setCardImageOption(setCardImagePosition(layout, 'Back'), key, value);
   const isDefault = (key === 'layout' && value === 'beside') || (key === 'blur' && value === true);
   const map = (b: CardLayoutBlock): CardLayoutBlock => {

@@ -87,6 +87,7 @@ export function createSampleCardContext(settings: ComputedRef<StudySettingsDto>,
   );
   const imageOnFront = computed(() => sampleLayout.value.front.some((b) => b.type === 'cardImage'));
   const besideLayout = computed(() => !isolated && (imageBlock.value?.options?.layout ?? 'beside') === 'beside');
+  const backgroundLayout = computed(() => !isolated && imageBlock.value?.options?.layout === 'background');
   const blurEnabled = computed(() => imageBlock.value?.options?.blur ?? true);
 
   return {
@@ -113,6 +114,7 @@ export function createSampleCardContext(settings: ComputedRef<StudySettingsDto>,
     imageBlurred: computed(() => !isolated && imageOnFront.value && blurEnabled.value && !isFlipped.value),
     showBesideImage: computed(() => !!imageBlock.value && besideLayout.value && (imageOnFront.value || isFlipped.value)),
     imageBesideLayout: besideLayout,
+    showBackgroundImage: computed(() => !!imageBlock.value && backgroundLayout.value && (imageOnFront.value || isFlipped.value)),
     hasCardMedia: computed(() => false),
     canEditCardMedia,
     openMediaEditor: () => {},

@@ -8,12 +8,14 @@
       blurred?: boolean;
       imgClass?: string;
       loading?: 'eager' | 'lazy';
+      fill?: boolean;
     }>(),
     {
       blurred: false,
       imgClass: '',
       contentType: 'image/*',
       loading: 'eager',
+      fill: false,
     }
   );
 
@@ -43,6 +45,22 @@
     videoPreviewOpen.value = true;
   }
 
+  const imagePreviewRef = ref<{ onImageClick?: () => void } | null>(null);
+
+  function openPreview() {
+    if (props.contentType === 'video/webm') {
+      openVideoPreview();
+      return;
+    }
+    if (props.blurred) {
+      emit('reveal');
+      return;
+    }
+    imagePreviewRef.value?.onImageClick?.();
+  }
+
+  defineExpose({ openPreview });
+
   // Scroll-wheel / trackpad-pinch zoom inside the opened preview, composed on top of PrimeVue's own
   // rotate/scale transform (from its toolbar buttons) rather than reaching into its internal scale.
   // Reset whenever the preview opens or closes.
@@ -67,6 +85,7 @@
         type="button"
         :aria-label="blurred ? 'Reveal card animation' : 'Enlarge card animation'"
         class="inline-flex p-0 border-0 bg-transparent rounded-lg focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500"
+        :class="{ 'w-full': fill }"
         @click.stop="openVideoPreview"
       >
         <video
@@ -96,7 +115,7 @@
         />
       </Dialog>
     </template>
-    <Image v-else :preview="!blurred" @show="resetZoom" @hide="resetZoom">
+    <Image v-else ref="imagePreviewRef" :class="{ 'block w-full': fill }" :preview="!blurred" @show="resetZoom" @hide="resetZoom">
       <template #image>
         <img :src="url" alt="Card image" :loading="loading" :class="[imgClass, { 'blur-md': blurred }]" @error="emit('error')" />
       </template>

@@ -1,0 +1,25 @@
+.background-top-area,
+.background-answer-area {
+  border-radius: 0.75rem;
+  background: rgb(255 255 255 / 0.85);
+  padding: 1rem 0.75rem 0.75rem;
+}
+
+:global(.dark-mode .background-top-area),
+:global(.dark-mode .background-answer-area) {
+  background: rgb(0 0 0 / 0.42);
+  color: rgb(255 255 255 / 0.92);
+}
+
+:is(.background-top-area, .background-answer-area) :deep(.text-gray-400:not(button:hover)),
+:is(.background-top-area, .background-answer-area) :deep(.text-gray-500:not(button:hover)),
+:is(.background-top-area, .background-answer-area) :deep(.text-surface-400:not(button:hover)),
+:is(.background-top-area, .background-answer-area) :deep(.text-surface-500:not(button:hover)) {
+  color: var(--p-surface-600) !important;
+}
+
+:global(
+    .dark-mode :is(.background-top-area, .background-answer-area) :is(.text-gray-400, .text-gray-500, .text-surface-400, .text-surface-500):not(button:hover)
+  ) {
+  color: rgb(255 255 255 / 0.68) !important;
+}
