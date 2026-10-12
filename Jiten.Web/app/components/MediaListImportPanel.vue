@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { DeckStatus, type MediaType } from '~/types';
+  import { DeckStatus, MediaListEntryState, type MediaType } from '~/types';
   import { getDeckStatusText } from '~/utils/deckStatusMapper';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { coverUrl } from '~/utils/coverImage';
@@ -34,13 +34,15 @@
     completedOn?: string | null;
     startedPrecision?: DatePrecision;
     completedPrecision?: DatePrecision;
-    datesTarget?: { inProgress: boolean; startedOn: string | null; finishedOn: string | null } | null;
+    datesTarget?: { inProgress: boolean; startedOn: string | null; finishedOn: string | null; hasCharacters?: boolean } | null;
+    currentCompletions?: string[];
     repeatCount?: number | null;
     charactersRead?: number | null;
     history?: ImportedHistoryRow[] | null;
     volumes?: { deckId: number; status: DeckStatus; history: ImportedHistoryRow[] | null }[] | null;
     progress: number | null;
     subdeckCount: number | null;
+    completedUnits?: number;
     currentStatus: DeckStatus | null;
     isIgnored: boolean;
     isFavourite?: boolean;
@@ -60,7 +62,7 @@
   type ViewKey = 'import' | 'all' | 'excluded' | 'conflicts' | 'ignored' | 'add' | 'partial' | 'dated' | 'skipped';
   type SortKey = 'title' | 'type' | 'source' | 'action' | 'finished';
   type SortDir = 'asc' | 'desc';
-  type ActionKind = 'ignored' | 'excluded' | 'conflict' | 'favourite' | 'unchanged' | 'none';
+  type ActionKind = 'ignored' | 'excluded' | 'conflict' | 'favourite' | 'history' | 'unchanged' | 'none';
 
   interface DatesPlan {
     kind: 'fill' | 'dated' | 'skip';
@@ -383,7 +385,10 @@
     if (row.isIgnored) return 'ignored';
     if (!isRowIncluded(row)) return 'excluded';
     if (isConflict(row)) return 'conflict';
-    if (row.currentStatus === row.mappedStatus) return needsFavourite(row) ? 'favourite' : 'unchanged';
+    if (row.currentStatus === row.mappedStatus) {
+      if (needsFavourite(row)) return 'favourite';
+      return addsHistory(row) ? 'history' : 'unchanged';
+    }
     return 'none';
   }
 
@@ -403,13 +408,52 @@
     return importProgress.value && progressUnits(row) > 0;
   }
 
+  const completionsSince = computed(() => (!isFile.value && cutoffEnabled.value && cutoffDate.value ? `${cutoffLabel.value}-01` : null));
+
+  function sourceCompletions(row: PreviewRow): number {
+    if (row.history?.length) return row.history.filter((r) => r.state === MediaListEntryState.Completed).length;
+    return (row.repeatCount ?? 0) + (row.mappedStatus === DeckStatus.Completed ? 1 : 0);
+  }
+
+  /** Mirrors the server's TopUpHistoryAsync for a title already on the list; keep the two in sync. */
+  function missingCompletions(row: PreviewRow): number {
+    if (row.currentStatus !== row.mappedStatus) return 0;
+    const current = row.currentCompletions ?? [];
+    const source = sourceCompletions(row);
+    const since = completionsSince.value;
+    if (!since) return Math.max(0, source - current.length);
+
+    const latest = row.mappedStatus === DeckStatus.Completed ? (sentFinishedOn(row) ?? sentStartedOn(row)) : sentFinishedOn(row);
+    return source > 0 && latest != null && latest >= since && current.every((day) => day < since) ? 1 : 0;
+  }
+
+  function addsCharacters(row: PreviewRow): boolean {
+    return row.currentStatus === row.mappedStatus && !!row.charactersRead && !!row.datesTarget && !row.datesTarget.hasCharacters;
+  }
+
+  function addsUnits(row: PreviewRow): boolean {
+    if (row.currentStatus !== row.mappedStatus || !importProgress.value) return false;
+    const units = row.volumes?.length ? row.volumes.filter((v) => v.status === DeckStatus.Completed).length : progressUnits(row);
+    return units > (row.completedUnits ?? 0);
+  }
+
+  function addsHistory(row: PreviewRow): boolean {
+    return missingCompletions(row) > 0 || addsCharacters(row) || addsUnits(row);
+  }
+
+  function historyLabel(row: PreviewRow): string {
+    const completions = missingCompletions(row);
+    if (completions === 0) return 'Adds progress';
+    return completions === 1 ? '+1 completion' : `+${completions} completions`;
+  }
+
   const progressRows = computed(() => allRows.value.filter((row) => progressUnits(row) > 0));
   const progressUnitTotal = computed(() => applyRows.value.reduce((sum, row) => sum + progressUnits(row), 0));
 
   const applyRows = computed(() =>
     allRows.value.filter((row) => {
       if (!isRowIncluded(row) || row.isIgnored) return false;
-      if (row.currentStatus === row.mappedStatus) return needsFavourite(row);
+      if (row.currentStatus === row.mappedStatus) return needsFavourite(row) || addsHistory(row);
       if (isConflict(row) && rowResolution(row) === 'keep') return false;
       return true;
     })
@@ -676,6 +720,7 @@
         method: 'POST',
         body: {
           overwriteExisting: true,
+          completionsSince: completionsSince.value,
           entries: applyRows.value.map((r) => {
             const units = importProgress.value ? progressUnits(r) : 0;
             const volumes = importProgress.value && r.volumes?.length ? r.volumes : null;
@@ -691,7 +736,11 @@
               volumes,
             };
             if (units === 0 && !volumes) return base;
-            return { ...base, progress: units > 0 ? units : null, overwriteSubdecks: rowResolution(r) === 'overwrite' };
+            return {
+              ...base,
+              progress: units > 0 ? units : null,
+              overwriteSubdecks: r.currentStatus !== r.mappedStatus && rowResolution(r) === 'overwrite',
+            };
           }),
         },
       });
@@ -912,14 +961,11 @@
               </div>
 
               <p v-if="historyRowCount > 0" class="text-xs text-gray-500 dark:text-gray-400">
-                <template v-if="historyRowCount === 1">
-                  1 title has dates, repeat counts or character counts. They'll be added to your history unless the title already has one on Jiten.
-                </template>
-                <template v-else>
-                  {{ historyRowCount }} titles have dates, repeat counts or character counts. They'll be added to your history, except on titles that already
-                  have one on Jiten.
-                </template>
-                To date titles already on your list, switch to Dates only.
+                {{ historyRowCount === 1 ? '1 title has' : `${historyRowCount} titles have` }} dates, repeat counts or character counts, which will be
+                added to your history. Titles that already have a history on Jiten will only get the completions and character counts they're missing<template
+                  v-if="completionsSince"
+                  >, and at most one completion after your set date</template
+                >. To date titles already on your list, switch to Dates only.
               </p>
 
               <div v-if="partialDateRowCount > 0" class="flex flex-wrap items-center gap-2">
@@ -1276,6 +1322,11 @@
                       v-else-if="actionKind(item) === 'favourite'"
                       class="inline-block max-w-full truncate rounded-full bg-amber-100 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:bg-amber-900/40 dark:text-amber-300"
                       >Favourite</span
+                    >
+                    <span
+                      v-else-if="actionKind(item) === 'history'"
+                      class="inline-block max-w-full truncate rounded-full bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-700 dark:bg-green-900/40 dark:text-green-300"
+                      >{{ historyLabel(item) }}</span
                     >
                     <span v-else-if="actionKind(item) === 'unchanged'" class="text-xs text-gray-400 dark:text-gray-500">Unchanged</span>
                     <span v-else class="text-xs font-semibold text-green-600 sm:hidden dark:text-green-400">New</span>

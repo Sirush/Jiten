@@ -195,7 +195,7 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
 
                     entries.Add(new ExternalListEntry(id.ToString(), title ?? $"AniList #{id}",
                                                       $"https://anilist.co/{urlSegment}/{id}", status, mapped, finishedAt, progress,
-                                                      startedOn, completedOn, RepeatsBeforeFromAnilist(repeat, mapped), startedPrecision,
+                                                      startedOn, completedOn, RepeatsBeforeFromAnilist(repeat, status, mapped), startedPrecision,
                                                       completedPrecision));
                 }
             }
@@ -213,11 +213,12 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
     }
 
     /// <summary>AniList's repeat excludes the first completion; a completed title's own entry is one of them, any other status came after all.</summary>
-    private static int? RepeatsBeforeFromAnilist(int? repeat, DeckStatus mapped)
+    private static int? RepeatsBeforeFromAnilist(int? repeat, string status, DeckStatus mapped)
     {
-        if (repeat is not > 0)
+        var finished = repeat ?? 0;
+        if (finished == 0 && status != "REPEATING")
             return null;
-        return mapped == DeckStatus.Completed ? repeat : repeat + 1;
+        return mapped == DeckStatus.Completed ? finished : finished + 1;
     }
 
     private static (DateOnly? Date, DatePrecision Precision) ReadAnilistFuzzyDate(JsonElement entry, string property)
@@ -256,7 +257,7 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
         mapped = status switch
                  {
                      "CURRENT" => DeckStatus.Ongoing,
-                     "REPEATING" => DeckStatus.Completed,
+                     "REPEATING" => DeckStatus.Ongoing,
                      "PAUSED" => DeckStatus.Paused,
                      "PLANNING" => DeckStatus.Planning,
                      "COMPLETED" => DeckStatus.Completed,

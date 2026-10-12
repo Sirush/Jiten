@@ -1096,6 +1096,67 @@ public class MediaListEntryTests(JitenWebApplicationFactory factory)
     private Task<HttpResponseMessage> Import(object entry) =>
         Send(HttpMethod.Post, "/api/user/media-list/import/apply", new { overwriteExisting = true, entries = new[] { entry } });
 
+    private Task<HttpResponseMessage> ImportSince(object entry, string completionsSince) =>
+        Send(HttpMethod.Post, "/api/user/media-list/import/apply", new { overwriteExisting = true, completionsSince, entries = new[] { entry } });
+
+    [Fact]
+    public async Task Import_ATitleAlreadyOnTheList_GetsOnlyItsMissingCompletions()
+    {
+        var deckId = await SeedDeck("VN");
+        await SetStatus(deckId, DeckStatus.Completed, new { date = "2023-05-01" });
+        var original = (await Preference(deckId))!.CurrentEntryId;
+
+        var entry = new { deckId, status = DeckStatus.Completed, repeatCount = 2, finishedOn = "2024-01-01" };
+        (await Import(entry)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Import(entry)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var entries = await Entries(deckId);
+        entries.Should().HaveCount(3).And.OnlyContain(r => r.State == MediaListEntryState.Completed);
+        entries.Where(r => r.Id != original).Should().OnlyContain(r => r.FinishedOn == null);
+        (await Preference(deckId))!.CurrentEntryId.Should().Be(original);
+    }
+
+    [Fact]
+    public async Task Import_PastACutoff_AddsOnlyTheLatestCompletion()
+    {
+        var deckId = await SeedDeck("VN");
+        await SetStatus(deckId, DeckStatus.Completed, new { date = "2020-01-01" });
+
+        var entry = new { deckId, status = DeckStatus.Completed, repeatCount = 3, startedOn = "2025-02-01", finishedOn = "2025-03-01" };
+        (await ImportSince(entry, "2025-01-01")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await ImportSince(entry, "2025-01-01")).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var entries = await Entries(deckId);
+        entries.Should().HaveCount(2);
+        var latest = entries.Single(r => r.FinishedOn == new DateOnly(2025, 3, 1));
+        latest.StartedOn.Should().Be(new DateOnly(2025, 2, 1));
+        (await Preference(deckId))!.CurrentEntryId.Should().Be(latest.Id);
+    }
+
+    [Fact]
+    public async Task Import_PastACutoff_LeavesATitleFinishedOnJitenSinceTheCutoff()
+    {
+        var deckId = await SeedDeck("VN");
+        await SetStatus(deckId, DeckStatus.Completed, new { date = "2025-02-01" });
+
+        (await ImportSince(new { deckId, status = DeckStatus.Completed, repeatCount = 1, finishedOn = "2025-03-01" }, "2025-01-01"))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await Entries(deckId)).Should().ContainSingle();
+    }
+
+    [Fact]
+    public async Task Import_FillsOnlyAnEmptyCharacterCountOnATitleAlreadyOnTheList()
+    {
+        var deckId = await SeedDeck("VN");
+        await SetStatus(deckId, DeckStatus.Ongoing);
+
+        (await Import(new { deckId, status = DeckStatus.Ongoing, charactersRead = 500 })).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await Import(new { deckId, status = DeckStatus.Ongoing, charactersRead = 900 })).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await Entries(deckId)).Should().ContainSingle().Which.CharactersRead.Should().Be(500);
+    }
+
     private async Task<JsonElement> Summary(int deckId, string userId = TestUsers.UserA)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, $"/api/user/media-list/entries/{deckId}").WithUser(userId);

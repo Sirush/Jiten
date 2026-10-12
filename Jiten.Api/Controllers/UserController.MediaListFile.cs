@@ -74,12 +74,7 @@ public partial class UserController
 
         var passesByDeck = await PassesByDeckAsync(userId, matchedDeckIds);
 
-        var subdeckCounts = await jitenContext.Decks
-                                              .AsNoTracking()
-                                              .Where(d => d.ParentDeckId != null && matchedDeckIds.Contains(d.ParentDeckId.Value))
-                                              .GroupBy(d => d.ParentDeckId!.Value)
-                                              .Select(g => new { ParentDeckId = g.Key, Count = g.Count() })
-                                              .ToDictionaryAsync(g => g.ParentDeckId, g => g.Count);
+        var units = await UnitCountsAsync(userId, matchedDeckIds);
 
         var matched = byDeck
                       .Where(kv => decks.ContainsKey(kv.Key))
@@ -114,13 +109,16 @@ public partial class UserController
                                                inProgress = datesTarget.State == MediaListEntryState.InProgress,
                                                startedOn = datesTarget.StartedOn,
                                                finishedOn = datesTarget.FinishedOn,
+                                               hasCharacters = datesTarget.CharactersRead != null,
                                            },
+                                     currentCompletions = CompletionDays(passesByDeck.GetValueOrDefault(kv.Key)),
                                      repeatCount = RepeatsBeforeFromTimesCompleted(kv.Value.TimesCompleted, kv.Value.MappedStatus),
                                      charactersRead = kv.Value.CharactersRead,
                                      history = kv.Value.History,
                                      volumes = kv.Value.Volumes,
                                      progress = kv.Value.Progress,
-                                     subdeckCount = subdeckCounts.TryGetValue(deck.DeckId, out var subdecks) ? subdecks : (int?)null,
+                                     subdeckCount = units.TryGetValue(deck.DeckId, out var unitCount) ? unitCount.Total : (int?)null,
+                                     completedUnits = unitCount.Completed,
                                      currentStatus,
                                      isIgnored = pref?.IsIgnored ?? false,
                                      isFavourite = kv.Value.IsFavourite,

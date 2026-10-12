@@ -101,12 +101,7 @@ public partial class UserController
 
         var passesByDeck = await PassesByDeckAsync(userId, matchedDeckIds);
 
-        var subdeckCounts = await jitenContext.Decks
-                                              .AsNoTracking()
-                                              .Where(d => d.ParentDeckId != null && matchedDeckIds.Contains(d.ParentDeckId.Value))
-                                              .GroupBy(d => d.ParentDeckId!.Value)
-                                              .Select(g => new { ParentDeckId = g.Key, Count = g.Count() })
-                                              .ToDictionaryAsync(g => g.ParentDeckId, g => g.Count);
+        var units = await UnitCountsAsync(userId, matchedDeckIds);
 
         var matched = matchedByDeck
                       .Where(kv => decks.ContainsKey(kv.Key))
@@ -140,10 +135,13 @@ public partial class UserController
                                                inProgress = datesTarget.State == MediaListEntryState.InProgress,
                                                startedOn = datesTarget.StartedOn,
                                                finishedOn = datesTarget.FinishedOn,
+                                               hasCharacters = datesTarget.CharactersRead != null,
                                            },
+                                     currentCompletions = CompletionDays(passesByDeck.GetValueOrDefault(kv.Key)),
                                      repeatCount = kv.Value.RepeatCount,
                                      progress = kv.Value.Progress,
-                                     subdeckCount = subdeckCounts.TryGetValue(deck.DeckId, out var subdecks) ? subdecks : (int?)null,
+                                     subdeckCount = units.TryGetValue(deck.DeckId, out var unitCount) ? unitCount.Total : (int?)null,
+                                     completedUnits = unitCount.Completed,
                                      currentStatus,
                                      isIgnored = pref?.IsIgnored ?? false,
                                  };
@@ -215,7 +213,8 @@ public partial class UserController
                                                                     request.OverwriteExisting, skipIgnored: true, newEntry: true);
 
         var importedRows = new Dictionary<ImportedMediaListEntry, UserMediaListEntry>(ReferenceEqualityComparer.Instance);
-        var historyImported = await ApplyImportedHistoryAsync(userId, valid, outcome.Preferences, decksWithHistory, importedRows);
+        var historyImported = await ApplyImportedHistoryAsync(userId, valid, outcome.Preferences, decksWithHistory, importedRows) +
+                              await TopUpHistoryAsync(userId, valid, outcome.Preferences, decksWithHistory, request.CompletionsSince);
         var totalsChanged = outcome.TotalsChanged || historyImported > 0;
         var subdecksCompleted = 0;
         var favourited = 0;
@@ -346,6 +345,21 @@ public partial class UserController
         return passes.GroupBy(r => r.DeckId).ToDictionary(g => g.Key, g => g.ToList());
     }
 
+    private static List<DateOnly> CompletionDays(IReadOnlyCollection<UserMediaListEntry>? passes) =>
+        passes?.Where(r => r.State == MediaListEntryState.Completed).Select(CompletionDay).Order().ToList() ?? [];
+
+    private async Task<Dictionary<int, (int Total, int Completed)>> UnitCountsAsync(string userId, IReadOnlyCollection<int> deckIds)
+    {
+        var children = await jitenContext.Decks
+                                         .AsNoTracking()
+                                         .Where(d => d.ParentDeckId != null && deckIds.Contains(d.ParentDeckId.Value))
+                                         .Select(d => new { d.DeckId, ParentDeckId = d.ParentDeckId!.Value })
+                                         .ToListAsync();
+        var completed = await MediaListEntryHelper.CompletedDeckIdsAsync(userContext, userId, children.Select(c => c.DeckId).ToList());
+        return children.GroupBy(c => c.ParentDeckId)
+                       .ToDictionary(g => g.Key, g => (g.Count(), g.Count(c => completed.Contains(c.DeckId))));
+    }
+
     /// <summary>The current pass, else the latest, in the state both statuses keep current; null when the statuses describe different passes.</summary>
     private static UserMediaListEntry? DatesTarget(DeckStatus jitenStatus, long? currentEntryId, IReadOnlyCollection<UserMediaListEntry> passes,
                                                    DeckStatus sourceStatus)
@@ -440,11 +454,6 @@ public partial class UserController
         if (candidates.Count == 0)
             return 0;
 
-        static DateOnly? Clean(DateOnly? date) => date is { } d && MediaListEntryHelper.IsAllowedDate(d) ? d : null;
-        static int? Characters(int? value) => value is > 0 and <= MediaListEntryHelper.MaxCharactersRead ? value : null;
-        // Sources accept a start after the finish; the finish date is the one totals and sorting rely on, so the start gives way.
-        static DateOnly? StartBefore(DateOnly? startedOn, DateOnly? finishedOn) => startedOn > finishedOn ? null : startedOn;
-
         var imported = 0;
         foreach (var entry in candidates)
         {
@@ -529,6 +538,114 @@ public partial class UserController
             }
             else if (entry.Status.IsInProgress())
                 lastRepeat!.FinishedOn = Clean(entry.FinishedOn);
+        }
+
+        return imported;
+    }
+
+    private static DateOnly? Clean(DateOnly? date) => date is { } d && MediaListEntryHelper.IsAllowedDate(d) ? d : null;
+
+    private static int? Characters(int? value) => value is > 0 and <= MediaListEntryHelper.MaxCharactersRead ? value : null;
+
+    // Sources accept a start after the finish; the finish date is the one totals and sorting rely on, so the start gives way.
+    private static DateOnly? StartBefore(DateOnly? startedOn, DateOnly? finishedOn) => startedOn > finishedOn ? null : startedOn;
+
+    /// <summary>Completions the source records in total: a full history's own, else the repeat count plus the completion a Completed status refers to.</summary>
+    private static int SourceCompletions(MediaListImportEntry entry)
+    {
+        var rows = ImportableRows(entry.History);
+        return rows.Count > 0
+            ? rows.Count(r => r.State == MediaListEntryState.Completed)
+            : (entry.RepeatCount ?? 0) + (entry.Status == DeckStatus.Completed ? 1 : 0);
+    }
+
+    /// <summary>The finish of the source's latest completion; a Completed status's start bounds it too, while another status's start belongs to a later pass.</summary>
+    private static DateOnly? LatestSourceCompletion(MediaListImportEntry entry) =>
+        entry.Status == DeckStatus.Completed ? Clean(entry.FinishedOn) ?? Clean(entry.StartedOn) : Clean(entry.FinishedOn);
+
+    /// <summary>When a completion on Jiten happened: its finish date, else the day it was logged.</summary>
+    private static DateOnly CompletionDay(UserMediaListEntry entry) =>
+        entry.FinishedOn ?? DateOnly.FromDateTime(entry.CreatedAt == default ? DateTime.UtcNow : entry.CreatedAt);
+
+    /// <summary>Gives a title that already had history the completions the source has beyond it, and its character count when the matching pass has none.</summary>
+    /// <param name="since">The source only dates its latest completion, so past a cutoff at most that one is added, and only while no completion on Jiten falls after the cutoff.</param>
+    private async Task<int> TopUpHistoryAsync(string userId, IReadOnlyCollection<MediaListImportEntry> entries,
+                                              IReadOnlyDictionary<int, UserDeckPreference> preferences, IReadOnlySet<int> decksWithHistory, DateOnly? since)
+    {
+        var candidates = entries
+                         .Where(e => decksWithHistory.Contains(e.DeckId) &&
+                                     preferences.TryGetValue(e.DeckId, out var p) && !p.IsIgnored && p.Status == e.Status)
+                         .ToList();
+        if (candidates.Count == 0)
+            return 0;
+
+        var deckIds = candidates.Select(e => e.DeckId).ToList();
+        await userContext.UserMediaListEntries.Where(r => r.UserId == userId && deckIds.Contains(r.DeckId)).LoadAsync();
+        // Local also holds the passes the status import just opened, and leaves out the ones it removed.
+        var passesByDeck = userContext.UserMediaListEntries.Local
+                                      .Where(r => r.UserId == userId && deckIds.Contains(r.DeckId))
+                                      .GroupBy(r => r.DeckId)
+                                      .ToDictionary(g => g.Key, g => g.ToList());
+
+        var imported = 0;
+        foreach (var entry in candidates)
+        {
+            var preference = preferences[entry.DeckId];
+            var passes = passesByDeck.GetValueOrDefault(entry.DeckId) ?? [];
+
+            var state = MediaListEntryHelper.EntryStateFor(entry.Status);
+            var target = preference.CurrentEntry is { } current && current.State == state
+                ? current
+                : passes.Where(r => r.State == state).MaxBy(r => r.Id);
+            if (target is { CharactersRead: null } && Characters(entry.CharactersRead) is { } characters)
+            {
+                target.CharactersRead = characters;
+                imported++;
+            }
+
+            var completions = passes.Where(r => r.State == MediaListEntryState.Completed).ToList();
+            var sourceCompletions = SourceCompletions(entry);
+            var missing = since is { } cutoff
+                ? sourceCompletions > 0 && LatestSourceCompletion(entry) >= cutoff && completions.All(r => CompletionDay(r) < cutoff) ? 1 : 0
+                : sourceCompletions - completions.Count;
+            missing = Math.Min(missing, MediaListEntryHelper.MaxEntriesPerDeck - passes.Count);
+            if (missing <= 0)
+                continue;
+
+            if (since != null)
+            {
+                var finishedOn = Clean(entry.FinishedOn);
+                var latest = new UserMediaListEntry
+                             {
+                                 UserId = userId, DeckId = entry.DeckId, State = MediaListEntryState.Completed, FinishedOn = finishedOn,
+                                 StartedOn = entry.Status == DeckStatus.Completed ? StartBefore(Clean(entry.StartedOn), finishedOn) : null
+                             };
+                userContext.UserMediaListEntries.Add(latest);
+                // A Completed status refers to the latest completion, which this one is.
+                if (entry.Status == DeckStatus.Completed)
+                    preference.CurrentEntry = latest;
+                imported++;
+                continue;
+            }
+
+            // A full history names its completions; one whose finish date Jiten already has is taken as the same pass.
+            var knownFinishes = completions.Where(r => r.FinishedOn != null).Select(r => r.FinishedOn!.Value).ToList();
+            var unmatched = ImportableRows(entry.History)
+                            .Where(r => r.State == MediaListEntryState.Completed && !(Clean(r.FinishedOn) is { } f && knownFinishes.Remove(f)))
+                            .TakeLast(missing)
+                            .ToList();
+            for (var i = 0; i < missing; i++)
+            {
+                var row = i < unmatched.Count ? unmatched[i] : null;
+                var finishedOn = Clean(row?.FinishedOn);
+                userContext.UserMediaListEntries.Add(new UserMediaListEntry
+                                                     {
+                                                         UserId = userId, DeckId = entry.DeckId, State = MediaListEntryState.Completed,
+                                                         FinishedOn = finishedOn, StartedOn = StartBefore(Clean(row?.StartedOn), finishedOn),
+                                                         CharactersRead = Characters(row?.CharactersRead)
+                                                     });
+                imported++;
+            }
         }
 
         return imported;
