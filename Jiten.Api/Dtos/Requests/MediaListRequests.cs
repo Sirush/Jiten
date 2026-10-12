@@ -12,6 +12,9 @@ public class MediaListImportApplyRequest
 {
     public List<MediaListImportEntry> Entries { get; set; } = new();
     public bool OverwriteExisting { get; set; }
+
+    /// <summary>The cutoff the source list was filtered by; limits completions added to titles already on the list to passes after it.</summary>
+    public DateOnly? CompletionsSince { get; set; }
 }
 
 public class MediaListDatesImportRequest
@@ -37,7 +40,7 @@ public class MediaListImportEntry
 
     public bool IsFavourite { get; set; }
 
-    /// <summary>Reading history from the source; only applied to titles that had none before the import.</summary>
+    /// <summary>Reading history from the source; a title that already had history only gets its missing completions and an empty character count filled.</summary>
     public DateOnly? StartedOn { get; set; }
     public DateOnly? FinishedOn { get; set; }
     public int? CharactersRead { get; set; }

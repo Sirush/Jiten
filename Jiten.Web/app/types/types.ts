@@ -132,6 +132,8 @@ export interface Deck {
   relationships?: DeckRelationship[];
   /** Series and settings the deck is listed in; deck detail endpoint only. */
   series?: SeriesRef[];
+  /** Decks sharing a setting with this one but outside its franchise. */
+  settingDecks?: DeckSummary[];
   /** Deck detail endpoint only; null when the deck has no franchise. */
   franchiseId?: number | null;
   status?: DeckStatus;
@@ -1587,7 +1589,7 @@ export type TimedRevealAction = 'Reveal' | 'FailLearn' | 'Nudge';
 export type TimedAnswerAction = 'SoftFail' | 'HardFail';
 export type ExampleSentencePosition = 'Hidden' | 'Back' | 'Front';
 
-export type CardImageLayout = 'beside' | 'below';
+export type CardImageLayout = 'beside' | 'below' | 'background';
 export type CardImagePosition = 'Front' | 'Back';
 export type CardAudioAutoPlayPosition = 'Front' | 'Back' | 'Both';
 export type ExampleSentenceSorting = 'Random' | 'EasiestFirst' | 'HardestFirst';

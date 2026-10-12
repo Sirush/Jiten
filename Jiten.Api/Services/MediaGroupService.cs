@@ -65,7 +65,7 @@ public sealed class MediaGroupService(JitenDbContext db, IMemoryCache memoryCach
         {
             var series = await db.Series.AsNoTracking()
                                  .Where(s => seriesIds.Contains(s.SeriesId))
-                                 .Select(s => new { s.SeriesId, s.OriginalTitle, s.RomajiTitle, s.EnglishTitle })
+                                 .Select(s => new { s.SeriesId, s.Kind, s.OriginalTitle, s.RomajiTitle, s.EnglishTitle })
                                  .ToListAsync(ct);
             var members = (await db.SeriesMembers.AsNoTracking()
                                    .Where(m => seriesIds.Contains(m.SeriesId))
@@ -73,11 +73,13 @@ public sealed class MediaGroupService(JitenDbContext db, IMemoryCache memoryCach
                                    .ToListAsync(ct))
                           .ToLookup(m => m.SeriesId, m => m.DeckId);
             var homes = await SeriesHome.FranchisesAsync(db, seriesIds, ct);
+            var withLines = await WithStoryLinesAsync(members, series.Where(s => s.Kind == SeriesKind.Series).Select(s => s.SeriesId).ToList(), ct);
 
             foreach (var s in series)
                 result[new MediaGroupRef(MediaGroupKind.Series, s.SeriesId)] =
                     new MediaGroupDescription(Titles(s.OriginalTitle, s.RomajiTitle, s.EnglishTitle),
-                                              homes.TryGetValue(s.SeriesId, out var home) ? home : null, members[s.SeriesId].ToList());
+                                              homes.TryGetValue(s.SeriesId, out var home) ? home : null,
+                                              withLines.GetValueOrDefault(s.SeriesId) ?? members[s.SeriesId].ToList());
         }
 
         var anchorIds = IdsOf(MediaGroupKind.Line);
@@ -96,6 +98,30 @@ public sealed class MediaGroupService(JitenDbContext db, IMemoryCache memoryCach
         }
 
         return result;
+    }
+
+    /// <summary>Each series' members plus the rest of their story lines, except decks that belong to a series of their own; mirrors the franchise page's series scope.</summary>
+    private async Task<Dictionary<int, List<int>>> WithStoryLinesAsync(ILookup<int, int> members, List<int> seriesIds, CancellationToken ct)
+    {
+        var memberIds = seriesIds.SelectMany(id => members[id]).Distinct().ToList();
+        if (memberIds.Count == 0)
+            return [];
+
+        var lines = await StoryLines.LinesOfAsync(db, memberIds, ct);
+        var lineDeckIds = lines.Values.SelectMany(l => l).Distinct().ToList();
+        var inASeries = (await db.SeriesMembers.AsNoTracking()
+                                 .Where(m => lineDeckIds.Contains(m.DeckId) && m.Series.Kind == SeriesKind.Series)
+                                 .Select(m => m.DeckId)
+                                 .Distinct()
+                                 .ToListAsync(ct))
+                        .ToHashSet();
+
+        return seriesIds.ToDictionary(id => id, id => members[id]
+                                                      .SelectMany(m => lines.TryGetValue(m, out var line)
+                                                                      ? line.Where(d => d == m || !inASeries.Contains(d))
+                                                                      : [m])
+                                                      .Distinct()
+                                                      .ToList());
     }
 
     private static MediaGroupTitlesDto Titles(string originalTitle, string? romajiTitle, string? englishTitle) =>

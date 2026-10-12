@@ -10,6 +10,7 @@
   const { JpdbApiClient } = useJpdbApi();
   const srsStore = useSrsStore();
   const confirm = useConfirm();
+  const { limits } = useJitenPlus();
 
   const isLoading = ref(false);
   const jpdbApiKey = ref('');
@@ -36,11 +37,23 @@
   const existingListNames = computed(() => new Set(srsStore.studyDecks.filter((d) => d.deckType === StudyDeckType.StaticWordList).map((d) => d.name.trim())));
 
   function replacesExistingList(deck: JpdbDeck) {
-    return existingListNames.value.has(deck.name.trim().slice(0, 200));
+    return existingListNames.value.has(jpdbListName(deck.name));
+  }
+
+  function exceedsImportWords(deck: JpdbDeck) {
+    return deck.vocabularyCount > limits.value.importWords;
   }
 
   const tickedDecks = computed(() => jpdbDecks.value.filter(isDeckTicked));
   const collidingDecks = computed(() => jpdbDecks.value.filter(replacesExistingList));
+
+  const limitReason = computed(() =>
+    jpdbImportLimitReason(
+      tickedDecks.value,
+      srsStore.studyDecks.map((d) => ({ name: d.name, isWordList: d.deckType === StudyDeckType.StaticWordList, totalWords: d.totalWords })),
+      limits.value
+    )
+  );
 
   const blockingReason = computed(() => {
     if (!jpdbApiKey.value) return 'Enter your API key to continue.';
@@ -51,6 +64,7 @@
       if (deckLoadError.value) return deckLoadError.value;
       if (jpdbDecks.value.length === 0) return 'No decks found on this JPDB account.';
       if (tickedDecks.value.length === 0) return 'Tick at least one deck, or untick word lists.';
+      if (limitReason.value) return limitReason.value;
     }
     return '';
   });
@@ -193,7 +207,10 @@
       showSummary.value = true;
     } catch (error) {
       console.error('Error importing from JPDB:', error);
-      const errorMessage = error instanceof Error ? error.message : 'Failed to import from JPDB. Please check your input and try again.';
+      const errorMessage = apiErrorMessage(
+        error,
+        error instanceof Error ? error.message : 'Failed to import from JPDB. Please check your input and try again.'
+      );
       toast.add({ severity: 'error', summary: 'Error', detail: errorMessage, life: 6000 });
     } finally {
       isLoading.value = false;
@@ -368,6 +385,7 @@
                       <span v-if="replacesExistingList(deck)" class="text-xs text-amber-700 dark:text-amber-400 shrink-0 inline-flex items-center gap-1">
                         <i class="pi pi-exclamation-triangle text-[10px]" />replaces your list
                       </span>
+                      <span v-if="exceedsImportWords(deck)" class="text-xs text-red-600 dark:text-red-400 shrink-0">too large</span>
                       <span v-if="deck.isBuiltIn" class="text-xs text-gray-500 dark:text-gray-400 shrink-0">built-in</span>
                       <span class="text-sm text-gray-600 dark:text-gray-400 shrink-0 tabular-nums"
                         >{{ deck.vocabularyCount.toLocaleString() }}<span class="hidden sm:inline"> words</span></span
@@ -382,7 +400,12 @@
 
         <div class="flex flex-col md:flex-row md:items-center gap-3">
           <Button label="Import" icon="pi pi-download" :disabled="!canImport" class="w-full md:w-auto" @click="importFromJpdb" />
-          <span v-if="blockingReason" class="text-sm text-gray-600 dark:text-gray-400">{{ blockingReason }}</span>
+          <span
+            v-if="blockingReason"
+            class="text-sm"
+            :class="importDecks && limitReason === blockingReason ? 'text-red-600 dark:text-red-400' : 'text-gray-600 dark:text-gray-400'"
+            >{{ blockingReason }}</span
+          >
         </div>
       </div>
     </template>

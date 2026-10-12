@@ -148,6 +148,8 @@ public class MediaDeckController(
     {
         const int pageSize = 250;
         page = Math.Max(page, 1);
+        // Guards the year extraction: an unset ReleaseDate is stored as -infinity, which date_part(...)::int overflows on.
+        var firstKnownReleaseDate = new DateOnly(2, 1, 1);
 
         var query = context.Decks.AsNoTracking()
                            .Where(d => d.ParentDeckId == null && d.MediaType == mediaType && d.Difficulty > -1);
@@ -173,7 +175,7 @@ public class MediaDeckController(
                                     Difficulty = (d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty)
                                                  + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0),
                                     CharacterCount = d.CharacterCount,
-                                    ReleaseYear = d.ReleaseDate.Year > 1 ? d.ReleaseDate.Year : null,
+                                    ReleaseYear = d.ReleaseDate >= firstKnownReleaseDate ? d.ReleaseDate.Year : null,
                                 })
                                 .ToListAsync();
 
@@ -498,10 +500,10 @@ public class MediaDeckController(
                 + (float)(d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0) <= difficultyMax);
 
         if (releaseYearMin != null)
-            query = query.Where(d => d.ReleaseDate.Year >= releaseYearMin);
+            query = query.ReleasedFromYear(releaseYearMin.Value);
 
         if (releaseYearMax != null)
-            query = query.Where(d => d.ReleaseDate.Year <= releaseYearMax);
+            query = query.ReleasedUpToYear(releaseYearMax.Value);
 
         if (uniqueKanjiMin != null)
             query = query.Where(d => d.UniqueKanjiCount >= uniqueKanjiMin);

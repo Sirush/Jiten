@@ -86,6 +86,7 @@ export const blockOptionsSchema: Partial<Record<CardBlockType, OptionControl[]>>
       options: [
         { label: 'Beside word', value: 'beside' },
         { label: 'Free placement', value: 'below' },
+        { label: 'In background', value: 'background' },
       ],
     },
     { key: 'blur', label: 'Blur until flip', type: 'toggle' },

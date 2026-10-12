@@ -66,7 +66,8 @@ public enum ExampleSentenceSource
 public enum CardImageLayout
 {
     [JsonStringEnumMemberName("beside")] Beside,
-    [JsonStringEnumMemberName("below")] Below
+    [JsonStringEnumMemberName("below")] Below,
+    [JsonStringEnumMemberName("background")] Background
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<CardImagePosition>))]

@@ -9,7 +9,7 @@
   import { useToast } from 'primevue/usetoast';
 
   definePageMeta({ middleware: ['auth'] });
-  useHead({ title: 'Study' });
+  useHead({ title: 'Study', htmlAttrs: { class: 'stable-gutter' } });
 
   const srsStore = useSrsStore();
   useSrsSessionCache();
@@ -213,6 +213,7 @@
     onDictNext: () => studyCardRef.value?.cycleDictionary(1),
     onContinueBatch: handleContinueBatch,
     onEndSession: handleEndSession,
+    suggestedRating: () => writeInSuggested.value,
   });
 
   // Write-in review: per-card modality, input/reveal phase, suggested grade and auto-advance.

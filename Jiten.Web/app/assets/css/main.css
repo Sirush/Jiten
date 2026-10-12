@@ -39,6 +39,10 @@
   font-family: var(--font-noto-sans);
 }
 
+:root.stable-gutter {
+  scrollbar-gutter: stable;
+}
+
 :root.dark-mode {
   --jiten-page-bg: black;
 }

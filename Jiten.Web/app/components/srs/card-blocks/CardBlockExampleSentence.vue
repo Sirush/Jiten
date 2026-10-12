@@ -166,7 +166,7 @@
   <div v-if="isPreview" class="my-4 w-full" @click.stop>
     <blockquote
       class="relative inline-block border-l-4 border-primary-500 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
-      :class="{ 'blur-md select-none cursor-pointer': blurred }"
+      :class="{ 'blur-md grayscale select-none cursor-pointer': blurred }"
       @click.stop="revealExample(side)"
     >
       <div class="float-right ml-2 mt-0.5 flex items-center gap-1">
@@ -200,7 +200,7 @@
       <template v-if="exampleSentenceHtml">
         <blockquote
           class="relative inline-block border-l-4 pl-5 pr-3 py-3 bg-surface-50 dark:bg-surface-800 rounded-r shadow-sm overflow-hidden w-full"
-          :class="[cardExample?.isCustom ? 'border-yellow-500' : 'border-primary-500', { 'blur-md select-none cursor-pointer': blurred }]"
+          :class="[cardExample?.isCustom ? 'border-yellow-500' : 'border-primary-500', { 'blur-md grayscale select-none cursor-pointer': blurred }]"
           @click.stop="revealExample(side)"
         >
           <!-- Floated so long sentences wrap under the actions instead of staying in a narrow column. -->

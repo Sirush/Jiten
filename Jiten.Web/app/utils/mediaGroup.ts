@@ -1,4 +1,4 @@
-import { type Franchise, type MediaGroupRef, type MediaGroupTitles, type MediaType, MediaGroupKind } from '~/types';
+import { type Franchise, type FranchiseSeries, type MediaGroupRef, type MediaGroupTitles, type MediaType, MediaGroupKind } from '~/types';
 import { compareFranchiseRelease } from '~/utils/franchiseLayout';
 import { getMediaTypePluralText } from '~/utils/mediaTypeMapper';
 
@@ -32,8 +32,16 @@ export function franchisePath(franchiseId: number, scope?: MediaGroupRef | null)
 
 const deckIdSet = (franchise: Pick<Franchise, 'nodes'>) => new Set(franchise.nodes.map((n) => n.deckId));
 
-function seriesDeckIds(memberDeckIds: number[], franchiseDeckIds: Set<number>): number[] {
-  return [...new Set(memberDeckIds)].filter((id) => franchiseDeckIds.has(id));
+/** A series covers its members plus the rest of their story lines, except decks that belong to a series of their own. Mirrors MediaGroupService. */
+function seriesDeckIds(franchise: Pick<Franchise, 'nodes' | 'series' | 'lines'>, series: FranchiseSeries, franchiseDeckIds: Set<number>): number[] {
+  const own = new Set(series.memberDeckIds.filter((id) => franchiseDeckIds.has(id)));
+  const inSomeSeries = new Set((franchise.series ?? []).flatMap((s) => s.memberDeckIds));
+  const out = new Set(own);
+  for (const line of franchise.lines ?? []) {
+    if (!line.deckIds.some((id) => own.has(id))) continue;
+    for (const id of line.deckIds) if (franchiseDeckIds.has(id) && !inSomeSeries.has(id)) out.add(id);
+  }
+  return [...out];
 }
 
 /** The decks a scope covers, or null when the scope is the whole franchise or names nothing in it. A line is found by any of its decks, not only its anchor. */
@@ -41,7 +49,7 @@ export function scopeDeckIds(franchise: Pick<Franchise, 'nodes' | 'series' | 'li
   if (!scope) return null;
   if (scope.kind === MediaGroupKind.Series) {
     const series = (franchise.series ?? []).find((s) => s.seriesId === scope.id);
-    return series ? seriesDeckIds(series.memberDeckIds, deckIdSet(franchise)) : null;
+    return series ? seriesDeckIds(franchise, series, deckIdSet(franchise)) : null;
   }
   if (scope.kind === MediaGroupKind.Line) return (franchise.lines ?? []).find((l) => l.deckIds.includes(scope.id))?.deckIds ?? null;
   return null;
@@ -85,7 +93,7 @@ export function buildScopeChips(franchise: Pick<Franchise, 'nodes' | 'series' | 
   const franchiseDeckIds = deckIdSet(franchise);
   for (const series of franchise.series ?? []) {
     const scope = { kind: MediaGroupKind.Series, id: series.seriesId };
-    push({ key: formatScope(scope)!, scope, label: localise(series), deckIds: seriesDeckIds(series.memberDeckIds, franchiseDeckIds) });
+    push({ key: formatScope(scope)!, scope, label: localise(series), deckIds: seriesDeckIds(franchise, series, franchiseDeckIds) });
   }
 
   const lines = (franchise.lines ?? [])

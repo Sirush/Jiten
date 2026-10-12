@@ -1737,9 +1737,16 @@ public partial class StudyController(
             return Results.BadRequest("Deck name exceeds 200 characters.");
 
         var result = await importService.ImportJpdbDecks(userId, request);
-        if (result.Error != null) return Results.BadRequest(result.Error);
+        if (result.Error != null)
+        {
+            logger.LogWarning("JPDB deck import rejected: DeckCount={DeckCount}, WordCount={WordCount}, Error={Error}",
+                request.Decks.Count, request.Decks.Sum(d => d.Words.Count), result.Error);
+            return Results.BadRequest(result.Error);
+        }
         await sessionService.BumpStudyOverviewVersion(userId);
 
+        logger.LogInformation("User imported JPDB decks: DeckCount={DeckCount}, Matched={Matched}, Unmatched={Unmatched}",
+            result.Decks.Count, result.Decks.Sum(d => d.Matched), result.Decks.Sum(d => d.Unmatched));
         return Results.Ok(new { decks = result.Decks });
     }
 

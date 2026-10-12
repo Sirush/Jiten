@@ -1,13 +1,14 @@
 <script setup lang="ts">
   import { ref, computed, watch, onMounted, onBeforeUnmount, nextTick, type ComponentPublicInstance } from 'vue';
   import Tag from 'primevue/tag';
-  import { type DeckRelationship, DeckRelationshipType, MediaGroupKind, type SeriesRef, SeriesKind } from '~/types';
+  import { type DeckRelationship, DeckRelationshipType, type DeckSummary, MediaGroupKind, type SeriesRef, SeriesKind } from '~/types';
   import { franchisePath } from '~/utils/mediaGroup';
   import { relatedMediaLabel } from '~/utils/relationshipRoles';
 
   interface Props {
     relationships: DeckRelationship[];
     series?: SeriesRef[];
+    settingDecks?: DeckSummary[];
     franchiseId?: number | null;
     /** Passed as ?deck= so the franchise page marks this deck. */
     deckId?: number;
@@ -18,6 +19,7 @@
 
   const props = withDefaults(defineProps<Props>(), {
     series: () => [],
+    settingDecks: () => [],
     minVisibleItems: 1,
     buttonBuffer: 80,
     gapSize: 16,
@@ -96,7 +98,19 @@
       }))
   );
 
-  const sortedRelationships = computed(() => [...seriesItems.value, ...relationshipItems.value]);
+  const settingItems = computed<RelatedItem[]>(() => {
+    const linked = new Set(props.relationships.map((rel) => rel.targetDeckId));
+    return props.settingDecks
+      .filter((deck) => !linked.has(deck.deckId))
+      .map((deck) => ({
+        key: `setting-${deck.deckId}`,
+        label: relatedMediaLabel(DeckRelationshipType.SameSetting),
+        text: localiseTitle(deck),
+        to: `/decks/media/${deck.deckId}/detail`,
+      }));
+  });
+
+  const sortedRelationships = computed(() => [...seriesItems.value, ...relationshipItems.value, ...settingItems.value]);
 
   const hasOverflow = computed(() => sortedRelationships.value.length > visibleCount.value);
   const hiddenCount = computed(() => Math.max(0, sortedRelationships.value.length - visibleCount.value));
@@ -170,7 +184,7 @@
   });
 
   watch(
-    () => [props.relationships, props.series, props.franchiseId],
+    () => [props.relationships, props.series, props.settingDecks, props.franchiseId],
     () => {
       expanded.value = false;
       itemRefs.value = [];

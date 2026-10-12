@@ -156,7 +156,7 @@ public partial class AdminController
         }
 
         var sniff = CardMediaSniffer.Detect(bytes);
-        if (sniff is not { Kind: CardMediaKind.Image })
+        if (sniff is not { Kind: CardMediaKind.Image } || sniff.ContentType == "video/webm")
             return BadRequest(new { Message = "Unsupported file. Upload a JPEG, PNG, WebP or GIF image." });
 
         var processed = CardMediaImageProcessor.Normalize(sniff.Kind, sniff.Extension, sniff.ContentType, bytes, logger);

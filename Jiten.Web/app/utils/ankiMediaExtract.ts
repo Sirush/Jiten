@@ -1,14 +1,15 @@
 /**
  * Finds the image and audio a card references. Anki stores both inline in the field HTML: images as
- * `<img src="file.jpg">`, audio as `[sound:file.mp3]`.
+ * `<img src="file.jpg">` or an animated `<video src="file.webm">`, audio as `[sound:file.mp3]`.
  */
 
 /** Video containers whose audio track the sniffer would accept; not worth fetching megabytes for. */
 const VIDEO_EXTENSIONS = /\.(mp4|mkv|mov|avi|webm)$/i;
 
 const SVG_EXTENSION = /\.svg$/i;
+const WEBM_EXTENSION = /\.webm$/i;
 
-const IMG_TAG = /<img\b[^>]*>/gi;
+const IMAGE_TAG = /<(img|video)\b[^>]*>/gi;
 const SRC_ATTR = /\bsrc\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/i;
 const SOUND_TAG = /\[sound:([^\]]+)\]/g;
 
@@ -39,8 +40,8 @@ export interface ExtractedMediaRef {
 }
 
 /**
- * First `<img>` whose source is a local Anki media file. Remote and inline sources are skipped: they are
- * not in the media folder, so `retrieveMediaFile` could not return them anyway.
+ * First image or animated WebM `<video>` whose source is a local Anki media file. Remote and inline
+ * sources are skipped: they are not in the media folder, so `retrieveMediaFile` could not return them.
  */
 export function extractImageRef(html: string): ExtractedMediaRef | null {
   if (!html) return null;
@@ -48,13 +49,17 @@ export function extractImageRef(html: string): ExtractedMediaRef | null {
   let first: string | null = null;
   let count = 0;
 
-  for (const tag of html.match(IMG_TAG) ?? []) {
+  IMAGE_TAG.lastIndex = 0;
+  for (let match = IMAGE_TAG.exec(html); match !== null; match = IMAGE_TAG.exec(html)) {
+    const tag = match[0];
+    const isVideo = match[1].toLowerCase() === 'video';
     const src = SRC_ATTR.exec(tag);
     if (!src) continue;
 
     const value = decodeEntities(src[2] ?? src[3] ?? src[4] ?? '').trim();
     if (!value) continue;
     if (/^(https?:)?\/\//i.test(value) || /^data:/i.test(value)) continue;
+    if (isVideo && !WEBM_EXTENSION.test(value)) continue;
     if (SVG_EXTENSION.test(value)) continue;
 
     count++;
