@@ -5,15 +5,14 @@
   import AutoComplete from 'primevue/autocomplete';
   import Message from 'primevue/message';
   import { SeriesKind, type SeriesRef, type SeriesSummary } from '~/types/series';
+  import type { MediaGroupTitles } from '~/types/mediaGroup';
   import type { SeriesDialogRequest } from '~/utils/franchiseBuilder';
-  import { apiErrorMessage } from '~/utils/apiErrorMessage';
   import { titlesDraft, titlesFromDraft } from '~/utils/groupTitles';
   import { seriesKindLabel } from '~/utils/seriesKind';
 
   const props = defineProps<{ request: SeriesDialogRequest | null }>();
-  const emit = defineEmits<{ close: []; picked: [series: SeriesRef]; created: [series: SeriesRef]; renamed: [series: SeriesRef] }>();
+  const emit = defineEmits<{ close: []; picked: [series: SeriesRef]; created: [series: SeriesRef]; renamed: [titles: MediaGroupTitles] }>();
 
-  const { $api } = useNuxtApp();
   const { error, busy, create } = useSeriesCreate();
   const localiseTitle = useLocaliseTitle();
   const draft = ref(titlesDraft());
@@ -22,6 +21,7 @@
   const kindWord = computed(() => seriesKindLabel(kind.value).toLowerCase());
   const { suggestions, fetchSuggestions } = useSeriesSuggestions(kind);
   const pickedExisting = computed(() => (existing.value && typeof existing.value === 'object' ? existing.value : null));
+  const joining = computed(() => props.request?.deckIds?.length ?? 0);
 
   watch(
     () => props.request,
@@ -50,16 +50,7 @@
       error.value = 'Give it an original title.';
       return;
     }
-    if (r.seriesId == null) return;
-    busy.value = true;
-    error.value = '';
-    try {
-      emit('renamed', await $api<SeriesRef>(`admin/series/${r.seriesId}`, { method: 'PATCH', body: titles }));
-    } catch (e) {
-      error.value = apiErrorMessage(e, failMessage);
-    } finally {
-      busy.value = false;
-    }
+    emit('renamed', titles);
   }
 </script>
 
@@ -93,8 +84,10 @@
         <p class="m-0 text-xs text-gray-500 dark:text-gray-400">An existing series joins the board empty; drop decks on its rail to add them.</p>
       </div>
       <p v-if="request.mode === 'create'" class="m-0 text-xs text-gray-500 dark:text-gray-400">
-        {{ request.kind === SeriesKind.Setting ? 'The setting' : 'The series' }} is created right away. Adding decks to it waits until you save.
+        {{ request.kind === SeriesKind.Setting ? 'The setting' : 'The series' }} is created right away.
+        {{ joining ? `The ${joining} selected ${joining === 1 ? 'deck' : 'decks'} will join it when you save.` : 'Adding decks to it waits until you save.' }}
       </p>
+      <p v-else class="m-0 text-xs text-gray-500 dark:text-gray-400">The new name will be saved with your other changes.</p>
       <Message v-if="error" severity="error" :closable="false">{{ error }}</Message>
       <div class="flex justify-end gap-2">
         <Button label="Cancel" severity="secondary" text type="button" @click="emit('close')" />

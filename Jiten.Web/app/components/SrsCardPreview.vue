@@ -67,7 +67,12 @@
         class="relative bg-surface-0 dark:bg-transparent rounded-2xl shadow-lg dark:shadow-none border border-surface-200 dark:border-surface-700 p-5 lg:p-7"
         :class="{ isolate: context.showBackgroundImage.value }"
       >
-        <SrsCardBackgroundImage v-if="context.showBackgroundImage.value" :url="context.cardImageUrl.value" :blurred="context.imageBlurred.value" />
+        <SrsCardBackgroundImage
+          v-if="context.showBackgroundImage.value"
+          :url="context.cardImageUrl.value"
+          :content-type="context.cardImage.value?.contentType"
+          :blurred="context.imageBlurred.value"
+        />
 
         <div :class="context.showBackgroundImage.value ? 'background-top-area relative z-40' : undefined">
           <!-- Top bar: frequency rank (back only) -->

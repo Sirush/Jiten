@@ -29,9 +29,11 @@ import {
   otherSeriesOfLine,
   pendingChanges,
   putLinesInSeries,
+  renameSeries,
   revertDeck,
   revertLink,
   toBuilderDeck,
+  withRenames,
   type BuilderDeck,
   type BuilderSeries,
   type BuilderState,
@@ -223,7 +225,22 @@ describe('pending state', () => {
       addMembers: [{ seriesId: 10, deckId: 1 }],
       removeMembers: [{ seriesId: 10, deckId: 5 }],
       boardDeckIds: [1, 2, 3, 4, 5],
+      renameSeries: [],
     });
+  });
+
+  it('queues a series rename as a pending change and drops it when renamed back', () => {
+    const state = stateWith([]);
+    const saved = { originalTitle: '物語', romajiTitle: 'Monogatari', englishTitle: null };
+    renameSeries(state, 10, { originalTitle: '物語シリーズ', romajiTitle: 'Monogatari' }, saved);
+    expect(pendingChanges(state)).toEqual([
+      { kind: 'rename', rename: { seriesId: 10, titles: { originalTitle: '物語シリーズ', romajiTitle: 'Monogatari', englishTitle: null } } },
+    ]);
+    expect(buildSaveRequest(1, state).renameSeries).toEqual([{ seriesId: 10, originalTitle: '物語シリーズ', romajiTitle: 'Monogatari', englishTitle: null }]);
+    const series: BuilderSeries[] = [{ ...saved, seriesId: 10, kind: SeriesKind.Series }];
+    expect(withRenames(series, state.renames)[0]!.originalTitle).toBe('物語シリーズ');
+    renameSeries(state, 10, { ...saved, englishTitle: '' }, saved);
+    expect(pendingChanges(state)).toEqual([]);
   });
 
   it('reverts single changes and discards everything', () => {
@@ -233,6 +250,7 @@ describe('pending state', () => {
     revertLink(state, 1);
     expect(state.edges.map((e) => e.status)).toEqual(['saved', 'new']);
     joinGroup(state, 10, 1);
+    renameSeries(state, 10, { originalTitle: 'New' }, { originalTitle: 'Old' });
     discardPending(state);
     expect(pendingChanges(state)).toEqual([]);
     expect(state.edges).toHaveLength(1);

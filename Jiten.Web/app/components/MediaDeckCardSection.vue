@@ -25,6 +25,7 @@
       v-else-if="section === 'relations'"
       :relationships="deck.relationships ?? []"
       :series="deck.series"
+      :setting-decks="deck.settingDecks"
       :franchise-id="deck.franchiseId"
       :deck-id="deck.deckId"
     />

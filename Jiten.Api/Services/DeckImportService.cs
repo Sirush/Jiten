@@ -512,8 +512,8 @@ public partial class DeckImportService(
     {
         using var reader = new StreamReader(stream, Encoding.UTF8);
         var content = await reader.ReadToEndAsync();
-        return content.Split('\n')
-                      .Select(line => line.Trim().TrimEnd('\r'))
+        return content.Split(['\r', '\n'])
+                      .Select(line => line.Trim())
                       .Where(line => line.Length > 0)
                       .ToList();
     }

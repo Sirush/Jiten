@@ -501,6 +501,7 @@
         v-if="showBackgroundImage"
         ref="backgroundMediaRef"
         :url="cardImageUrl"
+        :content-type="cardImage?.contentType"
         :blurred="imageBlurred"
         @error="onImageError"
         @reveal="imageManuallyRevealed = true"

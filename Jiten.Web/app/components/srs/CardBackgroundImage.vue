@@ -1,6 +1,7 @@
 <script setup lang="ts">
   const props = defineProps<{
     url: string;
+    contentType?: string;
     blurred?: boolean;
   }>();
 
@@ -23,6 +24,7 @@
         ref="mediaRef"
         class="w-full"
         :url="props.url"
+        :content-type="props.contentType"
         :blurred="props.blurred"
         :fill="true"
         img-class="block h-auto w-full object-contain object-top opacity-75"

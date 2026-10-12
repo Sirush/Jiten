@@ -2683,6 +2683,7 @@ namespace Jiten.Parser
             foreach (var word in surfaces)
             {
                 if (candidates.ContainsKey(word)) continue;
+                if (word.Length > _maxLookupKeyLength * 2) continue;
 
                 var wordInHiragana = KanaConverter.ToHiragana(word, convertLongVowelMark: false);
                 var wordNormalized = KanaNormalizer.Normalize(wordInHiragana);

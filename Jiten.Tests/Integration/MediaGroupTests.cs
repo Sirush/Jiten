@@ -21,6 +21,7 @@ public class MediaGroupTests(JitenWebApplicationFactory factory)
 
     private const int SagaSeriesId = 1;
     private const int LoneDeckId = 6;
+    private const int NovelsSeriesId = 2;
     private const int SettingId = 3;
     private int _franchiseId;
 
@@ -34,6 +35,7 @@ public class MediaGroupTests(JitenWebApplicationFactory factory)
 
     // Line A: 1 (anime, 2000) <- 2 (anime, 2002) sequel, 1 -> 3 (novel, 2001) adaptation.
     // Line B: 4 (anime, 2005) <- 5 (game, 2006) sequel. No link joins the lines; the "Saga" series (1, 4, 5) does.
+    // Deck 3 is the only member of "Saga Novels"; both series reach 2 through line A, and Saga does not reach 3.
     // Deck 6 stands alone; it shares only the setting "World" with 1.
     private async Task SeedAsync()
     {
@@ -57,6 +59,10 @@ public class MediaGroupTests(JitenWebApplicationFactory factory)
         saga.Members.Add(new SeriesMember { SeriesId = SagaSeriesId, DeckId = 4 });
         saga.Members.Add(new SeriesMember { SeriesId = SagaSeriesId, DeckId = 5 });
         db.Series.Add(saga);
+
+        var novels = new Series { SeriesId = NovelsSeriesId, OriginalTitle = "Saga Novels", Kind = SeriesKind.Series };
+        novels.Members.Add(new SeriesMember { SeriesId = NovelsSeriesId, DeckId = 3 });
+        db.Series.Add(novels);
 
         var world = new Series { SeriesId = SettingId, OriginalTitle = "World", Kind = SeriesKind.Setting };
         world.Members.Add(new SeriesMember { SeriesId = SettingId, DeckId = 1 });
@@ -131,13 +137,15 @@ public class MediaGroupTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task Members_Series_ListsItsMembers()
+    public async Task Members_Series_ListsItsMembersAndTheirStoryLines()
     {
         var members = await MembersAsync(2, SagaSeriesId);
 
         members.OriginalTitle.Should().Be("Saga");
         members.FranchiseId.Should().Be(_franchiseId);
-        members.Members.Select(m => m.DeckId).Should().Equal(1, 4, 5);
+        members.Members.Select(m => m.DeckId).Should().Equal(1, 2, 4, 5);
+
+        (await MembersAsync(2, NovelsSeriesId)).Members.Select(m => m.DeckId).Should().Equal(3, 2);
     }
 
     [Fact]
@@ -211,8 +219,8 @@ public class MediaGroupTests(JitenWebApplicationFactory factory)
     public async Task Stats_ForSeriesAndLine()
     {
         var series = await StatsAsync(2, SagaSeriesId);
-        series.CharacterCount.Should().Be(2500);
-        series.UniqueWordCount.Should().Be(3);
+        series.CharacterCount.Should().Be(5500);
+        series.UniqueWordCount.Should().Be(4);
 
         var line = await StatsAsync(3, 1);
         line.CharacterCount.Should().Be(6000);
@@ -224,7 +232,7 @@ public class MediaGroupTests(JitenWebApplicationFactory factory)
     {
         (await VocabularyAsync(1, _franchiseId)).Should().Equal((5, 20), (2, 12), (1, 11), (3, 3), (4, 2));
         (await VocabularyAsync(1, _franchiseId, "&mediaTypes=1&excludeDeckIds=4")).Should().Equal((2, 12), (1, 10), (3, 3));
-        (await VocabularyAsync(2, SagaSeriesId, "&excludeDeckIds=4")).Should().Equal((1, 11), (2, 5));
+        (await VocabularyAsync(2, SagaSeriesId, "&excludeDeckIds=4")).Should().Equal((2, 12), (1, 11), (3, 3));
         (await VocabularyAsync(3, 1)).Should().Equal((2, 12), (1, 10), (3, 3), (4, 2));
         (await VocabularyAsync(3, 4, "&mediaTypes=8")).Should().BeEmpty();
     }

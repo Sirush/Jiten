@@ -19,6 +19,7 @@
     cardAudio,
     customAudioPlaying,
     playCustomAudio,
+    cardImage,
     showBesideImage,
     showBackgroundImage,
     imageBlurred,
@@ -164,6 +165,7 @@
       <SrsCardImage
         v-if="showBesideImage"
         :url="cardImageUrl"
+        :content-type="cardImage?.contentType"
         :blurred="imageBlurred"
         img-class="max-h-36 w-auto max-w-full rounded-lg object-contain border border-surface-200 dark:border-surface-700"
         @error="onImageError"

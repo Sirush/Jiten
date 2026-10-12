@@ -144,6 +144,25 @@ public partial class AdminController
         return Ok(await series.ToRefAsync(target.SeriesId));
     }
 
+    /// <summary>Titles for a new series made of these decks, named the way franchises are named automatically.</summary>
+    [HttpGet("series/suggest-titles")]
+    public async Task<IActionResult> SuggestSeriesTitles([FromQuery] List<int> deckIds)
+    {
+        if (deckIds.Count == 0 || deckIds.Count > FranchiseSuggestionService.MaxDismissDecks)
+            return BadRequest(new { Message = $"Pick between 1 and {FranchiseSuggestionService.MaxDismissDecks} decks." });
+
+        var members = await dbContext.Decks.AsNoTracking()
+                                     .Where(d => deckIds.Contains(d.DeckId))
+                                     .Select(d => new { d.DeckId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle, d.ReleaseDate })
+                                     .ToListAsync();
+        if (members.Count == 0)
+            return NotFound();
+
+        var titles = FranchiseNaming.Suggest(members.Select(d => (GroupTitles.Of(d.OriginalTitle, d.RomajiTitle, d.EnglishTitle), d.ReleaseDate, d.DeckId))
+                                                    .ToList(), []);
+        return Ok(titles);
+    }
+
     [HttpGet("franchise-builder/{deckId:int}")]
     public async Task<IActionResult> GetFranchiseBuilder(int deckId, [FromQuery] List<int> add, [FromServices] FranchiseService franchise)
     {
@@ -189,9 +208,17 @@ public partial class AdminController
         if (missingDeck != -1)
             return BadRequest(new { Message = $"Unknown deck id {missingDeck}." });
 
+        foreach (var rename in request.RenameSeries)
+            if (rename.Validate() is { } titleError)
+                return BadRequest(new { Message = titleError });
+
         var seriesIds = request.AddMembers.Concat(request.RemoveMembers).Select(m => m.SeriesId).Distinct().ToList();
-        var knownSeries = await dbContext.Series.AsNoTracking().Where(s => seriesIds.Contains(s.SeriesId)).Select(s => s.SeriesId).ToListAsync();
-        var missingSeries = seriesIds.Except(knownSeries).FirstOrDefault(-1);
+        var renamedIds = request.RenameSeries.Select(r => r.SeriesId).Distinct().ToList();
+        var knownSeries = await dbContext.Series.AsNoTracking()
+                                         .Where(s => seriesIds.Contains(s.SeriesId) || renamedIds.Contains(s.SeriesId))
+                                         .Select(s => s.SeriesId)
+                                         .ToListAsync();
+        var missingSeries = seriesIds.Concat(renamedIds).Except(knownSeries).FirstOrDefault(-1);
         if (missingSeries != -1)
             return BadRequest(new { Message = $"Unknown series id {missingSeries}." });
 
@@ -249,6 +276,14 @@ public partial class AdminController
         var presentMembers = existingMembers.Except(removedMembers).Select(m => (m.SeriesId, m.DeckId)).ToHashSet();
         var addedMembers = request.AddMembers.Select(m => (m.SeriesId, m.DeckId)).Where(presentMembers.Add).ToList();
         dbContext.SeriesMembers.AddRange(addedMembers.Select(m => new SeriesMember { SeriesId = m.SeriesId, DeckId = m.DeckId }));
+
+        var renamedSeries = await dbContext.Series.Where(x => renamedIds.Contains(x.SeriesId)).ToListAsync();
+        foreach (var entity in renamedSeries)
+        {
+            entity.SetTitles(request.RenameSeries.Last(r => r.SeriesId == entity.SeriesId).ToTitles());
+            entity.UpdatedAt = DateTime.UtcNow;
+        }
+
         await dbContext.SaveChangesAsync();
         await SaveBoardAsync(request.AnchorDeckId, request.BoardDeckIds.Distinct().ToList());
         await transaction.CommitAsync();
@@ -257,8 +292,8 @@ public partial class AdminController
 
         await franchiseSync.RunAsync();
 
-        logger.LogInformation("Admin saved franchise builder for deck {DeckId}: +{AddEdges}/-{RemoveEdges} edges, {Members} series touched",
-                              request.AnchorDeckId, addedEdges.Count, removedEdges.Count, touchedSeries);
+        logger.LogInformation("Admin saved franchise builder for deck {DeckId}: +{AddEdges}/-{RemoveEdges} edges, {Members} series touched, {Renamed} renamed",
+                              request.AnchorDeckId, addedEdges.Count, removedEdges.Count, touchedSeries, renamedSeries.Count);
 
         return Ok(await franchise.BuildForBoardAsync(request.AnchorDeckId, request.BoardDeckIds));
     }
