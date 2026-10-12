@@ -213,6 +213,7 @@
     onDictNext: () => studyCardRef.value?.cycleDictionary(1),
     onContinueBatch: handleContinueBatch,
     onEndSession: handleEndSession,
+    suggestedRating: () => writeInSuggested.value,
   });
 
   // Write-in review: per-card modality, input/reveal phase, suggested grade and auto-advance.

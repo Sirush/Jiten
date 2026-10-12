@@ -102,6 +102,7 @@ export interface StudyKeyboardCallbacks {
   onDictNext: () => void;
   onContinueBatch: () => void;
   onEndSession: () => void;
+  suggestedRating?: () => FsrsRating | null | undefined;
 }
 
 const RATINGS_4 = [FsrsRating.Again, FsrsRating.Hard, FsrsRating.Good, FsrsRating.Easy];
@@ -116,6 +117,13 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
   // so a double-tapped reveal can't silently grade Good.
   const REVEAL_DWELL_MS = 350;
   let revealedAt = 0;
+  const stopFlipWatch = watch(
+    () => store.isFlipped,
+    (flipped) => {
+      if (flipped) revealedAt = performance.now();
+    },
+    { flush: 'sync' }
+  );
 
   let batchCompletedAt = 0;
   const stopBatchWatch = watch(
@@ -195,12 +203,13 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
       e.preventDefault();
       if (!store.isFlipped) {
         flashKey(kb.flipCard);
-        revealedAt = e.timeStamp;
         store.revealCard();
+        revealedAt = e.timeStamp;
       } else if (e.timeStamp - revealedAt >= REVEAL_DWELL_MS) {
-        const goodKey = is4Btn ? kb.grade3 : kb.grade2;
-        flashKey(goodKey);
-        callbacks.onGrade(FsrsRating.Good);
+        const suggested = callbacks.suggestedRating?.();
+        const rating = suggested != null && ratings.includes(suggested) ? suggested : FsrsRating.Good;
+        flashKey(gradeKeys[ratings.indexOf(rating)]!);
+        callbacks.onGrade(rating);
       }
       return;
     }
@@ -295,6 +304,7 @@ export function useStudyKeyboard(callbacks: StudyKeyboardCallbacks) {
     window.removeEventListener('contextmenu', handleContextMenu);
     stopHistoryLockWatch();
     stopBatchWatch();
+    stopFlipWatch();
   });
 
   return { pressedKey: readonly(pressedKey) };
