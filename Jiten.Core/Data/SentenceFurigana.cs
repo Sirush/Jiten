@@ -21,8 +21,9 @@ public static class SentenceFurigana
             var surface = text.AsSpan(token.Position, token.Length);
             if (!ContainsKanji(surface)) continue;
 
+            var trailing = text.AsSpan(token.Position + token.Length);
             var aligned = forms.TryGetValue((token.WordId, token.ReadingIndex), out var own)
-                ? Align(surface, own.RubyText)
+                ? Align(surface, own.RubyText, trailing)
                 : [];
 
             if (aligned.Count == 0)
@@ -33,7 +34,7 @@ public static class SentenceFurigana
                     foreach (var sibling in siblings)
                     {
                         if (sibling.ReadingIndex == token.ReadingIndex || sibling.FormType != JmDictFormType.KanjiForm) continue;
-                        aligned = Align(surface, sibling.RubyText);
+                        aligned = Align(surface, sibling.RubyText, trailing);
                         if (aligned.Count > 0) break;
                     }
                 }
@@ -54,8 +55,8 @@ public static class SentenceFurigana
         return groups;
     }
 
-    /// <summary>Walks dictionary ruby (食[た]べる) along the inflected surface (食べた) and stops at the first differing kana, where inflection starts.</summary>
-    public static List<(int Offset, int Length, string Reading)> Align(ReadOnlySpan<char> surface, string? rubyText)
+    /// <summary>Walks dictionary ruby (食[た]べる) along the inflected surface (食べた) and stops at the first differing kana, where inflection starts; trailing is the text after the surface, read only to pick 来 and 得's readings.</summary>
+    public static List<(int Offset, int Length, string Reading)> Align(ReadOnlySpan<char> surface, string? rubyText, ReadOnlySpan<char> trailing = default)
     {
         var result = new List<(int, int, string)>();
         if (string.IsNullOrEmpty(rubyText)) return result;
@@ -76,6 +77,9 @@ public static class SentenceFurigana
                 if (!surface[s..].StartsWith(rubyBase, StringComparison.Ordinal)) break;
 
                 var reading = rubyText.Substring(baseEnd + 1, close - baseEnd - 1);
+                if (rubyText.AsSpan(close + 1) is "る")
+                    reading = VerbFinalReading(rubyBase, reading, surface[(s + rubyBase.Length)..], trailing);
+
                 if (reading.Length > 0)
                     result.Add((s, rubyBase.Length, reading));
 
@@ -90,6 +94,53 @@ public static class SentenceFurigana
         }
 
         return result;
+    }
+
+    // First prefix match wins, so longer prefixes come first.
+    private static readonly (string Prefix, string Reading)[] KuruReadings =
+    [
+        ("ない", "こ"), ("なか", "こ"), ("なく", "こ"), ("なけ", "こ"), ("なきゃ", "こ"),
+        ("れば", "く"), ("りゃ", "く"), ("る", "く"),
+        ("な", "き"), ("た", "き"), ("て", "き"), ("ま", "き"), ("ち", "き"), ("そう", "き"),
+        ("と", "き"), ("や", "き"), ("つ", "き"), ("っ", "き"),
+        ("れ", "こ"), ("ら", "こ"), ("さ", "こ"), ("よ", "こ"), ("い", "こ"), ("ず", "こ"),
+        ("ぬ", "こ"), ("ね", "こ"), ("ん", "こ"),
+    ];
+
+    // うる survives only in the plain and べき forms; every other conjugation of 得る reads え (あり得ない, あり得ます).
+    private static readonly (string Prefix, string Reading)[] UruReadings = [("る", "う"), ("べ", "う")];
+
+    private const int FollowingPrefixMaxLength = 3;
+
+    /// <summary>The kanji's reading in a verb ending in ruby + る (やって来[く]る, あり得[う]る), where 来 and 得 change reading with the conjugation; empty when it can't be told.</summary>
+    private static string VerbFinalReading(ReadOnlySpan<char> rubyBase, string reading, ReadOnlySpan<char> surfaceTail, ReadOnlySpan<char> trailing)
+    {
+        if (rubyBase is "来" or "來" && reading == "く")
+            return MatchFollowing(KuruReadings, surfaceTail, trailing) ?? "";
+        if (rubyBase is "得" && reading == "う")
+            return MatchFollowing(UruReadings, surfaceTail, trailing) ?? "え";
+        return reading;
+    }
+
+    private static string? MatchFollowing((string Prefix, string Reading)[] table, ReadOnlySpan<char> surfaceTail, ReadOnlySpan<char> trailing)
+    {
+        Span<char> following = stackalloc char[FollowingPrefixMaxLength];
+        int n = 0;
+        foreach (var c in surfaceTail)
+        {
+            if (n == following.Length) break;
+            following[n++] = ToHiragana(c);
+        }
+        foreach (var c in trailing)
+        {
+            if (n == following.Length) break;
+            following[n++] = ToHiragana(c);
+        }
+
+        ReadOnlySpan<char> next = following[..n];
+        foreach (var (prefix, reading) in table)
+            if (next.StartsWith(prefix, StringComparison.Ordinal)) return reading;
+        return null;
     }
 
     private static bool IsKana(char c) => c is >= '぀' and <= 'ゟ' or >= '゠' and <= 'ヿ';
