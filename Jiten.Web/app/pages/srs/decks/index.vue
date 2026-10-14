@@ -727,6 +727,13 @@
                   <Icon name="material-symbols:book-2" size="24" />
                 </div>
               </NuxtLink>
+              <NuxtLink
+                v-else-if="deck.deckType === StudyDeckType.MediaGroup && deck.groupCoverNames?.length && presentation(deck).link"
+                :to="presentation(deck).link!"
+                class="w-12 h-16 sm:w-16 sm:h-20 float-left mr-3 mb-1 sm:float-none sm:mr-0 sm:mb-0 flex-shrink-0"
+              >
+                <StackedCover :covers="deck.groupCoverNames" :alt="deckTitle(deck)" />
+              </NuxtLink>
               <div
                 v-else
                 class="w-12 h-16 sm:w-16 sm:h-20 float-left mr-3 mb-1 sm:float-none sm:mr-0 sm:mb-0 flex-shrink-0 rounded overflow-hidden bg-surface-100 dark:bg-surface-700"
@@ -902,6 +909,13 @@
                 <div v-else class="w-full h-full flex items-center justify-center text-gray-400">
                   <Icon name="material-symbols:book-2" size="24" />
                 </div>
+              </NuxtLink>
+              <NuxtLink
+                v-else-if="deck.deckType === StudyDeckType.MediaGroup && deck.groupCoverNames?.length && presentation(deck).link"
+                :to="presentation(deck).link!"
+                class="w-12 h-16 sm:w-16 sm:h-20 float-left mr-3 mb-1 sm:float-none sm:mr-0 sm:mb-0 flex-shrink-0"
+              >
+                <StackedCover :covers="deck.groupCoverNames" :alt="deckTitle(deck)" />
               </NuxtLink>
               <div
                 v-else

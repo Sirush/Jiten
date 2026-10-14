@@ -1356,6 +1356,8 @@ export interface StudyDeckDto {
   /** Null means every media type. */
   groupMediaTypes?: MediaType[] | null;
   groupExcludedDeckIds?: number[] | null;
+  /** Front cover first. */
+  groupCoverNames?: string[] | null;
 }
 
 export interface SmartDeckSettings {
