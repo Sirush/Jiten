@@ -926,7 +926,8 @@ builder.Services.AddCors(options =>
 
                 return origin == "https://jiten.moe" ||
                        origin == "https://kizuna-texthooker-ui.fly.dev" ||
-                       origin == "https://kizuna-texthooker-ui.app";
+                       origin == "https://kizuna-texthooker-ui.app" ||
+                       origin == "https://asbplayer-jiten.pages.dev";
             })
             .AllowAnyHeader()
             .AllowAnyMethod()
