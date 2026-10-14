@@ -411,6 +411,12 @@ public class Program
             return;
         }
 
+        if (options.WordsForCoverage)
+        {
+            await new SiteStatsCommands(context).WordsForCoverage(options.WordsForCoverageSample);
+            return;
+        }
+
         // WordSet commands
         if (options.CreateWordSetFromPos)
         {

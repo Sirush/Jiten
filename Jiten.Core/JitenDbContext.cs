@@ -79,6 +79,7 @@ public class JitenDbContext : DbContext
     public DbSet<DifficultyRankItem> DifficultyRankItems { get; set; }
 
     public DbSet<MediaRequest> MediaRequests { get; set; }
+    public DbSet<SiteStatsSnapshot> SiteStatsSnapshots { get; set; }
     public DbSet<MediaRequestUpvote> MediaRequestUpvotes { get; set; }
     public DbSet<MediaRequestBoost> MediaRequestBoosts { get; set; }
     public DbSet<MediaRequestSubscription> MediaRequestSubscriptions { get; set; }
@@ -112,6 +113,21 @@ public class JitenDbContext : DbContext
             modelBuilder.HasPostgresExtension("fuzzystrmatch");
             modelBuilder.HasDefaultSchema("jiten");
         }
+
+        modelBuilder.Entity<SiteStatsSnapshot>(entity =>
+        {
+            entity.HasKey(s => s.Date);
+            var payload = entity.Property(s => s.Payload).IsRequired();
+            if (isNpgsql)
+                payload.HasColumnType("jsonb");
+        });
+
+        modelBuilder.Entity<ParseDataEpoch>(entity =>
+        {
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Id).ValueGeneratedNever();
+            entity.HasData(new ParseDataEpoch { Id = ParseDataEpoch.SingletonId, Epoch = 0 });
+        });
 
         modelBuilder.Entity<Deck>(entity =>
         {

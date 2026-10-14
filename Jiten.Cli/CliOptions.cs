@@ -487,4 +487,10 @@ public class CliOptions
 
     [Option(longName: "youtube-videos-csv", Required = false, HelpText = "With --export-youtube-speech-boundaries or --youtube-speech-preview all: read videos from a CSV (deck_id, channel_b64, raw_b64) exported from another database instead of the configured one.")]
     public string? YouTubeVideosCsv { get; set; }
+
+    [Option(longName: "words-for-coverage", Required = false, HelpText = "Print, per media type, the frequency rank a typical title needs known for 85-99% coverage. Read-only.")]
+    public bool WordsForCoverage { get; set; }
+
+    [Option(longName: "words-for-coverage-sample", Required = false, Default = 1, HelpText = "With --words-for-coverage: only use titles whose DeckId is divisible by this (1 = every title).")]
+    public int WordsForCoverageSample { get; set; }
 }

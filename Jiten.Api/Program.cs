@@ -479,6 +479,7 @@ builder.Services.Configure<Jiten.Core.Services.CardMediaStorageOptions>(
 builder.Services.AddScoped<ICardMediaQuotaService, CardMediaQuotaService>();
 builder.Services.AddScoped<ICardMediaWriteService, CardMediaWriteService>();
 builder.Services.AddScoped<IExampleSentenceQueryService, ExampleSentenceQueryService>();
+builder.Services.AddScoped<Jiten.Api.Services.SiteStatsBuilder>();
 builder.Services.AddSingleton<ReadableSentenceListingCache>();
 builder.Services.AddScoped<IReadableSentenceSearch, ReadableSentenceSearch>();
 builder.Services.AddSingleton<SentenceStatsCache>();
@@ -546,6 +547,7 @@ builder.Services.AddSingleton<IDeckActivityBuffer, DeckActivityBuffer>();
 builder.Services.AddSingleton<IPendingEmbeddingQueue, PendingEmbeddingQueue>();
 builder.Services.AddSingleton<IUserActivityTracker, UserActivityTracker>();
 builder.Services.AddSingleton<IParseThrottleService, ParseThrottleService>();
+builder.Services.AddSingleton<IParseVersionProvider, ParseVersionProvider>();
 builder.Services.AddSingleton<IConnectionMultiplexer>(sp =>
     ConnectionMultiplexer.Connect(sp.GetRequiredService<IConfiguration>().GetConnectionString("Redis")!));
 builder.Services.AddScoped<WordReplacementService>();
@@ -955,6 +957,7 @@ builder.Services.AddScoped<LapseRecountJob>();
 builder.Services.AddScoped<ReviewRollupJob>();
 builder.Services.AddScoped<DifficultyAdjustmentJob>();
 builder.Services.AddScoped<PopularityScoreJob>();
+builder.Services.AddScoped<SiteStatsJob>();
 builder.Services.AddScoped<RecomputeVectorsJob>();
 builder.Services.AddScoped<DescriptionEmbeddingJob>();
 builder.Services.AddScoped<StripeReconcileJob>();
@@ -1210,6 +1213,16 @@ if (!app.Environment.IsEnvironment("Testing"))
         "popularity-score",
         job => job.RecomputeAll(),
         "30 */6 * * *");
+
+    recurringJobs.AddOrUpdate<SiteStatsJob>(
+        "site-stats-snapshot",
+        job => job.Snapshot(),
+        Cron.Daily(2));
+
+    recurringJobs.AddOrUpdate<SiteStatsJob>(
+        "site-stats-words-for-coverage",
+        job => job.WordsForCoverage(),
+        Cron.Weekly(DayOfWeek.Sunday, 2, 30));
 
     scope.ServiceProvider.GetRequiredService<IBackgroundJobClient>().Enqueue<FsrsModelMigrationJob>(job => job.Run());
 }

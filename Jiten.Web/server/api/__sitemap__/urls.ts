@@ -14,6 +14,8 @@ export default defineEventHandler(async (event) => {
     urls.push({ loc: `/decks/media/list/${slug}`, changefreq: 'daily', priority: 0.6, _sitemap: 'pages' });
   }
 
+  urls.push({ loc: '/stats', changefreq: 'daily', priority: 0.6, _sitemap: 'pages' });
+
   try {
     const guides = await queryCollection(event, 'guides').where('draft', '=', false).select('path', 'updated').all();
     for (const g of guides) {

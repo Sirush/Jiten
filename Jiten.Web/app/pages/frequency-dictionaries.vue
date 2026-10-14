@@ -325,6 +325,8 @@
             </div>
           </div>
         </div>
+
+        <NuxtLink to="/stats" class="inline-block mt-4 font-medium">See all statistics →</NuxtLink>
       </template>
     </Card>
 
