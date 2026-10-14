@@ -4,6 +4,7 @@ using Jiten.Core.Data;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Swashbuckle.AspNetCore.Annotations;
 
 namespace Jiten.Api.Controllers;
@@ -55,4 +56,27 @@ public class StatsController(JitenDbContext context) : ControllerBase
 
         return new GlobalStatsDto { MediaByType = mediaByType, TotalMojis = totalMojis, TotalMedia = totalMedias };
     }
+
+    /// <summary>Latest public /stats snapshot, written nightly by SiteStatsJob; 204 before the first run.</summary>
+    [HttpGet("site")]
+    [ResponseCache(Duration = 60 * 60)]
+    [SwaggerOperation(Summary = "Gets the latest public site statistics snapshot.", OperationId = "Stats_GetSiteStats")]
+    [ProducesResponseType(typeof(SiteStatsDto), StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status204NoContent)]
+    [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
+    public async Task<IActionResult> GetSiteStats([FromServices] IMemoryCache cache)
+    {
+        var payload = await cache.GetOrCreateAsync(SiteStatsCacheKey, async entry =>
+        {
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromMinutes(10);
+            return await context.SiteStatsSnapshots.AsNoTracking()
+                                .OrderByDescending(s => s.Date)
+                                .Select(s => s.Payload)
+                                .FirstOrDefaultAsync();
+        });
+
+        return payload == null ? NoContent() : Content(payload, "application/json");
+    }
+
+    public const string SiteStatsCacheKey = "site-stats";
 }

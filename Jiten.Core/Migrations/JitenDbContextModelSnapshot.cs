@@ -1930,6 +1930,29 @@ namespace Jiten.Core.Migrations
                     b.ToTable("Notifications", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.ParseDataEpoch", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Epoch")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("ParseDataEpochs", "jiten");
+
+                    b.HasData(
+                        new
+                        {
+                            Id = 1,
+                            Epoch = 0
+                        });
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.Poll", b =>
                 {
                     b.Property<int>("Id")
@@ -2124,6 +2147,23 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_SeriesMembers_DeckId");
 
                     b.ToTable("SeriesMembers", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.SiteStatsSnapshot", b =>
+                {
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("ComputedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Payload")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.HasKey("Date");
+
+                    b.ToTable("SiteStatsSnapshots", "jiten");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.SiteUpdate", b =>

@@ -144,6 +144,66 @@ public class ExampleSentenceTokensTests
     }
 
     [Theory]
+    [InlineData("来る", "", "く")]
+    [InlineData("来た", "", "き")]
+    [InlineData("来ます", "", "き")]
+    [InlineData("来なさい", "", "き")]
+    [InlineData("来ない", "", "こ")]
+    [InlineData("来なかった", "", "こ")]
+    [InlineData("来れば", "", "く")]
+    [InlineData("来られる", "", "こ")]
+    [InlineData("来い", "", "こ")]
+    [InlineData("来", "ます", "き")]
+    [InlineData("來た", "", "き")]
+    public void AlignReadsKuruFromTheConjugationThatFollows(string surface, string trailing, string expected)
+    {
+        var ruby = surface.StartsWith('來') ? "來[く]る" : "来[く]る";
+
+        SentenceFurigana.Align(surface, ruby, trailing).Should().Equal((0, 1, expected));
+    }
+
+    [Theory]
+    [InlineData("やって来た", "やって来[く]る", new[] { "3:1:き" })]
+    [InlineData("持って来ない", "持[も]って来[く]る", new[] { "0:1:も", "3:1:こ" })]
+    [InlineData("来る日", "来[く]る日[ひ]", new[] { "0:1:く", "2:1:ひ" })]
+    public void AlignResolvesKuruInsideCompoundsAndLeavesFixedNounsAlone(string surface, string ruby, string[] expected)
+    {
+        SentenceFurigana.Align(surface, ruby).Select(g => $"{g.Offset}:{g.Length}:{g.Reading}").Should().Equal(expected);
+    }
+
+    [Theory]
+    [InlineData("あり得る", "", new[] { "2:1:う" })]
+    [InlineData("あり得べき", "", new[] { "2:1:う" })]
+    [InlineData("あり得ません", "", new[] { "2:1:え" })]
+    [InlineData("有り得ない", "", new[] { "0:1:あ", "2:1:え" })]
+    [InlineData("あり得", "ない", new[] { "2:1:え" })]
+    public void AlignReadsUruAsEOutsideThePlainForm(string surface, string trailing, string[] expected)
+    {
+        var ruby = surface.StartsWith('有') ? "有[あ]り得[う]る" : "あり得[う]る";
+
+        SentenceFurigana.Align(surface, ruby, trailing).Select(g => $"{g.Offset}:{g.Length}:{g.Reading}").Should().Equal(expected);
+    }
+
+    [Fact]
+    public void BuildReadsKuruFromTheTextAfterTheToken()
+    {
+        const string text = "友達が来ました";
+        SentenceToken[] tokens = [new(1, 0, 3, 1, true, false)];
+        var forms = new Dictionary<(int, short), JmDictWordForm>
+        {
+            [(1, 0)] = Form(1, 0, "来る", "来[く]る", JmDictFormType.KanjiForm),
+        };
+
+        SentenceFurigana.Build(text, tokens, forms).Should().Equal(new FuriganaGroup(3, 1, "き", 1, 0, true));
+    }
+
+    [Fact]
+    public void AlignDropsKuruRubyWhenNothingDisambiguatesIt()
+    {
+        SentenceFurigana.Align("来", "来[く]る").Should().BeEmpty();
+    }
+
+    [Theory]
     [InlineData("たべた", "食[た]べる")]
     [InlineData("喰べた", "食[た]べる")]
     [InlineData("食べた", "たべる")]

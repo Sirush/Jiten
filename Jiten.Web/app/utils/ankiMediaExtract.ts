@@ -4,7 +4,7 @@
  */
 
 /** Video containers whose audio track the sniffer would accept; not worth fetching megabytes for. */
-const VIDEO_EXTENSIONS = /\.(mp4|mkv|mov|avi|webm)$/i;
+const VIDEO_EXTENSIONS = /\.(mp4|mkv|mov|avi)$/i;
 
 const SVG_EXTENSION = /\.svg$/i;
 const WEBM_EXTENSION = /\.webm$/i;

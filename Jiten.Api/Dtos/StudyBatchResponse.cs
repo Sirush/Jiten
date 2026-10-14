@@ -225,5 +225,8 @@ public class StudyDeckDto
     public List<int>? GroupMediaTypes { get; set; }
 
     public List<int>? GroupExcludedDeckIds { get; set; }
+
+    /// <summary>Up to three covers of the group's decks, front cover first.</summary>
+    public List<string>? GroupCoverNames { get; set; }
 }
 

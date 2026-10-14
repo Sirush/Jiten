@@ -65,6 +65,7 @@ public partial class StudyController(
     private const int IPlusOnePoolSize = 200;
 
     private const int MaxConcurrentDeckQueries = 6;
+    private const int GroupCoverCount = 3;
 
     [HttpGet("overview-version")]
     [SwaggerOperation(Summary = "Get current overview version for cache validation")]
@@ -337,6 +338,8 @@ public partial class StudyController(
                                .Where(f => frequencyListIds.Contains(f.Id))
                                .ToDictionaryAsync(f => f.Id, f => f.Name);
 
+        var groupCovers = await LoadGroupCovers(sources);
+
         var result = resolvedDecks.Select(entry =>
         {
             var (sd, deck) = entry;
@@ -377,7 +380,8 @@ public partial class StudyController(
                 GroupTitles = group?.Titles,
                 GroupFranchiseId = group?.FranchiseId,
                 GroupMediaTypes = StudyDeckGroupFilter.ParseIds(sd.GroupMediaTypes),
-                GroupExcludedDeckIds = StudyDeckGroupFilter.ParseIds(sd.GroupExcludedDeckIds)
+                GroupExcludedDeckIds = StudyDeckGroupFilter.ParseIds(sd.GroupExcludedDeckIds),
+                GroupCoverNames = groupCovers.GetValueOrDefault(sd.UserStudyDeckId)
             };
 
             if (deck?.ParentDeckId != null && parentDecks.TryGetValue(deck.ParentDeckId.Value, out var parent))
@@ -416,6 +420,29 @@ public partial class StudyController(
         }
 
         return Results.Ok(result);
+    }
+
+    /// <summary>Covers of each group study deck's narrowed decks, most popular first.</summary>
+    private async Task<Dictionary<int, List<string>>> LoadGroupCovers(Dictionary<int, DeckWordSource> sources)
+    {
+        var groupSources = sources.Where(s => s.Value.Group != null).ToList();
+        var deckIds = groupSources.SelectMany(s => s.Value.DeckIds).Distinct().ToList();
+        if (deckIds.Count == 0)
+            return [];
+
+        var covers = await context.Decks.AsNoTracking()
+                                  .Where(d => deckIds.Contains(d.DeckId) && d.ParentDeckId == null && d.CoverName != "nocover.jpg" && d.CoverName != "")
+                                  .Select(d => new { d.DeckId, d.CoverName, d.PopularityScore })
+                                  .ToDictionaryAsync(d => d.DeckId);
+
+        return groupSources.ToDictionary(s => s.Key, s => s.Value.DeckIds
+                                                            .Where(covers.ContainsKey)
+                                                            .Select(id => covers[id])
+                                                            .OrderByDescending(c => c.PopularityScore)
+                                                            .ThenBy(c => c.DeckId)
+                                                            .Take(GroupCoverCount)
+                                                            .Select(c => c.CoverName)
+                                                            .ToList());
     }
 
     [HttpPost("study-decks")]

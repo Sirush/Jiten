@@ -130,8 +130,8 @@
           </div>
 
           <p v-if="globalStats" class="text-sm text-gray-600 dark:text-gray-400 mb-5">
-            <b>{{ formatCharacters(globalStats.totalMojis) }}</b>
-            characters analysed across
+            <NuxtLink to="/stats"><b>{{ formatCharacters(globalStats.totalMojis) }}</b> characters analysed</NuxtLink>
+            across
             <b>{{ globalStats.totalMedia.toLocaleString() }}</b>
             titles, including
             <template v-for="(featured, index) in featuredTypes" :key="featured.type">

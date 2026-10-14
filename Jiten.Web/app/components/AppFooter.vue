@@ -8,6 +8,7 @@
       <div class="flex flex-wrap justify-center items-center gap-x-6 gap-y-2">
         <NuxtLink to="/media-updates" class="!text-white text-sm" no-rel>New media updates</NuxtLink>
         <NuxtLink to="/updates" class="!text-white text-sm" no-rel>What's new</NuxtLink>
+        <NuxtLink to="/stats" class="!text-white text-sm" no-rel>Statistics</NuxtLink>
         <NuxtLink to="/jiten-plus" class="!text-white text-sm" no-rel>Jiten+</NuxtLink>
         <NuxtLink to="/donate" class="!text-white text-sm" no-rel>Donate</NuxtLink>
         <span class="flex items-center gap-3">

@@ -23,12 +23,24 @@ public class ReaderController(
     IParseThrottleService parseThrottle,
     IStudyDeckMembershipService deckMembership,
     IFrequencySourceResolver frequencySource,
+    IParseVersionProvider parseVersionProvider,
     ILogger<ReaderController> logger) : ControllerBase
 {
     [HttpPost("ping")]
     public IResult Ping()
     {
         return Results.Ok(new { success = true });
+    }
+
+    [HttpGet("version")]
+    [AllowAnonymous]
+    [ResponseCache(Duration = 60, Location = ResponseCacheLocation.Any)]
+    [SwaggerOperation(Summary = "Current parser version",
+                      Description = "Opaque string compared by equality with the parseVersion returned by reader/parse. A different value means saved parse results are outdated and should be parsed again.")]
+    [ProducesResponseType(typeof(ReaderVersionResponse), StatusCodes.Status200OK)]
+    public async Task<IResult> Version(CancellationToken ct)
+    {
+        return Results.Ok(new ReaderVersionResponse(await parseVersionProvider.GetAsync(ct)));
     }
 
     /// <summary>
@@ -55,8 +67,11 @@ public class ReaderController(
             return Results.StatusCode(StatusCodes.Status429TooManyRequests);
         }
 
+        var parseVersion = await parseVersionProvider.GetAsync();
+
         List<List<ReaderToken>> allTokens = new();
         List<ReaderWord> allWords = new();
+        HashSet<(int WordId, byte ReadingIndex)> emittedWords = new();
         var parsedParagraphs = await ParagraphParser.ParseAsync(contextFactory, request.Text);
 
         var wordIds = parsedParagraphs.SelectMany(p => p).Select(w => w.WordId).Distinct().ToList();
@@ -85,6 +100,10 @@ public class ReaderController(
                                    End = position + word.OriginalText.Length, Length = word.OriginalText.Length,
                                    Conjugations = word.Conjugations
                                });
+                    currentPosition = position + word.OriginalText.Length;
+                    if (!emittedWords.Add((word.WordId, word.ReadingIndex)))
+                        continue;
+
                     var jmdictWord = jmdictWords[word.WordId];
                     knownStates.TryGetValue((word.WordId, word.ReadingIndex), out var knownState);
                     deckMembershipMap.TryGetValue((word.WordId, word.ReadingIndex), out var studyDeckIds);
@@ -106,8 +125,6 @@ public class ReaderController(
                                          StudyDeckIds = studyDeckIds ?? new(),
                                      };
                     allWords.Add(readerWord);
-
-                    currentPosition = position + word.OriginalText.Length;
                 }
             }
 
@@ -116,7 +133,7 @@ public class ReaderController(
 
         logger.LogInformation("Reader parsed text: ParagraphCount={ParagraphCount}, TotalWords={TotalWords}, TotalLength={TotalLength}",
                               request.Text.Length, parsedParagraphs.Sum(p => p.Count), string.Join("", request.Text).Length);
-        return Results.Ok(new { tokens = allTokens, vocabulary = allWords });
+        return Results.Ok(new { tokens = allTokens, vocabulary = allWords, parseVersion });
     }
 
     [HttpPost("lookup-vocabulary")]

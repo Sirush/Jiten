@@ -53,6 +53,10 @@ describe('extractAudioRef', () => {
     expect(extractAudioRef('これは猫です[sound:neko_01.ogg]')?.filename).toBe('neko_01.ogg');
   });
 
+  it('reads an audio WebM sound tag', () => {
+    expect(extractAudioRef('[sound:150726_lsDgxZCa.webm]')?.filename).toBe('150726_lsDgxZCa.webm');
+  });
+
   it('skips generated tts tags', () => {
     expect(extractAudioRef('[sound:anki:tts lang=ja_JP voices=Kyoko:猫]')).toBeNull();
   });
