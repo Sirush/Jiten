@@ -92,6 +92,8 @@ public class JitenDbContext : DbContext
     public DbSet<PollOption> PollOptions { get; set; }
     public DbSet<PollVote> PollVotes { get; set; }
 
+    public DbSet<ParseDataEpoch> ParseDataEpochs { get; set; }
+
     public JitenDbContext()
     {
     }

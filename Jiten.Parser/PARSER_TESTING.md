@@ -54,3 +54,5 @@ dotnet run --project Jiten.Cli -- --search-lookup "そうする"    # Lookups ta
 5. **Flush Redis** with `--flush-redis`
 6. Re-run failing test, then full suite for regressions
 
+**Reader parse version:** saved reader chapters carry `ParseVersion` (`Jiten.Parser/ParseVersion.cs`). Bump `ParserRevision` only for segmentation changes readers should pick up, since every bump re-parses each chapter a reader opens. JMdict/JMnedict syncs and moved-form migrations bump the data epoch themselves; the API picks it up on restart after the Redis flush.
+

@@ -1,4 +1,5 @@
 ﻿using System.Text;
+using Jiten.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using WanaKanaShaapu;
 
@@ -158,7 +159,11 @@ public static class MovedFormMigrator
             results.Add(new MovedForm(oldId, oldRi, text, newId, newRi, toRemove.Count, formRankCopied, wordRankCopied));
         }
 
-        if (!dryRun) await db.SaveChangesAsync();
+        if (!dryRun)
+        {
+            await db.SaveChangesAsync();
+            await ParseDataEpochStore.BumpAsync(contextFactory);
+        }
 
         if (reportPath != null)
         {

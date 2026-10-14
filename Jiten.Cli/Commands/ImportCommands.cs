@@ -1,5 +1,6 @@
 ﻿using Jiten.Core;
 using Jiten.Core.Data.JMDict;
+using Jiten.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 
@@ -101,6 +102,8 @@ public class ImportCommands(CliContext context)
         var reportPath = options.DryRun ? (options.Output ?? "jmnedict-sync-changes.txt") : null;
         await JmDictHelper.SyncMissingJMNedict(context.ContextFactory, options.XmlPath, options.SyncJMNedict!,
             options.DryRun, reportPath);
+        if (!options.DryRun)
+            await ParseDataEpochStore.BumpAsync(context.ContextFactory);
         Console.WriteLine("JMNedict sync complete.");
     }
 
@@ -117,6 +120,8 @@ public class ImportCommands(CliContext context)
         var reportPath = options.DryRun ? (options.Output ?? "jmdict-sync-changes.txt") : null;
         await JmDictHelper.SyncJmDict(context.ContextFactory, options.XmlPath, options.DictionaryPath, options.FuriganaPath,
             options.DryRun, reportPath, rebuildKanjiTables: !options.SkipKanjiRebuild);
+        if (!options.DryRun)
+            await ParseDataEpochStore.BumpAsync(context.ContextFactory);
         Console.WriteLine("JMDict sync complete.");
     }
 
