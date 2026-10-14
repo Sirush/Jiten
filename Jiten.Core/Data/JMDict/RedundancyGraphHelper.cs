@@ -8,13 +8,14 @@ namespace Jiten.Core.Data.JMDict;
 /// <c>target</c> is redundant". Two sources of edges:
 ///   1. Kana-degradation: a kanji form dominates any form obtained by replacing a subset of its kanji
 ///      with their readings while keeping every other character (kept kanji + okurigana) identical.
+///      A kept kanji may also spell out the tail of its reading (田圃 -> 田んぼ).
 ///      e.g. 落ち着ける -> 落ちつける, おちつける  (never 落ち付ける / 落着ける / 落付ける).
 ///   2. Script permutation: forms whose hiragana-normalised text is identical (e.g. おちつける ↔
 ///      オチツケル) are mutually redundant.
 /// </summary>
 public static class RedundancyGraphHelper
 {
-    private const int MaxKanjiSegments = 10; // guard against pathological 2^n enumeration
+    private const int MaxKanjiSegments = 10; // guard against pathological combinatorial enumeration
 
     public static List<(byte Source, byte Target)> BuildEdges(IReadOnlyList<JmDictWordForm> forms)
     {
@@ -121,37 +122,42 @@ public static class RedundancyGraphHelper
     }
 
     /// <summary>
-    /// Yields every kana-degradation of the segmented form: each kanji segment is independently kept
-    /// as its kanji text or replaced by its reading; literal segments are always kept.
+    /// Yields every kana-degradation of the segmented form: each kanji segment is independently kept,
+    /// replaced by its reading, or kept with a trailing part of its reading spelled out
+    /// (田[たん] -> 田ん, so 田圃 covers 田んぼ); literal segments are always kept.
     /// </summary>
     private static IEnumerable<string> EnumerateDegradations(List<Segment> segments)
     {
-        var kanjiIndexes = new List<int>();
-        for (int i = 0; i < segments.Count; i++)
-            if (segments[i].IsKanji)
-                kanjiIndexes.Add(i);
+        var options = segments.Select(KanjiSegmentRenderings).ToList();
+        var parts = new string[segments.Count];
+        return Expand(0);
 
-        int combinations = 1 << kanjiIndexes.Count;
-        var sb = new System.Text.StringBuilder();
-        for (int mask = 0; mask < combinations; mask++)
+        IEnumerable<string> Expand(int index)
         {
-            sb.Clear();
-            int bit = 0;
-            foreach (var seg in segments)
+            if (index == options.Count)
             {
-                if (!seg.IsKanji)
-                {
-                    sb.Append(seg.Text);
-                }
-                else
-                {
-                    bool useReading = (mask & (1 << bit)) != 0;
-                    sb.Append(useReading ? seg.Reading : seg.Text);
-                    bit++;
-                }
+                yield return string.Concat(parts);
+                yield break;
             }
-            yield return sb.ToString();
+
+            foreach (var option in options[index])
+            {
+                parts[index] = option;
+                foreach (var result in Expand(index + 1))
+                    yield return result;
+            }
         }
+    }
+
+    private static List<string> KanjiSegmentRenderings(Segment segment)
+    {
+        if (!segment.IsKanji || string.IsNullOrEmpty(segment.Reading))
+            return [segment.Text];
+
+        var renderings = new List<string> { segment.Text, segment.Reading };
+        for (int keep = 1; keep < segment.Reading.Length; keep++)
+            renderings.Add(segment.Text + segment.Reading[keep..]);
+        return renderings;
     }
 
     private static string ToHiragana(string text)

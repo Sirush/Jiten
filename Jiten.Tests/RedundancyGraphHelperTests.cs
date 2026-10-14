@@ -30,6 +30,22 @@ public class RedundancyGraphHelperTests
     }
 
     [Fact]
+    public void Degradation_AllowsKeptKanjiToSpellOutTailOfItsReading()
+    {
+        var forms = new List<JmDictWordForm>
+        {
+            Form(0, "田んぼ", JmDictFormType.KanjiForm, "田[た]んぼ"),
+            Form(1, "田圃", JmDictFormType.KanjiForm, "田[たん]圃[ぼ]"),
+            Form(2, "たんぼ", JmDictFormType.KanaForm),
+        };
+
+        var edges = RedundancyGraphHelper.BuildEdges(forms);
+
+        edges.Should().Contain(((byte)1, (byte)0));
+        edges.Should().NotContain(((byte)0, (byte)1));
+    }
+
+    [Fact]
     public void ScriptVariants_AreMutuallyRedundant()
     {
         var forms = new List<JmDictWordForm>
