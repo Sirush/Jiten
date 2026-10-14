@@ -179,9 +179,9 @@
       </div>
       <div class="leading-relaxed" :class="sizeClass" lang="ja" v-html="previewHtml" />
     </blockquote>
-    <div v-if="opts.showSource" class="flex items-center mt-1">
-      <span class="text-xs italic mr-2 ml-4">Source:</span>
-      <span class="text-xs text-primary-600">{{ sample!.example.source }}</span>
+    <div v-if="opts.showSource" class="flex items-baseline mt-1">
+      <span class="text-xs italic mr-2 ml-4 shrink-0">Source:</span>
+      <span class="text-xs text-primary-600 min-w-0 [overflow-wrap:anywhere]">{{ sample!.example.source }}</span>
     </div>
   </div>
   <div v-else-if="exampleSentenceHtml || editingExample || side === 'back'" class="my-4 w-full" @click.stop>
@@ -241,13 +241,13 @@
           <div class="leading-relaxed" :class="sizeClass" lang="ja" v-html="exampleSentenceHtml" />
         </blockquote>
         <template v-if="sourceVisible">
-          <div v-if="cardExample?.isCustom && cardExample.customSource" class="flex items-center mt-1">
-            <span class="text-xs italic mr-2 ml-4">Source:</span>
-            <span class="text-xs">{{ cardExample.customSource }}</span>
+          <div v-if="cardExample?.isCustom && cardExample.customSource" class="flex items-baseline mt-1">
+            <span class="text-xs italic mr-2 ml-4 shrink-0">Source:</span>
+            <span class="text-xs min-w-0 [overflow-wrap:anywhere]">{{ cardExample.customSource }}</span>
           </div>
-          <div v-else-if="cardExample?.sourceDeck" class="flex items-center mt-1">
-            <span class="text-xs italic mr-2 ml-4">Source:</span>
-            <div class="inline-flex items-center text-xs flex-wrap">
+          <div v-else-if="cardExample?.sourceDeck" class="flex items-baseline mt-1">
+            <span class="text-xs italic mr-2 ml-4 shrink-0">Source:</span>
+            <div class="inline-flex items-center text-xs flex-wrap min-w-0 [overflow-wrap:anywhere]">
               <NuxtLink
                 v-if="cardExample.sourceParent"
                 :to="`/decks/media/${cardExample.sourceParent.deckId}/detail`"
