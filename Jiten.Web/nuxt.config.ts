@@ -78,6 +78,9 @@ export default defineNuxtConfig({
     // Nuxt's own poll fires app:manifest:update, which 'automatic-immediate' turns into a reload mid-review;
     // plugins/05.build-update.client.ts polls instead and prompts.
     checkOutdatedBuildInterval: false,
+    // The import map keeps chunk hashes stable while their __vite__mapDeps still name the entry JS and CSS,
+    // so the CDN serves stale chunks that inject a previous build's entry CSS over the current one.
+    entryImportMap: false,
   },
   primevue: {
     // Build-time theme import; putting the preset in `options.theme` instead would serialise
