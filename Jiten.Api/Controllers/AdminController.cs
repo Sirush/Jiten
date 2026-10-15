@@ -336,7 +336,8 @@ public partial class AdminController(
     [HttpPost("update-deck")]
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(254857600)]
-    public async Task<IActionResult> UpdateMediaDeck([FromForm] UpdateMediaRequest model, [FromServices] FranchiseSyncRunner franchiseSync)
+    public async Task<IActionResult> UpdateMediaDeck([FromForm] UpdateMediaRequest model, [FromServices] FranchiseSyncRunner franchiseSync,
+                                                     [FromServices] SubdeckListSeeder subdeckListSeeder)
     {
         if (!ModelState.IsValid)
         {
@@ -480,8 +481,14 @@ public partial class AdminController(
         var newChildDecks = new List<Deck>();
         var updatedChildIdsWithText = new List<int>();
         var removedSubdeckIds = new List<int>();
+        Deck? parentTextHeir = null;
+        var wasLeaf = deck.Children.Count == 0;
         if (model.Subdecks != null && model.Subdecks.Count != 0)
         {
+            var parentTextSubdeck = wasLeaf && deck.RawText != null
+                ? model.Subdecks.FirstOrDefault(s => s.FromParentText && s.DeckId <= 0)
+                : null;
+
             var existingSubdeckIds = deck.Children.Select(d => d.DeckId).ToHashSet();
             var newSubdeckIds = model.Subdecks.Where(d => d.DeckId > 0).Select(d => d.DeckId).ToHashSet();
 
@@ -532,6 +539,16 @@ public partial class AdminController(
                         newDeck.SpeechDuration = stats.DurationMs;
                         newDeck.SpeechMoraCount = stats.MoraCount;
                     }
+                    else if (subdeck == parentTextSubdeck)
+                    {
+                        newDeck.OriginalFileName = deck.OriginalFileName;
+                        newDeck.RawText = new DeckRawText(deck.RawText!.RawText) { SpeechBoundaries = deck.RawText.SpeechBoundaries };
+                        newDeck.SpeechDuration = deck.SpeechDuration;
+                        newDeck.SpeechMoraCount = deck.SpeechMoraCount;
+                    }
+
+                    if (subdeck == parentTextSubdeck)
+                        parentTextHeir = newDeck;
 
                     deck.Children.Add(newDeck);
                     newChildDecks.Add(newDeck);
@@ -539,8 +556,20 @@ public partial class AdminController(
             }
         }
 
+        var becameParent = wasLeaf && deck.Children.Count > 0;
+        if (becameParent && deck.RawText != null)
+        {
+            dbContext.Remove(deck.RawText);
+            deck.RawText = null;
+            deck.OriginalFileName = null;
+        }
+
         var relationshipsChanged = RelationshipsChanged();
         await dbContext.SaveChangesAsync();
+        if (becameParent)
+            await dbContext.ExampleSentences.Where(s => s.DeckId == deck.DeckId).ExecuteDeleteAsync();
+        if (parentTextHeir != null)
+            await subdeckListSeeder.SeedFromParentAsync(deck.DeckId, parentTextHeir.DeckId);
         if (relationshipsChanged)
             await franchiseSync.RunAsync();
 

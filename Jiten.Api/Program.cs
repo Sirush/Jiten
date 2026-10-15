@@ -527,6 +527,7 @@ builder.Services.AddSingleton(OneTimeNoticeRegistry.Default);
 builder.Services.AddScoped<IOneTimeNoticeService, OneTimeNoticeService>();
 builder.Services.AddScoped<IStudyDeckMembershipService, StudyDeckMembershipService>();
 builder.Services.AddScoped<DeckMetadataService>();
+builder.Services.AddScoped<SubdeckListSeeder>();
 builder.Services.AddScoped<FranchiseService>();
 builder.Services.AddScoped<FranchiseSuggestionService>();
 builder.Services.AddSingleton<FranchiseResponseCache>();

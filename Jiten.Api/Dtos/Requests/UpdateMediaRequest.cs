@@ -36,6 +36,9 @@ public class UpdateMediaRequestSubdeck
     public int DeckOrder { get; set; }
     public float DifficultyOverride { get; set; }
     public IFormFile? File { get; set; }
+
+    /// <summary>Only honoured while the deck has no subdecks: this new subdeck takes over the deck's own text and its users' data.</summary>
+    public bool FromParentText { get; set; }
 }
 
 public class UpdateMediaRequestTag
