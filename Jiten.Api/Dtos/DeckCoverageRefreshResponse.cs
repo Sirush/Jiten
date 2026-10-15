@@ -8,4 +8,9 @@ public class DeckCoverageRefreshResponse
     public float? UniqueCoverage { get; set; }
     public float? YoungCoverage { get; set; }
     public float? YoungUniqueCoverage { get; set; }
+
+    /// <summary>Jiten+ only; null when the media has no stored sentence metrics.</summary>
+    public float? ReadableSentences { get; set; }
+
+    public float? IPlusOneSentences { get; set; }
 }
