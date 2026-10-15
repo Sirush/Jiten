@@ -180,7 +180,7 @@ public class SiteStatsJobTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task Forgotten_words_need_enough_learners_and_reviews()
+    public async Task Forgotten_words_need_enough_learners_and_reviews_and_count_each_learners_first_answers()
     {
         await SeedLearners();
         using (var scope = factory.Services.CreateScope())
@@ -196,10 +196,12 @@ public class SiteStatsJobTests(JitenWebApplicationFactory factory)
             var at = Now.AddDays(-5);
             foreach (var card in await userDb.FsrsCards.Where(c => c.WordId == 1000 || c.WordId == 1001).ToListAsync())
             {
-                // Word 1000: 10 reviews per learner, 4 missed. Word 1001: one review each, under the 200-review floor.
+                // Word 1000: 10 reviews per learner, the first 2 missed, except learner 0 who misses all 10.
+                // Word 1001: one review each, under the 200-review floor.
                 var reviews = card.WordId == 1000 ? 10 : 1;
+                var misses = card.UserId == Learners[0] ? 10 : 2;
                 for (var r = 0; r < reviews; r++)
-                    userDb.FsrsReviewLogs.Add(new FsrsReviewLog(card.CardId, r < 4 ? FsrsRating.Again : FsrsRating.Good, at.AddMinutes(r)) { State = FsrsState.Review });
+                    userDb.FsrsReviewLogs.Add(new FsrsReviewLog(card.CardId, r < misses ? FsrsRating.Again : FsrsRating.Good, at.AddMinutes(r)) { State = FsrsState.Review });
             }
 
             await userDb.SaveChangesAsync();
@@ -211,7 +213,8 @@ public class SiteStatsJobTests(JitenWebApplicationFactory factory)
         word.Text.Should().Be("抑える");
         word.ReadingFurigana.Should().Be("抑[おさ]える");
         word.Gloss.Should().Be("to restrain; to hold down");
-        word.MissedPercent.Should().Be(40);
+        // Capped at 5 answers each: (5 + 2 x 21) / (5 x 22).
+        word.MissedPercent.Should().Be(42.7);
     }
 
     [Fact]
