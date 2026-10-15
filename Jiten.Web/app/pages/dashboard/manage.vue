@@ -89,6 +89,7 @@
     difficultyVotes: false,
     speechSpeed: false,
     lapseRecount: false,
+    requestMetadata: false,
     movedFormsPreview: false,
     movedFormsExecute: false,
     wordReplacementPreview: false,
@@ -564,6 +565,41 @@
       acceptClass: 'p-button-danger',
       rejectClass: 'p-button-secondary',
       accept: () => migrateMovedForms(),
+      reject: () => {},
+    });
+  };
+
+  const backfillRequestMetadata = async (all: boolean) => {
+    isLoading.value.requestMetadata = true;
+    try {
+      const data = await $api<{ queued: number; unsupported: number }>('/admin/requests/backfill-metadata', {
+        method: 'POST',
+        query: { all: all || undefined },
+      });
+      toast.add({
+        severity: 'success',
+        summary: 'Success',
+        detail: `Queued ${data.queued} lookups. ${data.unsupported} links have no metadata source.`,
+        life: 6000,
+      });
+    } catch (error) {
+      toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to queue request metadata lookups', life: 5000 });
+      console.error('Error queueing request metadata backfill:', error);
+    } finally {
+      isLoading.value.requestMetadata = false;
+    }
+  };
+
+  const confirmBackfillRequestMetadata = (all: boolean) => {
+    confirm.require({
+      message: all
+        ? 'Read every linked request again? Each lookup waits its turn on the provider queues, so deck metadata jobs will be delayed while this runs.'
+        : 'Read the links of requests that have no metadata yet? Each lookup waits its turn on the provider queues, so deck metadata jobs will be delayed while this runs.',
+      header: 'Backfill request metadata',
+      icon: 'pi pi-exclamation-triangle',
+      acceptClass: 'p-button-primary',
+      rejectClass: 'p-button-secondary',
+      accept: () => backfillRequestMetadata(all),
       reject: () => {},
     });
   };
@@ -1385,6 +1421,33 @@
               :disabled="isLoading.speechSpeed"
               :loading="isLoading.speechSpeed"
               @click="recomputeParentSpeechSpeed"
+            />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
+        <template #title>Backfill Request Metadata</template>
+        <template #content>
+          <p class="mb-4">
+            Reads titles, genres and tags from each request's link. Lookups go through the same provider queues as deck metadata, so they respect each site's
+            rate limit.
+          </p>
+
+          <div class="flex flex-wrap justify-center gap-2">
+            <Button
+              label="Missing only"
+              icon="pi pi-download"
+              :disabled="isLoading.requestMetadata"
+              :loading="isLoading.requestMetadata"
+              @click="confirmBackfillRequestMetadata(false)"
+            />
+            <Button
+              label="All linked requests"
+              icon="pi pi-refresh"
+              severity="secondary"
+              :disabled="isLoading.requestMetadata"
+              @click="confirmBackfillRequestMetadata(true)"
             />
           </div>
         </template>

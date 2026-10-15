@@ -16,6 +16,7 @@ import type {
   ReadingType,
   RequestAction,
   RequestKind,
+  RequestMetadataStatus,
   RequestStatus,
   StudyDeckType,
   WordSetStateType,
@@ -1148,6 +1149,17 @@ export interface MediaRequestDto {
   requesterName?: string;
   createdAt: string;
   completedAt?: string;
+  originalTitle?: string;
+  romajiTitle?: string;
+  englishTitle?: string;
+  releaseDate?: string;
+  metadataStatus: RequestMetadataStatus;
+  genres: Genre[];
+  tags: TagWithPercentage[];
+  possibleDuplicateOfRequestId?: number;
+  possibleDuplicateOfTitle?: string;
+  possibleDuplicateDeckId?: number;
+  possibleDuplicateDeckTitle?: string;
 }
 
 export interface MediaRequestCommentDto {

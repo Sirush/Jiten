@@ -286,4 +286,23 @@ public class StatusTransitionTests(JitenWebApplicationFactory factory)
         var notifBBody = await notifBResponse.Content.ReadFromJsonAsync<JsonElement>();
         notifBBody.GetProperty("data").GetArrayLength().Should().BeGreaterThan(0);
     }
+
+    [Theory]
+    [InlineData(MediaRequestStatus.Completed)]
+    [InlineData(MediaRequestStatus.Rejected)]
+    public async Task TerminalStatus_NotificationMessage_ContainsAdminNote(MediaRequestStatus status)
+    {
+        const string note = "Parsed from the official release";
+        var id = await CreateRequest(TestUsers.UserA);
+        var deckId = await SeedDeck();
+
+        await SetStatus(id, status, adminNote: note, fulfilledDeckId: status == MediaRequestStatus.Completed ? deckId : null);
+
+        var response = await _client.SendAsync(
+            new HttpRequestMessage(HttpMethod.Get, "/api/notifications").WithUser(TestUsers.UserA));
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("data").EnumerateArray()
+            .Select(n => n.GetProperty("message").GetString())
+            .Should().ContainSingle(m => m!.Contains(note));
+    }
 }

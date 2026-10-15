@@ -1,4 +1,4 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Text.Json;
@@ -1891,19 +1891,19 @@ public class MediaDeckController(
         if (!await userContext.UserCoverageChunks.AnyAsync(c => c.UserId == userId))
             return Results.Ok(new DeckCoverageRefreshResponse { Status = "no_baseline" });
 
+        var hasJitenPlus = await jitenPlusService.GetTierAsync(userId) >= JitenPlusTier.Trial;
         var previousTimeout = userContext.Database.GetCommandTimeout();
         userContext.Database.SetCommandTimeout(TimeSpan.FromSeconds(120));
         try
         {
-            var sentenceProfiles = await jitenPlusService.GetTierAsync(userId) >= JitenPlusTier.Trial ? contextFactory : null;
-            await CoverageComputeService.ComputeSpecificDecksAsync(userContext, userId, deckIds, sentenceProfiles);
+            await CoverageComputeService.ComputeSpecificDecksAsync(userContext, userId, deckIds, hasJitenPlus ? contextFactory : null);
         }
         finally
         {
             userContext.Database.SetCommandTimeout(previousTimeout);
         }
 
-        var coverage = await UserCoverageChunkHelper.GetCoverage(userContext, userId, [id]);
+        var coverage = await UserCoverageChunkHelper.GetCoverage(userContext, userId, [id], includeSentences: hasJitenPlus);
         return Results.Ok(new DeckCoverageRefreshResponse
         {
             Status = "refreshed",
@@ -1911,6 +1911,8 @@ public class MediaDeckController(
             UniqueCoverage = coverage.MatureUniqueCoverage.GetValueOrDefault(id),
             YoungCoverage = coverage.YoungCoverage.GetValueOrDefault(id),
             YoungUniqueCoverage = coverage.YoungUniqueCoverage.GetValueOrDefault(id),
+            ReadableSentences = coverage.ReadableSentences.TryGetValue(id, out var readable) ? readable : null,
+            IPlusOneSentences = coverage.IPlusOneSentences.TryGetValue(id, out var iPlusOne) ? iPlusOne : null,
         });
     }
 

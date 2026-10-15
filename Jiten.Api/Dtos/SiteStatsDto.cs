@@ -8,7 +8,7 @@ public class SiteStatsDto
     public DateOnly Date { get; set; }
     public DateTime ComputedAt { get; set; }
     public SiteStatsTotalsDto Totals { get; set; } = new();
-    public SiteStatsLast30DaysDto Last30Days { get; set; } = new();
+    public SiteStatsRecentDto Recent { get; set; } = new();
     public List<SiteStatsMonthPointDto> LearnersByMonth { get; set; } = [];
     public SiteStatsHeatmapDto? Heatmap { get; set; }
     public SiteStatsKnownWordsDto? KnownWords { get; set; }
@@ -33,7 +33,7 @@ public class SiteStatsTotalsDto
     public long CharactersRead { get; set; }
 }
 
-public class SiteStatsLast30DaysDto
+public class SiteStatsRecentDto
 {
     public int PeopleReviewing { get; set; }
     public long Reviews { get; set; }

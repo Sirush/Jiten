@@ -19,6 +19,25 @@ export interface RequestFacets {
   attachmentsYes: number;
   attachmentsNo: number;
   attachmentTotal: number;
+  genreCounts: Record<number, number>;
+  tagCounts: Record<number, number>;
+}
+
+export interface RequestGenreTagFilter {
+  includeGenres: number[];
+  excludeGenres: number[];
+  includeTags: number[];
+  excludeTags: number[];
+}
+
+function genreTagQuery(filter?: RequestGenreTagFilter) {
+  const csv = (ids?: number[]) => (ids && ids.length > 0 ? ids.join(',') : undefined);
+  return {
+    genres: csv(filter?.includeGenres),
+    excludeGenres: csv(filter?.excludeGenres),
+    tags: csv(filter?.includeTags),
+    excludeTags: csv(filter?.excludeTags),
+  };
 }
 
 export interface BoostBalance {
@@ -63,6 +82,7 @@ export function useMediaRequests() {
       excludeOwn?: boolean;
       search?: string;
       attachments?: string;
+      genreTags?: RequestGenreTagFilter;
     } = {}
   ) => {
     const version = ++fetchVersion;
@@ -84,6 +104,7 @@ export function useMediaRequests() {
           excludeOwn: params.excludeOwn || undefined,
           search: params.search || undefined,
           attachments: params.attachments || undefined,
+          ...genreTagQuery(params.genreTags),
         },
       });
       if (version !== fetchVersion) return;
@@ -425,6 +446,7 @@ export function useMediaRequests() {
       excludeOwn?: boolean;
       search?: string;
       attachments?: string;
+      genreTags?: RequestGenreTagFilter;
     } = {}
   ): Promise<RequestFacets | null> => {
     try {
@@ -439,9 +461,45 @@ export function useMediaRequests() {
           excludeOwn: params.excludeOwn || undefined,
           search: params.search || undefined,
           attachments: params.attachments || undefined,
+          ...genreTagQuery(params.genreTags),
         },
       });
     } catch {
+      return null;
+    }
+  };
+
+  const refetchMetadata = async (id: number): Promise<boolean> => {
+    error.value = null;
+    try {
+      await $api(`requests/${id}/refetch-metadata`, { method: 'POST' });
+      return true;
+    } catch (e) {
+      error.value = e as Error;
+      return false;
+    }
+  };
+
+  const dismissDuplicate = async (id: number): Promise<boolean> => {
+    error.value = null;
+    try {
+      await $api(`requests/${id}/dismiss-duplicate`, { method: 'POST' });
+      return true;
+    } catch (e) {
+      error.value = e as Error;
+      return false;
+    }
+  };
+
+  const backfillMetadata = async (all = false): Promise<{ queued: number; unsupported: number } | null> => {
+    error.value = null;
+    try {
+      return await $api<{ queued: number; unsupported: number }>('admin/requests/backfill-metadata', {
+        method: 'POST',
+        query: { all: all || undefined },
+      });
+    } catch (e) {
+      error.value = e as Error;
       return null;
     }
   };
@@ -486,5 +544,8 @@ export function useMediaRequests() {
     fetchUserSummary,
     fetchMyQuota,
     fetchFacets,
+    refetchMetadata,
+    dismissDuplicate,
+    backfillMetadata,
   };
 }

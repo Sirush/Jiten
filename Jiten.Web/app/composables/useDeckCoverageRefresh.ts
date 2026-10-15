@@ -7,6 +7,8 @@ interface DeckCoverageRefreshResponse {
   uniqueCoverage?: number;
   youngCoverage?: number;
   youngUniqueCoverage?: number;
+  readableSentences?: number | null;
+  iPlusOneSentences?: number | null;
 }
 
 export type DeckCoverageRefreshResult = 'refreshed' | 'not_eligible' | 'no_baseline' | 'rate_limited' | 'error';
@@ -36,6 +38,8 @@ export function useDeckCoverageRefresh(deck: () => Deck, onUpdate: (updated: Dec
         uniqueCoverage: response.uniqueCoverage ?? d.uniqueCoverage,
         youngCoverage: response.youngCoverage ?? d.youngCoverage,
         youngUniqueCoverage: response.youngUniqueCoverage ?? d.youngUniqueCoverage,
+        readableSentences: response.readableSentences ?? d.readableSentences,
+        iPlusOneSentences: response.iPlusOneSentences ?? d.iPlusOneSentences,
       });
       // The whole media was recomputed, so both the deck itself and its root go stale.
       store.bumpDeckCoverageVersion(d.deckId);

@@ -23,9 +23,7 @@
       <div v-for="figure in figures" :key="figure.label" class="min-w-0 flex flex-col-reverse">
         <dt class="text-sm text-gray-600 dark:text-gray-400">{{ figure.label }}</dt>
         <dd class="m-0 text-xl font-bold tabular-nums">
-          <Tooltip :content="figure.value.toLocaleString('en-US')">
-            <span tabindex="0">{{ formatCompact(figure.value) }}</span>
-          </Tooltip>
+          {{ formatCompact(figure.value) }}
         </dd>
       </div>
     </dl>

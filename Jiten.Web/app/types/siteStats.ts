@@ -14,7 +14,7 @@ export interface SiteStatsTotals {
   charactersRead: number;
 }
 
-export interface SiteStatsLast30Days {
+export interface SiteStatsRecent {
   peopleReviewing: number;
   reviews: number;
   newWords: number;
@@ -100,7 +100,7 @@ export interface SiteStats {
   date: string;
   computedAt: string;
   totals: SiteStatsTotals;
-  last30Days: SiteStatsLast30Days;
+  recent?: SiteStatsRecent;
   learnersByMonth: SiteStatsMonthPoint[];
   heatmap?: SiteStatsHeatmap | null;
   knownWords?: SiteStatsKnownWords | null;

@@ -1,9 +1,9 @@
 <script setup lang="ts">
-  import type { SiteStatsLast30Days } from '~/types';
+  import type { SiteStatsRecent } from '~/types';
   import { formatCompact } from '~/utils/siteStats';
 
   const props = defineProps<{
-    stats: SiteStatsLast30Days;
+    stats: SiteStatsRecent;
   }>();
 
   const figures = computed(() =>
@@ -17,14 +17,12 @@
 </script>
 
 <template>
-  <StatsSection v-if="figures.length" title="Last 30 days">
+  <StatsSection v-if="figures.length" title="Last 90 days">
     <dl class="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-3 m-0">
       <div v-for="figure in figures" :key="figure.label" class="min-w-0 flex flex-col-reverse justify-end">
         <dt class="text-sm text-gray-600 dark:text-gray-400">{{ figure.label }}</dt>
         <dd class="m-0 text-xl font-bold tabular-nums">
-          <Tooltip :content="figure.value.toLocaleString('en-US')">
-            <span tabindex="0">{{ formatCompact(figure.value) }}</span>
-          </Tooltip>
+          {{ formatCompact(figure.value) }}
         </dd>
       </div>
     </dl>

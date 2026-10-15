@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { RequestStatus, RequestKind, MediaType, LinkType } from '~/types';
+  import { RequestStatus, RequestKind, MediaType, LinkType, RequestMetadataStatus } from '~/types';
   import type {
     Deck,
     DeckDetail,
@@ -45,6 +45,8 @@
     deleteUpload,
     reviewUpload,
     getUploadDownloadUrl,
+    refetchMetadata,
+    dismissDuplicate,
     error: apiError,
   } = useMediaRequests();
 
@@ -127,6 +129,141 @@
   }
 
   onBeforeUnmount(stopParsePolling);
+
+  const METADATA_POLL_INTERVAL_MS = 4000;
+  const METADATA_POLL_TIMEOUT_MS = 3 * 60 * 1000;
+  const isRefetchingMetadata = ref(false);
+  let metadataPollTimer: ReturnType<typeof setTimeout> | null = null;
+  let metadataPollStartedAt = 0;
+
+  function stopMetadataPolling() {
+    if (metadataPollTimer) clearTimeout(metadataPollTimer);
+    metadataPollTimer = null;
+  }
+
+  async function pollMetadata() {
+    metadataPollTimer = null;
+    if (!request.value || Date.now() - metadataPollStartedAt > METADATA_POLL_TIMEOUT_MS) return;
+
+    const fresh = await fetchRequest(request.value.id);
+    if (!fresh || !request.value) return;
+    if (fresh.metadataStatus === RequestMetadataStatus.Pending) {
+      metadataPollTimer = setTimeout(pollMetadata, METADATA_POLL_INTERVAL_MS);
+      return;
+    }
+
+    Object.assign(request.value, {
+      originalTitle: fresh.originalTitle,
+      romajiTitle: fresh.romajiTitle,
+      englishTitle: fresh.englishTitle,
+      releaseDate: fresh.releaseDate,
+      metadataStatus: fresh.metadataStatus,
+      genres: fresh.genres,
+      tags: fresh.tags,
+      possibleDuplicateOfRequestId: fresh.possibleDuplicateOfRequestId,
+      possibleDuplicateOfTitle: fresh.possibleDuplicateOfTitle,
+      possibleDuplicateDeckId: fresh.possibleDuplicateDeckId,
+      possibleDuplicateDeckTitle: fresh.possibleDuplicateDeckTitle,
+    });
+  }
+
+  watch(
+    () => request.value?.metadataStatus,
+    (status) => {
+      stopMetadataPolling();
+      if (status !== RequestMetadataStatus.Pending) return;
+      metadataPollStartedAt = Date.now();
+      metadataPollTimer = setTimeout(pollMetadata, METADATA_POLL_INTERVAL_MS);
+    }
+  );
+
+  onBeforeUnmount(stopMetadataPolling);
+
+  const isResolvingDuplicate = ref(false);
+  const hasDuplicateFlag = computed(() => !!request.value?.possibleDuplicateOfRequestId || !!request.value?.possibleDuplicateDeckId);
+
+  async function handleDismissDuplicate() {
+    if (!request.value) return;
+    isResolvingDuplicate.value = true;
+    const success = await dismissDuplicate(request.value.id);
+    isResolvingDuplicate.value = false;
+    if (success) {
+      request.value.possibleDuplicateOfRequestId = undefined;
+      request.value.possibleDuplicateOfTitle = undefined;
+      request.value.possibleDuplicateDeckId = undefined;
+      request.value.possibleDuplicateDeckTitle = undefined;
+    } else {
+      toast.add({ severity: 'error', summary: 'Could not dismiss', detail: extractApiError(apiError.value, 'Please try again.'), life: 6000 });
+    }
+  }
+
+  async function handleResolveDuplicate() {
+    const req = request.value;
+    if (!req) return;
+    isResolvingDuplicate.value = true;
+    const success = req.possibleDuplicateDeckId
+      ? await updateStatus(req.id, { status: RequestStatus.Completed, fulfilledDeckId: req.possibleDuplicateDeckId })
+      : await updateStatus(req.id, { status: RequestStatus.Rejected, adminNote: `Duplicate of request #${req.possibleDuplicateOfRequestId}` });
+    isResolvingDuplicate.value = false;
+    if (success) {
+      toast.add({ severity: 'success', summary: req.possibleDuplicateDeckId ? 'Request completed' : 'Request rejected as duplicate', life: 3000 });
+      await loadData();
+    } else {
+      toast.add({ severity: 'error', summary: 'Status update failed', detail: extractApiError(apiError.value, 'Please try again.'), life: 6000 });
+    }
+  }
+
+  async function handleRefetchMetadata() {
+    if (!request.value) return;
+    isRefetchingMetadata.value = true;
+    const success = await refetchMetadata(request.value.id);
+    isRefetchingMetadata.value = false;
+    if (success) {
+      request.value.metadataStatus = RequestMetadataStatus.Pending;
+    } else {
+      toast.add({ severity: 'error', summary: 'Refetch failed', detail: extractApiError(apiError.value, 'Could not queue the lookup.'), life: 6000 });
+    }
+  }
+
+  const alternateTitles = computed(() => {
+    const req = request.value;
+    if (!req) return [];
+    const seen = new Set([req.title.trim().toLowerCase()]);
+    return [
+      { label: 'Original', value: req.originalTitle },
+      { label: 'Romaji', value: req.romajiTitle },
+      { label: 'English', value: req.englishTitle },
+    ].filter((entry): entry is { label: string; value: string } => {
+      if (!entry.value) return false;
+      const key = entry.value.trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  });
+
+  const releaseYear = computed(() => (request.value?.releaseDate ? request.value.releaseDate.slice(0, 4) : null));
+
+  const metadataSourceName = computed(() => {
+    const req = request.value;
+    const linkType = req ? resolveLinkType(req.externalUrl, req.externalLinkType) : null;
+    return linkType ? getLinkTypeText(linkType) : 'the link';
+  });
+
+  const metadataStatusText = computed(() => {
+    switch (request.value?.metadataStatus) {
+      case RequestMetadataStatus.Pending:
+        return `Waiting for ${metadataSourceName.value}`;
+      case RequestMetadataStatus.Fetched:
+        return `Read from ${metadataSourceName.value}`;
+      case RequestMetadataStatus.Failed:
+        return `Couldn't read ${metadataSourceName.value}`;
+      case RequestMetadataStatus.Unsupported:
+        return 'No metadata source reads this link';
+      default:
+        return 'No link';
+    }
+  });
 
   // Admin edit fields
   const editTitle = ref('');
@@ -620,7 +757,21 @@
       <Card class="shadow-md">
         <template #content>
           <div class="mb-4">
-            <h1 class="text-2xl font-bold mb-2">{{ request.title }}</h1>
+            <h1 class="text-2xl font-bold mb-1">{{ request.title }}</h1>
+            <dl v-if="alternateTitles.length || releaseYear" class="mb-2 grid grid-cols-[auto_1fr] gap-x-3 gap-y-0.5 text-sm">
+              <template v-for="entry in alternateTitles" :key="entry.label">
+                <dt class="text-muted-color">{{ entry.label }}</dt>
+                <dd class="min-w-0 break-words" :lang="entry.label === 'Original' ? 'ja' : undefined">{{ entry.value }}</dd>
+              </template>
+              <template v-if="releaseYear">
+                <dt class="text-muted-color">Released</dt>
+                <dd>{{ releaseYear }}</dd>
+              </template>
+            </dl>
+            <p v-else-if="request.metadataStatus === RequestMetadataStatus.Pending" class="mb-2 text-sm text-muted-color flex items-center gap-1.5">
+              <i class="pi pi-spin pi-spinner text-xs" aria-hidden="true" />
+              Reading details from {{ metadataSourceName }}...
+            </p>
             <div class="flex items-center gap-2 flex-wrap">
               <Tag v-if="request.kind === RequestKind.Update" :value="getRequestKindText(request.kind)" :icon="getRequestKindIcon(request.kind)" />
               <Tag :value="getMediaTypeText(request.mediaType)" severity="secondary" />
@@ -633,6 +784,42 @@
               <span v-if="request.requesterName && authStore.isAdmin" class="text-sm text-muted-color">
                 by <span class="font-medium">{{ request.requesterName }}</span>
               </span>
+            </div>
+          </div>
+
+          <div
+            v-if="hasDuplicateFlag && !isTerminal"
+            class="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-700 dark:bg-amber-950/40"
+            role="status"
+          >
+            <p v-if="request.possibleDuplicateDeckId" class="flex items-start gap-2">
+              <i class="pi pi-clone mt-0.5 text-amber-700 dark:text-amber-400" aria-hidden="true" />
+              <span>
+                This might already be on Jiten:
+                <NuxtLink :to="`/decks/media/${request.possibleDuplicateDeckId}/detail`" class="font-medium text-primary hover:underline">
+                  {{ request.possibleDuplicateDeckTitle }}
+                </NuxtLink>
+              </span>
+            </p>
+            <p v-else class="flex items-start gap-2">
+              <i class="pi pi-clone mt-0.5 text-amber-700 dark:text-amber-400" aria-hidden="true" />
+              <span>
+                This might be the same media as
+                <NuxtLink :to="`/requests/${request.possibleDuplicateOfRequestId}`" class="font-medium text-primary hover:underline">{{
+                  request.possibleDuplicateOfTitle
+                }}</NuxtLink
+                >. If it is, vote there instead.
+              </span>
+            </p>
+            <div v-if="authStore.isAdmin && displayAdminFunctions" class="mt-2 flex flex-wrap gap-2">
+              <Button
+                :label="request.possibleDuplicateDeckId ? 'Complete with this deck' : 'Reject as duplicate'"
+                size="small"
+                severity="warn"
+                :loading="isResolvingDuplicate"
+                @click="handleResolveDuplicate"
+              />
+              <Button label="Not a duplicate" size="small" severity="secondary" text :disabled="isResolvingDuplicate" @click="handleDismissDuplicate" />
             </div>
           </div>
 
@@ -664,6 +851,11 @@
 
             <div v-if="request.description" class="mb-4 flex items-start gap-2">
               <p class="text-muted-color whitespace-pre-wrap flex-1">{{ request.description }}</p>
+            </div>
+
+            <div v-if="request.genres.length || request.tags.length" class="mb-4 flex flex-col gap-1.5">
+              <GenreTagDisplay v-if="request.genres.length" :genres="request.genres" label="Genres" />
+              <GenreTagDisplay v-if="request.tags.length" :tags="request.tags" label="Tags" />
             </div>
 
             <div v-if="request.isOwnRequest && canComment" class="mb-4">
@@ -797,6 +989,26 @@
                 <div class="flex flex-col gap-1">
                   <label class="text-xs font-semibold">External URL</label>
                   <InputText v-model="editExternalUrl" class="w-full" placeholder="https://..." />
+                  <div class="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <small class="text-surface-500 dark:text-surface-400 flex items-center gap-1.5">
+                      <i v-if="request!.metadataStatus === RequestMetadataStatus.Pending" class="pi pi-spin pi-spinner text-xs" aria-hidden="true" />
+                      {{ metadataStatusText }}
+                    </small>
+                    <Button
+                      v-if="request!.externalUrl"
+                      label="Refetch details"
+                      icon="pi pi-refresh"
+                      severity="secondary"
+                      text
+                      size="small"
+                      :loading="isRefetchingMetadata"
+                      :disabled="request!.metadataStatus === RequestMetadataStatus.Pending || editExternalUrl.trim() !== (request!.externalUrl ?? '')"
+                      @click="handleRefetchMetadata"
+                    />
+                    <small v-if="request!.externalUrl && editExternalUrl.trim() !== request!.externalUrl" class="text-surface-500 dark:text-surface-400">
+                      The new link will be read when you save.
+                    </small>
+                  </div>
                 </div>
                 <div class="flex flex-col gap-1">
                   <label class="text-xs font-semibold">Description</label>

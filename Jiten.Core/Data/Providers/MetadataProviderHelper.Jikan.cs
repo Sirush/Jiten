@@ -12,11 +12,14 @@ public static partial class MetadataProviderHelper
         PropertyNameCaseInsensitive = true
     };
 
+    /// <summary>Tenrai serves the Jikan v4 schema; the public api.jikan.moe shut down on 2026-10-01 (jikan-me/jikan-rest#613).</summary>
+    private const string JikanBaseUrl = "https://api.tenrai.org/v1";
+
     public static async Task<List<Metadata>> JikanAnimeSearchApi(string query)
     {
         var httpClient = new HttpClient();
         var encoded = Uri.EscapeDataString(query);
-        var response = await httpClient.GetAsync($"https://api.jikan.moe/v4/anime?q={encoded}&order_by=score&limit=10");
+        var response = await httpClient.GetAsync($"{JikanBaseUrl}/anime?q={encoded}&order_by=score&sort=desc&limit=10");
 
         if (!response.IsSuccessStatusCode)
             return [];
@@ -31,7 +34,7 @@ public static partial class MetadataProviderHelper
     {
         var httpClient = new HttpClient();
         var encoded = Uri.EscapeDataString(query);
-        var response = await httpClient.GetAsync($"https://api.jikan.moe/v4/manga?q={encoded}&type=lightnovel&order_by=score&limit=10");
+        var response = await httpClient.GetAsync($"{JikanBaseUrl}/manga?q={encoded}&type=lightnovel&order_by=score&sort=desc&limit=10");
 
         if (!response.IsSuccessStatusCode)
             return [];
@@ -46,7 +49,7 @@ public static partial class MetadataProviderHelper
     {
         var httpClient = new HttpClient();
         var encoded = Uri.EscapeDataString(query);
-        var response = await httpClient.GetAsync($"https://api.jikan.moe/v4/manga?q={encoded}&type=manga&order_by=score&limit=10");
+        var response = await httpClient.GetAsync($"{JikanBaseUrl}/manga?q={encoded}&type=manga&order_by=score&sort=desc&limit=10");
 
         if (!response.IsSuccessStatusCode)
             return [];
@@ -60,7 +63,7 @@ public static partial class MetadataProviderHelper
     public static async Task<Metadata?> JikanAnimeApi(int malId)
     {
         var httpClient = new HttpClient();
-        var response = await httpClient.GetAsync($"https://api.jikan.moe/v4/anime/{malId}/full");
+        var response = await httpClient.GetAsync($"{JikanBaseUrl}/anime/{malId}/full");
 
         if (!response.IsSuccessStatusCode)
             return null;
@@ -79,7 +82,7 @@ public static partial class MetadataProviderHelper
     public static async Task<Metadata?> JikanMangaApi(int malId)
     {
         var httpClient = new HttpClient();
-        var response = await httpClient.GetAsync($"https://api.jikan.moe/v4/manga/{malId}/full");
+        var response = await httpClient.GetAsync($"{JikanBaseUrl}/manga/{malId}/full");
 
         if (!response.IsSuccessStatusCode)
             return null;
@@ -228,7 +231,7 @@ public static partial class MetadataProviderHelper
         {
             // Jikan allows 3 requests/s
             await Task.Delay(400);
-            var response = await httpClient.GetAsync($"https://api.jikan.moe/v4/{key}/relations");
+            var response = await httpClient.GetAsync($"{JikanBaseUrl}/{key}/relations");
             if (response.IsSuccessStatusCode)
             {
                 var content = await response.Content.ReadAsStringAsync();
@@ -276,7 +279,7 @@ public static partial class MetadataProviderHelper
         {
             await Task.Delay(400);
             var listResponse = await httpClient.GetAsync(
-                $"https://api.jikan.moe/v4/{mediaCategory}/{malId}/characters");
+                $"{JikanBaseUrl}/{mediaCategory}/{malId}/characters");
 
             if (!listResponse.IsSuccessStatusCode)
                 return [];
@@ -298,7 +301,7 @@ public static partial class MetadataProviderHelper
             foreach (var charId in mainCharacterIds)
             {
                 await Task.Delay(400);
-                var charResponse = await httpClient.GetAsync($"https://api.jikan.moe/v4/characters/{charId}");
+                var charResponse = await httpClient.GetAsync($"{JikanBaseUrl}/characters/{charId}");
 
                 if (!charResponse.IsSuccessStatusCode)
                     continue;

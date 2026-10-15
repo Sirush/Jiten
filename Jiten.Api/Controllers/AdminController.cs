@@ -97,32 +97,15 @@ public partial class AdminController(
 
     /// <summary>Same payload as search-media, but resolved from a link instead of a search term.</summary>
     [HttpGet("metadata-from-url")]
-    public async Task<IActionResult> GetMetadataFromUrl([FromQuery] string url, [FromQuery] MediaType? mediaType)
+    public async Task<IActionResult> GetMetadataFromUrl([FromQuery] string url, [FromQuery] MediaType? mediaType,
+        [FromServices] IExternalMetadataResolver metadataResolver)
     {
         if (!ExternalUrlParser.TryParse(url, out var parsed))
             return BadRequest(new { Message = "This link is not from a metadata source we can read." });
 
         try
         {
-            Metadata? metadata = parsed.LinkType switch
-            {
-                LinkType.Vndb => await MetadataProviderHelper.VndbApi(parsed.Id),
-                LinkType.GoogleBooks => await MetadataProviderHelper.GoogleBooksApi(parsed.Id),
-                LinkType.Igdb => await MetadataProviderHelper.IgdbApi(parsed.Id, config["IgdbClientId"]!, config["IgdbClientSecret"]!),
-                LinkType.Anilist => parsed.Kind == ExternalUrlKind.Anime
-                    ? await MetadataProviderHelper.AnilistAnimeApi(int.Parse(parsed.Id))
-                    : await MetadataProviderHelper.AnilistApi(int.Parse(parsed.Id)),
-                LinkType.Mal => parsed.Kind == ExternalUrlKind.Anime
-                    ? await MetadataProviderHelper.JikanAnimeApi(int.Parse(parsed.Id))
-                    : await MetadataProviderHelper.JikanMangaApi(int.Parse(parsed.Id)),
-                LinkType.Tmdb => IsTmdbMovie(parsed.Kind, mediaType)
-                    ? await MetadataProviderHelper.TmdbMovieApi(parsed.Id, config["TmdbApiKey"]!)
-                    : await MetadataProviderHelper.TmdbTvApi(parsed.Id, config["TmdbApiKey"]!),
-                LinkType.Imdb => await MetadataProviderHelper.TmdbFindByImdbApi(parsed.Id, config["TmdbApiKey"]!,
-                    IsTmdbMovie(parsed.Kind, mediaType)),
-                LinkType.Bookmeter => await MetadataProviderHelper.BookmeterApi(parsed.Id),
-                _ => null
-            };
+            var metadata = await metadataResolver.ResolveAsync(parsed, mediaType);
 
             if (metadata == null)
                 return BadRequest(new { Message = "The source has no entry for this link." });
@@ -136,13 +119,6 @@ public partial class AdminController(
             return StatusCode(StatusCodes.Status502BadGateway, new { Message = "Could not read metadata from the source." });
         }
     }
-
-    private static bool IsTmdbMovie(ExternalUrlKind kind, MediaType? mediaType) => kind switch
-    {
-        ExternalUrlKind.Movie => true,
-        ExternalUrlKind.Tv => false,
-        _ => mediaType == MediaType.Movie
-    };
 
     [HttpPost("add-deck")]
     [Consumes("multipart/form-data")]

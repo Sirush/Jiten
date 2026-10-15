@@ -535,6 +535,8 @@ builder.Services.AddScoped<SeriesService>();
 builder.Services.AddScoped<MediaGroupService>();
 builder.Services.AddScoped<MediaTitleSearchService>();
 builder.Services.AddScoped<MediaDuplicateService>();
+builder.Services.AddSingleton<IExternalMetadataResolver, ExternalMetadataResolver>();
+builder.Services.AddScoped<MediaRequestMetadataService>();
 builder.Services.AddScoped<IDeckDownloadService, DeckDownloadService>();
 builder.Services.AddSingleton<Jiten.Api.Services.ExternalMediaList.ExternalFetchGate>();
 builder.Services.AddScoped<Jiten.Api.Services.ExternalMediaList.IExternalMediaListClient, Jiten.Api.Services.ExternalMediaList.ExternalMediaListClient>();

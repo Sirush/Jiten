@@ -225,6 +225,14 @@ export enum RequestKind {
   Update = 2,
 }
 
+export enum RequestMetadataStatus {
+  None = 0,
+  Pending = 1,
+  Fetched = 2,
+  Failed = 3,
+  Unsupported = 4,
+}
+
 export enum NotificationType {
   RequestStatusChanged = 1,
   RequestCompleted = 2,
