@@ -64,31 +64,49 @@ public class MediaTitleSearchService(JitenDbContext context)
 
         // Plain &@ rather than &@~: request titles are free text, and query syntax would reject stray parentheses or colons.
         FormattableString sql = $$"""
-                                  WITH candidates AS (
-                                      SELECT r."Id"
+                                  WITH names AS (
+                                      SELECT r."Id" AS "RequestId", r."Title" AS "Name"
                                       FROM jiten."MediaRequests" r
                                       WHERE r."Status" IN ({{open}}, {{inProgress}})
-                                        AND (r."Title" &@ {{filter.Original}} OR ({{filter.HasRomajiVariant}} AND r."Title" &@ {{filter.Romaji}}))
+                                      UNION ALL
+                                      SELECT t."MediaRequestId", t."Title"
+                                      FROM jiten."MediaRequestTitles" t
+                                      JOIN jiten."MediaRequests" r ON r."Id" = t."MediaRequestId"
+                                      WHERE r."Status" IN ({{open}}, {{inProgress}})
+                                  ),
+                                  candidates AS (
+                                      SELECT r."Id" AS "RequestId"
+                                      FROM jiten."MediaRequests" r
+                                      WHERE r."Title" &@ {{filter.Original}} OR ({{filter.HasRomajiVariant}} AND r."Title" &@ {{filter.Romaji}})
                                       UNION
-                                      SELECT r."Id"
-                                      FROM jiten."MediaRequests" r
-                                      WHERE r."Status" IN ({{open}}, {{inProgress}})
-                                        AND (levenshtein(LEFT(LOWER(r."Title"), 255), LEFT(LOWER({{filter.Original}}), 255)) <= {{maxDist}}
-                                          OR levenshtein(LEFT(LOWER(REPLACE(r."Title", ' ', '')), 255), LEFT(LOWER({{filter.NoSpaces}}), 255)) <= {{maxDist}})
+                                      SELECT t."MediaRequestId"
+                                      FROM jiten."MediaRequestTitles" t
+                                      WHERE t."Title" &@ {{filter.Original}} OR ({{filter.HasRomajiVariant}} AND t."Title" &@ {{filter.Romaji}})
+                                      UNION
+                                      SELECT n."RequestId"
+                                      FROM names n
+                                      WHERE levenshtein(LEFT(LOWER(n."Name"), 255), LEFT(LOWER({{filter.Original}}), 255)) <= {{maxDist}}
+                                         OR levenshtein(LEFT(LOWER(REPLACE(n."Name", ' ', '')), 255), LEFT(LOWER({{filter.NoSpaces}}), 255)) <= {{maxDist}}
+                                  ),
+                                  ranked AS (
+                                      SELECT n."RequestId",
+                                             MIN(CASE WHEN LOWER(TRIM(n."Name")) = LOWER({{filter.Original}})
+                                                        OR LOWER(REPLACE(n."Name", ' ', '')) = LOWER({{filter.NoSpaces}})
+                                                      THEN 0 ELSE 1 END) AS "Exact",
+                                             MIN(LEAST(
+                                                 levenshtein(LEFT(LOWER(n."Name"), 255), LEFT(LOWER({{filter.Original}}), 255)),
+                                                 levenshtein(LEFT(LOWER(REPLACE(n."Name", ' ', '')), 255), LEFT(LOWER({{filter.NoSpaces}}), 255))
+                                             )) AS "Distance"
+                                      FROM names n
+                                      JOIN candidates c ON c."RequestId" = n."RequestId"
+                                      GROUP BY n."RequestId"
                                   )
                                   SELECT r."Id" AS "Value"
-                                  FROM candidates c
-                                  JOIN jiten."MediaRequests" r ON r."Id" = c."Id"
+                                  FROM ranked k
+                                  JOIN jiten."MediaRequests" r ON r."Id" = k."RequestId"
                                   WHERE ({{mediaTypeValue}} < 0 OR r."MediaType" = {{mediaTypeValue}})
                                     AND (NOT {{fulfillableOnly}} OR (r."Kind" = {{newKind}} AND r."FulfilledDeckId" IS NULL))
-                                  ORDER BY CASE WHEN LOWER(TRIM(r."Title")) = LOWER({{filter.Original}})
-                                                  OR LOWER(REPLACE(r."Title", ' ', '')) = LOWER({{filter.NoSpaces}})
-                                                THEN 0 ELSE 1 END,
-                                           LEAST(
-                                               levenshtein(LEFT(LOWER(r."Title"), 255), LEFT(LOWER({{filter.Original}}), 255)),
-                                               levenshtein(LEFT(LOWER(REPLACE(r."Title", ' ', '')), 255), LEFT(LOWER({{filter.NoSpaces}}), 255))
-                                           ),
-                                           r."UpvoteCount" DESC
+                                  ORDER BY k."Exact", k."Distance", r."UpvoteCount" DESC
                                   LIMIT {{limit}}
                                   """;
 
@@ -214,7 +232,7 @@ public class MediaTitleSearchService(JitenDbContext context)
     {
         var lowered = filter.ToLowerInvariant();
         var query = context.MediaRequests.AsNoTracking()
-                           .Where(r => r.Title.ToLower().Contains(lowered))
+                           .Where(r => r.Title.ToLower().Contains(lowered) || r.Titles.Any(t => t.Title.ToLower().Contains(lowered)))
                            .WhereActive(mediaType, fulfillableOnly);
 
         return await query.OrderBy(r => r.Title.Length)

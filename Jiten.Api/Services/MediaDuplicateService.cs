@@ -110,12 +110,23 @@ public class MediaDuplicateService(JitenDbContext context, MediaTitleSearchServi
                                     })
                                     .ToDictionaryAsync(r => r.Id);
 
+        var exactTitleRequestIds = trimmedTitle.Length >= MinTitleLength
+            ? (await context.MediaRequestTitles.AsNoTracking()
+                            .Where(t => orderedIds.Contains(t.MediaRequestId))
+                            .Select(t => new { t.MediaRequestId, t.Title })
+                            .ToListAsync())
+              .Where(t => IsSameTitle(t.Title, trimmedTitle))
+              .Select(t => t.MediaRequestId)
+              .ToHashSet()
+            : [];
+
         var linkIdSet = linkRequestIds.ToHashSet();
         return orderedIds.Where(requests.ContainsKey)
                          .Select(id =>
                          {
                              var request = requests[id];
-                             request.IsExactMatch = linkIdSet.Contains(id) || IsSameTitle(request.Title, trimmedTitle);
+                             request.IsExactMatch = linkIdSet.Contains(id) || IsSameTitle(request.Title, trimmedTitle)
+                                                    || exactTitleRequestIds.Contains(id);
                              return request;
                          })
                          .OrderByDescending(r => r.IsExactMatch)
@@ -149,17 +160,25 @@ public class MediaDuplicateService(JitenDbContext context, MediaTitleSearchServi
                          .ToList();
     }
 
+    /// <summary>Matches the request's own link and the other catalogues' links its provider listed (an AniList entry's MAL page).</summary>
     private async Task<List<int>> RequestIdsByLink(ExternalEntityKey key, MediaType? mediaType, bool fulfillableOnly)
     {
         var token = key.Token.ToLowerInvariant();
         var candidates = await context.MediaRequests.AsNoTracking()
-                                      .Where(r => r.ExternalUrl != null && r.ExternalUrl.ToLower().Contains(token))
                                       .WhereActive(mediaType, fulfillableOnly)
+                                      .Where(r => (r.ExternalUrl != null && r.ExternalUrl.ToLower().Contains(token))
+                                                  || r.Links.Any(l => l.LinkType == key.LinkType && l.Url.ToLower().Contains(token)))
                                       .OrderByDescending(r => r.UpvoteCount)
-                                      .Select(r => new { r.Id, r.ExternalUrl })
+                                      .Select(r => new
+                                      {
+                                          r.Id,
+                                          r.ExternalUrl,
+                                          LinkUrls = r.Links.Where(l => l.LinkType == key.LinkType).Select(l => l.Url).ToList()
+                                      })
                                       .ToListAsync();
 
-        return candidates.Where(c => ExternalUrlParser.TryGetEntityKey(c.ExternalUrl, out var other) && other == key)
+        return candidates.Where(c => c.LinkUrls.Append(c.ExternalUrl)
+                                      .Any(url => ExternalUrlParser.TryGetEntityKey(url, out var other) && other == key))
                          .Select(c => c.Id)
                          .ToList();
     }

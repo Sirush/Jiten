@@ -15,12 +15,12 @@ public class FetchMetadataJob(
     IBackgroundJobClient backgroundJobs,
     ILogger<FetchMetadataJob> logger)
 {
-    private const float ANILIST_DELAY = 2.2f;
-    private const float GOOGLE_BOOKS_DELAY = 3f;
-    private const float VNDB_DELAY = 3.5f;
-    private const float TMDB_DELAY = 1.5f;
-    private const float IGDB_DELAY = 1f;
-    private const float JIKAN_DELAY = 1.5f;
+    public const float ANILIST_DELAY = 2.2f;
+    public const float GOOGLE_BOOKS_DELAY = 3f;
+    public const float VNDB_DELAY = 3.5f;
+    public const float TMDB_DELAY = 1.5f;
+    public const float IGDB_DELAY = 1f;
+    public const float JIKAN_DELAY = 1.5f;
 
     [Queue("anilist")]
     public async Task FetchAnilistMissingMetadata(int deckId)

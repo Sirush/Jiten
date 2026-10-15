@@ -82,6 +82,10 @@ public class JitenDbContext : DbContext
     public DbSet<SiteStatsSnapshot> SiteStatsSnapshots { get; set; }
     public DbSet<MediaRequestUpvote> MediaRequestUpvotes { get; set; }
     public DbSet<MediaRequestBoost> MediaRequestBoosts { get; set; }
+    public DbSet<MediaRequestGenre> MediaRequestGenres { get; set; }
+    public DbSet<MediaRequestTag> MediaRequestTags { get; set; }
+    public DbSet<MediaRequestTitle> MediaRequestTitles { get; set; }
+    public DbSet<MediaRequestLink> MediaRequestLinks { get; set; }
     public DbSet<MediaRequestSubscription> MediaRequestSubscriptions { get; set; }
     public DbSet<MediaRequestComment> MediaRequestComments { get; set; }
     public DbSet<MediaRequestUpload> MediaRequestUploads { get; set; }
@@ -1070,6 +1074,10 @@ public class JitenDbContext : DbContext
             entity.Property(mr => mr.BoostCount).HasDefaultValue(0);
             entity.Property(mr => mr.CreatedAt).IsRequired();
             entity.Property(mr => mr.UpdatedAt).IsRequired();
+            entity.Property(mr => mr.OriginalTitle).HasMaxLength(500);
+            entity.Property(mr => mr.RomajiTitle).HasMaxLength(500);
+            entity.Property(mr => mr.EnglishTitle).HasMaxLength(500);
+            entity.Property(mr => mr.MetadataStatus).HasDefaultValue(MediaRequestMetadataStatus.None);
 
             // SetNull, not Restrict: deleting a deck must not be blocked by, or cascade into, request history.
             // An Update request whose target was deleted therefore has a null TargetDeckId, which read paths handle.
@@ -1082,6 +1090,18 @@ public class JitenDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(mr => mr.FulfilledDeckId)
                   .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(mr => mr.PossibleDuplicateOfRequest)
+                  .WithMany()
+                  .HasForeignKey(mr => mr.PossibleDuplicateOfRequestId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(mr => mr.PossibleDuplicateDeck)
+                  .WithMany()
+                  .HasForeignKey(mr => mr.PossibleDuplicateDeckId)
+                  .OnDelete(DeleteBehavior.SetNull);
+
+            entity.Property(mr => mr.DuplicateFlagDismissed).HasDefaultValue(false);
 
             if (isNpgsql)
             {
@@ -1109,6 +1129,71 @@ public class JitenDbContext : DbContext
                   .HasDatabaseName("IX_MediaRequest_Kind");
             entity.HasIndex(mr => mr.TargetDeckId)
                   .HasDatabaseName("IX_MediaRequest_TargetDeckId");
+        });
+
+        modelBuilder.Entity<MediaRequestGenre>(entity =>
+        {
+            entity.ToTable("MediaRequestGenres", "jiten");
+            entity.HasKey(g => new { g.MediaRequestId, g.Genre });
+
+            entity.HasIndex(g => g.Genre)
+                  .HasDatabaseName("IX_MediaRequestGenres_Genre");
+
+            entity.HasOne(g => g.MediaRequest)
+                  .WithMany(mr => mr.Genres)
+                  .HasForeignKey(g => g.MediaRequestId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MediaRequestTitle>(entity =>
+        {
+            entity.ToTable("MediaRequestTitles", "jiten");
+            entity.HasKey(t => t.Id);
+            entity.Property(t => t.Title).IsRequired().HasMaxLength(500);
+
+            entity.HasIndex(t => t.MediaRequestId)
+                  .HasDatabaseName("IX_MediaRequestTitles_MediaRequestId");
+
+            entity.HasOne(t => t.MediaRequest)
+                  .WithMany(mr => mr.Titles)
+                  .HasForeignKey(t => t.MediaRequestId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MediaRequestLink>(entity =>
+        {
+            entity.ToTable("MediaRequestLinks", "jiten");
+            entity.HasKey(l => l.Id);
+            entity.Property(l => l.Url).IsRequired().HasMaxLength(500);
+
+            entity.HasIndex(l => l.MediaRequestId)
+                  .HasDatabaseName("IX_MediaRequestLinks_MediaRequestId");
+            entity.HasIndex(l => l.LinkType)
+                  .HasDatabaseName("IX_MediaRequestLinks_LinkType");
+
+            entity.HasOne(l => l.MediaRequest)
+                  .WithMany(mr => mr.Links)
+                  .HasForeignKey(l => l.MediaRequestId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<MediaRequestTag>(entity =>
+        {
+            entity.ToTable("MediaRequestTags", "jiten");
+            entity.HasKey(t => new { t.MediaRequestId, t.TagId });
+
+            entity.HasIndex(t => t.TagId)
+                  .HasDatabaseName("IX_MediaRequestTags_TagId");
+
+            entity.HasOne(t => t.MediaRequest)
+                  .WithMany(mr => mr.Tags)
+                  .HasForeignKey(t => t.MediaRequestId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(t => t.Tag)
+                  .WithMany()
+                  .HasForeignKey(t => t.TagId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<MediaRequestUpvote>(entity =>

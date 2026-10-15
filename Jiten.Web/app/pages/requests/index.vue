@@ -5,7 +5,8 @@
   import { getRequestStatusText, getRequestStatusSeverity } from '~/utils/requestStatusMapper';
   import { getRequestKindText, getRequestKindIcon } from '~/utils/requestKindMapper';
   import { getLinkTypeText, resolveLinkType } from '~/utils/linkTypeMapper';
-  import type { RequestFacets, BoostBalance } from '~/composables/useMediaRequests';
+  import { getGenreText } from '~/utils/genreMapper';
+  import type { RequestFacets, BoostBalance, RequestGenreTagFilter } from '~/composables/useMediaRequests';
 
   definePageMeta({
     middleware: ['auth'],
@@ -81,7 +82,7 @@
   const offset = ref(parseOffsetFromQuery());
 
   const mediaTypeOptions = computed(() => [
-    { label: withCount('All', facets.value?.mediaTypeTotal), value: undefined },
+    { label: withCount('All media types', facets.value?.mediaTypeTotal), value: undefined },
     ...Object.values(MediaType)
       .filter((v) => typeof v === 'number')
       .map((v) => ({
@@ -91,7 +92,7 @@
   ]);
 
   const statusOptions = computed(() => [
-    { label: withCount('All', facets.value?.statusTotal), value: undefined },
+    { label: withCount('All statuses', facets.value?.statusTotal), value: undefined },
     { label: withCount('Open', facets.value ? (facets.value.statuses[String(RequestStatus.Open)] ?? 0) : undefined), value: RequestStatus.Open },
     {
       label: withCount('In Progress', facets.value ? (facets.value.statuses[String(RequestStatus.InProgress)] ?? 0) : undefined),
@@ -102,9 +103,9 @@
   ]);
 
   const kindOptions = computed(() => [
-    { label: withCount('All', facets.value?.kindTotal), value: undefined },
-    { label: withCount('New', facets.value ? (facets.value.kinds[String(RequestKind.New)] ?? 0) : undefined), value: RequestKind.New },
-    { label: withCount('Update', facets.value ? (facets.value.kinds[String(RequestKind.Update)] ?? 0) : undefined), value: RequestKind.Update },
+    { label: withCount('All request types', facets.value?.kindTotal), value: undefined },
+    { label: withCount('New requests', facets.value ? (facets.value.kinds[String(RequestKind.New)] ?? 0) : undefined), value: RequestKind.New },
+    { label: withCount('Update requests', facets.value ? (facets.value.kinds[String(RequestKind.Update)] ?? 0) : undefined), value: RequestKind.Update },
   ]);
 
   const sortOptions = [
@@ -114,9 +115,9 @@
   ];
 
   const attachmentOptions = computed(() => [
-    { label: withCount('All', facets.value?.attachmentTotal), value: undefined },
-    { label: withCount('Has Attachments', facets.value?.attachmentsYes), value: 'yes' },
-    { label: withCount('No Attachments', facets.value?.attachmentsNo), value: 'no' },
+    { label: withCount('Any attachments', facets.value?.attachmentTotal), value: undefined },
+    { label: withCount('Has attachments', facets.value?.attachmentsYes), value: 'yes' },
+    { label: withCount('No attachments', facets.value?.attachmentsNo), value: 'no' },
   ]);
 
   const showAttachmentSplit = computed(
@@ -129,6 +130,26 @@
   }
 
   const selectedAttachments = ref<string | undefined>(parseAttachmentsFromQuery());
+
+  function parseIdsFromQuery(key: string): number[] {
+    const raw = route.query[key];
+    if (typeof raw !== 'string' || !raw) return [];
+    return raw
+      .split(',')
+      .map(Number)
+      .filter((id) => Number.isInteger(id) && id > 0);
+  }
+
+  const includeGenres = ref<number[]>(parseIdsFromQuery('genres'));
+  const excludeGenres = ref<number[]>(parseIdsFromQuery('excludeGenres'));
+  const includeTags = ref<number[]>(parseIdsFromQuery('tags'));
+  const excludeTags = ref<number[]>(parseIdsFromQuery('excludeTags'));
+  const genreTagFilter = computed<RequestGenreTagFilter>(() => ({
+    includeGenres: includeGenres.value,
+    excludeGenres: excludeGenres.value,
+    includeTags: includeTags.value,
+    excludeTags: excludeTags.value,
+  }));
   const excludeOwnRequests = ref(route.query.excludeOwn === '1');
 
   const searchQuery = ref(typeof route.query.search === 'string' ? route.query.search : '');
@@ -164,6 +185,7 @@
       excludeOwn: (canExcludeOwn.value && excludeOwnRequests.value) || undefined,
       search: debouncedSearch.value.trim() || undefined,
       attachments: selectedAttachments.value,
+      genreTags: genreTagFilter.value,
     });
   }
 
@@ -178,6 +200,7 @@
       excludeOwn: (canExcludeOwn.value && excludeOwnRequests.value) || undefined,
       search: debouncedSearch.value.trim() || undefined,
       attachments: selectedAttachments.value,
+      genreTags: genreTagFilter.value,
     });
     if (result) facets.value = result;
   }
@@ -193,7 +216,7 @@
     else if (sortBy.value === 'completed') sortBy.value = 'votes';
   });
 
-  watch([selectedMediaType, selectedStatus, selectedKind, sortBy, activeTab, debouncedSearch, selectedAttachments, excludeOwnRequests], () => {
+  watch([selectedMediaType, selectedStatus, selectedKind, sortBy, activeTab, debouncedSearch, selectedAttachments, excludeOwnRequests, genreTagFilter], () => {
     offset.value = 0;
     loadRequests();
     loadFacets();
@@ -204,7 +227,7 @@
 
   watch(offset, () => loadRequests());
 
-  watch([activeTab, selectedMediaType, selectedStatus, selectedKind, sortBy, offset, debouncedSearch, selectedAttachments, excludeOwnRequests], () => {
+  watch([activeTab, selectedMediaType, selectedStatus, selectedKind, sortBy, offset, debouncedSearch, selectedAttachments, excludeOwnRequests, genreTagFilter], () => {
     const query: Record<string, string> = {};
     if (activeTab.value === 1) query.tab = 'mine';
     else if (activeTab.value === 2) query.tab = 'contributions';
@@ -214,6 +237,10 @@
     if (debouncedSearch.value.trim()) query.search = debouncedSearch.value.trim();
     if (selectedAttachments.value) query.attachments = selectedAttachments.value;
     if (canExcludeOwn.value && excludeOwnRequests.value) query.excludeOwn = '1';
+    if (includeGenres.value.length) query.genres = includeGenres.value.join(',');
+    if (excludeGenres.value.length) query.excludeGenres = excludeGenres.value.join(',');
+    if (includeTags.value.length) query.tags = includeTags.value.join(',');
+    if (excludeTags.value.length) query.excludeTags = excludeTags.value.join(',');
     if (selectedStatus.value === undefined) query.status = 'all';
     else if (selectedStatus.value !== RequestStatus.Open) query.status = String(selectedStatus.value);
     if (sortBy.value !== 'votes') query.sort = sortBy.value;
@@ -264,7 +291,7 @@
     const now = new Date();
     const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000);
     if (diffDays < 30) return `${diffDays || 1}d ago`;
-    return `on ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined })}`;
+    return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined })}`;
   }
 
   function formatTimeAgo(dateString: string): string {
@@ -280,6 +307,23 @@
     if (diffDays < 30) return `${diffDays}d ago`;
     const diffMonths = Math.floor(diffDays / 30);
     return `${diffMonths}mo ago`;
+  }
+
+  function alternateTitles(request: MediaRequestDto): string | null {
+    const seen = new Set([request.title.trim().toLowerCase()]);
+    const titles = [request.originalTitle, request.romajiTitle, request.englishTitle].filter((title): title is string => {
+      if (!title) return false;
+      const key = title.trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+    return titles.length ? titles.join(' / ') : null;
+  }
+
+  // A single-status filter already says the status; a completion date in the meta line says it too.
+  function showStatusTag(request: MediaRequestDto) {
+    return selectedStatus.value === undefined && !request.completedAt;
   }
 
   function onPageChange(event: { first: number }) {
@@ -316,40 +360,53 @@
       </TabList>
     </Tabs>
 
-    <div class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 my-4 items-end">
-      <div class="flex flex-col gap-1 col-span-2 sm:col-span-1">
-        <label class="text-sm text-muted-color">Search</label>
-        <SearchInput v-model="searchQuery" placeholder="Search titles..." search-icon-class="pi pi-search" clear-icon-class="pi pi-times" />
-      </div>
-      <div class="flex flex-col gap-1 min-w-0">
-        <label class="text-sm text-muted-color">Media Type</label>
+    <div class="my-4 flex flex-col gap-3">
+      <div class="flex flex-col sm:flex-row gap-3">
+        <SearchInput
+          v-model="searchQuery"
+          placeholder="Search titles..."
+          aria-label="Search titles"
+          search-icon-class="pi pi-search"
+          clear-icon-class="pi pi-times"
+          class="min-w-0 flex-1"
+        />
         <Select
           v-model="selectedMediaType"
           :options="mediaTypeOptions"
           option-label="label"
           option-value="value"
-          placeholder="Media Type"
+          aria-label="Media type"
           scroll-height="24rem"
-          class="w-full"
+          class="min-w-0 sm:w-60"
         />
+        <Select v-model="sortBy" :options="sortOptions" option-label="label" option-value="value" aria-label="Sort" class="sm:w-52">
+          <template #value="{ value }">Sort: {{ sortOptions.find((option) => option.value === value)?.label }}</template>
+        </Select>
       </div>
-      <div class="flex flex-col gap-1 min-w-0">
-        <label class="text-sm text-muted-color">Request Type</label>
-        <Select v-model="selectedKind" :options="kindOptions" option-label="label" option-value="value" placeholder="Request Type" class="w-full" />
+      <div class="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <Select v-model="selectedStatus" :options="statusOptions" option-label="label" option-value="value" aria-label="Status" class="w-full min-w-0" />
+        <Select
+          v-model="selectedAttachments"
+          :options="attachmentOptions"
+          option-label="label"
+          option-value="value"
+          aria-label="Attachments"
+          class="w-full min-w-0"
+        />
+        <Select v-model="selectedKind" :options="kindOptions" option-label="label" option-value="value" aria-label="Request type" class="w-full min-w-0" />
+        <div class="min-w-0">
+          <RequestGenreTagFilter
+            v-model:include-genres="includeGenres"
+            v-model:exclude-genres="excludeGenres"
+            v-model:include-tags="includeTags"
+            v-model:exclude-tags="excludeTags"
+            :genre-counts="facets?.genreCounts"
+            :tag-counts="facets?.tagCounts"
+            :result-count="totalCount"
+          />
+        </div>
       </div>
-      <div class="flex flex-col gap-1 min-w-0">
-        <label class="text-sm text-muted-color">Status</label>
-        <Select v-model="selectedStatus" :options="statusOptions" option-label="label" option-value="value" placeholder="Status" class="w-full" />
-      </div>
-      <div class="flex flex-col gap-1 min-w-0">
-        <label class="text-sm text-muted-color">Sort</label>
-        <Select v-model="sortBy" :options="sortOptions" option-label="label" option-value="value" class="w-full" />
-      </div>
-      <div class="flex flex-col gap-1 min-w-0">
-        <label class="text-sm text-muted-color">Attachments</label>
-        <Select v-model="selectedAttachments" :options="attachmentOptions" option-label="label" option-value="value" placeholder="Attachments" class="w-full" />
-      </div>
-      <div v-if="canExcludeOwn" class="flex items-center gap-2 h-10 col-span-2 sm:col-span-3">
+      <div v-if="canExcludeOwn" class="flex items-center gap-2">
         <Checkbox v-model="excludeOwnRequests" input-id="excludeOwnRequests" :binary="true" />
         <label for="excludeOwnRequests" class="text-sm cursor-pointer">Exclude my own requests</label>
       </div>
@@ -420,20 +477,33 @@
                       />
                     </div>
 
-                    <div class="flex-1 min-w-0">
-                      <div class="flex items-center gap-2 flex-wrap mb-1">
+                    <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+                      <div class="flex items-center gap-2 flex-wrap">
                         <span class="font-semibold text-lg">{{ request.title }}</span>
                         <Tag v-if="request.kind === RequestKind.Update" :value="getRequestKindText(request.kind)" :icon="getRequestKindIcon(request.kind)" />
-                        <Tag :value="getMediaTypeText(request.mediaType)" severity="secondary" />
-                        <Tag :value="getRequestStatusText(request.status)" :severity="getRequestStatusSeverity(request.status)" />
-                        <span v-if="request.isOwnRequest && !isMine" class="text-xs text-muted-color italic">Your request</span>
+                        <Tag v-if="showStatusTag(request)" :value="getRequestStatusText(request.status)" :severity="getRequestStatusSeverity(request.status)" />
+                        <Tag v-if="request.possibleDuplicateDeckId" value="Maybe already on Jiten" severity="warn" icon="pi pi-clone" />
+                        <Tag v-else-if="request.possibleDuplicateOfRequestId" value="Possible duplicate" severity="warn" icon="pi pi-clone" />
                       </div>
+
+                      <p v-if="alternateTitles(request)" class="text-sm text-muted-color truncate">{{ alternateTitles(request) }}</p>
 
                       <p v-if="request.kind === RequestKind.Update" class="text-sm text-muted-color truncate">
                         Update to: {{ request.targetDeckTitle ?? 'media no longer available' }}
                       </p>
 
-                      <div class="flex items-center gap-3 text-sm text-muted-color mt-1">
+                      <div class="flex flex-wrap items-center gap-1">
+                        <span class="mr-2 text-sm text-primary-600 dark:text-primary-400">{{ getMediaTypeText(request.mediaType) }}</span>
+                        <span
+                          v-for="genre in request.genres"
+                          :key="genre"
+                          class="rounded border border-surface-200 px-1.5 py-px text-xs text-surface-600 dark:border-surface-700 dark:text-surface-300"
+                        >
+                          {{ getGenreText(genre) }}
+                        </span>
+                      </div>
+
+                      <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-color">
                         <span v-if="resolveLinkType(request.externalUrl, request.externalLinkType)" class="hidden md:flex items-center gap-1">
                           <i class="pi pi-external-link text-xs" />
                           {{ getLinkTypeText(resolveLinkType(request.externalUrl, request.externalLinkType)!) }}
@@ -446,6 +516,24 @@
                           <i class="pi pi-bolt text-xs" />
                           {{ request.boostCount }}
                         </span>
+                        <span v-if="request.isOwnRequest && !isMine" class="flex items-center gap-1">
+                          <i class="pi pi-user text-xs" />
+                          You
+                        </span>
+                        <span v-else-if="request.requesterName && authStore.isAdmin" class="flex items-center gap-1">
+                          <i class="pi pi-user text-xs" />
+                          {{ request.requesterName }}
+                        </span>
+                        <span v-if="!request.completedAt">{{ formatTimeAgo(request.createdAt) }}</span>
+                        <span v-if="request.completedAt" class="flex items-center gap-1">
+                          <i class="pi pi-check-circle text-xs" />
+                          Completed {{ formatCompletedAt(request.completedAt) }}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div class="shrink-0 flex flex-col md:flex-row items-end md:items-center gap-2 md:gap-4">
+                      <div v-if="request.commentCount > 0 || request.uploadCount > 0" class="flex items-center gap-3 text-sm text-muted-color">
                         <span v-if="request.commentCount > 0" class="flex items-center gap-1">
                           <i class="pi pi-comments text-xs" />
                           {{ request.commentCount }}
@@ -454,30 +542,20 @@
                           <i class="pi pi-paperclip text-xs" />
                           {{ request.uploadCount }}
                         </span>
-                        <span v-if="request.requesterName && authStore.isAdmin" class="flex items-center gap-1">
-                          <i class="pi pi-user text-xs" />
-                          {{ request.requesterName }}
-                        </span>
-                        <span>{{ formatTimeAgo(request.createdAt) }}</span>
-                        <span v-if="request.completedAt" class="hidden md:flex items-center gap-1">
-                          <i class="pi pi-check-circle text-xs" />
-                          completed {{ formatCompletedAt(request.completedAt) }}
-                        </span>
                       </div>
-                    </div>
-
-                    <div class="shrink-0 flex flex-col md:flex-row items-center gap-2" @click.prevent>
-                      <RequestBoostButton
-                        :request-id="request.id"
-                        :boost-count="request.boostCount"
-                        :has-boosted="request.hasUserBoosted"
-                        :boostable="isBoostable(request)"
-                        :balance="boostBalance"
-                        :auto-fetch-balance="false"
-                        compact
-                        @boosted="handleBoosted(request, $event)"
-                      />
-                      <RequestSubscribeButton :is-subscribed="request.isSubscribed" compact @toggle="handleSubscribe(request)" />
+                      <div class="flex flex-col md:flex-row items-center gap-2" @click.prevent>
+                        <RequestBoostButton
+                          :request-id="request.id"
+                          :boost-count="request.boostCount"
+                          :has-boosted="request.hasUserBoosted"
+                          :boostable="isBoostable(request)"
+                          :balance="boostBalance"
+                          :auto-fetch-balance="false"
+                          compact
+                          @boosted="handleBoosted(request, $event)"
+                        />
+                        <RequestSubscribeButton :is-subscribed="request.isSubscribed" compact @toggle="handleSubscribe(request)" />
+                      </div>
                     </div>
                   </div>
                 </template>

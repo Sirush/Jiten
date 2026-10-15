@@ -32,6 +32,7 @@ public partial class RequestController(
     ICdnService cdnService,
     IMemoryCache memoryCache,
     IUserLimitsService userLimits,
+    MediaRequestMetadataService requestMetadata,
     ILogger<RequestController> logger) : ControllerBase
 {
     private static readonly HashSet<string> AllowedExtensions =
@@ -66,7 +67,11 @@ public partial class RequestController(
         [FromQuery] bool voted = false,
         [FromQuery] bool excludeOwn = false,
         [FromQuery] string? search = null,
-        [FromQuery] string? attachments = null)
+        [FromQuery] string? attachments = null,
+        [FromQuery] string? genres = null,
+        [FromQuery] string? excludeGenres = null,
+        [FromQuery] string? tags = null,
+        [FromQuery] string? excludeTags = null)
     {
         var userId = currentUserService.UserId;
         if (string.IsNullOrEmpty(userId))
@@ -94,10 +99,9 @@ public partial class RequestController(
         }
 
         if (!string.IsNullOrWhiteSpace(search))
-        {
-            var escaped = search.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
-            query = query.Where(r => EF.Functions.ILike(r.Title, $"%{escaped}%", "\\"));
-        }
+            query = ApplyTitleSearch(query, search);
+
+        query = ApplyGenreTagFilters(query, new GenreTagFilter(genres, excludeGenres, tags, excludeTags));
 
         if (mediaType.HasValue)
             query = query.Where(r => r.MediaType == mediaType.Value);
@@ -188,6 +192,7 @@ public partial class RequestController(
         var upvoteSet = new HashSet<int>(userUpvotes);
         var boostSet = new HashSet<int>(userBoosts);
         var subSet = new HashSet<int>(userSubscriptions);
+        var genresAndTags = await LoadGenresAndTagsAsync(requests);
 
         var dtos = requests.Select(r => new MediaRequestDto
         {
@@ -219,7 +224,7 @@ public partial class RequestController(
             RequesterName = isAdmin ? requesterNames.GetValueOrDefault(r.RequesterId) : null,
             CreatedAt = r.CreatedAt,
             CompletedAt = r.CompletedAt
-        }).ToList();
+        }.WithMetadata(r, genresAndTags)).ToList();
 
         return Results.Ok(new PaginatedResponse<List<MediaRequestDto>>(dtos, totalCount, limit, offset));
     }
@@ -234,13 +239,19 @@ public partial class RequestController(
         [FromQuery] bool voted = false,
         [FromQuery] bool excludeOwn = false,
         [FromQuery] string? search = null,
-        [FromQuery] string? attachments = null)
+        [FromQuery] string? attachments = null,
+        [FromQuery] string? genres = null,
+        [FromQuery] string? excludeGenres = null,
+        [FromQuery] string? tags = null,
+        [FromQuery] string? excludeTags = null)
     {
         var userId = currentUserService.UserId;
         if (string.IsNullOrEmpty(userId))
             return Results.Unauthorized();
 
-        // Shared scope (tab + search) applied to every facet.
+        var genreTagFilter = new GenreTagFilter(genres, excludeGenres, tags, excludeTags);
+
+        // Shared scope (tab, search, genres and tags) applied to every facet.
         IQueryable<MediaRequest> BaseQuery()
         {
             var q = context.MediaRequests.AsNoTracking().AsQueryable();
@@ -262,12 +273,9 @@ public partial class RequestController(
             }
 
             if (!string.IsNullOrWhiteSpace(search))
-            {
-                var escaped = search.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
-                q = q.Where(r => EF.Functions.ILike(r.Title, $"%{escaped}%", "\\"));
-            }
+                q = ApplyTitleSearch(q, search);
 
-            return q;
+            return ApplyGenreTagFilters(q, genreTagFilter);
         }
 
         // Each facet's counts reflect the OTHER active filters but ignore its own selection,
@@ -305,6 +313,16 @@ public partial class RequestController(
         var attachmentsYes = await attachmentBase
             .CountAsync(r => context.MediaRequestUploads.Any(u => u.MediaRequestId == r.Id && !u.FileDeleted));
 
+        var fullyFiltered = WithAttachments(attachmentBase);
+        var genreCounts = await fullyFiltered.SelectMany(r => r.Genres)
+            .GroupBy(g => g.Genre)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => (int)g.Key, g => g.Count);
+        var tagCounts = await fullyFiltered.SelectMany(r => r.Tags)
+            .GroupBy(t => t.TagId)
+            .Select(g => new { g.Key, Count = g.Count() })
+            .ToDictionaryAsync(g => g.Key, g => g.Count);
+
         return Results.Ok(new
         {
             mediaTypes = mediaTypeCounts.ToDictionary(x => (int)x.Key, x => x.Count),
@@ -316,6 +334,8 @@ public partial class RequestController(
             attachmentsYes,
             attachmentsNo = attachmentTotal - attachmentsYes,
             attachmentTotal,
+            genreCounts,
+            tagCounts,
         });
     }
 
@@ -517,7 +537,7 @@ public partial class RequestController(
             RequesterName = requesterName,
             CreatedAt = request.CreatedAt,
             CompletedAt = request.CompletedAt
-        };
+        }.WithMetadata(request, await LoadGenresAndTagsAsync([request]));
 
         return Results.Ok(dto);
     }
@@ -597,6 +617,11 @@ public partial class RequestController(
             UpvoteCount = 1
         };
 
+        if (MediaRequestMetadataService.WouldQueueFetch(null, request.ExternalUrl) && !requestMetadata.TryConsumeRequesterBudget(userId))
+            return LinkBudgetExceeded();
+
+        var queueMetadataFetch = await requestMetadata.ApplyLinkChangeAsync(request, null);
+
         var limits = await userLimits.GetLimitsAsync(userId);
 
         try
@@ -652,6 +677,9 @@ public partial class RequestController(
 
             await context.SaveChangesAsync();
             await transaction.CommitAsync();
+
+            if (queueMetadataFetch)
+                requestMetadata.QueueFetch(request.Id, request.ExternalUrl);
 
             logger.LogInformation("Request created: Id={Id}, Title={Title}, UserId={UserId}",
                 request.Id, request.Title, userId);
@@ -1357,16 +1385,26 @@ public partial class RequestController(
             ? InferLinkType(model.ExternalUrl)
             : (LinkType?)null;
 
+        var previousUrl = request.ExternalUrl;
+        var newUrl = model.ExternalUrl?.Trim();
+        if (MediaRequestMetadataService.WouldQueueFetch(previousUrl, newUrl) && !requestMetadata.TryConsumeRequesterBudget(userId))
+            return LinkBudgetExceeded();
+
         request.Description = model.Description?.Trim();
-        request.ExternalUrl = model.ExternalUrl?.Trim();
+        request.ExternalUrl = newUrl;
         request.ExternalLinkType = externalLinkType;
         request.UpdatedAt = DateTime.UtcNow;
+
+        var queueMetadataFetch = await requestMetadata.ApplyLinkChangeAsync(request, previousUrl);
 
         activityService.LogWithoutSave(id, userId, RequestAction.RequestEditedByRequester,
             retargeted ? JsonSerializer.Serialize(new { newTargetDeckId = request.TargetDeckId }) : null,
             ipAddress: HttpContext.Connection.RemoteIpAddress?.ToString());
 
         await context.SaveChangesAsync();
+
+        if (queueMetadataFetch)
+            requestMetadata.QueueFetch(request.Id, request.ExternalUrl);
 
         return Results.Ok(new { success = true });
     }
@@ -1943,6 +1981,7 @@ public partial class RequestController(
 
         var oldTitle = request.Title;
         var oldKind = request.Kind;
+        var previousUrl = request.ExternalUrl;
         var externalLinkType = !string.IsNullOrWhiteSpace(model.ExternalUrl)
             ? InferLinkType(model.ExternalUrl)
             : (LinkType?)null;
@@ -1955,6 +1994,8 @@ public partial class RequestController(
         request.ExternalLinkType = externalLinkType;
         request.Description = model.Description?.Trim();
         request.UpdatedAt = DateTime.UtcNow;
+
+        var queueMetadataFetch = await requestMetadata.ApplyLinkChangeAsync(request, previousUrl);
 
         activityService.LogWithoutSave(id, userId, RequestAction.RequestEditedByAdmin,
             JsonSerializer.Serialize(new
@@ -1969,9 +2010,177 @@ public partial class RequestController(
 
         await context.SaveChangesAsync();
 
+        if (queueMetadataFetch)
+            requestMetadata.QueueFetch(request.Id, request.ExternalUrl);
+
         logger.LogInformation("Request edited by admin: Id={Id}, AdminUserId={UserId}", id, userId);
 
         return Results.Ok(new { success = true });
+    }
+
+    /// <summary>Reads the link again even when it has not changed. The lookup waits its turn on the provider's queue.</summary>
+    [HttpPost("{id:int}/refetch-metadata")]
+    [Authorize("RequiresAdmin")]
+    public async Task<IResult> RefetchMetadata(int id)
+    {
+        var request = await context.MediaRequests.FirstOrDefaultAsync(r => r.Id == id);
+        if (request == null)
+            return Results.NotFound("Request not found");
+
+        if (string.IsNullOrWhiteSpace(request.ExternalUrl))
+            return Results.BadRequest("This request has no link to read.");
+
+        if (!requestMetadata.QueueFetch(request.Id, request.ExternalUrl))
+        {
+            request.MetadataStatus = MediaRequestMetadataStatus.Unsupported;
+            await context.SaveChangesAsync();
+            return Results.BadRequest("No metadata source reads this link.");
+        }
+
+        request.MetadataStatus = MediaRequestMetadataStatus.Pending;
+        await context.SaveChangesAsync();
+
+        logger.LogInformation("Request metadata refetch queued: Id={Id}", id);
+        return Results.Ok(new { metadataStatus = request.MetadataStatus });
+    }
+
+    /// <summary>Clears both duplicate flags; later lookups of the same link leave them unset.</summary>
+    [HttpPost("{id:int}/dismiss-duplicate")]
+    [Authorize("RequiresAdmin")]
+    public async Task<IResult> DismissDuplicate(int id)
+    {
+        var request = await context.MediaRequests.FirstOrDefaultAsync(r => r.Id == id);
+        if (request == null)
+            return Results.NotFound("Request not found");
+
+        request.PossibleDuplicateOfRequestId = null;
+        request.PossibleDuplicateDeckId = null;
+        request.DuplicateFlagDismissed = true;
+        await context.SaveChangesAsync();
+
+        logger.LogInformation("Request duplicate flag dismissed: Id={Id}", id);
+        return Results.Ok(new { success = true });
+    }
+
+    /// <summary>Queues a lookup for every request whose link has never been read successfully, or for all linked requests.</summary>
+    [HttpPost("~/api/admin/requests/backfill-metadata")]
+    [Authorize("RequiresAdmin")]
+    public async Task<IResult> BackfillMetadata([FromQuery] bool all = false)
+    {
+        var candidates = await context.MediaRequests
+            .Where(r => r.ExternalUrl != null && r.ExternalUrl != "")
+            .Where(r => all || r.MetadataStatus != MediaRequestMetadataStatus.Fetched)
+            .Select(r => new { r.Id, r.ExternalUrl })
+            .ToListAsync();
+
+        var queuedIds = new List<int>();
+        var unsupportedIds = new List<int>();
+        foreach (var candidate in candidates)
+        {
+            if (requestMetadata.QueueFetch(candidate.Id, candidate.ExternalUrl))
+                queuedIds.Add(candidate.Id);
+            else
+                unsupportedIds.Add(candidate.Id);
+        }
+
+        await context.MediaRequests.Where(r => queuedIds.Contains(r.Id))
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.MetadataStatus, MediaRequestMetadataStatus.Pending));
+        await context.MediaRequests.Where(r => unsupportedIds.Contains(r.Id))
+            .ExecuteUpdateAsync(s => s.SetProperty(r => r.MetadataStatus, MediaRequestMetadataStatus.Unsupported));
+
+        logger.LogInformation("Request metadata backfill queued {Queued} lookups, {Unsupported} unsupported links", queuedIds.Count,
+            unsupportedIds.Count);
+        return Results.Ok(new { queued = queuedIds.Count, unsupported = unsupportedIds.Count });
+    }
+
+    private static IResult LinkBudgetExceeded() =>
+        Results.Problem(
+            title: "Too many link changes",
+            detail: "You've added or changed too many links in the last hour. Please try again later.",
+            statusCode: StatusCodes.Status429TooManyRequests);
+
+    private static IQueryable<MediaRequest> ApplyTitleSearch(IQueryable<MediaRequest> query, string search)
+    {
+        var escaped = search.Trim().Replace("\\", "\\\\").Replace("%", "\\%").Replace("_", "\\_");
+        var pattern = $"%{escaped}%";
+        return query.Where(r => EF.Functions.ILike(r.Title, pattern, "\\")
+                                || (r.OriginalTitle != null && EF.Functions.ILike(r.OriginalTitle, pattern, "\\"))
+                                || (r.RomajiTitle != null && EF.Functions.ILike(r.RomajiTitle, pattern, "\\"))
+                                || (r.EnglishTitle != null && EF.Functions.ILike(r.EnglishTitle, pattern, "\\")));
+    }
+
+    private sealed record GenreTagFilter(string? Genres, string? ExcludeGenres, string? Tags, string? ExcludeTags);
+
+    /// <summary>Included genres and tags must all be present; any excluded one rules a request out. Same rules as the media list.</summary>
+    private static IQueryable<MediaRequest> ApplyGenreTagFilters(IQueryable<MediaRequest> query, GenreTagFilter filter)
+    {
+        foreach (var genre in ParseIds(filter.Genres).Select(id => (Genre)id))
+            query = query.Where(r => r.Genres.Any(g => g.Genre == genre));
+
+        var excludedGenres = ParseIds(filter.ExcludeGenres).Select(id => (Genre)id).ToList();
+        if (excludedGenres.Count > 0)
+            query = query.Where(r => !r.Genres.Any(g => excludedGenres.Contains(g.Genre)));
+
+        foreach (var tagId in ParseIds(filter.Tags))
+            query = query.Where(r => r.Tags.Any(t => t.TagId == tagId));
+
+        var excludedTags = ParseIds(filter.ExcludeTags);
+        if (excludedTags.Count > 0)
+            query = query.Where(r => !r.Tags.Any(t => excludedTags.Contains(t.TagId)));
+
+        return query;
+    }
+
+    private static List<int> ParseIds(string? csv) =>
+        string.IsNullOrEmpty(csv)
+            ? []
+            : csv.Split(',', StringSplitOptions.RemoveEmptyEntries)
+                 .Select(v => int.TryParse(v, out var id) ? (int?)id : null)
+                 .Where(id => id.HasValue)
+                 .Select(id => id!.Value)
+                 .Distinct()
+                 .ToList();
+
+    private async Task<RequestGenresAndTags> LoadGenresAndTagsAsync(List<MediaRequest> requests)
+    {
+        var requestIds = requests.Select(r => r.Id).ToList();
+        if (requestIds.Count == 0)
+            return new RequestGenresAndTags([], [], [], []);
+
+        var duplicateRequestIds = requests.Select(r => r.PossibleDuplicateOfRequestId).OfType<int>().Distinct().ToList();
+        var activeRequestTitles = duplicateRequestIds.Count == 0
+            ? new Dictionary<int, string>()
+            : await context.MediaRequests.AsNoTracking()
+                .Where(r => duplicateRequestIds.Contains(r.Id)
+                            && (r.Status == MediaRequestStatus.Open || r.Status == MediaRequestStatus.InProgress))
+                .ToDictionaryAsync(r => r.Id, r => r.Title);
+
+        var duplicateDeckIds = requests.Select(r => r.PossibleDuplicateDeckId).OfType<int>().Distinct().ToList();
+        var duplicateDeckTitles = duplicateDeckIds.Count == 0
+            ? new Dictionary<int, string>()
+            : await context.Decks.AsNoTracking()
+                .Where(d => duplicateDeckIds.Contains(d.DeckId))
+                .ToDictionaryAsync(d => d.DeckId, d => d.OriginalTitle);
+
+        var genres = await context.MediaRequestGenres.AsNoTracking()
+            .Where(g => requestIds.Contains(g.MediaRequestId))
+            .Select(g => new { g.MediaRequestId, g.Genre })
+            .ToListAsync();
+
+        var tags = await context.MediaRequestTags.AsNoTracking()
+            .Where(t => requestIds.Contains(t.MediaRequestId))
+            .Select(t => new { t.MediaRequestId, t.TagId, t.Tag.Name, t.Percentage })
+            .ToListAsync();
+
+        return new RequestGenresAndTags(
+            genres.GroupBy(g => g.MediaRequestId)
+                  .ToDictionary(g => g.Key, g => g.Select(x => x.Genre).OrderBy(x => x).ToList()),
+            tags.GroupBy(t => t.MediaRequestId)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(t => t.Percentage).ThenBy(t => t.Name)
+                                                .Select(t => new TagWithPercentageDto { TagId = t.TagId, Name = t.Name, Percentage = t.Percentage })
+                                                .ToList()),
+            activeRequestTitles,
+            duplicateDeckTitles);
     }
 
     private sealed record TargetDeckInfo(MediaType MediaType, string OriginalTitle);

@@ -1,13 +1,19 @@
 export default defineNuxtRouteMiddleware(async (to, from) => {
+  const nuxtApp = useNuxtApp();
   const authStore = useAuthStore();
   const tokenCookie = useCookie('token');
   const refreshTokenCookie = useCookie('refreshToken');
 
+  const toLogin = () =>
+    nuxtApp.runWithContext(() =>
+      navigateTo({
+        path: '/login',
+        query: { redirect: to.fullPath !== '/login' ? to.fullPath : undefined },
+      })
+    );
+
   if (!tokenCookie.value && !refreshTokenCookie.value) {
-    return navigateTo({
-      path: '/login',
-      query: { redirect: to.fullPath !== '/login' ? to.fullPath : undefined },
-    });
+    return toLogin();
   }
 
   try {
@@ -22,10 +28,7 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
         return;
       }
       authStore.clearAuthData();
-      return navigateTo({
-        path: '/login',
-        query: { redirect: to.fullPath !== '/login' ? to.fullPath : undefined },
-      });
+      return toLogin();
     }
     if (!authStore.user) {
       try {
@@ -39,10 +42,7 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
           return;
         }
         authStore.clearAuthData();
-        return navigateTo({
-          path: '/login',
-          query: { redirect: to.fullPath !== '/login' ? to.fullPath : undefined },
-        });
+        return toLogin();
       }
     }
   } catch (error) {
@@ -51,9 +51,6 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
       return;
     }
     authStore.clearAuthData();
-    return navigateTo({
-      path: '/login',
-      query: { redirect: to.fullPath !== '/login' ? to.fullPath : undefined },
-    });
+    return toLogin();
   }
 });

@@ -1612,6 +1612,15 @@ namespace Jiten.Core.Migrations
                         .HasMaxLength(1000)
                         .HasColumnType("character varying(1000)");
 
+                    b.Property<bool>("DuplicateFlagDismissed")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("EnglishTitle")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
                     b.Property<int?>("ExternalLinkType")
                         .HasColumnType("integer");
 
@@ -1630,10 +1639,35 @@ namespace Jiten.Core.Migrations
                     b.Property<int>("MediaType")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("MetadataFetchedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("MetadataStatus")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("OriginalTitle")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("PossibleDuplicateDeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("PossibleDuplicateOfRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly?>("ReleaseDate")
+                        .HasColumnType("date");
+
                     b.Property<string>("RequesterId")
                         .IsRequired()
                         .HasMaxLength(36)
                         .HasColumnType("character varying(36)");
+
+                    b.Property<string>("RomajiTitle")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -1663,6 +1697,10 @@ namespace Jiten.Core.Migrations
 
                     b.HasIndex("MediaType")
                         .HasDatabaseName("IX_MediaRequest_MediaType");
+
+                    b.HasIndex("PossibleDuplicateDeckId");
+
+                    b.HasIndex("PossibleDuplicateOfRequestId");
 
                     b.HasIndex("RequesterId")
                         .HasDatabaseName("IX_MediaRequest_RequesterId");
@@ -1757,6 +1795,52 @@ namespace Jiten.Core.Migrations
                     b.ToTable("MediaRequestComments", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestGenre", b =>
+                {
+                    b.Property<int>("MediaRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Genre")
+                        .HasColumnType("integer");
+
+                    b.HasKey("MediaRequestId", "Genre");
+
+                    b.HasIndex("Genre")
+                        .HasDatabaseName("IX_MediaRequestGenres_Genre");
+
+                    b.ToTable("MediaRequestGenres", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestLink", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("LinkType")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MediaRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("LinkType")
+                        .HasDatabaseName("IX_MediaRequestLinks_LinkType");
+
+                    b.HasIndex("MediaRequestId")
+                        .HasDatabaseName("IX_MediaRequestLinks_MediaRequestId");
+
+                    b.ToTable("MediaRequestLinks", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.MediaRequestSubscription", b =>
                 {
                     b.Property<int>("Id")
@@ -1783,6 +1867,52 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_MediaRequestSubscription_RequestId_UserId");
 
                     b.ToTable("MediaRequestSubscriptions", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestTag", b =>
+                {
+                    b.Property<int>("MediaRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TagId")
+                        .HasColumnType("integer");
+
+                    b.Property<byte>("Percentage")
+                        .HasColumnType("smallint");
+
+                    b.HasKey("MediaRequestId", "TagId");
+
+                    b.HasIndex("TagId")
+                        .HasDatabaseName("IX_MediaRequestTags_TagId");
+
+                    b.ToTable("MediaRequestTags", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestTitle", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<int>("MediaRequestId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("TitleType")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MediaRequestId")
+                        .HasDatabaseName("IX_MediaRequestTitles_MediaRequestId");
+
+                    b.ToTable("MediaRequestTitles", "jiten");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.MediaRequestUpload", b =>
@@ -3029,12 +3159,26 @@ namespace Jiten.Core.Migrations
                         .HasForeignKey("FulfilledDeckId")
                         .OnDelete(DeleteBehavior.SetNull);
 
+                    b.HasOne("Jiten.Core.Data.Deck", "PossibleDuplicateDeck")
+                        .WithMany()
+                        .HasForeignKey("PossibleDuplicateDeckId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Jiten.Core.Data.MediaRequest", "PossibleDuplicateOfRequest")
+                        .WithMany()
+                        .HasForeignKey("PossibleDuplicateOfRequestId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("Jiten.Core.Data.Deck", "TargetDeck")
                         .WithMany()
                         .HasForeignKey("TargetDeckId")
                         .OnDelete(DeleteBehavior.SetNull);
 
                     b.Navigation("FulfilledDeck");
+
+                    b.Navigation("PossibleDuplicateDeck");
+
+                    b.Navigation("PossibleDuplicateOfRequest");
 
                     b.Navigation("TargetDeck");
                 });
@@ -3068,10 +3212,62 @@ namespace Jiten.Core.Migrations
                     b.Navigation("ParentComment");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestGenre", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.MediaRequest", "MediaRequest")
+                        .WithMany("Genres")
+                        .HasForeignKey("MediaRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MediaRequest");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestLink", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.MediaRequest", "MediaRequest")
+                        .WithMany("Links")
+                        .HasForeignKey("MediaRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MediaRequest");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.MediaRequestSubscription", b =>
                 {
                     b.HasOne("Jiten.Core.Data.MediaRequest", "MediaRequest")
                         .WithMany("Subscriptions")
+                        .HasForeignKey("MediaRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MediaRequest");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestTag", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.MediaRequest", "MediaRequest")
+                        .WithMany("Tags")
+                        .HasForeignKey("MediaRequestId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Jiten.Core.Data.Tag", "Tag")
+                        .WithMany()
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("MediaRequest");
+
+                    b.Navigation("Tag");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MediaRequestTitle", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.MediaRequest", "MediaRequest")
+                        .WithMany("Titles")
                         .HasForeignKey("MediaRequestId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
@@ -3272,7 +3468,15 @@ namespace Jiten.Core.Migrations
 
                     b.Navigation("Comments");
 
+                    b.Navigation("Genres");
+
+                    b.Navigation("Links");
+
                     b.Navigation("Subscriptions");
+
+                    b.Navigation("Tags");
+
+                    b.Navigation("Titles");
 
                     b.Navigation("Uploads");
 
