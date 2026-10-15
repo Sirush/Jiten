@@ -11,7 +11,7 @@ namespace Jiten.Api.Services;
 /// <summary>Builds the public /stats snapshot. Both contexts are queried separately and joined in memory, so it runs on any provider.</summary>
 public class SiteStatsBuilder(IDbContextFactory<JitenDbContext> jitenFactory, IDbContextFactory<UserDbContext> userFactory, ILogger<SiteStatsBuilder> logger)
 {
-    public const int ActiveWindowDays = 30;
+    public const int ActiveWindowDays = 90;
     public const int LogWindowDays = 90;
     public const int MinLearnersPerSection = 20;
     public const int MinLearnersPerStudiedDeck = 10;
@@ -44,7 +44,7 @@ public class SiteStatsBuilder(IDbContextFactory<JitenDbContext> jitenFactory, ID
         dto.Totals.Learners = activity.Learners;
         dto.Totals.Reviews = activity.ReviewsSinceSignup;
         dto.Totals.HoursReviewing = activity.MillisecondsSinceSignup / 3_600_000;
-        dto.Last30Days = activity.Last30Days;
+        dto.Recent = activity.Recent;
         dto.LearnersByMonth = activity.LearnersByMonth;
 
         var known = await BuildKnownWords(activity.ActiveUsers, ct);
@@ -71,7 +71,7 @@ public class SiteStatsBuilder(IDbContextFactory<JitenDbContext> jitenFactory, ID
         int Learners,
         long ReviewsSinceSignup,
         long MillisecondsSinceSignup,
-        SiteStatsLast30DaysDto Last30Days,
+        SiteStatsRecentDto Recent,
         List<SiteStatsMonthPointDto> LearnersByMonth,
         HashSet<string> ActiveUsers);
 
@@ -126,7 +126,7 @@ public class SiteStatsBuilder(IDbContextFactory<JitenDbContext> jitenFactory, ID
             learners.Count,
             reviewsSinceSignup,
             msSinceSignup,
-            new SiteStatsLast30DaysDto
+            new SiteStatsRecentDto
             {
                 PeopleReviewing = active.Count,
                 Reviews = windowReviews,

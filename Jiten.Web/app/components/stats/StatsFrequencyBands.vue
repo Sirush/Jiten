@@ -117,7 +117,7 @@
   <StatsSection
     v-if="bands.length > 1"
     title="Which words learners know"
-    subtitle="How much of each frequency band learners active in the last 30 days know"
+    subtitle="How much of each frequency band learners active in the last 90 days know"
   >
     <p v-if="topThousand !== null" class="m-0">
       The median learner knows <b class="text-primary-700 dark:text-primary-300">{{ describeShare(topThousand) }}</b> of the 1,000 most common words.

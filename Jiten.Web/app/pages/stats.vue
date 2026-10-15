@@ -36,7 +36,7 @@
 
     <template v-if="snapshot">
       <StatsHeadlineTiles :totals="snapshot.totals" />
-      <StatsLast30Days :stats="snapshot.last30Days" />
+      <StatsRecent v-if="snapshot.recent" :stats="snapshot.recent" />
       <StatsLearnersOverTime :points="snapshot.learnersByMonth" />
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 [&>*:only-child]:lg:col-span-2">

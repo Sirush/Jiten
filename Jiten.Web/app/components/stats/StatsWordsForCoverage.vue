@@ -22,12 +22,11 @@
     return shown.length ? shown : all;
   });
 
-  const rows = computed(() => {
-    const sortIndex = columns.value[Math.min(1, columns.value.length - 1)]?.index ?? 0;
-    return props.data.mediaTypes
-      .map((t) => ({ mediaType: t.mediaType, ranks: columns.value.map((c) => t.ranks[c.index] ?? null), sortBy: t.ranks[sortIndex] ?? Infinity }))
-      .sort((a, b) => a.sortBy - b.sortBy);
-  });
+  const rows = computed(() =>
+    props.data.mediaTypes
+      .map((t) => ({ mediaType: t.mediaType, name: getMediaTypeText(t.mediaType), ranks: columns.value.map((c) => t.ranks[c.index] ?? null) }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  );
 
   const logRange = computed(() => {
     const values = rows.value.flatMap((r) => r.ranks).filter((v): v is number => v !== null && v > 0);
@@ -59,7 +58,7 @@
         </thead>
         <tbody>
           <tr v-for="row in rows" :key="row.mediaType" class="border-t border-surface-200 dark:border-surface-700">
-            <th scope="row" class="text-left font-normal py-1.5 pr-3 whitespace-nowrap">{{ getMediaTypeText(row.mediaType) }}</th>
+            <th scope="row" class="text-left font-normal py-1.5 pr-3 whitespace-nowrap">{{ row.name }}</th>
             <td v-for="(rank, i) in row.ranks" :key="i" class="text-right tabular-nums font-medium py-1.5 px-2" :class="shade(rank)">
               {{ rank === null ? '-' : roundToHundred(rank).toLocaleString('en-US') }}
             </td>

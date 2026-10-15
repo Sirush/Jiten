@@ -135,9 +135,9 @@ public class SiteStatsJobTests(JitenWebApplicationFactory factory)
         // 3 cards each, plus learner 0's word 51 from the particle set; the name set never counts.
         stats.Totals.WordsKnown.Should().Be(3L * LearnerCount + 1);
 
-        stats.Last30Days.PeopleReviewing.Should().Be(LearnerCount);
-        stats.Last30Days.NewWords.Should().Be(2L * LearnerCount);
-        stats.Last30Days.MedianReviewsPerStudyDay.Should().Be(SiteStatsBuilder.Percentile(Enumerable.Range(1, LearnerCount).Select(i => 10.0 * i).ToList(), 0.5));
+        stats.Recent.PeopleReviewing.Should().Be(LearnerCount);
+        stats.Recent.NewWords.Should().Be(2L * LearnerCount);
+        stats.Recent.MedianReviewsPerStudyDay.Should().Be(SiteStatsBuilder.Percentile(Enumerable.Range(1, LearnerCount).Select(i => 10.0 * i).ToList(), 0.5));
 
         stats.LearnersByMonth.Should().ContainSingle().Which.Total.Should().Be(LearnerCount);
 
