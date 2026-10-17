@@ -25,6 +25,7 @@
   let decks: Record<string, number> = {};
   let deckEntries: Array<[string, number]> = [];
   let cantConnect = ref(false);
+  const cardLookupUnsupported = ref(false);
   let cardsIds: number[] = [];
 
   const apiKey = ref('');
@@ -145,6 +146,15 @@
     const json = await res.json();
     if (json.error) throw new Error(json.error);
     return json.result;
+  }
+
+  /** AnkiconnectAndroid has no findCards/cardsInfo and answers unknown actions with its version number instead of an error. */
+  async function supportsCardLookup(): Promise<boolean> {
+    try {
+      return Array.isArray(await ankiInvoke('findCards', { query: 'cid:0' }));
+    } catch {
+      return false;
+    }
   }
 
   async function fetchCardsInfo(cards: number[]): Promise<any[]> {
@@ -508,11 +518,15 @@
 
   const Connect = async () => {
     operationActive.value = true;
+    cardLookupUnsupported.value = false;
     try {
       client = new YankiConnect(apiKey.value ? { key: apiKey.value } : {});
       decks = await client.deck.deckNamesAndIds();
       deckEntries = Object.entries(decks);
       cantConnect.value = false;
+
+      cardLookupUnsupported.value = !(await supportsCardLookup());
+      if (cardLookupUnsupported.value) return;
 
       // Pre-select the last-used deck (by id, then stored name as a backup). The step-2 restore
       // re-validates id+name before applying any saved config.
@@ -1104,6 +1118,11 @@
         <p>If you use Brave, please disable Brave Shields for this website. You can do so by clicking on the shield icon at the right of the URL bar.</p>
         <img src="/assets/img/ankiconnect.jpg" alt="Anki Connect Config" class="w-full" />
       </div>
+      <Message v-if="cardLookupUnsupported" severity="error" class="mb-4">
+        This version of AnkiConnect cannot read cards and can't be used for importing. AnkiConnect Android isn't supported. Use desktop Anki with the
+        <a href="https://ankiweb.net/shared/info/2055492159" rel="nofollow" target="_blank">Anki Connect plugin</a>, or export your deck as a .txt file and
+        use the Anki File import.
+      </Message>
       <div v-if="currentStep == 0">
         <p v-if="mediaOnly">
           Add example sentences, images and audio from Anki using the
