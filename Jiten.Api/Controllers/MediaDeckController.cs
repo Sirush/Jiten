@@ -1346,15 +1346,34 @@ public class MediaDeckController(
     private async Task<Dictionary<int, ExampleSentenceDto>> FirstSentencePerTitle(List<int> titleDeckIds, int wordId, byte readingIndex)
     {
         var key = ExampleSentenceTokens.WordKey(wordId, readingIndex);
-        var rows = await context.ExampleSentences
-                                .AsNoTracking()
-                                .Join(context.Decks.AsNoTracking(), es => es.DeckId, d => d.DeckId, (es, d) => new { es, d })
-                                .Where(x => titleDeckIds.Contains(x.d.ParentDeckId ?? x.d.DeckId) && x.es.WordKeys.Contains(key))
-                                .GroupBy(x => x.d.ParentDeckId ?? x.d.DeckId)
-                                .Select(g => g.OrderBy(x => x.es.SentenceId)
-                                              .Select(x => new { TitleId = g.Key, x.es.SentenceId, x.es.Text, x.es.Tokens })
-                                              .First())
-                                .ToListAsync();
+        var titleByDeck = await context.Decks
+                                       .AsNoTracking()
+                                       .Where(d => titleDeckIds.Contains(d.DeckId)
+                                                   || (d.ParentDeckId != null && titleDeckIds.Contains(d.ParentDeckId.Value)))
+                                       .Select(d => new { d.DeckId, TitleId = d.ParentDeckId ?? d.DeckId })
+                                       .ToDictionaryAsync(d => d.DeckId, d => d.TitleId);
+        var deckIds = titleByDeck.Keys.ToList();
+
+        var firstPerDeck = await context.ExampleSentences
+                                        .AsNoTracking()
+                                        .Where(es => deckIds.Contains(es.DeckId) && es.WordKeys.Contains(key))
+                                        .GroupBy(es => es.DeckId)
+                                        .Select(g => new { DeckId = g.Key, SentenceId = g.Min(es => es.SentenceId) })
+                                        .ToListAsync();
+
+        var sentenceByTitle = firstPerDeck
+                              .GroupBy(r => titleByDeck[r.DeckId])
+                              .ToDictionary(g => g.Key, g => g.Min(r => r.SentenceId));
+        var sentenceIds = sentenceByTitle.Values.ToList();
+        var texts = await context.ExampleSentences
+                                 .AsNoTracking()
+                                 .Where(es => sentenceIds.Contains(es.SentenceId))
+                                 .Select(es => new { es.SentenceId, es.Text, es.Tokens })
+                                 .ToDictionaryAsync(es => es.SentenceId);
+        var rows = sentenceByTitle
+                   .Where(kv => texts.ContainsKey(kv.Value))
+                   .Select(kv => (TitleId: kv.Key, texts[kv.Value].SentenceId, texts[kv.Value].Text, texts[kv.Value].Tokens))
+                   .ToList();
 
         var furigana = await sentenceTokens.BuildFuriganaDtosAsync(rows.Select(r => (r.SentenceId, r.Text, (byte[]?)r.Tokens)));
 

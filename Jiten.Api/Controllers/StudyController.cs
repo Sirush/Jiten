@@ -1959,25 +1959,9 @@ public partial class StudyController(
         var (todayStart, _) = ResolveTimezone(now, settings.Timezone);
         Dictionary<long, int>? cursorHintByKey = null;
 
-        var todayStats = await userContext.FsrsCards
-            .Where(c => c.UserId == userId)
-            .SelectMany(c => c.ReviewLogs)
-            .Where(l => l.ReviewDateTime >= todayStart)
-            .GroupBy(_ => 1)
-            .Select(g => new
-            {
-                ReviewsToday = g.Count(l => l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart)),
-                UniqueCardsToday = g.Where(l => l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart))
-                    .Select(l => l.CardId).Distinct().Count(),
-                NewCardsToday = g.Where(l => !l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart))
-                    .Select(l => l.CardId).Distinct().Count()
-            })
-            .FirstOrDefaultAsync();
-
-        var newCardsToday = todayStats?.NewCardsToday ?? 0;
-        var reviewsToday = settings.CountFailedReviews
-            ? todayStats?.ReviewsToday ?? 0
-            : todayStats?.UniqueCardsToday ?? 0;
+        var todayStats = await LoadTodayStats(userId, todayStart);
+        var newCardsToday = todayStats.NewCardsToday;
+        var reviewsToday = settings.CountFailedReviews ? todayStats.ReviewsToday : todayStats.UniqueCardsToday;
 
 
         var newCardBudget = extraNewCards ?? Math.Max(0, settings.NewCardsPerDay - newCardsToday);
@@ -2899,31 +2883,9 @@ public partial class StudyController(
             reviewsDue = await dueNowQuery.CountAsync();
         }
 
-        var userCardIds = userContext.FsrsCards
-            .Where(c => c.UserId == userId)
-            .Select(c => c.CardId);
-
-        var todayLogs = userContext.FsrsReviewLogs
-            .AsNoTracking()
-            .Where(rl => userCardIds.Contains(rl.CardId) && rl.ReviewDateTime >= todayStart);
-
-        // Mirror the study-batch path exactly so "done today" matches the new-card budget logic.
-        var todayStats = await todayLogs
-            .GroupBy(_ => 1)
-            .Select(g => new
-            {
-                ReviewsToday = g.Count(l => l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart)),
-                UniqueCardsToday = g.Where(l => l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart))
-                    .Select(l => l.CardId).Distinct().Count(),
-                NewCardsToday = g.Where(l => !l.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart))
-                    .Select(l => l.CardId).Distinct().Count(),
-            })
-            .FirstOrDefaultAsync();
-
-        var reviewsToday = settings.CountFailedReviews
-            ? todayStats?.ReviewsToday ?? 0
-            : todayStats?.UniqueCardsToday ?? 0;
-        var newCardsToday = todayStats?.NewCardsToday ?? 0;
+        var todayStats = await LoadTodayStats(userId, todayStart);
+        var reviewsToday = settings.CountFailedReviews ? todayStats.ReviewsToday : todayStats.UniqueCardsToday;
+        var newCardsToday = todayStats.NewCardsToday;
 
         var newCardBudget = Math.Max(0, settings.NewCardsPerDay - newCardsToday);
         var newCardsAvailable = 0;
@@ -3056,16 +3018,7 @@ public partial class StudyController(
         {
             case "extraNew":
             {
-                var userCardIds = userContext.FsrsCards
-                    .Where(c => c.UserId == userId)
-                    .Select(c => c.CardId);
-                var newCardsToday = await userContext.FsrsReviewLogs
-                    .AsNoTracking()
-                    .Where(rl => userCardIds.Contains(rl.CardId) && rl.ReviewDateTime >= todayStart
-                                 && !rl.Card.ReviewLogs.Any(p => p.ReviewDateTime < todayStart))
-                    .Select(rl => rl.CardId)
-                    .Distinct()
-                    .CountAsync();
+                var newCardsToday = (await LoadTodayStats(userId, todayStart)).NewCardsToday;
 
                 var budget = extraNewCards ?? Math.Max(0, settings.NewCardsPerDay - newCardsToday);
 
@@ -4219,10 +4172,22 @@ public partial class StudyController(
 
         var exampleDeckIds = matches.Select(m => sentences[m.SentenceId].DeckId).Distinct().ToList();
         var exampleDecks = await context.Decks.AsNoTracking()
-            .Where(d => exampleDeckIds.Contains(d.DeckId)
-                        || context.Decks.Any(c => exampleDeckIds.Contains(c.DeckId) && c.ParentDeckId == d.DeckId))
+            .Where(d => exampleDeckIds.Contains(d.DeckId))
             .Select(d => new DeckProjection(d.DeckId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle, d.MediaType, d.ParentDeckId))
             .ToDictionaryAsync(d => d.DeckId);
+        var missingParentIds = exampleDecks.Values
+            .Where(d => d.ParentDeckId is { } p && !exampleDecks.ContainsKey(p))
+            .Select(d => d.ParentDeckId!.Value)
+            .Distinct()
+            .ToList();
+        if (missingParentIds.Count > 0)
+        {
+            await foreach (var parent in context.Decks.AsNoTracking()
+                               .Where(d => missingParentIds.Contains(d.DeckId))
+                               .Select(d => new DeckProjection(d.DeckId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle, d.MediaType, d.ParentDeckId))
+                               .AsAsyncEnumerable())
+                exampleDecks[parent.DeckId] = parent;
+        }
 
         foreach (var match in matches)
         {
@@ -4358,6 +4323,28 @@ public partial class StudyController(
     }
 
     private record DeckProjection(int DeckId, string OriginalTitle, string? RomajiTitle, string? EnglishTitle, MediaType MediaType, int? ParentDeckId);
+
+    private record TodayReviewStats(int ReviewsToday, int UniqueCardsToday, int NewCardsToday);
+
+    /// <summary>A card is new today when it has no review before <paramref name="todayStart"/>; ReviewsToday counts only reviews of the other cards.</summary>
+    private async Task<TodayReviewStats> LoadTodayStats(string userId, DateTime todayStart)
+    {
+        var perCard = await userContext.FsrsReviewLogs
+            .AsNoTracking()
+            .Where(l => l.Card.UserId == userId && l.ReviewDateTime >= todayStart)
+            .GroupBy(l => l.CardId)
+            .Select(g => new
+            {
+                Count = g.Count(),
+                HadEarlier = userContext.FsrsReviewLogs.Any(p => p.CardId == g.Key && p.ReviewDateTime < todayStart)
+            })
+            .ToListAsync();
+
+        return new TodayReviewStats(
+            perCard.Where(c => c.HadEarlier).Sum(c => c.Count),
+            perCard.Count(c => c.HadEarlier),
+            perCard.Count(c => !c.HadEarlier));
+    }
 
     private sealed class HeldForm
     {

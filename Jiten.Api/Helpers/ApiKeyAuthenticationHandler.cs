@@ -45,7 +45,7 @@ public class ApiKeyAuthenticationHandler(
 
     // Throttle LastUsedAt writes to one per key per interval instead of one per request.
     private static readonly ConcurrentDictionary<int, DateTime> LastUsedWrites = new();
-    private static readonly TimeSpan LAST_USED_WRITE_INTERVAL = TimeSpan.FromMinutes(1);
+    private static readonly TimeSpan LAST_USED_WRITE_INTERVAL = TimeSpan.FromMinutes(15);
 
     private sealed class FailedAttemptTracker(FixedWindowRateLimiter limiter)
     {
