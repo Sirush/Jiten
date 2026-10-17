@@ -149,6 +149,7 @@
       mediaSubdeckId?: number; // Added to track existing subdeck IDs
       difficultyOverride: number;
       originalFileName?: string | null; // Origin file name (provenance), read-only
+      fromParentText?: boolean;
       titleEdited?: boolean;
       autoDetected?: boolean;
     }>
@@ -235,6 +236,19 @@
 
   const deckHasNoContent = computed(() => !response.value?.subDecks?.length && (response.value?.mainDeck?.characterCount ?? 0) === 0);
 
+  /** A deck's own text, and its users' lists and votes, move into its first subdeck so they survive the deck becoming a parent. */
+  function ensureParentTextRow() {
+    if (subdecks.value.length || response.value?.subDecks?.length || deckHasNoContent.value) return;
+    subdecks.value.push({
+      id: nextSubdeckId++,
+      originalTitle: `${subdeckDefaultName.value} 1`,
+      file: null,
+      difficultyOverride: -1,
+      originalFileName: parentTextFile.value?.name ?? response.value?.mainDeck?.originalFileName,
+      fromParentText: true,
+    });
+  }
+
   function handleParentTextFileUpload(event: { files: File[] }) {
     if (event.files && event.files.length > 0) {
       parentTextFile.value = event.files[0];
@@ -314,6 +328,7 @@
   }
 
   function appendFilesAsSubdecks(files: File[]) {
+    ensureParentTextRow();
     for (const file of sortFilesNaturally(files)) {
       const newSubdeckNumber = subdecks.value.length + 1;
       subdecks.value.push({
@@ -344,7 +359,8 @@
     if (!event.files || event.files.length === 0) return;
 
     const files = sortFilesNaturally(event.files);
-    const savedSubdecks = subdecks.value.filter((sd) => sd.mediaSubdeckId);
+    ensureParentTextRow();
+    const savedSubdecks = subdecks.value.filter((sd) => sd.mediaSubdeckId || sd.fromParentText);
     const pendingCount = subdecks.value.length - savedSubdecks.length;
     const keptCount = Math.min(savedSubdecks.length, files.length);
     const appendedCount = Math.max(0, files.length - savedSubdecks.length);
@@ -372,6 +388,7 @@
         mediaSubdeckId: existing?.mediaSubdeckId,
         difficultyOverride: existing ? existing.difficultyOverride : -1,
         originalFileName: existing?.originalFileName,
+        fromParentText: existing?.fromParentText,
         titleEdited: false,
       };
     });
@@ -471,6 +488,7 @@
   });
 
   function addSubdeck() {
+    ensureParentTextRow();
     const newSubdeckNumber = subdecks.value.length + 1;
     subdecks.value.push({
       id: nextSubdeckId++,
@@ -488,6 +506,10 @@
     const subdeck = subdecks.value[index];
     if (subdeck.mediaSubdeckId) {
       if (!confirm('Are you sure you want to remove this subdeck? This action cannot be undone.')) {
+        return;
+      }
+    } else if (subdeck.fromParentText && subdecks.value.length > 1) {
+      if (!confirm("This subdeck holds the deck's current text and its users' lists and votes. Removing it will discard the text once you save.")) {
         return;
       }
     }
@@ -922,6 +944,9 @@
           // Include the existing subdeck ID if available
           if (subdeck.mediaSubdeckId) {
             formData.append(`subdecks[${i}].deckId`, subdeck.mediaSubdeckId.toString());
+          }
+          if (subdeck.fromParentText) {
+            formData.append(`subdecks[${i}].fromParentText`, 'true');
           }
 
           formData.append(`subdecks[${i}].deckOrder`, (i + 1).toString());
@@ -1702,7 +1727,18 @@
                 </div>
               </template>
               <template #content>
-                <div v-if="!subdeck.file && !subdeck.mediaSubdeckId">
+                <div v-if="subdeck.fromParentText && !subdeck.file" class="flex flex-wrap items-center gap-3">
+                  <span class="text-sm text-muted-color">The deck's current text, user lists and votes will move here.</span>
+                  <FileUpload
+                    mode="basic"
+                    :auto="true"
+                    choose-label="Replace text"
+                    :multiple="false"
+                    :custom-upload="true"
+                    @select="(e) => handleSubdeckFileUpload(e, subdeck.id)"
+                  />
+                </div>
+                <div v-else-if="!subdeck.file && !subdeck.mediaSubdeckId">
                   <FileUpload
                     mode="advanced"
                     :auto="true"

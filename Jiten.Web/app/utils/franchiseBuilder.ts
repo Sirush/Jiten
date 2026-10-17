@@ -528,9 +528,11 @@ export function builderChecks(state: BuilderState, year: (deckId: number) => num
     const sequels = edges.filter((e) => e.relationshipType === Sequel && getEdgeFlow(e).from === id).map((e) => getEdgeFlow(e).to);
     if (sequels.length > 1) out.push({ kind: 'branch', deckId: id, sequels });
   }
+  const board = new Set(state.board);
   for (const e of edges) {
     if (e.relationshipType !== Sequel) continue;
     const flow = getEdgeFlow(e);
+    if (!board.has(flow.from) || !board.has(flow.to)) continue;
     const a = year(flow.from);
     const b = year(flow.to);
     if (a != null && b != null && b < a) out.push({ kind: 'order', edge: e });
@@ -754,13 +756,14 @@ export function layoutBoard(input: BoardLayoutInput): BoardLayout {
   return { cards, bands, sections, seriesOf, width, height: Math.max(320, y - BAND_GAP + BOARD_PAD) };
 }
 
-export type CardRemoveAction = { kind: 'leave'; seriesId: number } | { kind: 'remove' };
+export type CardRemoveAction = { kind: 'leave'; seriesId: number } | { kind: 'remove'; ids: number[] };
 
-/** A card leaves the series it is shown under, else the board; null while links or memberships still hold it there. */
+/** A card leaves the series it is shown under, else the board together with every deck linked to it; null while a membership holds one of them. */
 export function cardRemoveAction(state: BuilderState, layout: Pick<BoardLayout, 'seriesOf'>, deckId: number): CardRemoveAction | null {
   const seriesId = layout.seriesOf.get(deckId);
   if (seriesId != null) return { kind: 'leave', seriesId };
-  return hasLinks(state, deckId) || hasMembership(state, deckId) ? null : { kind: 'remove' };
+  const line = lineOf(state, deckId);
+  return line.some((id) => hasMembership(state, id)) ? null : { kind: 'remove', ids: line };
 }
 
 export type BuilderDropTarget = { kind: 'deck'; id: number } | { kind: 'series'; id: number } | { kind: 'setting'; id: number } | { kind: 'board' };

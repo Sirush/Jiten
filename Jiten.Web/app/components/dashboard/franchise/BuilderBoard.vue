@@ -119,10 +119,12 @@
           run: () => emit('leave', seriesId, id),
         });
       } else if (action) {
+        const linked = action.ids.length - 1;
+        const withLinked = linked ? ` with the ${linked} linked ${linked === 1 ? 'deck' : 'decks'}` : '';
         out.set(id, {
-          label: `Take ${props.title(id)} out of the franchise`,
-          tip: 'Take out of the franchise',
-          keyHint: 'take out of the franchise',
+          label: `Take ${props.title(id)}${withLinked} out of the franchise`,
+          tip: `Take out of the franchise${withLinked}`,
+          keyHint: `take out of the franchise${withLinked}`,
           run: () => emit('remove', id),
         });
       }

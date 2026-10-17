@@ -19,6 +19,7 @@ public class SiteStatsBuilder(IDbContextFactory<JitenDbContext> jitenFactory, ID
     public const int MinLearnersPerForgottenWord = 20;
     public const int MinReviewsPerForgottenWord = 200;
     public const int ForgottenWordCount = 25;
+    public const int MaxReviewsPerLearnerPerForgottenWord = 5;
     public const int MinLearnersPerReadingType = 20;
 
     /// <summary>The name sets hold hundreds of thousands of proper nouns, which aren't vocabulary a learner knows.</summary>
@@ -489,26 +490,51 @@ public class SiteStatsBuilder(IDbContextFactory<JitenDbContext> jitenFactory, ID
         await using var jitenContext = await jitenFactory.CreateDbContextAsync(ct);
 
         var since = utcNow.AddDays(-LogWindowDays);
-        var words = await (from l in userContext.FsrsReviewLogs
-                           join c in userContext.FsrsCards on l.CardId equals c.CardId
-                           where l.ReviewDateTime >= since && l.State == FsrsState.Review
-                           group new { c.UserId, l.Rating } by new { c.WordId, c.ReadingIndex }
-                           into g
-                           where g.Count() >= MinReviewsPerForgottenWord
-                                 && g.Select(x => x.UserId).Distinct().Count() >= MinLearnersPerForgottenWord
-                           select new
-                           {
-                               g.Key.WordId,
-                               g.Key.ReadingIndex,
-                               Reviews = g.Count(),
-                               Agains = g.Count(x => x.Rating == FsrsRating.Again)
-                           })
-                          .ToListAsync(ct);
+        var reviews = from l in userContext.FsrsReviewLogs
+                      join c in userContext.FsrsCards on l.CardId equals c.CardId
+                      where l.ReviewDateTime >= since && l.State == FsrsState.Review
+                      select new { l.CardId, c.UserId, c.WordId, c.ReadingIndex, l.ReviewDateTime, l.Rating };
 
-        var top = words.OrderByDescending(w => (double)w.Agains / w.Reviews)
-                       .ThenBy(w => w.WordId)
-                       .Take(ForgottenWordCount)
-                       .ToList();
+        var eligible = await (from r in reviews
+                              group r.UserId by new { r.WordId, r.ReadingIndex }
+                              into g
+                              where g.Count() >= MinReviewsPerForgottenWord
+                                    && g.Distinct().Count() >= MinLearnersPerForgottenWord
+                              select g.Key)
+                             .ToListAsync(ct);
+        if (eligible.Count == 0)
+            return [];
+
+        var eligibleKeys = eligible.Select(k => (k.WordId, k.ReadingIndex)).ToHashSet();
+        var eligibleWordIds = eligibleKeys.Select(k => k.WordId).Distinct().ToList();
+        var tallies = new Dictionary<(int WordId, byte ReadingIndex), (int Reviews, int Agains)>();
+        var currentCardId = -1L;
+        var cardAnswers = 0;
+        await foreach (var r in reviews.Where(r => eligibleWordIds.Contains(r.WordId))
+                                       .OrderBy(r => r.CardId).ThenBy(r => r.ReviewDateTime)
+                                       .Select(r => new { r.CardId, r.WordId, r.ReadingIndex, r.Rating })
+                                       .AsAsyncEnumerable()
+                                       .WithCancellation(ct))
+        {
+            if (r.CardId != currentCardId)
+            {
+                currentCardId = r.CardId;
+                cardAnswers = 0;
+            }
+
+            var key = (r.WordId, r.ReadingIndex);
+            if (++cardAnswers > MaxReviewsPerLearnerPerForgottenWord || !eligibleKeys.Contains(key))
+                continue;
+
+            var tally = tallies.GetValueOrDefault(key);
+            tallies[key] = (tally.Reviews + 1, tally.Agains + (r.Rating == FsrsRating.Again ? 1 : 0));
+        }
+
+        var top = tallies.Select(t => new { t.Key.WordId, t.Key.ReadingIndex, t.Value.Reviews, t.Value.Agains })
+                         .OrderByDescending(w => (double)w.Agains / w.Reviews)
+                         .ThenBy(w => w.WordId)
+                         .Take(ForgottenWordCount)
+                         .ToList();
         if (top.Count == 0)
             return [];
 

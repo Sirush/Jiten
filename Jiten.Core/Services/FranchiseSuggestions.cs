@@ -41,7 +41,7 @@ public static partial class FranchiseSuggestions
 
     private static readonly HashSet<string> WorkPos = ["work", "product", "fict", "char"];
 
-    [GeneratedRegex(@"^(?:劇場版\s*|映画[\s「]|ネット版\s*|gekijouban\s+|the movie:?\s+)+", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"^(?:劇場版\s*|特別編\s*|総集編\s*|映画[\s「]|ネット版\s*|gekijouban\s+|the movie:?\s+)+", RegexOptions.IgnoreCase)]
     private static partial Regex LeadingDecoration();
 
     [GeneratedRegex(@"\s+")]

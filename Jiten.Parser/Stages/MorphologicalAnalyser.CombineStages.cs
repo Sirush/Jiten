@@ -1066,6 +1066,8 @@ public partial class MorphologicalAnalyser
 
             wordInfos[i].PartOfSpeech = PartOfSpeech.CommonNoun;
             wordInfos[i].PartOfSpeechSection1 = PartOfSpeechSection.None;
+            if (wordInfos[i].Text.Any(JapaneseTextHelper.IsKanji))
+                wordInfos[i].SuffixReading = wordInfos[i].Reading;
             wordInfos[i].Reading = string.Empty;
             wordInfos[i].WasReclassifiedFromSuffix = true;
         }

@@ -69,6 +69,13 @@ public class FranchiseSuggestionsTests
     }
 
     [Fact]
+    public void SpecialEditionPrefix_IsIgnored()
+    {
+        Groups("特別編 機動戦士ガンダムサンダーボルト BANDIT FLOWER", "特別編 響け！ユーフォニアム～アンサンブルコンテスト～").Should().BeEmpty();
+        Groups("総集編 進撃の巨人", "総集編 鋼の錬金術師").Should().BeEmpty();
+    }
+
+    [Fact]
     public void TrailingParticle_IsTrimmed()
     {
         Groups("ゼルダの伝説の旅", "ゼルダの伝説の夢").Should().ContainSingle().Which.Root.Should().Be("ゼルダの伝説");
