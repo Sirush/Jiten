@@ -309,17 +309,23 @@
     flash(fresh.length === 1 ? `Added ${title(fresh[0]!)} to the board` : `Added ${fresh.length} decks to the board`, true);
   }
 
-  const removable = (id: number) => cardRemoveAction(state.value, layout.value, id)?.kind === 'remove';
+  function decksLeavingWith(id: number): number[] | null {
+    const action = cardRemoveAction(state.value, layout.value, id);
+    return action?.kind === 'remove' ? action.ids : null;
+  }
+
+  const removable = (id: number) => decksLeavingWith(id) != null;
 
   function removeFromBoard(ids: number[]) {
     const blocked = ids.filter((id) => !removable(id));
     if (blocked.length) {
-      flash(`${blocked.map(title).join(', ')} still ${blocked.length === 1 ? 'has' : 'have'} links or memberships. Remove those first.`);
+      flash(`${blocked.map(title).join(', ')} or a deck linked to ${blocked.length === 1 ? 'it' : 'them'} is still in a series or setting. Take it out first.`);
       return;
     }
-    commit((s) => (s.board = s.board.filter((id) => !ids.includes(id))));
-    selected.value = selected.value.filter((id) => !ids.includes(id));
-    flash(`Took ${ids.length === 1 ? title(ids[0]!) : `${ids.length} decks`} out of the franchise`, true);
+    const leaving = [...new Set(ids.flatMap((id) => decksLeavingWith(id)!))];
+    commit((s) => (s.board = s.board.filter((id) => !leaving.includes(id))));
+    selected.value = selected.value.filter((id) => !leaving.includes(id));
+    flash(`Took ${leaving.length === 1 ? title(leaving[0]!) : `${leaving.length} decks`} out of the franchise`, true);
   }
 
   function seriesDropHint(seriesId: number, id: number) {

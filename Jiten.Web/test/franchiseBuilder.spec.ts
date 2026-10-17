@@ -446,6 +446,10 @@ describe('builderChecks', () => {
     expect(checks).toContainEqual({ kind: 'branch', deckId: 1, sequels: [2, 3] });
     expect(checks.filter((c) => c.kind === 'order')).toHaveLength(1);
   });
+
+  it('ignores links of decks taken off the board', () => {
+    expect(builderChecks(stateWith([edge(1, 5, Sequel)], [2, 3]), year)).toEqual([]);
+  });
 });
 
 describe('layoutBoard', () => {
@@ -519,12 +523,18 @@ describe('cardRemoveAction', () => {
 
   it('takes a free card off the board', () => {
     const state = stateWith([], [1]);
-    expect(cardRemoveAction(state, layoutOf(state), 1)).toEqual({ kind: 'remove' });
+    expect(cardRemoveAction(state, layoutOf(state), 1)).toEqual({ kind: 'remove', ids: [1] });
   });
 
-  it('offers nothing for a linked card or one in a setting', () => {
+  it('takes a linked card off the board with its whole line', () => {
+    const state = stateWith([edge(2, 1, Sequel), edge(3, 2, Sequel)], [1, 2, 3, 4]);
+    const action = cardRemoveAction(state, layoutOf(state), 2);
+    expect(action?.kind === 'remove' ? [...action.ids].sort() : action).toEqual([1, 2, 3]);
+  });
+
+  it('offers nothing while a setting holds the card or a deck linked to it', () => {
     const state = stateWith([edge(2, 1, Sequel)], [1, 2, 3]);
-    state.members.push({ seriesId: 20, deckId: 3, status: 'saved' });
+    state.members.push({ seriesId: 20, deckId: 2, status: 'saved' }, { seriesId: 20, deckId: 3, status: 'saved' });
     const layout = layoutOf(state);
     expect(cardRemoveAction(state, layout, 1)).toBeNull();
     expect(cardRemoveAction(state, layout, 3)).toBeNull();
