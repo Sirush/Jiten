@@ -44,6 +44,9 @@ public class FormSelectionTests
         // Hiragana まま should resolve to まま (as-is, 1585410), not mama
         yield return ["まま", "まま", 1585410, (byte)2];
 
+        // A suffix after a verb (いない歴) stays the suffix 歴, not the stem of 歴る
+        yield return ["「彼氏いない歴＝年齢でしょー？」", "歴", 2211960, (byte)0];
+
         // Classical attributive of a noun + adjective compound resolves to the modern lemma 気高い
         yield return ["気高き魂を持つ者", "気高き", 1222210, (byte)0];
 

@@ -29,6 +29,10 @@ public class WordInfo
     public bool IsSlurredNegative { get; set; }
 
     public bool WasReclassifiedFromSuffix { get; set; }
+
+    /// <summary>Sudachi's reading of a reclassified kanji suffix; lookup ignores it, noun-vs-verb arbitration weighs it (歴 レキ ≠ 経る).</summary>
+    public string? SuffixReading { get; set; }
+
     public bool IsMergedInflection { get; set; }
     public int? ResolvedWordId { get; set; }
 
@@ -73,6 +77,7 @@ public class WordInfo
         IsImperative = other.IsImperative;
         IsSlurredNegative = other.IsSlurredNegative;
         WasReclassifiedFromSuffix = other.WasReclassifiedFromSuffix;
+        SuffixReading = other.SuffixReading;
         IsMergedInflection = other.IsMergedInflection;
         ResolvedWordId = other.ResolvedWordId;
         KeptForm = other.KeptForm;

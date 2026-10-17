@@ -609,7 +609,7 @@ namespace Jiten.Parser
                             var isNameLike = PosMapper.IsNameLikeSudachiNoun(wi.PartOfSpeech, wi.PartOfSpeechSection1,
                                                                              wi.PartOfSpeechSection2, wi.PartOfSpeechSection3);
                             cacheKeys.Add(new DeckWordCacheKey(wi.Text, wi.PartOfSpeech, wi.DictionaryForm,
-                                                               wi.Reading, wi.IsPersonNameContext, isNameLike));
+                                                               CacheKeyReading(wi), wi.IsPersonNameContext, isNameLike));
                         }
 
                         if (cacheKeys.Count > 0)
@@ -1236,6 +1236,10 @@ namespace Jiten.Parser
             public static ProcessWordResult Unresolved { get; } = new(ProcessWordStatus.Unresolved);
         }
 
+        /// <summary>A reclassified suffix keys on its Sudachi reading, which noun-vs-verb arbitration weighs (上 ジョウ vs ウエ).</summary>
+        private static string CacheKeyReading(WordInfo wordInfo) =>
+            string.IsNullOrEmpty(wordInfo.Reading) ? wordInfo.SuffixReading ?? string.Empty : wordInfo.Reading;
+
         private static async Task<ProcessWordResult> ProcessWord(WordInfo wordInfo, Deconjugator deconjugator,
                                                                  Dictionary<DeckWordCacheKey, DeckWord?>? prefetchedCache = null,
                                                                  ParserDiagnostics? diagnostics = null,
@@ -1263,7 +1267,7 @@ namespace Jiten.Parser
                                                     wordInfo.Text,
                                                     wordInfo.PartOfSpeech,
                                                     wordInfo.DictionaryForm,
-                                                    wordInfo.Reading,
+                                                    CacheKeyReading(wordInfo),
                                                     wordInfo.IsPersonNameContext,
                                                     isNameLikeSudachiNoun
                                                    );
@@ -1635,7 +1639,7 @@ namespace Jiten.Parser
                                + EntryPriorityScorer.Score(candidate);
                     }
 
-                    var reading = wordInfo.Reading;
+                    var reading = string.IsNullOrEmpty(wordInfo.Reading) ? wordInfo.SuffixReading : wordInfo.Reading;
                     bool nounReadingMatch = !string.IsNullOrEmpty(reading) &&
                                             FormCandidateFactory.HasKanaReadingMatch(nounEntry, reading);
                     bool verbReadingMatch = !string.IsNullOrEmpty(reading) &&
