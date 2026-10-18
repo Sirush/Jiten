@@ -106,6 +106,9 @@ public class SiteStatsWordsForCoverageTypeDto
     /// <summary>Median word frequency rank to know up to; null when the level is out of reach for the median title.</summary>
     public List<int?> Ranks { get; set; } = [];
 
+    /// <summary>Distinct words, most frequent first, covering each level of all the type's text; null in snapshots computed before it existed.</summary>
+    public List<int?>? LibraryWords { get; set; }
+
     public double ExcludedPercent { get; set; }
 }
 
