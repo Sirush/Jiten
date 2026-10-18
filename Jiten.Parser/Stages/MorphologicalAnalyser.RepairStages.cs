@@ -3558,7 +3558,7 @@ public partial class MorphologicalAnalyser
                                        && VerbIndicatingAuxiliaries.Contains(word.DictionaryForm);
             bool isOrphanedVerbEnding = !isOrphanedAuxiliary
                                         && word.Text.Length == 1
-                                        && GodanVerbEndings.Contains(word.Text);
+                                        && GodanVerbEndingKana.Contains(word.Text[0]);
 
             if (!isOrphanedAuxiliary && !isOrphanedVerbEnding)
             {

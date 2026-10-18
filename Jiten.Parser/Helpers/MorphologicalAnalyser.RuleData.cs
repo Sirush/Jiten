@@ -252,7 +252,9 @@ public partial class MorphologicalAnalyser
     private static readonly HashSet<string> VerbIndicatingAuxiliaries =
         ["られる", "れる", "せる", "させる"];
 
-    private static readonly string[] GodanVerbEndings = ["る", "す", "つ", "く", "ぐ", "む", "ぶ", "ぬ", "う"];
+    private const string GodanVerbEndingKana = "るすつくぐむぶぬう";
+
+    private static readonly string[] GodanVerbEndings = [.. GodanVerbEndingKana.Select(c => c.ToString())];
 
     internal static readonly HashSet<char> GodanVolitionalOKana =
         ['お', 'こ', 'ご', 'そ', 'ぞ', 'と', 'ど', 'の', 'ほ', 'ぼ', 'ぽ', 'も', 'よ', 'ろ'];
