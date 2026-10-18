@@ -2639,7 +2639,7 @@ namespace Jiten.Parser
                 // Imperatives are left out: godan 食べれ/起きれ is also ichidan ら抜き, and the deconjugator only reads the godan side.
                 var verbClassTags = deconjugated
                     .Where(d => d.Process.Length > 0 && d.Text == formHiragana && !d.Process.Contains("imperative"))
-                    .Select(d => PosMapper.GetValidatableDeconjTags(d.Tags).LastOrDefault())
+                    .Select(d => PosMapper.GetLastValidatableDeconjTag(d.Tags))
                     .Where(t => t != null && t[0] == 'v')
                     .Select(t => t!)
                     .ToList();

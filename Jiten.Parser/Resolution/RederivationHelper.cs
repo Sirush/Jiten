@@ -104,8 +104,13 @@ internal static class RederivationHelper
                 matchedWordIds.Add(m.Word.WordId);
             }
 
-            foreach (var id in (state.DirectIds ?? []).Concat(state.HiraganaIds ?? []).Distinct())
+            int directCount = state.DirectIds?.Count ?? 0;
+            int surfaceIdCount = directCount + (state.HiraganaIds?.Count ?? 0);
+            var seenSurfaceIds = new HashSet<int>(surfaceIdCount);
+            for (int k = 0; k < surfaceIdCount; k++)
             {
+                int id = k < directCount ? state.DirectIds![k] : state.HiraganaIds![k - directCount];
+                if (!seenSurfaceIds.Add(id)) continue;
                 if (matchedWordIds.Contains(id)) continue;
                 if (!wordCache.TryGetValue(id, out var word)) continue;
                 var posList = word.CachedPOS;

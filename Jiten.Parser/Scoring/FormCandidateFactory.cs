@@ -60,11 +60,17 @@ internal static class FormCandidateFactory
         if (candidates.Count <= 1)
             return candidates;
 
-        var nonSearchOnly = candidates.Where(c => !c.Form.IsSearchOnly || c.Form.Text == surface).ToList();
+        var nonSearchOnly = new List<FormCandidate>(candidates.Count);
+        foreach (var c in candidates)
+            if (!c.Form.IsSearchOnly || c.Form.Text == surface)
+                nonSearchOnly.Add(c);
         if (nonSearchOnly.Count > 0)
             candidates = nonSearchOnly;
 
-        var nonObsolete = candidates.Where(c => !c.Form.IsObsolete || c.Form.Text == surface).ToList();
+        var nonObsolete = new List<FormCandidate>(candidates.Count);
+        foreach (var c in candidates)
+            if (!c.Form.IsObsolete || c.Form.Text == surface)
+                nonObsolete.Add(c);
         if (nonObsolete.Count > 0)
             candidates = nonObsolete;
 

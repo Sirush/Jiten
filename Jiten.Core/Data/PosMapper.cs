@@ -385,7 +385,7 @@ public static class PosMapper
         var posTagsList = jmDictPosTags as IList<string> ?? jmDictPosTags.ToList();
 
         // Direct match
-        if (posTagsList.Contains(deconjTag, StringComparer.OrdinalIgnoreCase))
+        if (ContainsIgnoreCase(posTagsList, deconjTag))
             return true;
 
         // Check compatibility mappings
@@ -393,11 +393,19 @@ public static class PosMapper
         {
             foreach (var compatibleTag in compatibleTags)
             {
-                if (posTagsList.Contains(compatibleTag, StringComparer.OrdinalIgnoreCase))
+                if (ContainsIgnoreCase(posTagsList, compatibleTag))
                     return true;
             }
         }
 
+        return false;
+    }
+
+    private static bool ContainsIgnoreCase(IList<string> list, string value)
+    {
+        for (int i = 0; i < list.Count; i++)
+            if (string.Equals(list[i], value, StringComparison.OrdinalIgnoreCase))
+                return true;
         return false;
     }
 
@@ -412,12 +420,12 @@ public static class PosMapper
         return deconjTags.Any(tag => IsDeconjTagCompatibleWithJmDict(tag, jmDictList));
     }
 
-    /// <summary>
-    /// Filters deconjugation tags to only those that require POS validation.
-    /// </summary>
-    public static IEnumerable<string> GetValidatableDeconjTags(IEnumerable<string> tags)
+    public static string? GetLastValidatableDeconjTag(string[] tags)
     {
-        return tags.Where(t => DeconjTagsRequiringValidation.Contains(t));
+        for (int i = tags.Length - 1; i >= 0; i--)
+            if (DeconjTagsRequiringValidation.Contains(tags[i]))
+                return tags[i];
+        return null;
     }
 
     #endregion

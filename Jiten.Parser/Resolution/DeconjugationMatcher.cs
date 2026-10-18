@@ -17,6 +17,7 @@ internal static class DeconjugationMatcher
         var matches = new List<DeconjMatch>();
         foreach (var (form, ids) in candidates)
         {
+            var lastTag = PosMapper.GetLastValidatableDeconjTag(form.Tags);
             foreach (var id in ids)
             {
                 if (!wordCache.TryGetValue(id, out var word)) continue;
@@ -33,7 +34,6 @@ internal static class DeconjugationMatcher
                         continue;
                 }
 
-                var lastTag = PosMapper.GetValidatableDeconjTags(form.Tags).LastOrDefault();
                 if (lastTag != null && !PosMapper.IsDeconjTagCompatibleWithJmDict(lastTag, word.PartsOfSpeech))
                     continue;
 
