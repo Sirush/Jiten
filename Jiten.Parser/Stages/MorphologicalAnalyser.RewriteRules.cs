@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Diagnostics;
 using Jiten.Core.Data;
 
@@ -1257,11 +1258,11 @@ public partial class MorphologicalAnalyser
                 PartOfSpeech.Counter, PartOfSpeech.Numeral], Negate: true)),
     ];
 
-    private sealed class RewriteIndex
+    private sealed class RewriteIndex(FrozenDictionary<string, List<RewriteRule>> byFirstText, List<RewriteRule> residual)
     {
-        public readonly Dictionary<string, List<RewriteRule>> ByFirstText = new(StringComparer.Ordinal);
+        public readonly FrozenDictionary<string, List<RewriteRule>> ByFirstText = byFirstText;
         // First pattern has no exact surface (StartsWith/EndsWith/POS-only), so these are tried at every token.
-        public readonly List<RewriteRule> Residual = [];
+        public readonly List<RewriteRule> Residual = residual;
         public bool IsEmpty => ByFirstText.Count == 0 && Residual.Count == 0;
     }
 
@@ -1270,22 +1271,28 @@ public partial class MorphologicalAnalyser
     private static Dictionary<RewritePhase, RewriteIndex> BuildRewriteIndex(RewriteRule[] rules)
     {
         ValidateRewriteRules(rules);
-        var index = new Dictionary<RewritePhase, RewriteIndex>();
+        var byFirstText = new Dictionary<RewritePhase, Dictionary<string, List<RewriteRule>>>();
+        var residual = new Dictionary<RewritePhase, List<RewriteRule>>();
         foreach (var rule in rules)
         {
-            if (!index.TryGetValue(rule.Phase, out var bucket))
-                index[rule.Phase] = bucket = new RewriteIndex();
+            if (!byFirstText.TryGetValue(rule.Phase, out var exact))
+            {
+                byFirstText[rule.Phase] = exact = new Dictionary<string, List<RewriteRule>>(StringComparer.Ordinal);
+                residual[rule.Phase] = [];
+            }
 
             var first = rule.Match[0];
             if (first.Text != null)
-                AddToBucket(bucket.ByFirstText, first.Text, rule);
+                AddToBucket(exact, first.Text, rule);
             else if (first.TextAnyOf is { Length: > 0 })
                 foreach (var t in first.TextAnyOf)
-                    AddToBucket(bucket.ByFirstText, t, rule);
+                    AddToBucket(exact, t, rule);
             else
-                bucket.Residual.Add(rule);
+                residual[rule.Phase].Add(rule);
         }
-        return index;
+        return byFirstText.ToDictionary(
+            kv => kv.Key,
+            kv => new RewriteIndex(kv.Value.ToFrozenDictionary(StringComparer.Ordinal), residual[kv.Key]));
     }
 
     private static void AddToBucket(Dictionary<string, List<RewriteRule>> map, string key, RewriteRule rule)

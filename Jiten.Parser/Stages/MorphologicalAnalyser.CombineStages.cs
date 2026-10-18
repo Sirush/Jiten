@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Utils;
@@ -1200,10 +1201,10 @@ public partial class MorphologicalAnalyser
         return newList ?? wordInfos;
     }
 
-    private static readonly Dictionary<string, List<(string Second, PartOfSpeech? Pos)>> SpecialCases2Dict = BuildSpecialCases2Dict();
-    private static readonly Dictionary<string, List<(string Second, string Third, PartOfSpeech? Pos)>> SpecialCases3Dict = BuildSpecialCases3Dict();
+    private static readonly FrozenDictionary<string, List<(string Second, PartOfSpeech? Pos)>> SpecialCases2Dict = BuildSpecialCases2Dict();
+    private static readonly FrozenDictionary<string, List<(string Second, string Third, PartOfSpeech? Pos)>> SpecialCases3Dict = BuildSpecialCases3Dict();
 
-    private static Dictionary<string, List<(string Second, PartOfSpeech? Pos)>> BuildSpecialCases2Dict()
+    private static FrozenDictionary<string, List<(string Second, PartOfSpeech? Pos)>> BuildSpecialCases2Dict()
     {
         var dict = new Dictionary<string, List<(string, PartOfSpeech?)>>(StringComparer.Ordinal);
         foreach (var sc in SpecialCases2)
@@ -1215,10 +1216,10 @@ public partial class MorphologicalAnalyser
             }
             list.Add((sc.Item2, sc.Item3));
         }
-        return dict;
+        return dict.ToFrozenDictionary(StringComparer.Ordinal);
     }
 
-    private static Dictionary<string, List<(string Second, string Third, PartOfSpeech? Pos)>> BuildSpecialCases3Dict()
+    private static FrozenDictionary<string, List<(string Second, string Third, PartOfSpeech? Pos)>> BuildSpecialCases3Dict()
     {
         var dict = new Dictionary<string, List<(string, string, PartOfSpeech?)>>(StringComparer.Ordinal);
         foreach (var sc in SpecialCases3)
@@ -1230,7 +1231,7 @@ public partial class MorphologicalAnalyser
             }
             list.Add((sc.Item2, sc.Item3, sc.Item4));
         }
-        return dict;
+        return dict.ToFrozenDictionary(StringComparer.Ordinal);
     }
 
     private List<WordInfo> CombineFinal(List<WordInfo> wordInfos)
