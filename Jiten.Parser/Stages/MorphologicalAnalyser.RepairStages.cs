@@ -4877,31 +4877,17 @@ public partial class MorphologicalAnalyser
         {
             bool combined = false;
             int maxSpan = Math.Min(4, wordInfos.Count - i);
+            int run = 0;
+            while (run < maxSpan && IsRecombinablePiece(wordInfos[i + run]))
+                run++;
 
-            for (int spanLen = maxSpan; spanLen >= 2 && !combined; spanLen--)
+            for (int spanLen = run; spanLen >= 2 && !combined; spanLen--)
             {
-                bool allValid = true;
                 int totalLen = 0;
-
                 for (int j = i; j < i + spanLen; j++)
-                {
-                    var w = wordInfos[j];
-                    if (!JapaneseTextHelper.IsAllHiragana(w.Text) ||
-                        PosMapper.IsInflectableBase(w.PartOfSpeech) ||
-                        w.PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Auxiliary
-                            or PartOfSpeech.Prefix or PartOfSpeech.Suffix or PartOfSpeech.NounSuffix
-                            or PartOfSpeech.SupplementarySymbol or PartOfSpeech.Symbol
-                            or PartOfSpeech.BlankSpace or PartOfSpeech.Conjunction
-                        || (w.PartOfSpeech == PartOfSpeech.Expression && w.Text is "だった" or "だったら"))
-                    {
-                        allValid = false;
-                        break;
-                    }
+                    totalLen += wordInfos[j].Text.Length;
 
-                    totalLen += w.Text.Length;
-                }
-
-                if (!allValid || totalLen < 3 || totalLen > 12)
+                if (totalLen < 3 || totalLen > 12)
                     continue;
 
                 bool allSameInterjection = wordInfos[i].PartOfSpeech == PartOfSpeech.Interjection;
@@ -4988,6 +4974,15 @@ public partial class MorphologicalAnalyser
 
         return result ?? wordInfos;
     }
+
+    private static bool IsRecombinablePiece(WordInfo w) =>
+        JapaneseTextHelper.IsAllHiragana(w.Text)
+        && !PosMapper.IsInflectableBase(w.PartOfSpeech)
+        && w.PartOfSpeech is not (PartOfSpeech.Particle or PartOfSpeech.Auxiliary
+            or PartOfSpeech.Prefix or PartOfSpeech.Suffix or PartOfSpeech.NounSuffix
+            or PartOfSpeech.SupplementarySymbol or PartOfSpeech.Symbol
+            or PartOfSpeech.BlankSpace or PartOfSpeech.Conjunction)
+        && !(w.PartOfSpeech == PartOfSpeech.Expression && w.Text is "だった" or "だったら");
 
     private static WordInfo BuildMergedHiraganaToken(
         List<WordInfo> tokens, int start, int count,
