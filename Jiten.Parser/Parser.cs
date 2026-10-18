@@ -54,11 +54,6 @@ namespace Jiten.Parser
         private static long[]? _hashBasePowers;
         private const long HASH_BASE = 131L;
 
-        private static readonly Regex TokenCleanRegex = new(
-                                                            @"[^a-zA-Z0-9\u3040-\u309F\u30A0-\u30FF\u4E00-\u9FAF\uFF21-\uFF3A\uFF41-\uFF5A\uFF10-\uFF19\u3005．]",
-                                                            RegexOptions.Compiled);
-
-        private static readonly Regex SmallTsuLongVowelRegex = new(@"ッー", RegexOptions.Compiled);
         private static readonly Regex MultiLongVowelRegex = new(@"ー{2,}", RegexOptions.Compiled);
         private static readonly Regex DialogueRegex = new(@"[「『].{0,200}?[」』]", RegexOptions.Compiled | RegexOptions.Singleline);
 
@@ -1132,26 +1127,28 @@ namespace Jiten.Parser
             {
                 wordInfoCharCount += w.Text.Length;
                 foreach (var c in w.Text)
-                    charCounts[c] = charCounts.GetValueOrDefault(c) + 1;
+                {
+                    if (JapaneseTextHelper.IsKanji(c))
+                        charCounts[c] = charCounts.GetValueOrDefault(c) + 1;
+                }
             }
 
             int uniqueKanjiCount = 0, uniqueKanjiUsedOnceCount = 0;
-            foreach (var (c, count) in charCounts)
+            foreach (var (_, count) in charCounts)
             {
-                if (!JapaneseTextHelper.IsKanji(c)) continue;
                 uniqueKanjiCount++;
                 if (count == 1) uniqueKanjiUsedOnceCount++;
             }
 
             var characterCount = rawContentCharCount ?? wordInfoCharCount;
 
-            var textWithoutDialogues = DialogueRegex.Replace(text, "");
-            textWithoutDialogues = TokenCleanRegex.Replace(textWithoutDialogues, "");
-            var textWithoutPunctuation = TokenCleanRegex.Replace(text, "");
+            int tokenCharCount = CountTokenChars(text);
+            int dialogueCharacterCount = 0;
+            foreach (var match in DialogueRegex.EnumerateMatches(text))
+                dialogueCharacterCount += CountTokenChars(text.AsSpan(match.Index, match.Length));
 
-            int dialogueCharacterCount = textWithoutPunctuation.Length - textWithoutDialogues.Length;
-            float dialoguePercentage = textWithoutPunctuation.Length > 0
-                ? (float)dialogueCharacterCount / textWithoutPunctuation.Length * 100f
+            float dialoguePercentage = tokenCharCount > 0
+                ? (float)dialogueCharacterCount / tokenCharCount * 100f
                 : 0f;
 
             var sentenceProfile = SentenceProfileBuilder.Build(sentences, processedWords, profileLineBreaks);
@@ -1199,7 +1196,7 @@ namespace Jiten.Parser
             var sentences = await parser.Parse(text, morphemesOnly: true, diagnostics: diagnostics);
             var wordInfos = sentences.SelectMany(s => s.Words).Select(w => w.word).ToList();
 
-            wordInfos.ForEach(x => x.Text = SmallTsuLongVowelRegex.Replace(x.Text, ""));
+            wordInfos.ForEach(x => x.Text = x.Text.Replace("ッー", ""));
             var processedWithMargins = await ProcessWordsInBatches(wordInfos, Deconjugator.Instance, batchSize: 5000);
 
             return processedWithMargins
@@ -4799,13 +4796,51 @@ namespace Jiten.Parser
                     if (word.PartOfSpeech == PartOfSpeech.SupplementarySymbol)
                         continue;
 
-                    word.Text = TokenCleanRegex.Replace(word.Text, "");
-                    word.Text = SmallTsuLongVowelRegex.Replace(word.Text, "");
+                    word.Text = StripNonTokenChars(word.Text).Replace("ッー", "");
                 }
 
                 sentence.Words.RemoveAll(w => string.IsNullOrWhiteSpace(w.word.Text) &&
                                               w.word.PartOfSpeech != PartOfSpeech.SupplementarySymbol);
             }
+        }
+
+        /// <summary>Compared per UTF-16 code unit, so surrogate halves are never token chars.</summary>
+        internal static bool IsTokenChar(char c) =>
+            c is (>= 'a' and <= 'z') or (>= 'A' and <= 'Z') or (>= '0' and <= '9')
+                or (>= '\u3040' and <= '\u30FF') or (>= '\u4E00' and <= '\u9FAF')
+                or (>= '\uFF21' and <= '\uFF3A') or (>= '\uFF41' and <= '\uFF5A') or (>= '\uFF10' and <= '\uFF19')
+                or '\u3005' or '．';
+
+        private static int CountTokenChars(ReadOnlySpan<char> text)
+        {
+            int count = 0;
+            foreach (var c in text)
+            {
+                if (IsTokenChar(c))
+                    count++;
+            }
+
+            return count;
+        }
+
+        internal static string StripNonTokenChars(string text)
+        {
+            int firstDropped = 0;
+            while (firstDropped < text.Length && IsTokenChar(text[firstDropped]))
+                firstDropped++;
+            if (firstDropped == text.Length)
+                return text;
+
+            Span<char> kept = text.Length <= 256 ? stackalloc char[text.Length] : new char[text.Length];
+            text.AsSpan(0, firstDropped).CopyTo(kept);
+            int length = firstDropped;
+            for (int i = firstDropped + 1; i < text.Length; i++)
+            {
+                if (IsTokenChar(text[i]))
+                    kept[length++] = text[i];
+            }
+
+            return new string(kept[..length]);
         }
 
         private static async Task<List<DeckWord>> ApplyMisparseGates(
