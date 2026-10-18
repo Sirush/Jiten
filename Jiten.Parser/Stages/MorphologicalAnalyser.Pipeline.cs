@@ -121,8 +121,9 @@ public partial class MorphologicalAnalyser
                 // A stale set bit only costs a no-op run, but a skip must never trust a stale clear bit.
                 if (featuresStale)
                 {
-                    features = TokenFeatureScanner.Scan(wordInfos);
+                    features |= TokenFeatureScanner.ScanMissing(wordInfos, features);
                     featuresStale = false;
+                    Debug.Assert((TokenFeatureScanner.Scan(wordInfos) & ~features) == TokenFeatures.None);
                 }
 
                 if ((features & stage.RequiredFeatures) == TokenFeatures.None)

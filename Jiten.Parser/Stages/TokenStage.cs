@@ -82,12 +82,32 @@ internal sealed class TokenFeatureScan(TokenFeatures features, Dictionary<TokenF
 
 internal static class TokenFeatureScanner
 {
-    public static TokenFeatures Scan(List<WordInfo> tokens) => ScanCore(tokens, null);
+    private const TokenFeatures AllFeatures = (TokenFeatures)uint.MaxValue;
+
+    /// <summary>Every bit the POS, section and sokuon checks can set; a masked scan runs them when any is wanted.</summary>
+    private const TokenFeatures PosShapeFeatures =
+        TokenFeatures.Prefix | TokenFeatures.Suffix | TokenFeatures.Auxiliary | TokenFeatures.Interjection
+        | TokenFeatures.InflectableBase | TokenFeatures.AuxVerbStem | TokenFeatures.ConjParticle
+        | TokenFeatures.NumericAmount | TokenFeatures.AdvParticle | TokenFeatures.Dependant | TokenFeatures.VerbLike
+        | TokenFeatures.LongVowelMark | TokenFeatures.EndsWithTsu;
+
+    /// <summary>Every bit <see cref="TextShapeFeature"/> can set; a masked scan runs it when any is wanted.</summary>
+    private const TokenFeatures TextShapeFeatures =
+        TokenFeatures.TextTanSuffix | TokenFeatures.TextTanka | TokenFeatures.TextHasa | TokenFeatures.TextTawake
+        | TokenFeatures.TextTatte | TokenFeatures.TextRan | TokenFeatures.TextKaratte | TokenFeatures.TextSakki
+        | TokenFeatures.TextTobashi | TokenFeatures.Prefix | TokenFeatures.DictKiru | TokenFeatures.VerbKaeru
+        | TokenFeatures.AdverbEndsTo;
+
+    public static TokenFeatures Scan(List<WordInfo> tokens) => ScanCore(tokens, null, AllFeatures);
+
+    /// <summary>Evaluates only the bits clear in <paramref name="known"/>; any other bit in the result is also true.</summary>
+    public static TokenFeatures ScanMissing(List<WordInfo> tokens, TokenFeatures known) =>
+        ScanCore(tokens, null, ~known);
 
     public static TokenFeatureScan ScanWithCandidates(List<WordInfo> tokens)
     {
         var candidates = new Dictionary<TokenFeatures, List<int>>(4);
-        return new TokenFeatureScan(ScanCore(tokens, candidates), candidates);
+        return new TokenFeatureScan(ScanCore(tokens, candidates, AllFeatures), candidates);
     }
 
     private static bool IsKatakanaRun(string text)
@@ -99,8 +119,11 @@ internal static class TokenFeatureScanner
     }
 
     private static TokenFeatures ScanCore(List<WordInfo> tokens,
-                                          Dictionary<TokenFeatures, List<int>>? candidates)
+                                          Dictionary<TokenFeatures, List<int>>? candidates,
+                                          TokenFeatures want)
     {
+        bool scanPosShape = (want & PosShapeFeatures) != 0;
+        bool scanTextShape = (want & TextShapeFeatures) != 0;
         var f = TokenFeatures.None;
         string prevText = "";
 
@@ -117,28 +140,35 @@ internal static class TokenFeatureScanner
         for (int index = 0; index < tokens.Count; index++)
         {
             var w = tokens[index];
-            switch (w.PartOfSpeech)
-            {
-                case PartOfSpeech.Prefix:       f |= TokenFeatures.Prefix; break;
-                case PartOfSpeech.Suffix:        f |= TokenFeatures.Suffix; break;
-                case PartOfSpeech.Auxiliary:      f |= TokenFeatures.Auxiliary; break;
-                case PartOfSpeech.Interjection:  f |= TokenFeatures.Interjection; break;
-                case PartOfSpeech.Verb:
-                case PartOfSpeech.IAdjective:
-                case PartOfSpeech.NaAdjective:   f |= TokenFeatures.InflectableBase; break;
-            }
-
-            f |= SectionFeature(w.PartOfSpeechSection1);
-            f |= SectionFeature(w.PartOfSpeechSection2);
-            f |= SectionFeature(w.PartOfSpeechSection3);
-
             var text = w.Text;
 
-            if (text.Contains('ー'))
-                f |= TokenFeatures.LongVowelMark;
-            // ッ included: RepairClippedAdjective accepts a katakana sokuon token too.
-            if (text.Length > 0 && text[^1] is 'っ' or 'ッ')
-                f |= TokenFeatures.EndsWithTsu;
+            if (scanPosShape)
+            {
+                switch (w.PartOfSpeech)
+                {
+                    case PartOfSpeech.Prefix:       f |= TokenFeatures.Prefix; break;
+                    case PartOfSpeech.Suffix:        f |= TokenFeatures.Suffix; break;
+                    case PartOfSpeech.Auxiliary:      f |= TokenFeatures.Auxiliary; break;
+                    case PartOfSpeech.Interjection:  f |= TokenFeatures.Interjection; break;
+                    case PartOfSpeech.Verb:
+                    case PartOfSpeech.IAdjective:
+                    case PartOfSpeech.NaAdjective:   f |= TokenFeatures.InflectableBase; break;
+                }
+
+                f |= SectionFeature(w.PartOfSpeechSection1);
+                f |= SectionFeature(w.PartOfSpeechSection2);
+                f |= SectionFeature(w.PartOfSpeechSection3);
+
+                if (text.Contains('ー'))
+                    f |= TokenFeatures.LongVowelMark;
+                // ッ included: RepairClippedAdjective accepts a katakana sokuon token too.
+                if (text.Length > 0 && text[^1] is 'っ' or 'ッ')
+                    f |= TokenFeatures.EndsWithTsu;
+                // って fused inside a token after mora theft (ケン|カって, 寒|さって) also feeds RepairQuotativeTte; Contains catches アっての.
+                if (text.Length >= 3 && (text[0] is >= 'ぁ' and <= 'ゖ' or >= 'ァ' and <= 'ヺ' or >= '一' and <= '鿿')
+                    && text.Contains("って", StringComparison.Ordinal))
+                    f |= TokenFeatures.EndsWithTsu;
+            }
 
             // Only candidate stages need positions; plain rescans skip these string walks.
             if (candidates != null)
@@ -176,72 +206,11 @@ internal static class TokenFeatureScanner
                     && w.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Verb)
                     AddCandidate(TokenFeatures.SingleKanjiNoun, index);
             }
-            // って fused inside a token after mora theft (ケン|カって, 寒|さって) also feeds RepairQuotativeTte; Contains catches アっての.
-            if (text.Length >= 3 && (text[0] is >= 'ぁ' and <= 'ゖ' or >= 'ァ' and <= 'ヺ' or >= '一' and <= '鿿')
-                && text.Contains("って", StringComparison.Ordinal))
-                f |= TokenFeatures.EndsWithTsu;
-
-            switch (text)
-            {
-                case "たん" when w.PartOfSpeech == PartOfSpeech.Suffix:
-                    f |= TokenFeatures.TextTanSuffix;
-                    break;
-                case "たんか" when w.PartOfSpeech == PartOfSpeech.Noun:
-                    f |= TokenFeatures.TextTanka;
-                    break;
-                // たか mis-tokenised as 鷹/高 (言い過ぎ|たか) is past た + か, handled by the same repair stage.
-                case "たか" when w.PartOfSpeech == PartOfSpeech.Noun:
-                    f |= TokenFeatures.TextTanka;
-                    break;
-                case "はさ" when w.PartOfSpeech == PartOfSpeech.Noun:
-                    f |= TokenFeatures.TextHasa;
-                    break;
-                case "たわけ":
-                    f |= TokenFeatures.TextTawake;
-                    break;
-                case "たって" or "だって" when w.HasPartOfSpeechSection(PartOfSpeechSection.ConjunctionParticle):
-                    f |= TokenFeatures.TextTatte;
-                    break;
-                case "だな" when w.PartOfSpeech == PartOfSpeech.Noun:
-                    f |= TokenFeatures.TextTatte;
-                    break;
-                case "かって" when w.PartOfSpeech == PartOfSpeech.Adverb:
-                    f |= TokenFeatures.TextTatte;
-                    break;
-                case "いたって" when w.PartOfSpeech == PartOfSpeech.Adverb:
-                    f |= TokenFeatures.TextTatte;
-                    break;
-                case "らん":
-                    f |= TokenFeatures.TextRan;
-                    break;
-                case "からって":
-                    f |= TokenFeatures.TextKaratte;
-                    break;
-                case "さっ":
-                    f |= TokenFeatures.TextSakki;
-                    break;
-                // 飛ばし heads the counter-compound 段飛ばし; RepairDanTobashi re-checks the numeral+段 head.
-                case "飛ばし":
-                    f |= TokenFeatures.TextTobashi;
-                    break;
-                // The emphatic prefix ど arrives as Adverb (truncated どう); CombinePrefixes re-checks precisely.
-                case "ど" when w.PartOfSpeech == PartOfSpeech.Adverb:
-                    f |= TokenFeatures.Prefix;
-                    break;
-            }
-
-            if (w.DictionaryForm == "切る")
-                f |= TokenFeatures.DictKiru;
-
-            // Superset: RepairIntensifierKaeru splits only OOV X返る, not entries like 静まり返る.
-            if (w.PartOfSpeech == PartOfSpeech.Verb && w.NormalizedForm.EndsWith("返る", StringComparison.Ordinal))
-                f |= TokenFeatures.VerbKaeru;
-
-            if (w.PartOfSpeech == PartOfSpeech.Adverb && text.Length >= 2 && text[^1] == 'と')
-                f |= TokenFeatures.AdverbEndsTo;
+            if (scanTextShape)
+                f |= TextShapeFeature(w);
 
             // Cheap superset of CollapseReduplicatedMimetic's 3+ unit runs, alone (ごろごろごろ) or across tokens (ごろごろ|ごろ).
-            if ((f & TokenFeatures.KanaRepetition) == 0 && IsUnitRepetition(text))
+            if ((want & ~f & TokenFeatures.KanaRepetition) != 0 && IsUnitRepetition(text))
             {
                 if (text.Length >= 6
                     || (prevText.Length >= 2 && IsUnitRepetition(prevText)
@@ -252,7 +221,7 @@ internal static class TokenFeatureScanner
 
             if (w.Text.Length >= 3
                 && w.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Interjection or PartOfSpeech.Filler
-                && (f & TokenFeatures.OovGarbage) == 0)
+                && (want & ~f & TokenFeatures.OovGarbage) != 0)
             {
                 bool allHira = true;
                 foreach (var c in w.Text)
@@ -263,7 +232,7 @@ internal static class TokenFeatureScanner
 
             if (w.Text.Length >= 5
                 && w.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
-                && (f & TokenFeatures.HiraganaOovBlob) == 0)
+                && (want & ~f & TokenFeatures.HiraganaOovBlob) != 0)
             {
                 bool hiraBlob = true;
                 foreach (var c in w.Text)
@@ -272,6 +241,73 @@ internal static class TokenFeatureScanner
                     f |= TokenFeatures.HiraganaOovBlob;
             }
         }
+
+        return f;
+    }
+
+    private static TokenFeatures TextShapeFeature(WordInfo w)
+    {
+        var f = TokenFeatures.None;
+        var text = w.Text;
+
+        switch (text)
+        {
+            case "たん" when w.PartOfSpeech == PartOfSpeech.Suffix:
+                f |= TokenFeatures.TextTanSuffix;
+                break;
+            case "たんか" when w.PartOfSpeech == PartOfSpeech.Noun:
+                f |= TokenFeatures.TextTanka;
+                break;
+            // たか mis-tokenised as 鷹/高 (言い過ぎ|たか) is past た + か, handled by the same repair stage.
+            case "たか" when w.PartOfSpeech == PartOfSpeech.Noun:
+                f |= TokenFeatures.TextTanka;
+                break;
+            case "はさ" when w.PartOfSpeech == PartOfSpeech.Noun:
+                f |= TokenFeatures.TextHasa;
+                break;
+            case "たわけ":
+                f |= TokenFeatures.TextTawake;
+                break;
+            case "たって" or "だって" when w.HasPartOfSpeechSection(PartOfSpeechSection.ConjunctionParticle):
+                f |= TokenFeatures.TextTatte;
+                break;
+            case "だな" when w.PartOfSpeech == PartOfSpeech.Noun:
+                f |= TokenFeatures.TextTatte;
+                break;
+            case "かって" when w.PartOfSpeech == PartOfSpeech.Adverb:
+                f |= TokenFeatures.TextTatte;
+                break;
+            case "いたって" when w.PartOfSpeech == PartOfSpeech.Adverb:
+                f |= TokenFeatures.TextTatte;
+                break;
+            case "らん":
+                f |= TokenFeatures.TextRan;
+                break;
+            case "からって":
+                f |= TokenFeatures.TextKaratte;
+                break;
+            case "さっ":
+                f |= TokenFeatures.TextSakki;
+                break;
+            // 飛ばし heads the counter-compound 段飛ばし; RepairDanTobashi re-checks the numeral+段 head.
+            case "飛ばし":
+                f |= TokenFeatures.TextTobashi;
+                break;
+            // The emphatic prefix ど arrives as Adverb (truncated どう); CombinePrefixes re-checks precisely.
+            case "ど" when w.PartOfSpeech == PartOfSpeech.Adverb:
+                f |= TokenFeatures.Prefix;
+                break;
+        }
+
+        if (w.DictionaryForm == "切る")
+            f |= TokenFeatures.DictKiru;
+
+        // Superset: RepairIntensifierKaeru splits only OOV X返る, not entries like 静まり返る.
+        if (w.PartOfSpeech == PartOfSpeech.Verb && w.NormalizedForm.EndsWith("返る", StringComparison.Ordinal))
+            f |= TokenFeatures.VerbKaeru;
+
+        if (w.PartOfSpeech == PartOfSpeech.Adverb && text.Length >= 2 && text[^1] == 'と')
+            f |= TokenFeatures.AdverbEndsTo;
 
         return f;
     }
