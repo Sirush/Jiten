@@ -87,6 +87,11 @@ static class SudachiInterop
 
     private const long ContextRecycleThreshold = 5_000;
 
+    /// <summary>Shorter documents stay one native call, so only long ones ever take extra slots.</summary>
+    private const int MinChunkedInputBytes = 64 * 1024;
+
+    private static readonly int MaxChunksPerCall;
+
     // Request-path callers own InteractiveSlots and may borrow an idle bulk slot; bulk callers never take an interactive one.
     private static readonly int BulkSlots;
     private static readonly int InteractiveSlots;
@@ -251,6 +256,7 @@ static class SudachiInterop
         var config = Runtime.ParserRuntimeSettings.Current.Configuration;
         BulkSlots = Math.Max(1, config.GetValue("Parser:SudachiBulkContexts", Math.Max(2, Environment.ProcessorCount / 4)));
         InteractiveSlots = Math.Max(0, config.GetValue("Parser:SudachiInteractiveContexts", 1));
+        MaxChunksPerCall = Math.Max(1, config.GetValue("Parser:SudachiMaxChunksPerCall", 1));
         _bulkGate = new SemaphoreSlim(BulkSlots, BulkSlots);
         _interactiveGate = new SemaphoreSlim(InteractiveSlots, Math.Max(1, InteractiveSlots));
         for (int i = 0; i < BulkSlots + InteractiveSlots; i++)
@@ -400,7 +406,7 @@ static class SudachiInterop
         try
         {
             return ProcessTextStreamingCore(slot, configPath, inputText, dictionaryPath, out rawOutput, captureRaw,
-                                            mode, printAll, wakati, userDictCsv, emitMargins);
+                                            mode, printAll, wakati, userDictCsv, emitMargins, interactive);
         }
         finally
         {
@@ -427,7 +433,7 @@ static class SudachiInterop
         try
         {
             var words = ProcessTextStreamingCore(slot, configPath, inputText, dictionaryPath, out var rawOutput, captureRaw,
-                                                 mode, printAll, wakati, userDictCsv, emitMargins);
+                                                 mode, printAll, wakati, userDictCsv, emitMargins, interactive);
             return (words, rawOutput);
         }
         finally
@@ -447,7 +453,8 @@ static class SudachiInterop
         bool printAll,
         bool wakati,
         byte[]? userDictCsv,
-        bool emitMargins)
+        bool emitMargins,
+        bool interactive)
     {
         rawOutput = null;
         if (_processTextCtxStreamV2 == null)
@@ -455,92 +462,196 @@ static class SudachiInterop
         if (emitMargins && _processTextCtxStreamV3 == null)
             emitMargins = false; // native library predates margin support
 
+        if (!CsvUnchanged(slot.UserDictCsv, userDictCsv))
         {
-            if (!CsvUnchanged(slot.UserDictCsv, userDictCsv))
+            slot.UserDictCsv = userDictCsv;
+            RecycleContext(slot);
+        }
+        inputText = FilterAllowedChars(inputText);
+
+        if (HasNoJapaneseChars(inputText))
+            return new List<WordInfo>();
+
+        IntPtr ctx = GetOrCreateContext(slot, configPath, dictionaryPath);
+        byte[] inputBytes = Encoding.UTF8.GetBytes(inputText);
+        var options = new StreamOptions(mode, printAll, wakati, emitMargins);
+
+        if (MaxChunksPerCall > 1 && !interactive && !captureRaw && inputBytes.Length >= MinChunkedInputBytes)
+        {
+            var borrowed = BorrowIdleSlots(MaxChunksPerCall - 1, configPath, userDictCsv);
+            if (borrowed.Count > 0)
             {
-                slot.UserDictCsv = userDictCsv;
-                RecycleContext(slot);
-            }
-            inputText = FilterAllowedChars(inputText);
-
-            if (HasNoJapaneseChars(inputText))
-                return new List<WordInfo>();
-
-            var state = new CallbackState(captureRaw);
-            var stateHandle = GCHandle.Alloc(state);
-
-            IntPtr ctx = GetOrCreateContext(slot, configPath, dictionaryPath);
-
-            byte[] inputBytes = Encoding.UTF8.GetBytes(inputText);
-
-            try
-            {
-                unsafe
+                try
                 {
-                    fixed (byte* inputPtr = inputBytes)
+                    return RunChunked((slot, ctx), borrowed, inputBytes, options);
+                }
+                finally
+                {
+                    foreach (var (borrowedSlot, _) in borrowed)
+                        ReturnSlot(borrowedSlot, _bulkGate);
+                }
+            }
+        }
+
+        var state = RunRange(slot, ctx, inputBytes, 0, inputBytes.Length, options, captureRaw);
+        rawOutput = state.RawCapture?.ToString();
+        return state.WordInfos;
+    }
+
+    private readonly record struct StreamOptions(char Mode, bool PrintAll, bool Wakati, bool EmitMargins);
+
+    /// <summary>Sudachi analyses each line on its own, so line ranges concatenated in order reproduce the single-call token sequence.</summary>
+    private static List<WordInfo> RunChunked(
+        (ContextSlot Slot, IntPtr Ctx) primary,
+        List<(ContextSlot Slot, IntPtr Ctx)> borrowed,
+        byte[] input,
+        StreamOptions options)
+    {
+        var ranges = SplitAtLineBreaks(input, borrowed.Count + 1);
+
+        var tail = new Task<CallbackState>[ranges.Count - 1];
+        for (int r = 1; r < ranges.Count; r++)
+        {
+            var (slot, ctx) = borrowed[r - 1];
+            var (start, length) = ranges[r];
+            tail[r - 1] = Task.Run(() => RunRange(slot, ctx, input, start, length, options, captureRaw: false));
+        }
+
+        CallbackState head;
+        try
+        {
+            head = RunRange(primary.Slot, primary.Ctx, input, ranges[0].Start, ranges[0].Length, options, captureRaw: false);
+        }
+        catch
+        {
+            try { Task.WaitAll(tail); }
+            catch (AggregateException) { }
+            throw;
+        }
+        var rest = Task.WhenAll(tail).GetAwaiter().GetResult();
+
+        int total = head.WordInfos.Count;
+        foreach (var state in rest)
+            total += state.WordInfos.Count;
+
+        var words = new List<WordInfo>(total);
+        words.AddRange(head.WordInfos);
+        foreach (var state in rest)
+            words.AddRange(state.WordInfos);
+        return words;
+    }
+
+    /// <summary>Cuts only just after a '\n', so no line is split across ranges.</summary>
+    private static List<(int Start, int Length)> SplitAtLineBreaks(byte[] input, int maxRanges)
+    {
+        var ranges = new List<(int Start, int Length)>(maxRanges);
+        int start = 0;
+        for (int i = 1; i < maxRanges; i++)
+        {
+            int target = (int)((long)input.Length * i / maxRanges);
+            if (target < start)
+                continue;
+            int newline = input.AsSpan(target).IndexOf((byte)'\n');
+            if (newline < 0)
+                break;
+            int cut = target + newline + 1;
+            ranges.Add((start, cut - start));
+            start = cut;
+        }
+        if (start < input.Length)
+            ranges.Add((start, input.Length - start));
+        return ranges;
+    }
+
+    /// <summary>Takes only idle bulk slots that already hold this config's context for the same user-dict CSV, so a borrow never builds or rebuilds a context.</summary>
+    private static List<(ContextSlot Slot, IntPtr Ctx)> BorrowIdleSlots(int max, string configPath, byte[]? userDictCsv)
+    {
+        var borrowed = new List<(ContextSlot Slot, IntPtr Ctx)>(max);
+        List<ContextSlot>? unusable = null;
+        while (borrowed.Count < max && _bulkGate.Wait(0))
+        {
+            var slot = TakeSlot();
+            if (CsvUnchanged(slot.UserDictCsv, userDictCsv)
+                && slot.Contexts.TryGetValue(configPath, out var ctx) && ctx != IntPtr.Zero)
+                borrowed.Add((slot, ctx));
+            else
+                (unusable ??= []).Add(slot);
+        }
+
+        if (unusable != null)
+            foreach (var slot in unusable)
+                ReturnSlot(slot, _bulkGate);
+        return borrowed;
+    }
+
+    private static CallbackState RunRange(ContextSlot slot, IntPtr ctx, byte[] input, int start, int length,
+                                          StreamOptions options, bool captureRaw)
+    {
+        var state = new CallbackState(captureRaw);
+        var stateHandle = GCHandle.Alloc(state);
+        try
+        {
+            unsafe
+            {
+                fixed (byte* inputPtr = input)
+                {
+                    IntPtr errPtr = options.EmitMargins
+                        ? _processTextCtxStreamV3!(
+                            ctx,
+                            inputPtr + start,
+                            (nuint)length,
+                            (sbyte)options.Mode,
+                            (byte)(options.PrintAll ? 1 : 0),
+                            (byte)(options.Wakati ? 1 : 0),
+                            1,
+                            _outputCallback,
+                            GCHandle.ToIntPtr(stateHandle))
+                        : _processTextCtxStreamV2!(
+                            ctx,
+                            inputPtr + start,
+                            (nuint)length,
+                            (sbyte)options.Mode,
+                            (byte)(options.PrintAll ? 1 : 0),
+                            (byte)(options.Wakati ? 1 : 0),
+                            _outputCallback,
+                            GCHandle.ToIntPtr(stateHandle));
+
+                    string err = Marshal.PtrToStringUTF8(errPtr) ?? "";
+                    _freeString(errPtr);
+
+                    if (!string.IsNullOrEmpty(err))
                     {
-                        IntPtr errPtr = emitMargins
-                            ? _processTextCtxStreamV3!(
-                                ctx,
-                                inputPtr,
-                                (nuint)inputBytes.Length,
-                                (sbyte)mode,
-                                (byte)(printAll ? 1 : 0),
-                                (byte)(wakati ? 1 : 0),
-                                1,
-                                _outputCallback,
-                                GCHandle.ToIntPtr(stateHandle))
-                            : _processTextCtxStreamV2(
-                                ctx,
-                                inputPtr,
-                                (nuint)inputBytes.Length,
-                                (sbyte)mode,
-                                (byte)(printAll ? 1 : 0),
-                                (byte)(wakati ? 1 : 0),
-                                _outputCallback,
-                                GCHandle.ToIntPtr(stateHandle));
-
-                        string err = Marshal.PtrToStringUTF8(errPtr) ?? "";
-                        _freeString(errPtr);
-
-                        if (!string.IsNullOrEmpty(err))
-                        {
-                            RecycleContext(slot);
-                            throw new InvalidOperationException($"Sudachi streaming error: {err}");
-                        }
+                        RecycleContext(slot);
+                        throw new InvalidOperationException($"Sudachi streaming error: {err}");
                     }
                 }
             }
-            finally
-            {
-                stateHandle.Free();
-            }
-
-            // Output may not end with a newline.
-            if (state.LeftoverLen > 0)
-            {
-                ReadOnlySpan<byte> line = state.Leftover.AsSpan(0, state.LeftoverLen);
-                if (!line.SequenceEqual("EOS"u8))
-                {
-                    state.RawCapture?.Append(Encoding.UTF8.GetString(line)).Append('\n');
-                    var wi = new WordInfo(line, state.Strings);
-                    if (!wi.IsInvalid) state.WordInfos.Add(wi);
-                }
-            }
-
-            if (state.Error != null)
-                throw new InvalidOperationException("Sudachi streaming callback error", state.Error);
-
-            rawOutput = state.RawCapture?.ToString();
-
-            var result = state.WordInfos;
-
-            // Periodic recycle bounds native memory growth inside a long-lived context.
-            if (++slot.CallCount % ContextRecycleThreshold == 0)
-                RecycleContext(slot);
-
-            return result;
         }
+        finally
+        {
+            stateHandle.Free();
+        }
+
+        // Output may not end with a newline.
+        if (state.LeftoverLen > 0)
+        {
+            ReadOnlySpan<byte> line = state.Leftover.AsSpan(0, state.LeftoverLen);
+            if (!line.SequenceEqual("EOS"u8))
+            {
+                state.RawCapture?.Append(Encoding.UTF8.GetString(line)).Append('\n');
+                var wi = new WordInfo(line, state.Strings);
+                if (!wi.IsInvalid) state.WordInfos.Add(wi);
+            }
+        }
+
+        if (state.Error != null)
+            throw new InvalidOperationException("Sudachi streaming callback error", state.Error);
+
+        // Periodic recycle bounds native memory growth inside a long-lived context.
+        if (++slot.CallCount % ContextRecycleThreshold == 0)
+            RecycleContext(slot);
+
+        return state;
     }
 
     private static void RecycleContext(ContextSlot slot)
