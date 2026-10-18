@@ -2777,7 +2777,7 @@ public partial class MorphologicalAnalyser
             if (w1.PartOfSpeech is PartOfSpeech.PrenounAdjectival or PartOfSpeech.Noun
                 && w1.Text.Length >= 2
                 && JapaneseTextHelper.IsKatakanaWordChar(w1.Text[0]) && w1.Text[0] != 'ー'
-                && w1.Text[1..].All(c => c is >= '぀' and <= 'ゟ')
+                && w1.Text.AsSpan(1).IndexOfAnyExceptInRange('぀', 'ゟ') < 0
                 && CaseParticles.Contains(w1.Text[1..])
                 && KanaConverter.ToHiragana(w1.Text) == w1.DictionaryForm
                 && newList.Count > 0
@@ -3848,6 +3848,9 @@ public partial class MorphologicalAnalyser
             return 0;
         });
 
+    /// <summary>Every RepairQuotativeTte rule needs a sokuon in the current token; a rule that does not must run before this gate.</summary>
+    private static bool HasSokuon(WordInfo w) => w.Text.AsSpan().IndexOfAny('っ', 'ッ') >= 0;
+
     private List<WordInfo> RepairQuotativeTte(List<WordInfo> wordInfos)
     {
         if (wordInfos.Count < 2) return wordInfos;
@@ -3962,6 +3965,12 @@ public partial class MorphologicalAnalyser
 
         for (int i = 0; i < wordInfos.Count; i++)
         {
+            if (!HasSokuon(wordInfos[i]))
+            {
+                result.Add(wordInfos[i]);
+                continue;
+            }
+
             // Nominal + だって|ば is copula だ + emphatic ってば (ダルマザメだってば), not the conjunction だって.
             if (i + 1 < wordInfos.Count
                 && wordInfos[i].Text == "だって"
