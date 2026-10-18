@@ -1,3 +1,4 @@
+using System.Numerics;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Parser;
@@ -55,13 +56,13 @@ internal static class TransitionRuleEngine
     }
 
     // Empty ValidIf means never valid.
-    private static bool IsValidState(TokenWindow w, MatchCondition[] validIf)
+    private static bool IsValidState(in TokenWindow w, MatchCondition[] validIf)
     {
         if (validIf.Length == 0) return false;
         return MatchesAll(w, validIf);
     }
 
-    private static bool MatchesAll(TokenWindow w, MatchCondition[] conditions)
+    private static bool MatchesAll(in TokenWindow w, MatchCondition[] conditions)
     {
         foreach (var c in conditions)
         {
@@ -267,23 +268,25 @@ internal static class TransitionRuleEngine
         var ctx = ConditionContext.FromScoringWindow(window);
         var rules = TransitionRuleSets.SoftRules;
 
-        for (int r = 0; r < rules.Length; r++)
-        {
-            bool contextApplicable = r < MaskCapacity
-                ? (contextApplicableMask & (1UL << r)) != 0
-                : MatchesAll(ctx, rules[r].ContextMatch);
-            if (!contextApplicable) continue;
+        for (ulong pending = contextApplicableMask; pending != 0; pending &= pending - 1)
+            bonus += CandidateDelta(rules[BitOperations.TrailingZeroCount(pending)], in ctx, rulesMatched);
 
-            var rule = rules[r];
-            if (rule.RequiredCandidateMask != 0 && !PosMask.Has(ctx.CandidateMask, rule.RequiredCandidateMask))
-                continue;
-            if (!MatchesAll(ctx, rule.CandidateMatch)) continue;
-
-            bonus += rule.Delta;
-            rulesMatched?.Add(rule.Id);
-        }
+        for (int r = MaskCapacity; r < rules.Length; r++)
+            if (MatchesAll(in ctx, rules[r].ContextMatch))
+                bonus += CandidateDelta(rules[r], in ctx, rulesMatched);
 
         return bonus;
+    }
+
+    private static int CandidateDelta(ScoringRule rule, in ConditionContext ctx, List<string>? rulesMatched)
+    {
+        if (rule.RequiredCandidateMask != 0 && !PosMask.Has(ctx.CandidateMask, rule.RequiredCandidateMask))
+            return 0;
+        if (!MatchesAll(in ctx, rule.CandidateMatch))
+            return 0;
+
+        rulesMatched?.Add(rule.Id);
+        return rule.Delta;
     }
 
     internal static bool CouldAnySoftRuleApply(
@@ -299,7 +302,7 @@ internal static class TransitionRuleEngine
             nextPOS != null ? PosMask.FromList(nextPOS) : 0, nextPOS != null, nextText));
     }
 
-    private static bool AnySoftRuleMatches(ConditionContext ctx)
+    private static bool AnySoftRuleMatches(in ConditionContext ctx)
     {
         foreach (var rule in TransitionRuleSets.SoftRules)
         {
@@ -333,15 +336,15 @@ internal static class TransitionRuleEngine
             w.PrevMask, w.HasPrev, w.PrevText,
             w.NextMask, w.HasNext, w.NextText,
             w.Candidate.Word.IsSuruVerb,
-            TransitionRuleSets.HonorificSuffixes.Contains(w.Candidate.Form.Text) &&
             PosMask.Has(w.Candidate.Word.CachedPOSMask, PosMask.SuffixGroup) &&
+            TransitionRuleSets.HonorificSuffixes.Contains(w.Candidate.Form.Text) &&
             w.Candidate.Word.PartsOfSpeech.Exists(TransitionRuleSets.HonorificRegisterTags.Contains),
             w.Candidate.DeconjForm?.Process.Contains("volitional") == true,
             w.Candidate.DeconjForm?.Process is { Length: > 0 } process
                 && process[^1] is "(infinitive)" or "(unstressed infinitive)" or "imperative");
     }
 
-    private static bool MatchesAll(ConditionContext ctx, ScoringCondition[] conditions)
+    private static bool MatchesAll(in ConditionContext ctx, ScoringCondition[] conditions)
     {
         foreach (var c in conditions)
         {
