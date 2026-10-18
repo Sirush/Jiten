@@ -63,6 +63,23 @@ public class AlgorithmAdjustmentCalculatorTests
     }
 
     [Theory]
+    [InlineData(MediaType.VisualNovel, 0, 13198)]
+    [InlineData(MediaType.VisualNovel, 3, 77525)]
+    [InlineData(MediaType.VideoGame, 1, 622957)]
+    [InlineData(MediaType.VideoGame, 94, 40296)]
+    [InlineData(MediaType.Anime, 0, 249)]
+    public void Compute_KanaOnlyText_IsLeftAlone(MediaType mediaType, int uniqueKanji, int characters)
+    {
+        AlgorithmAdjustmentCalculator.Compute(mediaType, 2.5m, uniqueKanji, characters).Should().Be(0m);
+    }
+
+    [Fact]
+    public void Compute_ShortDeckWithFewKanji_IsStillAdjusted()
+    {
+        AlgorithmAdjustmentCalculator.Compute(MediaType.VideoGame, 2.0m, 82, 418).Should().NotBe(0m);
+    }
+
+    [Theory]
     [InlineData(4.8, 0.5, 5.0)]
     [InlineData(0.3, -0.9, 0.0)]
     [InlineData(2.0, 0.4, 2.4)]
