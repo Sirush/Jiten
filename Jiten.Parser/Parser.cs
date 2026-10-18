@@ -2957,8 +2957,7 @@ namespace Jiten.Parser
                 if (words.Count < 2)
                     continue;
 
-                var result = new List<(WordInfo word, int position, int length)>(words.Count);
-                bool changed = false;
+                List<(WordInfo word, int position, int length)>? result = null;
 
                 for (int i = 0; i < words.Count; i++)
                 {
@@ -2983,8 +2982,8 @@ namespace Jiten.Parser
                             PartOfSpeech = PartOfSpeech.Conjunction,
                             EndOffset = next.word.EndOffset,
                         };
+                        result ??= CopySentencePrefix(words, i);
                         result.Add((merged, words[i].position, words[i].length + next.length));
-                        changed = true;
                         i++;
                         continue;
                     }
@@ -3022,19 +3021,28 @@ namespace Jiten.Parser
                                 EndOffset = next.word.EndOffset,
                             };
 
+                            result ??= CopySentencePrefix(words, i);
                             result.Add((merged, words[i].position, words[i].length + next.length));
-                            changed = true;
                             i++;
                             continue;
                         }
                     }
 
-                    result.Add(words[i]);
+                    result?.Add(words[i]);
                 }
 
-                if (changed)
+                if (result != null)
                     sentence.Words = result;
             }
+        }
+
+        private static List<(WordInfo word, int position, int length)> CopySentencePrefix(
+            List<(WordInfo word, int position, int length)> words, int upToExclusive)
+        {
+            var copy = new List<(WordInfo word, int position, int length)>(words.Count);
+            for (int j = 0; j < upToExclusive; j++)
+                copy.Add(words[j]);
+            return copy;
         }
 
         private static bool HasLexicalAdverbEntry(string text) =>
@@ -4353,6 +4361,8 @@ namespace Jiten.Parser
             [("鎌", "掛ける")] = "鎌を掛ける",
         };
 
+        private static readonly string[] TwoTokenIdiomVerbs = [.. TwoTokenNounVerbIdioms.Keys.Select(k => k.Item2).Distinct()];
+
         private static void CombineExpressions(List<SentenceInfo> sentences)
         {
             foreach (var sentence in sentences)
@@ -4437,6 +4447,20 @@ namespace Jiten.Parser
                     string? matchedText = null;
 
                     int maxWindow = Math.Min(8, sentence.Words.Count - i);
+                    int firstParticle = int.MaxValue;
+                    for (int j = 0; j < maxWindow; j++)
+                    {
+                        var pos = sentence.Words[i + j].word.PartOfSpeech;
+                        if (pos == PartOfSpeech.SupplementarySymbol)
+                        {
+                            maxWindow = j;
+                            break;
+                        }
+
+                        if (pos == PartOfSpeech.Particle && firstParticle == int.MaxValue)
+                            firstParticle = j;
+                    }
+
                     int cumBuilt = 0;
                     int safeUpTo = 0;
                     cumHash[0] = 0;
@@ -4445,25 +4469,6 @@ namespace Jiten.Parser
 
                     for (int windowSize = maxWindow; windowSize >= 2; windowSize--)
                     {
-                        bool hasParticle = false;
-                        bool hasSupplementarySymbol = false;
-
-                        for (int j = 0; j < windowSize; j++)
-                        {
-                            var w = sentence.Words[i + j].word;
-                            if (w.PartOfSpeech == PartOfSpeech.SupplementarySymbol)
-                            {
-                                hasSupplementarySymbol = true;
-                                break;
-                            }
-
-                            if (w.PartOfSpeech == PartOfSpeech.Particle)
-                                hasParticle = true;
-                        }
-
-                        if (hasSupplementarySymbol)
-                            continue;
-
                         // Whitelist-only: no POS gate separates compositional pairs (すると) from units (どちらも).
                         if (windowSize == 2)
                         {
@@ -4503,9 +4508,10 @@ namespace Jiten.Parser
                                     break;
                                 }
                             }
-                            else if (TwoTokenNounVerbIdioms.TryGetValue(
-                                         (sentence.Words[i].word.Text, sentence.Words[i + 1].word.DictionaryForm ?? ""),
-                                         out var idiomDictForm)
+                            else if (sentence.Words[i + 1].word.DictionaryForm is { } idiomVerb
+                                     && Array.IndexOf(TwoTokenIdiomVerbs, idiomVerb) >= 0
+                                     && TwoTokenNounVerbIdioms.TryGetValue((sentence.Words[i].word.Text, idiomVerb),
+                                                                           out var idiomDictForm)
                                      && !IsExpressionBoundaryTheft(sentence.Words, i, 2))
                             {
                                 bestMatch = 2;
@@ -4516,7 +4522,7 @@ namespace Jiten.Parser
                             continue;
                         }
 
-                        if (!hasParticle)
+                        if (firstParticle >= windowSize)
                             continue;
 
                         if (cumBuilt < windowSize)
@@ -4686,12 +4692,7 @@ namespace Jiten.Parser
                                                PreMatchedWordId = null
                                            };
 
-                        if (result == null)
-                        {
-                            result = new List<(WordInfo word, int position, int length)>(sentence.Words.Count);
-                            for (int j = 0; j < i; j++)
-                                result.Add(sentence.Words[j]);
-                        }
+                        result ??= CopySentencePrefix(sentence.Words, i);
                         result.Add((combinedWord, sentence.Words[i].position, combinedLength));
                         i += bestMatch;
                     }
