@@ -5434,7 +5434,30 @@ namespace Jiten.Parser
             bool NextIsCopula,
             bool AdmitCounters);
 
-        private sealed record ScoredCandidates(List<FormCandidate> Candidates, FormScoringContext Context);
+        private sealed record ScoredCandidates(
+            List<FormCandidate> Candidates,
+            FormScoringContext Context,
+            int ResultWordId,
+            byte ResultReadingIndex,
+            bool AllRefineToResult,
+            bool InterjectionFlip)
+        {
+            /// <summary>True when no adjacent context can change the result: every candidate refines to it, or only the interjection override may apply and it does not fire.</summary>
+            public bool IsStableFor(DeckWord current, bool onlyInterjectionAllowed) =>
+                ResultWordId == current.WordId && ResultReadingIndex == current.ReadingIndex
+                && (AllRefineToResult || (onlyInterjectionAllowed && !InterjectionFlip));
+        }
+
+        private static bool AllCandidatesRefineTo(List<FormCandidate> candidates, FormScoringContext context, DeckWord current)
+        {
+            foreach (var c in candidates)
+            {
+                var refined = FormCandidateSelector.RefineBest(c, candidates, context);
+                if (refined == null || refined.Word.WordId != current.WordId || refined.ReadingIndex != current.ReadingIndex)
+                    return false;
+            }
+            return true;
+        }
 
         private static FormCandidate? FindCandidate(List<FormCandidate> candidates, int wordId, byte readingIndex)
         {
@@ -5585,13 +5608,13 @@ namespace Jiten.Parser
                         long t0 = timing ? Stopwatch.GetTimestamp() : 0;
                         state = RederivationHelper.CollectRederivationIds(currentInfo, _lookups, Deconjugator.Instance);
                         rederiveCache[dedupKey] = state;
+                        if (state != null) allWordIds.UnionWith(state.CandidateIds);
                         if (timing) ParserCounters.AddSection(ParserCounters.Section.AdjCollectIds, t0);
                     }
                     if (state == null) continue;
 
                     (rederiveStates[si] ??= new RederivationHelper.RederiveState?[sentenceWords.Count])[i] = state;
                     Interlocked.Increment(ref ParserCounters.AdjRederived);
-                    allWordIds.UnionWith(state.CandidateIds);
                 }
             }
 
@@ -5645,6 +5668,11 @@ namespace Jiten.Parser
                     WordInfo? nextInfo = i < sentenceWords.Count - 1 ? sentenceWords[i + 1].word : null;
                     bool nextIsCopula = nextInfo != null && TransitionRuleSets.CopulaForms.Contains(nextInfo.Text);
 
+                    // A confident sentence-final verb gets only the interjection override, never an adjacency flip (行けよ).
+                    bool onlyInterjectionAllowed = i == sentenceWords.Count - 1
+                        && ScoringPolicy.IsHighConfidence(currentMargin)
+                        && currentResult.PartsOfSpeech.Contains(PartOfSpeech.Verb);
+
                     List<FormCandidate>? candidates = null;
                     bool fromFirstPassCache = false;
                     bool memoHit = false;
@@ -5675,10 +5703,16 @@ namespace Jiten.Parser
 
                         if (hasMemoKey && scoredMemo.TryGetValue(memoKey, out var memo))
                         {
+                            Interlocked.Increment(ref ParserCounters.AdjMemoHits);
+                            if (diagnostics == null && memo.IsStableFor(currentResult, onlyInterjectionAllowed))
+                            {
+                                currentInfo.ResolvedWordId = currentResult.WordId;
+                                corrected.Add(currentResult);
+                                continue;
+                            }
                             candidates = memo.Candidates;
                             memoContext = memo.Context;
                             memoHit = true;
-                            Interlocked.Increment(ref ParserCounters.AdjMemoHits);
                         }
                         else
                         {
@@ -5731,10 +5765,28 @@ namespace Jiten.Parser
                     bool interjectionFlip = sfInterjCurrent != null
                         && FormCandidateSelector.ApplySentenceFinalInterjection(sfInterjCurrent, candidates, scoringContext) != null;
 
-                    // A confident sentence-final verb gets only the interjection override, never an adjacency flip (行けよ).
-                    bool onlyInterjectionAllowed = scoringContext.IsSentenceFinal
-                        && ScoringPolicy.IsHighConfidence(currentMargin)
-                        && currentResult.PartsOfSpeech.Contains(PartOfSpeech.Verb);
+                    // Copula follows nominals only, so nouns must be eligible for the noun-copula synergy.
+                    if (nextIsCopula)
+                        foreach (var c in candidates)
+                            c.IsPosIncompatibleDirectSurface = false;
+
+                    if (!skipRescore && !memoHit)
+                        foreach (var c in candidates)
+                            c.SetScoreTrace(FormCandidateScorer.Score(c, scoringContext, ArchaicPosTypes));
+
+                    if (hasMemoKey && !memoHit)
+                    {
+                        var entry = new ScoredCandidates(candidates, scoringContext,
+                            currentResult.WordId, currentResult.ReadingIndex,
+                            AllCandidatesRefineTo(candidates, scoringContext, currentResult), interjectionFlip);
+                        scoredMemo[memoKey] = entry;
+                        if (diagnostics == null && entry.IsStableFor(currentResult, onlyInterjectionAllowed))
+                        {
+                            currentInfo.ResolvedWordId = currentResult.WordId;
+                            corrected.Add(currentResult);
+                            continue;
+                        }
+                    }
 
                     Interlocked.Increment(ref ParserCounters.AdjTokensScored);
                     ParserCounters.Add(ref ParserCounters.AdjCandidatesScored, candidates.Count);
@@ -5782,11 +5834,6 @@ namespace Jiten.Parser
                         }
                     }
 
-                    // Copula follows nominals only, so nouns must be eligible for the noun-copula synergy.
-                    if (nextIsCopula)
-                        foreach (var c in candidates)
-                            c.IsPosIncompatibleDirectSurface = false;
-
                     var leftDictForm = prevInfo?.DictionaryForm;
                     var rightDictForm = nextInfo?.DictionaryForm;
                     var left2DictForm = i >= 2 ? sentenceWords[i - 2].word.DictionaryForm : null;
@@ -5797,15 +5844,8 @@ namespace Jiten.Parser
                         : null;
                     if (timing) ParserCounters.AddSection(ParserCounters.Section.AdjContext, tCtx);
                     long tScore = timing ? Stopwatch.GetTimestamp() : 0;
-                    bool needsBaseScore = !skipRescore && !memoHit;
                     foreach (var candidate in candidates)
                     {
-                        if (needsBaseScore)
-                        {
-                            var trace = FormCandidateScorer.Score(candidate, scoringContext, ArchaicPosTypes);
-                            candidate.SetScoreTrace(trace);
-                        }
-
                         int rubyContextBonus = RubyPriorsScorer.ScoreWithContext(candidate, scoringContext,
                                                  leftDictForm, rightDictForm, left2DictForm, right2DictForm)
                                              - candidate.RubyPriorsScore;
@@ -5826,8 +5866,6 @@ namespace Jiten.Parser
                     }
 
                     if (timing) ParserCounters.AddSection(ParserCounters.Section.AdjScoreCandidates, tScore);
-                    if (hasMemoKey && !memoHit)
-                        scoredMemo[memoKey] = new ScoredCandidates(candidates, scoringContext);
 
                     // Archaic context changes base scores and can flip the winner.
                     if (!anyNonZeroBonus && isArchaicSentence)
