@@ -176,7 +176,7 @@ namespace Jiten.Parser
 
             void DbgDump(string label)
             {
-                if (Environment.GetEnvironmentVariable("JITEN_STAGE_DEBUG") is { Length: > 0 })
+                if (MorphologicalAnalyser.StageDebug)
                     Console.WriteLine($"[prep] {label}: " + string.Join("|", sentences.SelectMany(s => s.Words).Select(w => w.word.Text)));
             }
 

@@ -12,6 +12,8 @@ internal static class ResegmentationScorer
     private const int BeamWidth          = 16;
     private const int KanaReadingFragmentMaxRank = 10000;
 
+    private static readonly bool ResegDebug = Environment.GetEnvironmentVariable("JITEN_RESEG_DEBUG") != null;
+
     /// <summary>Single-kana particles valid in katakana-styled text (オマエガ来イ); other single kana are shred noise.</summary>
     internal static bool IsKatakanaParticleChar(char c) =>
         c is 'ガ' or 'ヲ' or 'ニ' or 'ハ' or 'ヘ' or 'デ' or 'ト' or 'モ' or 'カ' or 'ノ';
@@ -105,8 +107,6 @@ internal static class ResegmentationScorer
 
         bool filterKatakanaFragments = wordMeta != null && JapaneseTextHelper.IsAllKatakana(spanText);
 
-        bool debug = Environment.GetEnvironmentVariable("JITEN_RESEG_DEBUG") != null;
-
         for (int pos = 0; pos < spanText.Length; pos++)
         {
             if (!beamByPos.TryGetValue(pos, out var states) || states.Count == 0)
@@ -134,7 +134,7 @@ internal static class ResegmentationScorer
                 edges.RemoveAll(e => pos + e.Length < spanText.Length
                                      && IsKatakanaRunChar(spanText[pos + e.Length - 1])
                                      && IsKatakanaRunChar(spanText[pos + e.Length]));
-            if (debug)
+            if (ResegDebug)
                 Console.WriteLine($"[reseg] '{spanText}' pos={pos} states={states.Count} edges: " +
                                   string.Join(", ", edges.Select(e => $"{spanText.Substring(e.StartChar, e.Length)}({e.WordIds.Count})")));
             if (edges.Count == 0)

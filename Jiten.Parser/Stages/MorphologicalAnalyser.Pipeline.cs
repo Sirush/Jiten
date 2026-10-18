@@ -5,7 +5,7 @@ namespace Jiten.Parser;
 
 public partial class MorphologicalAnalyser
 {
-    private static readonly bool StageDebug = Environment.GetEnvironmentVariable("JITEN_STAGE_DEBUG") is { Length: > 0 };
+    internal static readonly bool StageDebug = Environment.GetEnvironmentVariable("JITEN_STAGE_DEBUG") is { Length: > 0 };
 
     private IReadOnlyList<TokenStage>? _tokenStages;
 
