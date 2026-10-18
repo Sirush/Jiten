@@ -592,41 +592,9 @@ namespace Jiten.Parser
                 var batch = words.GetRange(i, Math.Min(batchSize, words.Count - i));
                 var batchWordCache = new ConcurrentDictionary<int, JmDictWord>();
 
-                Dictionary<DeckWordCacheKey, DeckWord?>? prefetchedCache = null;
-                if (UseCache && diagnostics == null)
-                {
-                    try
-                    {
-                        var cacheKeys = new List<DeckWordCacheKey>(batch.Count);
-                        foreach (var word in batch)
-                        {
-                            var wi = word;
-                            var textWithoutBar = wi.Text.TrimEnd('ー');
-                            if (textWithoutBar.Length > 0 && textWithoutBar.All(char.IsDigit) ||
-                                (textWithoutBar.Length == 1 && textWithoutBar.IsAsciiOrFullWidthLetter()))
-                                continue;
-
-                            // Pinned tokens bypass the cache entirely (see hasPin in ProcessWord).
-                            if (wi.PreMatchedWordId != null || wi.PreMatchedCandidateWordIds != null)
-                                continue;
-
-                            var isNameLike = PosMapper.IsNameLikeSudachiNoun(wi.PartOfSpeech, wi.PartOfSpeechSection1,
-                                                                             wi.PartOfSpeechSection2, wi.PartOfSpeechSection3);
-                            cacheKeys.Add(new DeckWordCacheKey(wi.Text, wi.PartOfSpeech, wi.DictionaryForm,
-                                                               CacheKeyReading(wi), wi.IsPersonNameContext, isNameLike));
-                        }
-
-                        if (cacheKeys.Count > 0)
-                            prefetchedCache = await DeckWordCache.GetManyAsync(cacheKeys);
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"[Warning] Failed to pre-fetch DeckWordCache: {ex.Message}");
-                    }
-                }
-
-                var processBatch = batch.Select(word => ProcessWord(word, deconjugator, prefetchedCache, diagnostics, batchWordCache)).ToList();
-                var batchResults = await Task.WhenAll(processBatch);
+                var batchResults = UseCache && diagnostics == null
+                    ? await ProcessBatchWithCache(batch, deconjugator, batchWordCache)
+                    : await Task.WhenAll(batch.Select(word => ProcessWord(word, deconjugator, null, diagnostics, batchWordCache)));
 
                 if (UseCache && diagnostics == null)
                 {
@@ -687,6 +655,105 @@ namespace Jiten.Parser
             }
 
             return allProcessedWords;
+        }
+
+        /// <summary>Process-local cache hits resolve inline; misses and pinned words go through ProcessWord in their original relative order.</summary>
+        private static async Task<ProcessWordResult[]> ProcessBatchWithCache(List<WordInfo> batch, Deconjugator deconjugator,
+                                                                             ConcurrentDictionary<int, JmDictWord> batchWordCache)
+        {
+            var results = new ProcessWordResult[batch.Count];
+            var localHits = new DeckWord?[batch.Count];
+            var uncached = new List<int>();
+            var missKeys = new List<DeckWordCacheKey>();
+
+            for (int j = 0; j < batch.Count; j++)
+            {
+                var wordInfo = batch[j];
+                if (IsNumberOrSingleLetter(wordInfo.Text))
+                {
+                    results[j] = ProcessWordResult.FilteredOut;
+                    continue;
+                }
+
+                if (!IsPinned(wordInfo))
+                {
+                    var key = BuildCacheKey(wordInfo);
+                    if (!DeckWordCache.TryGetShared(key, out var shared))
+                        missKeys.Add(key);
+                    else if (shared!.WordId != -1)
+                    {
+                        localHits[j] = shared;
+                        continue;
+                    }
+                }
+
+                uncached.Add(j);
+            }
+
+            var missTask = missKeys.Count > 0 ? DeckWordCache.GetManyAsync(missKeys) : null;
+
+            for (int j = 0; j < batch.Count; j++)
+            {
+                if (localHits[j] is { } shared)
+                    results[j] = ResolvedFromCache(batch[j], shared);
+            }
+
+            Dictionary<DeckWordCacheKey, DeckWord?>? prefetchedCache = null;
+            try
+            {
+                prefetchedCache = missTask != null ? await missTask : new Dictionary<DeckWordCacheKey, DeckWord?>();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Warning] Failed to pre-fetch DeckWordCache: {ex.Message}");
+            }
+
+            var uncachedResults = await Task.WhenAll(uncached.Select(j => ProcessWord(batch[j], deconjugator, prefetchedCache, null, batchWordCache)));
+            for (int k = 0; k < uncached.Count; k++)
+                results[uncached[k]] = uncachedResults[k];
+
+            return results;
+        }
+
+        /// <summary>Only reads <paramref name="cached"/>, which may be the cache's shared stored instance.</summary>
+        private static ProcessWordResult ResolvedFromCache(WordInfo wordInfo, DeckWord cached)
+        {
+            var resolved = new DeckWord
+                           {
+                               WordId = cached.WordId, OriginalText = wordInfo.Text,
+                               ReadingIndex = cached.ReadingIndex,
+                               PartsOfSpeech = new List<PartOfSpeech>(cached.PartsOfSpeech), Origin = cached.Origin,
+                               SudachiReading = wordInfo.Reading,
+                               SudachiPartOfSpeech = wordInfo.PartOfSpeech
+                           };
+            resolved.CopyConjugationsFrom(cached);
+            return ProcessWordResult.FromResolved(resolved, margin: cached.CachedMargin);
+        }
+
+        private static DeckWordCacheKey BuildCacheKey(WordInfo wordInfo) =>
+            new(wordInfo.Text, wordInfo.PartOfSpeech, wordInfo.DictionaryForm, CacheKeyReading(wordInfo), wordInfo.IsPersonNameContext,
+                PosMapper.IsNameLikeSudachiNoun(wordInfo.PartOfSpeech, wordInfo.PartOfSpeechSection1,
+                                                wordInfo.PartOfSpeechSection2, wordInfo.PartOfSpeechSection3));
+
+        /// <summary>The cache key has no pin context (帽子のツバ→鍔 and ツバを飲む→唾 share a key), so pinned words skip the cache.</summary>
+        private static bool IsPinned(WordInfo wordInfo) =>
+            wordInfo.PreMatchedWordId != null || wordInfo.PreMatchedCandidateWordIds != null;
+
+        /// <summary>char.IsDigit rather than IsAsciiDigit: full-width digits are numbers too.</summary>
+        private static bool IsNumberOrSingleLetter(string text)
+        {
+            var core = text.AsSpan().TrimEnd('ー');
+            if (core.Length == 0)
+                return false;
+            if (core.Length == 1 && core[0].IsAsciiOrFullWidthLetter())
+                return true;
+            foreach (var c in core)
+            {
+                if (!char.IsDigit(c))
+                    return false;
+            }
+
+            return true;
         }
 
         private static async Task<DeckWord?> ResolveAsNameEntry(string surface,
@@ -1254,31 +1321,12 @@ namespace Jiten.Parser
 
             try
             {
-                var textWithoutBar = wordInfo.Text.TrimEnd('ー');
-                if (textWithoutBar.Length > 0 && textWithoutBar.All(char.IsDigit) ||
-                    (textWithoutBar.Length == 1 && textWithoutBar.IsAsciiOrFullWidthLetter()))
-                {
+                if (IsNumberOrSingleLetter(wordInfo.Text))
                     return ProcessWordResult.FilteredOut;
-                }
 
-                var isNameLikeSudachiNoun = PosMapper.IsNameLikeSudachiNoun(
-                                                                            wordInfo.PartOfSpeech,
-                                                                            wordInfo.PartOfSpeechSection1,
-                                                                            wordInfo.PartOfSpeechSection2,
-                                                                            wordInfo.PartOfSpeechSection3);
-
-                var cacheKey = new DeckWordCacheKey(
-                                                    wordInfo.Text,
-                                                    wordInfo.PartOfSpeech,
-                                                    wordInfo.DictionaryForm,
-                                                    CacheKeyReading(wordInfo),
-                                                    wordInfo.IsPersonNameContext,
-                                                    isNameLikeSudachiNoun
-                                                   );
-
-                // The cache key has no pin context (帽子のツバ→鍔 and ツバを飲む→唾 share a key), so pins skip the cache.
-                bool hasPin = wordInfo.PreMatchedWordId != null
-                              || wordInfo.PreMatchedCandidateWordIds != null;
+                var cacheKey = BuildCacheKey(wordInfo);
+                var isNameLikeSudachiNoun = cacheKey.IsNameLikeSudachiNoun;
+                bool hasPin = IsPinned(wordInfo);
 
                 if (UseCache && diagnostics == null && !hasPin)
                 {
@@ -1291,18 +1339,7 @@ namespace Jiten.Parser
                             cachedWord = await DeckWordCache.GetAsync(cacheKey);
 
                         if (cachedWord != null && cachedWord.WordId != -1)
-                        {
-                            var resolved = new DeckWord
-                                           {
-                                               WordId = cachedWord.WordId, OriginalText = wordInfo.Text,
-                                               ReadingIndex = cachedWord.ReadingIndex,
-                                               PartsOfSpeech = cachedWord.PartsOfSpeech, Origin = cachedWord.Origin,
-                                               SudachiReading = wordInfo.Reading,
-                                               SudachiPartOfSpeech = wordInfo.PartOfSpeech
-                                           };
-                            resolved.CopyConjugationsFrom(cachedWord);
-                            return ProcessWordResult.FromResolved(resolved, margin: cachedWord.CachedMargin);
-                        }
+                            return ResolvedFromCache(wordInfo, cachedWord);
                     }
                     catch (Exception ex)
                     {
@@ -2234,12 +2271,8 @@ namespace Jiten.Parser
             ConcurrentDictionary<int, JmDictWord>? batchWordCache = null)
         {
             // Before WanaKana, which can't convert full-width digits.
-            var textWithoutBar = wordInfo.Text.TrimEnd('ー');
-            if (textWithoutBar.Length > 0 && textWithoutBar.All(char.IsDigit) ||
-                (textWithoutBar.Length == 1 && textWithoutBar.IsAsciiOrFullWidthLetter()))
-            {
+            if (IsNumberOrSingleLetter(wordInfo.Text))
                 return (false, null, null, null);
-            }
 
             var normalizedText = KanaNormalizer.Normalize(KanaConverter.ToHiragana(wordInfo.Text));
 

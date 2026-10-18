@@ -58,6 +58,19 @@ public sealed class InProcessDeckWordCache : IDeckWordCache
         }
     }
 
+    public bool TryGetShared(DeckWordCacheKey key, out DeckWord? shared)
+    {
+        if (!TryGetLocal(key, out var local))
+        {
+            shared = null;
+            return false;
+        }
+
+        Interlocked.Increment(ref ParserCounters.DeckWordInProcessHits);
+        shared = local;
+        return true;
+    }
+
     public async Task<DeckWord?> GetAsync(DeckWordCacheKey key)
     {
         if (TryGetLocal(key, out var local))

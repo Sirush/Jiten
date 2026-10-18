@@ -50,10 +50,10 @@ public static class StringExtensions
         return result.ToString();
     }
     
-    public static bool IsAsciiOrFullWidthLetter(this string input)
-    {
-        var c = input[0];
+    public static bool IsAsciiOrFullWidthLetter(this string input) => input[0].IsAsciiOrFullWidthLetter();
 
+    public static bool IsAsciiOrFullWidthLetter(this char c)
+    {
         return c is >= 'a' and <= 'z' ||
                c is >= 'A' and <= 'Z' ||
                c is >= 'ａ' and <= 'ｚ' ||
