@@ -486,22 +486,20 @@ public partial class MorphologicalAnalyser
         return positions;
     }
 
+    private static bool IsSentenceEnder(char c) => c is '。' or '！' or '？' or '」';
+
     private List<SentenceInfo> SplitIntoSentences(string text, List<WordInfo> wordInfos, HashSet<int> lineEndParens)
     {
         text = text.Replace("\r", "").Replace("\n", "");
 
         // Start positions give O(1) sentence lookup by offset.
         var sentenceData = new List<(SentenceInfo info, int startPos)>();
-        var sb = new StringBuilder();
         bool seenEnder = false;
         int sentenceStartPos = 0;
 
         for (int i = 0; i < text.Length; i++)
         {
-            char current = text[i];
-            sb.Append(current);
-
-            if (_sentenceEnders.Contains(current) || lineEndParens.Contains(i))
+            if (IsSentenceEnder(text[i]) || (lineEndParens.Count > 0 && lineEndParens.Contains(i)))
             {
                 seenEnder = true;
                 continue;
@@ -509,24 +507,14 @@ public partial class MorphologicalAnalyser
 
             if (seenEnder)
             {
-                if (_sentenceEnders.Contains(current))
-                    continue;
-
-                // The current character belongs to the next sentence.
-                var sentenceText = sb.ToString(0, sb.Length - 1);
-                sentenceData.Add((new SentenceInfo(sentenceText), sentenceStartPos));
-
+                sentenceData.Add((new SentenceInfo(text.Substring(sentenceStartPos, i - sentenceStartPos)), sentenceStartPos));
                 sentenceStartPos = i;
-                sb.Clear();
-                sb.Append(current);
                 seenEnder = false;
             }
         }
 
-        if (sb.Length > 0)
-        {
-            sentenceData.Add((new SentenceInfo(sb.ToString()), sentenceStartPos));
-        }
+        if (sentenceStartPos < text.Length)
+            sentenceData.Add((new SentenceInfo(text.Substring(sentenceStartPos)), sentenceStartPos));
 
         if (sentenceData.Count == 0)
             return [];

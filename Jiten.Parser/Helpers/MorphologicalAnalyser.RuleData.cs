@@ -235,8 +235,6 @@ public partial class MorphologicalAnalyser
         ("に", "よって", PartOfSpeech.Expression)
     ];
 
-    private readonly HashSet<char> _sentenceEnders = ['。', '！', '？', '」'];
-
     private static readonly string _stopToken = "|";
     private static readonly string _batchDelimiter = "|||";
 
