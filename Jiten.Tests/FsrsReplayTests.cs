@@ -103,6 +103,32 @@ public class FsrsReplayTests
     }
 
     [Fact]
+    public void CountLapses_AnkiHistoryUnderDifferentSteps_FollowsTheRecordedStates()
+    {
+        const FsrsState L = FsrsState.Learning, R = FsrsState.Review, RL = FsrsState.Relearning;
+        const FsrsRating Again = FsrsRating.Again, Good = FsrsRating.Good;
+        var history = new (string At, FsrsState State, FsrsRating Rating)[]
+        {
+            ("10-01 11:13", L, Again), ("10-01 11:14", L, Again), ("10-01 11:16", L, Good), ("10-01 11:37", L, Again),
+            ("10-01 11:39", L, Good), ("10-01 12:18", L, Again), ("10-01 12:20", L, Good), ("10-01 14:09", L, Again),
+            ("10-01 14:16", L, Again), ("10-01 14:17", L, Again), ("10-01 14:19", L, Again), ("10-01 14:20", L, Good),
+            ("10-01 20:13", L, Again), ("10-01 20:14", L, Good), ("10-01 20:37", L, Again), ("10-01 20:38", L, Good),
+            ("10-01 20:41", L, Good), ("10-02 17:03", R, Again), ("10-02 17:14", RL, Good), ("10-03 12:31", R, Again),
+            ("10-03 12:42", RL, Again), ("10-03 12:50", RL, Good), ("10-04 12:42", R, Good), ("10-06 13:21", R, Again),
+            ("10-06 13:33", RL, Good), ("10-07 11:50", R, Good), ("10-09 10:29", R, Good), ("10-11 11:57", R, Good),
+            ("10-17 13:52", R, Good)
+        };
+        var logs = history.Select((h, i) => new FsrsReviewLog(1, h.Rating,
+                                                              DateTime.SpecifyKind(DateTime.Parse($"2026-{h.At}"), DateTimeKind.Utc))
+                                            { ReviewLogId = i + 1, State = h.State })
+                          .ToList();
+
+        var singleStep = new FsrsScheduler(learningSteps: [TimeSpan.FromMinutes(10)], enableFuzzing: false);
+
+        FsrsReplay.CountLapses(logs, singleStep).Should().Be(3);
+    }
+
+    [Fact]
     public void Recompute_UnorderedLogs_ReplaysChronologically()
     {
         var ordered = Logs((0, FsrsRating.Good), (3, FsrsRating.Again), (5, FsrsRating.Good));

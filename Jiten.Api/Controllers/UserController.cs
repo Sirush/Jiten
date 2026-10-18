@@ -769,15 +769,17 @@ public partial class UserController(
                                 State = l.State
                             }).ToList();
 
-    private static int CountLapsesFromLogs(List<FsrsReviewLogExportDto> logs, FsrsScheduler scheduler)
-        => CountLapsesFromLogs(logs.Select(l => (l.Rating, DateTimeOffset.FromUnixTimeSeconds(l.ReviewDateTime).UtcDateTime, l.ReviewDuration)), scheduler);
+    /// <summary>A recount above the stored value means the user cleared lapses, which must stay cleared.</summary>
+    private static int LowerLapsesOnly(int stored, int recounted) => Math.Min(stored, recounted);
 
-    private static int CountLapsesFromLogs(IEnumerable<(FsrsRating Rating, DateTime ReviewDateTime, int? ReviewDuration)> logs,
-                                           FsrsScheduler scheduler)
+    private static int CountLapsesFromLogs(List<FsrsReviewLogExportDto> logs, FsrsScheduler scheduler)
+        => FsrsReplay.CountLapses(ToReviewLogs(logs), scheduler);
+
+    private static int CountLapsesFromLogs(IEnumerable<FsrsReviewLog> logs, FsrsScheduler scheduler)
         => FsrsReplay.CountLapses(logs.Select(l => new FsrsReviewLog
                                                    {
                                                        Rating = l.Rating, ReviewDateTime = l.ReviewDateTime,
-                                                       ReviewDuration = l.ReviewDuration
+                                                       ReviewDuration = l.ReviewDuration, State = l.State
                                                    })
                                       .ToList(),
                                   scheduler);
@@ -1914,7 +1916,11 @@ public partial class UserController(
                 // same second is that same review re-imported, so repeating an import adds nothing.
                 var knownReviewTimes = card.ReviewLogs.Select(l => TruncateToSecond(l.ReviewDateTime)).ToHashSet();
                 liveTimesByCard[card] = knownReviewTimes;
+                var statelessLogsByTime = card.ReviewLogs.Where(l => l.State == null)
+                                              .GroupBy(l => TruncateToSecond(l.ReviewDateTime))
+                                              .ToDictionary(g => g.Key, g => g.First());
                 var mergedLogs = new List<FsrsReviewLog>();
+                var statesFilled = false;
 
                 foreach (var log in processed.AllReviewLogs)
                 {
@@ -1922,8 +1928,17 @@ public partial class UserController(
                     if (log.Rating is < FsrsRating.Again or > FsrsRating.Easy)
                         continue;
 
-                    if (!knownReviewTimes.Add(TruncateToSecond(log.ReviewDateTime)))
+                    var reviewSecond = TruncateToSecond(log.ReviewDateTime);
+                    if (!knownReviewTimes.Add(reviewSecond))
+                    {
+                        if (log.State != null && statelessLogsByTime.Remove(reviewSecond, out var stateless))
+                        {
+                            stateless.State = log.State;
+                            statesFilled = true;
+                        }
+
                         continue;
+                    }
 
                     mergedLogs.Add(new FsrsReviewLog
                                    {
@@ -1937,14 +1952,14 @@ public partial class UserController(
                 if (updatedCards.Contains(card))
                 {
                     if (mergedLogs.Count > 0)
-                        card.Lapses = CountLapsesFromLogs(card.ReviewLogs.Concat(mergedLogs)
-                                                              .Select(l => (l.Rating, l.ReviewDateTime, l.ReviewDuration)), lapseScheduler);
+                        card.Lapses = CountLapsesFromLogs(card.ReviewLogs.Concat(mergedLogs), lapseScheduler);
+                    else if (statesFilled)
+                        card.Lapses = LowerLapsesOnly(card.Lapses, CountLapsesFromLogs(card.ReviewLogs, lapseScheduler));
                 }
                 else
                 {
                     // Anki's own counter covers history the export left out; the log replay covers Anki decks that never tracked it.
-                    card.Lapses = Math.Max(cardToAnkiMap[card].Card.Lapses,
-                                           CountLapsesFromLogs(mergedLogs.Select(l => (l.Rating, l.ReviewDateTime, l.ReviewDuration)), lapseScheduler));
+                    card.Lapses = Math.Max(cardToAnkiMap[card].Card.Lapses, CountLapsesFromLogs(mergedLogs, lapseScheduler));
                 }
 
                 if (lapseScheduler.Version == FsrsVersion.V7)
