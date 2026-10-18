@@ -51,6 +51,7 @@ export interface SiteStatsWordsForCoverageType {
   mediaType: MediaType;
   titles: number;
   ranks: (number | null)[];
+  libraryWords?: (number | null)[] | null;
   excludedPercent: number;
 }
 

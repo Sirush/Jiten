@@ -12,6 +12,9 @@ public static class AlgorithmAdjustmentCalculator
     private const int MinUniqueKanji = 10;
     private const int MinCharacters = 100;
 
+    private const int KanaOnlyMaxUniqueKanji = 100;
+    private const double KanaOnlyMaxUniqueKanjiPerCharacter = 0.01;
+
     // The ratings offset fades out between these scores; hard decks have too few ratings to justify lowering them.
     private const double OffsetFullBelow = 2.5;
     private const double OffsetZeroAbove = 3.5;
@@ -32,7 +35,7 @@ public static class AlgorithmAdjustmentCalculator
     public static decimal Compute(MediaType mediaType, decimal modelDifficulty, int uniqueKanjiCount, int characterCount)
     {
         var constants = GroupConstants(MediaTypeGroups.GetGroup(mediaType));
-        if (constants == null || characterCount <= 0)
+        if (constants == null || characterCount <= 0 || IsKanaOnly(uniqueKanjiCount, characterCount))
             return 0m;
 
         var (intercept, ratingsOffset) = constants.Value;
@@ -49,6 +52,11 @@ public static class AlgorithmAdjustmentCalculator
         var corrected = Math.Clamp(score, (double)MinDifficulty, (double)MaxDifficulty);
         return Math.Round((decimal)(corrected - model), 2);
     }
+
+    /// <summary>Kana-only text (retro games, children's media) is outside the fit, which would rate it 0 whatever the model says.</summary>
+    private static bool IsKanaOnly(int uniqueKanjiCount, int characterCount) =>
+        uniqueKanjiCount < KanaOnlyMaxUniqueKanji
+        && uniqueKanjiCount < characterCount * KanaOnlyMaxUniqueKanjiPerCharacter;
 
     /// <summary>Raw model value moved by the adjustment, kept on the 0-5 scale.</summary>
     public static decimal Apply(decimal modelValue, decimal adjustment) =>

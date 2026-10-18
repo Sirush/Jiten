@@ -90,6 +90,7 @@ public class SiteStatsJob(
                                     Titles = r.Titles,
                                     Ranks = levelIndexes.Select(i => r.MedianRanks[i] >= int.MaxValue / 2.0 ? (int?)null : (int)Math.Round(r.MedianRanks[i]))
                                                         .ToList(),
+                                    LibraryWords = levelIndexes.Select(i => r.LibraryWords[i] == int.MaxValue ? (int?)null : r.LibraryWords[i]).ToList(),
                                     ExcludedPercent = Math.Round(r.MedianExcludedPercent, 1)
                                 })
                                 .ToList()

@@ -45,7 +45,10 @@
       </div>
 
       <StatsFrequencyBands :bands="snapshot.frequencyBands" />
-      <StatsWordsForCoverage v-if="snapshot.wordsForCoverage" :data="snapshot.wordsForCoverage" />
+      <template v-if="snapshot.wordsForCoverage">
+        <StatsWordsForCoverage :data="snapshot.wordsForCoverage" measure="library" />
+        <StatsWordsForCoverage :data="snapshot.wordsForCoverage" measure="depth" />
+      </template>
       <StatsReadWatch :rows="snapshot.reading" />
       <StatsStudying :decks="snapshot.studying" />
       <StatsForgottenWords :words="snapshot.forgotten" />

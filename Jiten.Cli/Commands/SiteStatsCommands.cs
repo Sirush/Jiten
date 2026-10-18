@@ -14,5 +14,10 @@ public class SiteStatsCommands(CliContext context)
         Console.WriteLine($"{"MediaType",-12} {"Titles",7} {string.Join(" ", levels.Select(l => $"{l * 100,8:0}%"))} {"Excluded",9}");
         foreach (var r in results)
             Console.WriteLine($"{r.MediaType,-12} {r.Titles,7} {string.Join(" ", r.MedianRanks.Select(v => $"{v,9:N0}"))} {r.MedianExcludedPercent,8:F1}%");
+
+        Console.WriteLine();
+        Console.WriteLine("Library words");
+        foreach (var r in results)
+            Console.WriteLine($"{r.MediaType,-12} {r.Titles,7} {string.Join(" ", r.LibraryWords.Select(v => $"{v,9:N0}"))}");
     }
 }

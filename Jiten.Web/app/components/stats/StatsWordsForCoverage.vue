@@ -3,9 +3,28 @@
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { roundToHundred } from '~/utils/siteStats';
 
+  type Measure = 'library' | 'depth';
+
   const props = defineProps<{
     data: SiteStatsWordsForCoverage;
+    measure: Measure;
   }>();
+
+  const COPY: Record<Measure, { title: string; subtitle: string; note: string }> = {
+    library: {
+      title: 'Unique words needed',
+      subtitle: 'If you read every media of this type, how many of the most common words would you need to reach each coverage percentage.',
+      note: "Words that appear in fewer than 1% of a type's titles, or in fewer than 5, are left out.",
+    },
+    depth: {
+      title: 'Frequency list depth needed',
+      subtitle:
+        "If you learned the frequency list of a media type in order, how many words you would need to know to reach each coverage percentage in a typical title.",
+      note: "Typical means the median across all titles of a type. Words that appear in fewer than 1% of a type's titles, or in fewer than 5, are left out.",
+    },
+  };
+
+  const copy = computed(() => COPY[props.measure]);
 
   const SHADES = [
     'bg-primary-50 dark:bg-primary-950/60',
@@ -24,7 +43,9 @@
 
   const rows = computed(() =>
     props.data.mediaTypes
-      .map((t) => ({ mediaType: t.mediaType, name: getMediaTypeText(t.mediaType), ranks: columns.value.map((c) => t.ranks[c.index] ?? null) }))
+      .map((t) => ({ mediaType: t.mediaType, name: getMediaTypeText(t.mediaType), values: props.measure === 'library' ? t.libraryWords : t.ranks }))
+      .filter((t): t is typeof t & { values: (number | null)[] } => !!t.values)
+      .map((t) => ({ ...t, ranks: columns.value.map((c) => t.values[c.index] ?? null) }))
       .sort((a, b) => a.name.localeCompare(b.name))
   );
 
@@ -44,9 +65,9 @@
 <template>
   <StatsSection
     v-if="rows.length && columns.length"
-    title="How many words you need"
-    subtitle="How far down Jiten's frequency list you need to know every word to understand this share of the words in a typical title"
-    note="Typical means the median title of each type. Only taking into account words used in at least 1% of a type's titles count."
+    :title="copy.title"
+    :subtitle="copy.subtitle"
+    :note="copy.note"
   >
     <div class="overflow-x-auto">
       <table class="w-full min-w-[22rem] border-collapse text-sm">

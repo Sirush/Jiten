@@ -6,6 +6,7 @@ public static class FsrsReplay
     /// <summary>
     /// Replays <paramref name="logs"/> onto <paramref name="card"/>, overwriting its schedule fields.
     /// Returns false and leaves the card untouched when there is nothing to replay.
+    /// Lapses follow each log's recorded state, so a history studied under other learning steps (Anki's, or the user's earlier ones) keeps its count.
     /// </summary>
     /// <param name="scheduler">Schedules the final review, whose due date is the one that survives.</param>
     /// <param name="replayScheduler">
@@ -41,7 +42,7 @@ public static class FsrsReplay
             var isSurvivingPlacement = i == ordered.Count - 1 && overrideState == null;
             var activeScheduler = isSurvivingPlacement ? scheduler : replayScheduler;
 
-            var prevState = tempCard.State;
+            var prevState = log.State ?? tempCard.State;
             var review = activeScheduler.ReviewCard(tempCard, log.Rating, AsUtc(log.ReviewDateTime), log.ReviewDuration);
             if (IsLapse(prevState, previousRating, log.Rating))
                 lapses++;

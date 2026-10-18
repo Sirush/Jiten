@@ -41,6 +41,25 @@ public class WordsForCoverageTests
     }
 
     [Fact]
+    public void LibraryWordCounts_CountsMostFrequentWordsFirst()
+    {
+        WordsForCoverage.LibraryWordCounts([0.1, 0.5, 0.05, 0.3, 0.05], [0.5, 0.8, 0.9, 0.95, 1.0])
+                        .Should().Equal(1, 2, 3, 4, 5);
+    }
+
+    [Fact]
+    public void LibraryWordCounts_LevelsAreRelativeToTheSummedShares()
+    {
+        WordsForCoverage.LibraryWordCounts([0.2, 0.1, 0.1], [0.5, 0.75]).Should().Equal(1, 2);
+    }
+
+    [Fact]
+    public void LibraryWordCounts_NoWords_LeavesLevelsUnreached()
+    {
+        WordsForCoverage.LibraryWordCounts([], [0.5]).Should().Equal(int.MaxValue);
+    }
+
+    [Fact]
     public void Median_InterpolatesEvenCounts()
     {
         WordsForCoverage.Median([4, 1, 3, 2]).Should().Be(2.5);

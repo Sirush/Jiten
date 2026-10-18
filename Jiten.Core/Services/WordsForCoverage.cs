@@ -5,9 +5,9 @@ using Npgsql;
 
 namespace Jiten.Core.Services;
 
-public sealed record WordsForCoverageResult(MediaType MediaType, int Titles, double[] MedianRanks, double MedianExcludedPercent);
+public sealed record WordsForCoverageResult(MediaType MediaType, int Titles, double[] MedianRanks, double MedianExcludedPercent, int[] LibraryWords);
 
-/// <summary>Per media type, how far down the word frequency list a learner must know every word to reach each coverage level in a typical title.</summary>
+/// <summary>Per media type, how far down the word frequency list a learner must know every word to reach each coverage level in a typical title, and how many distinct words reach it across the whole library.</summary>
 public static class WordsForCoverage
 {
     public static readonly double[] Levels = [0.80, 0.85, 0.90, 0.93, 0.95, 0.98, 0.99];
@@ -32,14 +32,16 @@ public static class WordsForCoverage
 
         // Names and title-specific words would decide the high coverage levels, so only words common to the media type count.
         var commonWords = new Dictionary<MediaType, HashSet<int>>();
+        var libraryWords = new Dictionary<MediaType, int[]>();
         foreach (var (mediaType, titleCount) in titlesPerType)
         {
             var minTitles = Math.Max((int)Math.Ceiling(options.MinTypeShare * titleCount), options.MinTypeTitles);
-            var ids = await context.WordFrequenciesByType.AsNoTracking()
-                                   .Where(f => f.MediaType == mediaType && f.UsedInMediaAmount >= minTitles)
-                                   .Select(f => f.WordId)
-                                   .ToListAsync(ct);
-            commonWords[mediaType] = ids.ToHashSet();
+            var common = await context.WordFrequenciesByType.AsNoTracking()
+                                      .Where(f => f.MediaType == mediaType && f.UsedInMediaAmount >= minTitles)
+                                      .Select(f => new { f.WordId, f.ObservedFrequency })
+                                      .ToListAsync(ct);
+            commonWords[mediaType] = common.Select(w => w.WordId).ToHashSet();
+            libraryWords[mediaType] = LibraryWordCounts(common.Select(w => w.ObservedFrequency).ToList(), Levels);
         }
 
         log?.Invoke($"Loaded {wordRanks.Count:N0} word ranks and {commonWords.Values.Sum(s => s.Count):N0} common words in {stopwatch.Elapsed.TotalSeconds:F1}s");
@@ -113,7 +115,8 @@ public static class WordsForCoverage
                                   kv.Key,
                                   kv.Value.Count,
                                   Enumerable.Range(0, Levels.Length).Select(i => Median(kv.Value.Select(t => (double)t.Ranks[i]))).ToArray(),
-                                  Median(kv.Value.Select(t => t.ExcludedPercent))))
+                                  Median(kv.Value.Select(t => t.ExcludedPercent)),
+                                  libraryWords[kv.Key]))
                       .ToList();
     }
 
@@ -133,6 +136,26 @@ public static class WordsForCoverage
             if (level == levels.Count)
                 break;
         }
+    }
+
+    /// <summary>Distinct words needed to reach each level of the summed shares when the most frequent are learned first; a level never reached gets int.MaxValue.</summary>
+    public static int[] LibraryWordCounts(List<double> shares, IReadOnlyList<double> levels)
+    {
+        shares.Sort((a, b) => b.CompareTo(a));
+        var total = shares.Sum();
+        var result = new int[levels.Count];
+        Array.Fill(result, int.MaxValue);
+
+        double cumulative = 0;
+        var level = 0;
+        for (var i = 0; i < shares.Count && level < levels.Count; i++)
+        {
+            cumulative += shares[i];
+            while (level < levels.Count && cumulative >= levels[level] * total)
+                result[level++] = i + 1;
+        }
+
+        return result;
     }
 
     /// <summary>Interpolated median, matching Postgres PERCENTILE_CONT(0.5).</summary>
