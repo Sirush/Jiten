@@ -5685,6 +5685,9 @@ namespace Jiten.Parser
                         rederiveCache[dedupKey] = state;
                         if (state != null) allWordIds.UnionWith(state.CandidateIds);
                         if (timing) ParserCounters.AddSection(ParserCounters.Section.AdjCollectIds, t0);
+                        if (state != null)
+                            foreach (var id in state.CandidateIds)
+                                allWordIds.Add(id);
                     }
                     if (state == null) continue;
 
