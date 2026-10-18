@@ -1181,7 +1181,9 @@ namespace Jiten.Parser
             await using var context = await _contextFactory.CreateDbContextAsync();
             return await context.WordFormFrequencies
                 .AsNoTracking()
+                .AsSingleQuery()
                 .Where(wff => wordIds.Contains(wff.WordId))
+                .Select(wff => new { wff.WordId, wff.ReadingIndex, wff.FrequencyRank })
                 .ToDictionaryAsync(
                     wff => (wff.WordId, (byte)wff.ReadingIndex),
                     wff => wff.FrequencyRank);
