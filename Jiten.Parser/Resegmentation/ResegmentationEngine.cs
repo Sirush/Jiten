@@ -105,6 +105,17 @@ internal static class ResegmentationEngine
         Dictionary<int, int> frequencyRanks,
         Dictionary<(int sentenceIndex, int wordIndex), int?> marginMap,
         Dictionary<int, JmDictWordMeta> wordMeta,
+        ParserDiagnostics? diagnostics = null) =>
+        TryResegmentLowConfidenceTokens(sentences, lookups, frequencyRanks,
+                                        (si, wi, _) => marginMap.GetValueOrDefault((si, wi)), wordMeta, diagnostics);
+
+    /// <summary>marginOf is read before any span is replaced, so it sees the sentences as passed in.</summary>
+    public static bool TryResegmentLowConfidenceTokens(
+        List<SentenceInfo> sentences,
+        Dictionary<string, List<int>> lookups,
+        Dictionary<int, int> frequencyRanks,
+        Func<int, int, WordInfo, int?> marginOf,
+        Dictionary<int, JmDictWordMeta> wordMeta,
         ParserDiagnostics? diagnostics = null)
     {
         var pending = new List<(SentenceInfo sentence, UncertainSpan span, SpanPath path, PartOfSpeech? prevPos, PartOfSpeech? nextPos)>();
@@ -125,7 +136,7 @@ internal static class ResegmentationEngine
                 if (PosMapper.IsNameLikeSudachiNoun(word.PartOfSpeech, word.PartOfSpeechSection1,
                         word.PartOfSpeechSection2, word.PartOfSpeechSection3))
                     continue;
-                if (!marginMap.TryGetValue((si, wi), out var margin) || !ScoringPolicy.IsLowConfidence(margin))
+                if (!ScoringPolicy.IsLowConfidence(marginOf(si, wi, word)))
                     continue;
 
                 var path = ResegmentationScorer.FindBestPath(word.Text, lookups, frequencyRanks,

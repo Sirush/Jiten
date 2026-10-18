@@ -985,8 +985,8 @@ namespace Jiten.Parser
 
             if (sw != null) { timings!.DeconjugationLookupMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
-            var marginMap = BuildMarginMapFromLookup(sentences, resultLookup);
-            if (ResegmentationEngine.TryResegmentLowConfidenceTokens(sentences, _lookups, _wordFrequencyRanks, marginMap,
+            if (ResegmentationEngine.TryResegmentLowConfidenceTokens(sentences, _lookups, _wordFrequencyRanks,
+                                                                    (_, _, word) => LookupResult(word, resultLookup).margin,
                                                                     WordMeta, diagnostics))
             {
                 var newWordInfos = ExtractWordInfos(sentences);
@@ -6072,30 +6072,6 @@ namespace Jiten.Parser
                     if (flatIndex < processedWithMargins.Count)
                         map[(si, wi)] = processedWithMargins[flatIndex].margin;
                     flatIndex++;
-                }
-            }
-
-            return map;
-        }
-
-        private static Dictionary<(int sentenceIndex, int wordIndex), int?> BuildMarginMapFromLookup(
-            List<SentenceInfo> sentences,
-            Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), (DeckWord? word, int? margin)> resultLookup)
-        {
-            int tokenCount = 0;
-            foreach (var sentence in sentences)
-                tokenCount += sentence.Words.Count;
-            var map = new Dictionary<(int, int), int?>(tokenCount);
-            for (int si = 0; si < sentences.Count; si++)
-            {
-                for (int wi = 0; wi < sentences[si].Words.Count; wi++)
-                {
-                    var word = sentences[si].Words[wi].word;
-                    if (word.PartOfSpeech == PartOfSpeech.SupplementarySymbol)
-                        continue;
-                    var key = GetDedupKey(word);
-                    if (resultLookup.TryGetValue(key, out var result))
-                        map[(si, wi)] = result.margin;
                 }
             }
 
