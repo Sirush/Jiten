@@ -12,8 +12,16 @@ public static class AlgorithmAdjustmentCalculator
     private const int MinUniqueKanji = 10;
     private const int MinCharacters = 100;
 
-    private const int KanaOnlyMaxUniqueKanji = 100;
-    private const double KanaOnlyMaxUniqueKanjiPerCharacter = 0.01;
+    private const double ExpectedLogKanjiIntercept = -1.04523;
+    private const double ExpectedLogKanjiSlope = 1.14818;
+    private const double ExpectedLogKanjiCurvature = -0.03722;
+    private const double ExpectedLogKanjiPeakLogCharacters = -ExpectedLogKanjiSlope / (2 * ExpectedLogKanjiCurvature);
+
+    /// <summary>Kanji shortfall (log) down to which votes back the fit; below it the kanji term is held at this level.</summary>
+    private const double TrustedKanjiShortfall = -1.1;
+
+    /// <summary>Kanji shortfall (log) at which the adjustment has faded to nothing, so kana-only text keeps the model score.</summary>
+    private const double IgnoredKanjiShortfall = -2.25;
 
     // The ratings offset fades out between these scores; hard decks have too few ratings to justify lowering them.
     private const double OffsetFullBelow = 2.5;
@@ -35,28 +43,38 @@ public static class AlgorithmAdjustmentCalculator
     public static decimal Compute(MediaType mediaType, decimal modelDifficulty, int uniqueKanjiCount, int characterCount)
     {
         var constants = GroupConstants(MediaTypeGroups.GetGroup(mediaType));
-        if (constants == null || characterCount <= 0 || IsKanaOnly(uniqueKanjiCount, characterCount))
+        if (constants == null || characterCount <= 0)
+            return 0m;
+
+        var logCharacters = Math.Log(Math.Max(characterCount, MinCharacters));
+        var expectedLogKanji = ExpectedLogKanji(logCharacters);
+        var kanjiShortfall = Math.Log(Math.Max(uniqueKanjiCount, 1)) - expectedLogKanji;
+        var kanjiWeight = Math.Clamp((kanjiShortfall - IgnoredKanjiShortfall) / (TrustedKanjiShortfall - IgnoredKanjiShortfall), 0, 1);
+        if (kanjiWeight == 0)
             return 0m;
 
         var (intercept, ratingsOffset) = constants.Value;
         var model = (double)modelDifficulty;
+        var logKanji = Math.Max(Math.Log(Math.Max(uniqueKanjiCount, MinUniqueKanji)), expectedLogKanji + TrustedKanjiShortfall);
 
         var score = ModelWeight * model
-                    + LogUniqueKanjiWeight * Math.Log(Math.Max(uniqueKanjiCount, MinUniqueKanji))
-                    + LogCharacterWeight * Math.Log(Math.Max(characterCount, MinCharacters))
+                    + LogUniqueKanjiWeight * logKanji
+                    + LogCharacterWeight * logCharacters
                     + intercept;
 
         var offsetShare = Math.Clamp((OffsetZeroAbove - score) / (OffsetZeroAbove - OffsetFullBelow), 0, 1);
         score -= ratingsOffset * offsetShare;
 
         var corrected = Math.Clamp(score, (double)MinDifficulty, (double)MaxDifficulty);
-        return Math.Round((decimal)(corrected - model), 2);
+        return Math.Round((decimal)(kanjiWeight * (corrected - model)), 2);
     }
 
-    /// <summary>Kana-only text (retro games, children's media) is outside the fit, which would rate it 0 whatever the model says.</summary>
-    private static bool IsKanaOnly(int uniqueKanjiCount, int characterCount) =>
-        uniqueKanjiCount < KanaOnlyMaxUniqueKanji
-        && uniqueKanjiCount < characterCount * KanaOnlyMaxUniqueKanjiPerCharacter;
+    /// <summary>Typical log unique kanji for a text of this length; kana-heavy writing (retro games, children's media) falls far below it.</summary>
+    private static double ExpectedLogKanji(double logCharacters)
+    {
+        var x = Math.Min(logCharacters, ExpectedLogKanjiPeakLogCharacters);
+        return ExpectedLogKanjiIntercept + ExpectedLogKanjiSlope * x + ExpectedLogKanjiCurvature * x * x;
+    }
 
     /// <summary>Raw model value moved by the adjustment, kept on the 0-5 scale.</summary>
     public static decimal Apply(decimal modelValue, decimal adjustment) =>

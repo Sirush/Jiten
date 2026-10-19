@@ -79,6 +79,30 @@ public class AlgorithmAdjustmentCalculatorTests
         AlgorithmAdjustmentCalculator.Compute(MediaType.VideoGame, 2.0m, 82, 418).Should().NotBe(0m);
     }
 
+    [Fact]
+    public void Compute_KanaHeavyText_IsOnlyPartlyAdjusted()
+    {
+        var adjustment = AlgorithmAdjustmentCalculator.Compute(MediaType.VisualNovel, 1.80m, 278, 54441);
+
+        adjustment.Should().BeApproximately(-0.94m, 0.02m);
+    }
+
+    [Theory]
+    [InlineData(MediaType.VisualNovel, 1.80, 54441)]
+    [InlineData(MediaType.VideoGame, 2.50, 400_000)]
+    [InlineData(MediaType.Anime, 1.70, 9000)]
+    public void Compute_HasNoStepAsKanjiThinsOut(MediaType mediaType, double model, int characters)
+    {
+        var previous = AlgorithmAdjustmentCalculator.Compute(mediaType, (decimal)model, 0, characters);
+        for (var uniqueKanji = 1; uniqueKanji <= 3000; uniqueKanji++)
+        {
+            var adjustment = AlgorithmAdjustmentCalculator.Compute(mediaType, (decimal)model, uniqueKanji, characters);
+
+            Math.Abs(adjustment - previous).Should().BeLessThanOrEqualTo(0.03m, $"at {uniqueKanji} unique kanji");
+            previous = adjustment;
+        }
+    }
+
     [Theory]
     [InlineData(4.8, 0.5, 5.0)]
     [InlineData(0.3, -0.9, 0.0)]
