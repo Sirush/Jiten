@@ -7,7 +7,7 @@ level: beginner
 order: 10
 icon: material-symbols-light:compare-arrows
 draft: false
-updated: 2026-09-23
+updated: 2026-10-19
 published: 2026-07-28
 verified: 2026-08-23
 ---
@@ -48,8 +48,8 @@ Historically, JPDB offered a strong media database, but it only received around 
 
 |       | Anime     | Aozora Bunko           | Audio  | Live Action | Manga     | Non-Fiction | Novels    | Video Games | Visual Novels | Web Novels | YouTube |
 | ----- | --------- | ---------------------- | ------ | ----------- | --------- | ----------- | --------- | ----------- | ------------- | ---------- | ------- |
-| Jiten | **3700+** | Some are within novels | 15     | **6500+**   | **1200+** | 100+          | **2300+** | **200+**    | **1900+**     | 29          | New     |
-| JPDB  | 1399      | **577**                | **45** | 1273        | None      | **144**     | 1518      | 30          | 529           | **1053**   | **137** |
+| Jiten | **3700+** | Some are within novels | 15     | **6500+**   | **1200+** | 100+          | **3100+** | **300+**    | **2300+**     | 35          | **48 channels, 6000+ videos**     |
+| JPDB  | 1399      | **577**                | **45** | 1273        | None      | **144**     | 1518      | 30          | 529           | **1053**   | 137 videos |
 
 JPDB counts as listed on [jpdb.io](https://jpdb.io/), as of August 2026.
 
