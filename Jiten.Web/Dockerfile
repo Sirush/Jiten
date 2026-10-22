@@ -1,4 +1,4 @@
-FROM node:23-alpine AS build
+FROM node:24.22.1-alpine AS build
 WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@10.11.0 --activate
@@ -23,7 +23,7 @@ ENV NODE_OPTIONS=--max-old-space-size=8192
 
 RUN pnpm build
 
-FROM node:23-alpine AS final
+FROM node:24.22.1-alpine AS final
 WORKDIR /app
 COPY --from=build /app/.output ./
 COPY docker-entrypoint.sh /docker-entrypoint.sh
