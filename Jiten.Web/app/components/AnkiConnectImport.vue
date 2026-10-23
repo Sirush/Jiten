@@ -933,6 +933,7 @@
           // Optimized path: fetch cards + reviews per chunk with bounded concurrency and build the
           // chunk's payloads immediately, so each chunk's raw reviews are released before the next.
           const FETCH_CONCURRENCY = 5;
+          const UPLOAD_CONCURRENCY = 3;
           let completedFetches = 0;
           const allChunkPayloads = await mapWithConcurrency(chunks, FETCH_CONCURRENCY, async (chunkIds) => {
             const cards = await fetchCardsInfo(chunkIds);
@@ -967,22 +968,17 @@
 
           importPhase.value = 'upload';
           let completedUploads = 0;
-          const apiResults = await Promise.all(
-            apiChunks.map(async (chunkPayload) => {
-              const result = await $api<any>('user/vocabulary/import-from-anki', {
-                method: 'POST',
-                body: JSON.stringify({
-                  cards: chunkPayload,
-                  overwrite: overwriteExisting.value,
-                  parseWords: parseWords.value,
-                }),
-                headers: { 'Content-Type': 'application/json' },
-              });
-              completedUploads++;
-              uploadProgress.value = Math.round((completedUploads / apiChunks.length) * 100);
-              return result;
-            })
-          );
+          const apiResults = await mapWithConcurrency(apiChunks, UPLOAD_CONCURRENCY, async (chunkPayload) => {
+            const { body, headers } = await gzipJsonBody({
+              cards: chunkPayload,
+              overwrite: overwriteExisting.value,
+              parseWords: parseWords.value,
+            });
+            const result = await $api<any>('user/vocabulary/import-from-anki', { method: 'POST', body, headers });
+            completedUploads++;
+            uploadProgress.value = Math.round((completedUploads / apiChunks.length) * 100);
+            return result;
+          });
           for (const result of apiResults) aggregateResult(result);
         } else {
           // Standard path: sequential fetch + upload to keep memory low
@@ -1000,15 +996,12 @@
             if (chunkPayload.length === 0) continue;
 
             importPhase.value = 'upload';
-            const result = await $api<any>('user/vocabulary/import-from-anki', {
-              method: 'POST',
-              body: JSON.stringify({
-                cards: chunkPayload,
-                overwrite: overwriteExisting.value,
-                parseWords: parseWords.value,
-              }),
-              headers: { 'Content-Type': 'application/json' },
+            const { body, headers } = await gzipJsonBody({
+              cards: chunkPayload,
+              overwrite: overwriteExisting.value,
+              parseWords: parseWords.value,
             });
+            const result = await $api<any>('user/vocabulary/import-from-anki', { method: 'POST', body, headers });
             uploadProgress.value = Math.round(((i + 1) / chunks.length) * 100);
             aggregateResult(result);
             importPhase.value = 'fetch';
