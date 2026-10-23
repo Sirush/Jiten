@@ -1266,6 +1266,7 @@ app.UseSwaggerUI(c =>
 });
 
 app.UseRouting();
+app.UseRequestDecompressionForOptedInEndpoints();
 
 app.UseCors("AllowSpecificOrigin");
 

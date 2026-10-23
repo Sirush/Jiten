@@ -119,6 +119,12 @@ public class FsrsEvalCommands
         var perUser = new List<object>();
         var pooled = models.ToDictionary(m => m.Name, _ => new List<Prediction>());
         var perUserMetrics = models.ToDictionary(m => m.Name, _ => new List<(Metrics Inter, Metrics Same, int ParamCount)>());
+        Dictionary<string, BinaryWriter>? dumps = null;
+        if (options.FsrsEvalPredictions is { } dumpDir)
+        {
+            Directory.CreateDirectory(dumpDir);
+            dumps = models.ToDictionary(m => m.Name, m => new BinaryWriter(File.Create(Path.Combine(dumpDir, $"{m.Name}.bin"))));
+        }
 
         foreach (var user in users)
         {
@@ -142,8 +148,17 @@ public class FsrsEvalCommands
                         var interday = reviews[i].DeltaT >= 1.0;
                         if (interday) interdayCount++;
                         if (i >= firstTestIndex)
+                        {
                             predictions.Add(new Prediction(p[i], reviews[i].Rating > 1 ? 1 : 0, !interday,
                                                            BenchmarkBin(reviews[i].DeltaT, interdayCount + 1, lapses)));
+                            if (dumps != null)
+                            {
+                                var w = dumps[model.Name];
+                                w.Write((float)p[i]);
+                                w.Write((byte)(reviews[i].Rating > 1 ? 1 : 0));
+                                w.Write((float)reviews[i].DeltaT);
+                            }
+                        }
                         if (interday && reviews[i].Rating == 1) lapses++;
                     }
                 }
@@ -169,6 +184,10 @@ public class FsrsEvalCommands
             }));
             Console.WriteLine($"user {user.UserIdx,2} ({user.ParamCount,2}p, {user.Cards.Sum(c => c.Length),7:N0} rev)  {line}");
         }
+
+        if (dumps != null)
+            foreach (var w in dumps.Values)
+                w.Dispose();
 
         var summary = models.ToDictionary(m => m.Name, m => new
         {

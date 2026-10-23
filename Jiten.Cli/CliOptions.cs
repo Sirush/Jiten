@@ -321,6 +321,9 @@ public class CliOptions
     [Option(longName: "fsrs-eval-max-users", Required = false, HelpText = "With --fsrs-eval: only evaluate the first N users.")]
     public int? FsrsEvalMaxUsers { get; set; }
 
+    [Option(longName: "fsrs-eval-predictions", Required = false, HelpText = "With --fsrs-eval: directory to write every held-out prediction per model (<model>.bin: f32 p, u8 y, f32 elapsed days).")]
+    public string? FsrsEvalPredictions { get; set; }
+
     [Option(longName: "scan-confidence", Required = false, HelpText = "Scan a corpus file for low-confidence token resolutions. Requires --input.")]
     public bool ScanConfidence { get; set; }
 

@@ -3,6 +3,7 @@ using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Helpers;
 using Jiten.Api.Jobs;
+using Jiten.Api.Middleware;
 using Jiten.Api.Services;
 using Jiten.Api.Services.ExternalMediaList;
 using Jiten.Core;
@@ -1676,14 +1677,43 @@ public partial class UserController(
     /// </summary>
     [HttpPost("vocabulary/import-from-anki")]
     [Consumes("text/json", "application/json")]
+    [AcceptsCompressedBody]
+    [RequestSizeLimit(MaxAnkiImportBodyBytes)]
     public async Task<IResult> ImportFromAnki([FromBody] AnkiImportRequest request)
     {
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
-        var lapseScheduler = await FsrsSettingsHelper.CreateSchedulerAsync(userContext, userId, enableFuzzing: false);
 
         if (request?.Cards == null || request.Cards.Count == 0)
             return Results.BadRequest("No cards provided.");
+
+        for (var attempt = 0;; attempt++)
+        {
+            try
+            {
+                return await ImportAnkiCards(request, userId);
+            }
+            catch (DbUpdateException ex) when (ex.IsUniqueViolation())
+            {
+                userContext.ChangeTracker.Clear();
+                if (attempt == MaxAnkiImportConflictRetries)
+                {
+                    logger.LogError(ex, "Anki import failed");
+                    return Results.Problem("Import failed: " + ex.Message);
+                }
+
+                logger.LogInformation("Anki import chunk collided with a concurrent chunk, retrying: UserId={UserId}, Attempt={Attempt}",
+                                      userId, attempt + 1);
+            }
+        }
+    }
+
+    private const int MaxAnkiImportConflictRetries = 2;
+    private const long MaxAnkiImportBodyBytes = 30_000_000;
+
+    private async Task<IResult> ImportAnkiCards(AnkiImportRequest request, string userId)
+    {
+        var lapseScheduler = await FsrsSettingsHelper.CreateSchedulerAsync(userContext, userId, enableFuzzing: false);
 
         // Step 1: Parse all unique words to get WordId + ReadingIndex
         var uniqueWords = request.Cards
@@ -1699,13 +1729,16 @@ public partial class UserController(
         List<string> skippedWordsNoReviews = new List<string>();
         int skippedCountNoReviews = 0;
 
-        for (int i = request.Cards.Count - 1; i >= 0; i--)
+        var reviewedCards = new List<AnkiCardWrapper>(request.Cards.Count);
+        foreach (var wrapper in request.Cards)
         {
-            if (request.Cards[i].Card.LastReview != null)
+            if (wrapper.Card.LastReview != null)
+            {
+                reviewedCards.Add(wrapper);
                 continue;
+            }
 
-            skippedWordsNoReviews.Add(new string(request.Cards[i].Card.Word));
-            request.Cards.RemoveAt(i);
+            skippedWordsNoReviews.Add(wrapper.Card.Word);
             skippedCountNoReviews++;
         }
 
@@ -1723,7 +1756,7 @@ public partial class UserController(
         }
         else
         {
-            var uniquePairs = request.Cards
+            var uniquePairs = reviewedCards
                                      .Where(c => !string.IsNullOrWhiteSpace(c.Card.Word))
                                      .Select(c => (Word: c.Card.Word.Trim(), Reading: c.Card.Reading?.Trim() ?? ""))
                                      .Distinct()
@@ -1756,7 +1789,7 @@ public partial class UserController(
         var skippedWords = new List<string>();
         var skippedWordsReadingMismatch = new List<string>();
 
-        foreach (var wrapper in request.Cards)
+        foreach (var wrapper in reviewedCards)
         {
             var word = wrapper.Card.Word?.Trim();
             if (string.IsNullOrWhiteSpace(word))
@@ -2006,6 +2039,11 @@ public partial class UserController(
                                   skippedWordsNoReviews = skippedWordsNoReviews.ToList(), skippedCountNoReviews = skippedCountNoReviews,
                                   archivedRedundant, restoredCards, pruned
                               });
+        }
+        catch (DbUpdateException ex) when (ex.IsUniqueViolation())
+        {
+            await transaction.RollbackAsync();
+            throw;
         }
         catch (Exception ex)
         {

@@ -37,7 +37,7 @@ public class AlgorithmAdjustmentJobTests(JitenWebApplicationFactory factory)
         using var scope = factory.Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
 
-        // A short, kanji-light film: the adjustment lowers it by about a point.
+        // A short, kanji-light film: the adjustment lowers it by about 0.7.
         db.Decks.Add(new Deck
         {
             DeckId = StandaloneId, OriginalTitle = "Film", MediaType = MediaType.Movie,
@@ -95,7 +95,7 @@ public class AlgorithmAdjustmentJobTests(JitenWebApplicationFactory factory)
 
         var film = (await Load())[StandaloneId];
         film.Raw.Should().Be(1.68m);
-        film.Adjustment.Should().BeApproximately(-1.09m, 0.02m);
+        film.Adjustment.Should().BeApproximately(-0.72m, 0.02m);
         film.DeckDifficulty.Should().BeApproximately((float)(1.68m + film.Adjustment), 0.001f);
     }
 
