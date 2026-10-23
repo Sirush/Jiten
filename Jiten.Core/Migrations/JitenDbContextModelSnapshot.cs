@@ -572,8 +572,7 @@ namespace Jiten.Core.Migrations
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
+                        .HasColumnType("text");
 
                     b.Property<string>("TitleNoSpaces")
                         .ValueGeneratedOnAddOrUpdate()
@@ -591,7 +590,10 @@ namespace Jiten.Core.Migrations
                     b.HasIndex("DeckId", "TitleType")
                         .HasDatabaseName("IX_DeckTitles_DeckId_TitleType");
 
-                    b.ToTable("DeckTitles", "jiten");
+                    b.ToTable("DeckTitles", "jiten", t =>
+                        {
+                            t.HasCheckConstraint("CK_DeckTitles_Title_Length", "length(\"Title\") <= 200");
+                        });
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.DeckWord", b =>
@@ -1677,8 +1679,7 @@ namespace Jiten.Core.Migrations
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("UpdatedAt")
                         .HasColumnType("timestamp with time zone");
@@ -1719,7 +1720,10 @@ namespace Jiten.Core.Migrations
                         .IsDescending(false, true)
                         .HasDatabaseName("IX_MediaRequest_Status_UpvoteCount");
 
-                    b.ToTable("MediaRequests", "jiten");
+                    b.ToTable("MediaRequests", "jiten", t =>
+                        {
+                            t.HasCheckConstraint("CK_MediaRequests_Title_Length", "length(\"Title\") <= 300");
+                        });
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.MediaRequestBoost", b =>
@@ -1901,8 +1905,7 @@ namespace Jiten.Core.Migrations
 
                     b.Property<string>("Title")
                         .IsRequired()
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
+                        .HasColumnType("text");
 
                     b.Property<int>("TitleType")
                         .HasColumnType("integer");
@@ -1912,7 +1915,10 @@ namespace Jiten.Core.Migrations
                     b.HasIndex("MediaRequestId")
                         .HasDatabaseName("IX_MediaRequestTitles_MediaRequestId");
 
-                    b.ToTable("MediaRequestTitles", "jiten");
+                    b.ToTable("MediaRequestTitles", "jiten", t =>
+                        {
+                            t.HasCheckConstraint("CK_MediaRequestTitles_Title_Length", "length(\"Title\") <= 500");
+                        });
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.MediaRequestUpload", b =>

@@ -198,7 +198,8 @@ public class JitenDbContext : DbContext
         modelBuilder.Entity<DeckTitle>(entity =>
         {
               entity.HasKey(dt => dt.DeckTitleId);
-              entity.Property(dt => dt.Title).IsRequired().HasMaxLength(200);
+              entity.Property(dt => dt.Title).IsRequired().HasColumnType("text");
+              entity.ToTable(t => t.HasCheckConstraint("CK_DeckTitles_Title_Length", "length(\"Title\") <= 200"));
               entity.Property(dt => dt.TitleType).IsRequired();
 
               if (isNpgsql)
@@ -1062,7 +1063,8 @@ public class JitenDbContext : DbContext
             entity.ToTable("MediaRequests", "jiten");
             entity.HasKey(mr => mr.Id);
             entity.Property(mr => mr.Id).ValueGeneratedOnAdd();
-            entity.Property(mr => mr.Title).IsRequired().HasMaxLength(300);
+            entity.Property(mr => mr.Title).IsRequired().HasColumnType("text");
+            entity.ToTable(t => t.HasCheckConstraint("CK_MediaRequests_Title_Length", "length(\"Title\") <= 300"));
             entity.Property(mr => mr.Kind).IsRequired().HasDefaultValue(MediaRequestKind.New).HasSentinel(default(MediaRequestKind));
             entity.Property(mr => mr.MediaType).IsRequired();
             entity.Property(mr => mr.ExternalUrl).HasMaxLength(500);
@@ -1149,7 +1151,8 @@ public class JitenDbContext : DbContext
         {
             entity.ToTable("MediaRequestTitles", "jiten");
             entity.HasKey(t => t.Id);
-            entity.Property(t => t.Title).IsRequired().HasMaxLength(500);
+            entity.Property(t => t.Title).IsRequired().HasColumnType("text");
+            entity.ToTable(t => t.HasCheckConstraint("CK_MediaRequestTitles_Title_Length", "length(\"Title\") <= 500"));
 
             entity.HasIndex(t => t.MediaRequestId)
                   .HasDatabaseName("IX_MediaRequestTitles_MediaRequestId");
