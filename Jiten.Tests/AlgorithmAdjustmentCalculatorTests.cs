@@ -9,7 +9,6 @@ public class AlgorithmAdjustmentCalculatorTests
     // Expected values are corrected minus raw for real decks, from eval/refit_correction.py in the JapaneseDifficulty repo.
     [Theory]
     [InlineData(MediaType.Anime, 1.12, 1128, 59198, 0.39)]
-    [InlineData(MediaType.Anime, 1.68, 191, 7610, -1.09)]
     [InlineData(MediaType.Anime, 4.26, 1506, 90361, 0.00)]
     [InlineData(MediaType.VisualNovel, 4.43, 3108, 812087, -0.11)]
     [InlineData(MediaType.VisualNovel, 2.51, 1237, 440077, -0.71)]
@@ -20,6 +19,25 @@ public class AlgorithmAdjustmentCalculatorTests
         var adjustment = AlgorithmAdjustmentCalculator.Compute(mediaType, (decimal)model, uniqueKanji, characters);
 
         adjustment.Should().BeApproximately((decimal)expected, 0.02m);
+    }
+
+    [Theory]
+    [InlineData(2_000, 252)]
+    [InlineData(5_000, 417)]
+    [InlineData(10_000, 585)]
+    [InlineData(20_000, 792)]
+    public void Compute_ShortDeckAtTypicalKanjiDensity_ScoresAsAtReferenceLength(int characters, int uniqueKanji)
+    {
+        var reference = AlgorithmAdjustmentCalculator.Compute(MediaType.Anime, 2.5m, 930, 30_000);
+
+        AlgorithmAdjustmentCalculator.Compute(MediaType.Anime, 2.5m, uniqueKanji, characters)
+            .Should().BeApproximately(reference, 0.02m);
+    }
+
+    [Fact]
+    public void Compute_KanjiLightShortDeck_IsStillLowered()
+    {
+        AlgorithmAdjustmentCalculator.Compute(MediaType.Anime, 1.68m, 191, 7610).Should().BeApproximately(-0.72m, 0.02m);
     }
 
     [Fact]

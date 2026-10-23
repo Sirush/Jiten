@@ -12,6 +12,9 @@ public static class AlgorithmAdjustmentCalculator
     private const int MinUniqueKanji = 10;
     private const int MinCharacters = 100;
 
+    /// <summary>Shorter decks are scored as this long at the same kanji density; the fit's length term does not hold below it.</summary>
+    private const int ReferenceCharacters = 30_000;
+
     private const double ExpectedLogKanjiIntercept = -1.04523;
     private const double ExpectedLogKanjiSlope = 1.14818;
     private const double ExpectedLogKanjiCurvature = -0.03722;
@@ -55,11 +58,14 @@ public static class AlgorithmAdjustmentCalculator
 
         var (intercept, ratingsOffset) = constants.Value;
         var model = (double)modelDifficulty;
-        var logKanji = Math.Max(Math.Log(Math.Max(uniqueKanjiCount, MinUniqueKanji)), expectedLogKanji + TrustedKanjiShortfall);
+        var scoredLogCharacters = Math.Max(logCharacters, Math.Log(ReferenceCharacters));
+        var scoredExpectedLogKanji = ExpectedLogKanji(scoredLogCharacters);
+        var scoredLogKanji = Math.Max(Math.Log(Math.Max(uniqueKanjiCount, 1)) + scoredExpectedLogKanji - expectedLogKanji, Math.Log(MinUniqueKanji));
+        var logKanji = Math.Max(scoredLogKanji, scoredExpectedLogKanji + TrustedKanjiShortfall);
 
         var score = ModelWeight * model
                     + LogUniqueKanjiWeight * logKanji
-                    + LogCharacterWeight * logCharacters
+                    + LogCharacterWeight * scoredLogCharacters
                     + intercept;
 
         var offsetShare = Math.Clamp((OffsetZeroAbove - score) / (OffsetZeroAbove - OffsetFullBelow), 0, 1);
