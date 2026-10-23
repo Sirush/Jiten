@@ -7,8 +7,6 @@ export const SENTENCE_MAX_LENGTH = 150;
 /** `**` on each side of the marked span. */
 const MARKER_COST = 4;
 
-const MIN_SENTENCE_LENGTH = 5;
-
 /** A fully styled field is styling, not a marker. */
 const MAX_EXPLICIT_MARK_RATIO = 0.6;
 
@@ -18,6 +16,7 @@ const MAX_KANA_TAIL = 4;
 const CLAUSE_END = /[。！？!?…]/;
 const KANJI = /[㐀-䶿一-鿿豈-﫿]/;
 const HIRAGANA = /[ぁ-ゟ]/;
+const WORD_CHAR = /[\p{L}\p{N}]/u;
 
 const HIGHLIGHT_TAGS = new Set(['b', 'strong', 'mark']);
 const DROPPED_CONTENT_TAGS = new Set(['rt', 'rp', 'script', 'style']);
@@ -348,7 +347,12 @@ export function truncateAroundWord(text: string, start: number, end: number): { 
   };
 }
 
-export type SentenceSkipReason = 'empty' | 'noHighlight' | 'tooLong';
+/** A field holding only the word, give or take punctuation, is a vocabulary field rather than a sentence. */
+function hasContextAroundWord(text: string, start: number, end: number): boolean {
+  return WORD_CHAR.test(text.slice(0, start)) || WORD_CHAR.test(text.slice(end));
+}
+
+export type SentenceSkipReason ='empty' | 'noHighlight' | 'tooLong';
 
 export interface SentenceBuildResult {
   text?: string;
@@ -362,10 +366,11 @@ export interface SentenceBuildResult {
  */
 export function buildSentenceForImport(html: string, candidates: string[]): SentenceBuildResult {
   const extracted = extractSentenceFromField(html);
-  if (extracted.text.length < MIN_SENTENCE_LENGTH) return { skipped: 'empty' };
+  if (extracted.text.length === 0) return { skipped: 'empty' };
 
   const located = locateWord(extracted, candidates);
   if (!located) return { skipped: 'noHighlight' };
+  if (!hasContextAroundWord(extracted.text, located[0], located[1])) return { skipped: 'empty' };
 
   const fitted = truncateAroundWord(extracted.text, located[0], located[1]);
   if (!fitted) return { skipped: 'tooLong' };

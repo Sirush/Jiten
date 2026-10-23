@@ -153,6 +153,20 @@ describe('buildSentenceForImport', () => {
     expect(buildSentenceForImport('猫', ['猫']).skipped).toBe('empty');
   });
 
+  it('skips a field that is only the word plus punctuation', () => {
+    expect(buildSentenceForImport('<b>猫</b>。', ['猫']).skipped).toBe('empty');
+    expect(buildSentenceForImport('「食べた」', ['食べる']).skipped).toBe('empty');
+  });
+
+  it('skips an empty field', () => {
+    expect(buildSentenceForImport('<div><br></div>', ['猫']).skipped).toBe('empty');
+  });
+
+  it('keeps a short sentence with context around the word', () => {
+    expect(marked('猫だ。', ['猫'])).toBe('**猫**だ。');
+    expect(marked('行くよ', ['行く'])).toBe('**行く**よ');
+  });
+
   it('skips a sentence whose word cannot be located', () => {
     expect(buildSentenceForImport('これは犬でした。', ['猫']).skipped).toBe('noHighlight');
   });
