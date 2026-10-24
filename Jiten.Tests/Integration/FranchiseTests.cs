@@ -231,6 +231,18 @@ public class FranchiseTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Alternative_JoinsTheFranchise_ButNotTheLine()
+    {
+        await SeedAsync(new[] { Deck(1, "Original"), Deck(2, "Original 2"), Deck(3, "Remake") },
+                        new[] { Rel(2, 1, DeckRelationshipType.Sequel), Rel(3, 1, DeckRelationshipType.Alternative) });
+
+        var dto = await GetFranchiseAsync(1);
+        dto.Nodes.Select(n => n.DeckId).Should().BeEquivalentTo(new[] { 1, 2, 3 });
+        dto.Edges.Should().HaveCount(2);
+        dto.Lines.Select(l => string.Join(",", l.DeckIds.Order())).Should().BeEquivalentTo("1,2", "3");
+    }
+
+    [Fact]
     public async Task DeckWithoutFranchise_HasNullId_AndBuildsAlone()
     {
         await SeedAsync(new[] { Deck(1, "Lonely"), Deck(2, "Other"), Deck(3, "Other 2") },

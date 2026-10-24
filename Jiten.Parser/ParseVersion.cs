@@ -4,7 +4,7 @@ namespace Jiten.Parser;
 public static class ParseVersion
 {
     /// <summary>Bump for segmentation changes readers should pick up; each bump re-parses every chapter readers open.</summary>
-    public const int ParserRevision = 1;
+    public const int ParserRevision = 2;
 
     public static string Format(int dataEpoch) => $"{ParserRevision}.{dataEpoch}";
 }

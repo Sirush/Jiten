@@ -18,6 +18,7 @@ public partial class MorphologicalAnalyser
     public Func<string, bool>? HasVerbOrAdjectiveLookup { get; set; }
     public Func<string, bool>? HasExpressionLookup { get; set; }
     public Func<string, bool>? HasCounterSenseLookup { get; set; }
+    internal Func<string, Data.PartialKanaForm?>? GetPartialKanaSpelling { get; set; }
 
     // Captured per Parse for RetokeniseOovBlobs; one instance must not run concurrent parses with different Sudachi configs.
     private string? _sudachiConfigPath;

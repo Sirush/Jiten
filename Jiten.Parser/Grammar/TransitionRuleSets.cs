@@ -63,18 +63,49 @@ internal static class TransitionRuleSets
     ];
 
     // A nearby resolved contextWordId boosts the target verb over its homophones.
-    internal static readonly Dictionary<int, (int TargetWordId, int Bonus)> NounVerbCollocations = new()
+    private const int FuruWaveVerb = 1361330;   // 振る
+    private const int FukuBlowVerb = 1370760;   // 吹く
+    private const int FukuWipeVerb = 1357240;   // 拭く
+    private const int MukuFaceVerb = 1277080;   // 向く
+    private const int KakeruHangVerb = 1207610; // 掛ける
+
+    /// <summary>A noun up to three tokens back picks the kana verb homograph (手をふる 振る); 振る's bonus must clear 降る's +100 jiten priority.</summary>
+    internal static readonly Dictionary<int, (int TargetWordId, int Bonus)[]> NounVerbCollocations = new()
     {
-        { 1172400, (1444150, 30) }, // 嘘 → 吐く (to tell a lie), not 点く/付く
-        { 1597190, (1444150, 30) }, // ため息 → 吐く (to sigh), not 付く
-        { 1371260, (1229610, 30) }, // 水 → 汲む (to draw water), not 組む
+        { 1172400, [(1444150, 30)] }, // 嘘 → 吐く (to tell a lie), not 点く/付く
+        { 1597190, [(1444150, 30)] }, // ため息 → 吐く (to sigh), not 付く
+        { 1371260, [(1229610, 30)] }, // 水 → 汲む (to draw water), not 組む
+        { 1327190, [(FuruWaveVerb, 150), (FukuWipeVerb, 30)] }, // 手をふる waves, 手をふく wipes
+        { 1592270, [(FuruWaveVerb, 150)] }, // 首をふる
+        { 1358800, [(FuruWaveVerb, 150)] }, // 尻尾をふる
+        { 1220240, [(FuruWaveVerb, 150)] }, // 旗をふる
+        { 1562850, [(FuruWaveVerb, 150)] }, // 腕をふる
+        { 1582310, [(FuruWaveVerb, 150)] }, // 頭をふる
+        { 1499720, [(FukuBlowVerb, 30)] }, // 風がふく
+        { 1276630, [(FukuBlowVerb, 30)] }, // 口笛をふく
+        { 1404390, [(FukuBlowVerb, 30)] }, // 息をふく
+        { 1213060, [(FukuWipeVerb, 30)] }, // 汗をふく
+        { 1555930, [(FukuWipeVerb, 30)] }, // 涙をふく
+        { 1217730, [(FukuWipeVerb, 30)] }, // 顔をふく
+        { 1184140, [(MukuFaceVerb, 30)] }, // 下をむく
+        { 1352130, [(MukuFaceVerb, 30)] }, // 上をむく
+        { 1387210, [(MukuFaceVerb, 30)] }, // 前をむく
+        { 1180570, [(MukuFaceVerb, 30)] }, // 横をむく
+        { 1269410, [(MukuFaceVerb, 30)] }, // 後ろをむく
+        { 1204110, [(MukuFaceVerb, 30)] }, // そっぽをむく
+        { 1443840, [(KakeruHangVerb, 40)] }, // 電話をかける
+        { 1380440, [(KakeruHangVerb, 40)] }, // 声をかける
+        { 1532800, [(KakeruHangVerb, 40)] }, // 迷惑をかける
+        { 1360930, [(KakeruHangVerb, 40)] }, // 心配をかける
+        { 1260490, [(KakeruHangVerb, 40)] }, // 鍵をかける
+        { 1577670, [(KakeruHangVerb, 40)] }, // 眼鏡をかける
     };
 
     // A next-token surface in NextAnchors boosts the target wordId over a higher-priority homograph.
     internal static readonly Dictionary<int, (string[] NextAnchors, int Bonus)> ForwardAnchorBoosts = new()
     {
-        // 一分前 = いっぷん "one minute", not the news-ranked いちぶ "one tenth" (1166270).
-        { 1166290, (["前", "後", "ぐらい", "くらい", "ほど", "経つ", "経った", "経って"], 40) },
+        // 一分前 / 一分一秒 = いっぷん "one minute", not the news-ranked いちぶ "one tenth" (1166270).
+        { 1166290, (["前", "後", "ぐらい", "くらい", "ほど", "経つ", "経った", "経って", "一秒"], 60) },
     };
 
     // Pass-2 prefilter keeps a confident token rescorable when an anchor could flip its homograph.

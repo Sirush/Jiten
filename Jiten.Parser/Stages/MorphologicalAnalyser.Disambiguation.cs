@@ -192,6 +192,65 @@ public partial class MorphologicalAnalyser
                 && wordInfos[i - 1].Text is "どこ" or "どっか" or "こっち" or "あっち" or "そっち" or "どこか")
                 PinVerb(word, 1578850, "行く", "いった", "いく");
 
+            // Clause-initial kana いけ before a pause is 行く's command (いけ、ブリガロン), like kanji 行け below.
+            if (word is { Text: "いけ" or "いけー", PartOfSpeech: PartOfSpeech.Verb, PreMatchedWordId: null }
+                && AtClauseStart(wordInfos, i) && FollowedByPunctuationOrEnd(wordInfos, i))
+                PinVerb(word, 1578850, "行く", "いけ", "いく");
+
+            // Kana いける read as 行く's potential is 行ける "to be good", not 生ける; いけない is its own entry, imperatives stay 行く.
+            if (word.PartOfSpeech == PartOfSpeech.Verb && word.PreMatchedWordId == null
+                && word.Text.StartsWith("いけ", StringComparison.Ordinal)
+                && !IkenaiNegativeHeads.Any(h => word.Text.StartsWith(h, StringComparison.Ordinal))
+                && word.DictionaryForm == "いける")
+            {
+                // After a te-form it is the auxiliary 〜ていく's potential (ついていけず).
+                bool afterTeForm = i > 0 && wordInfos[i - 1].Text.Length > 0 && wordInfos[i - 1].Text[^1] is 'て' or 'で';
+                if (word.IsImperative)
+                    PinVerb(word, 1578850, "行く", "いけ", "いく");
+                else if (afterTeForm)
+                    PinVerb(word, 1578850, "行く", word.Text, "いく");
+                else
+                    PinVerb(word, 1631370, "いける", word.Text);
+            }
+
+            // Kana ふう after a predicate or demonstrative is 風 "manner" (気づくふうもなく, こんなふうに), never 封 "seal".
+            if (word is { Text: "ふう", PreMatchedWordId: null } && i > 0
+                && word.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Suffix
+                && (wordInfos[i - 1].PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective or PartOfSpeech.Adnominal
+                    || wordInfos[i - 1].Text is "た" or "ない" or "だ" or "な" or "という" or "って"))
+            {
+                word.PreMatchedWordId = 1499730;
+                word.PreMatchedReadingIndex = 1;
+            }
+
+            // Clause-initial フウ before a pause or a predicate is the sigh ふう (フウ、よかった); before a particle it is a name.
+            if (word is { Text: "フウ" or "フゥ", PreMatchedWordId: null } && AtClauseStart(wordInfos, i)
+                && (i + 1 >= wordInfos.Count || wordInfos[i + 1].PartOfSpeech is not PartOfSpeech.Particle))
+            {
+                word.PartOfSpeech = PartOfSpeech.Interjection;
+                word.PreMatchedWordId = 2828104;
+                word.PreMatchedReadingIndex = 0;
+            }
+
+            // Kana へん before な/に/だ is 変 "strange"; the negating へん follows a verb stem and Sudachi tags it 助動詞.
+            if (word.Text is "へん" or "へんな" or "へんに" or "へんだ"
+                && word.PartOfSpeech is not PartOfSpeech.Auxiliary
+                && word.PreMatchedWordId == null
+                && (i == 0 || wordInfos[i - 1].PartOfSpeech is not PartOfSpeech.Verb)
+                && (word.Text.Length > 2 || (i + 1 < wordInfos.Count && wordInfos[i + 1].Text is "な" or "に" or "だ" or "です" or "なの")))
+            {
+                word.PreMatchedWordId = 1510640;
+                word.PreMatchedReadingIndex = 2;
+            }
+
+            // Kana いった/いったら right after quotative って reports speech (しばらくっていったら), so it is 言う, not 行く.
+            if (word.Text.StartsWith("いっ", StringComparison.Ordinal) && word.Text.Length > 2
+                && word.DictionaryForm is "いく" or "行く"
+                && word.PartOfSpeech == PartOfSpeech.Verb
+                && i > 0 && wordInfos[i - 1] is { Text: "って", PartOfSpeech: PartOfSpeech.Particle }
+                && word.PreMatchedWordId == null)
+                PinVerb(word, 1587040, "言う", word.Text, "いう");
+
             // 出られな|いって is ない + って: Sudachi lets いく steal ない's final mora.
             if (word.Text == "いって" && word.DictionaryForm is "いく" or "行く"
                 && i > 0 && wordInfos[i - 1] is { Text: "な", PartOfSpeech: PartOfSpeech.Auxiliary } naAux)
@@ -455,6 +514,8 @@ public partial class MorphologicalAnalyser
                 return f.Text;
         return null;
     }
+
+    private static readonly string[] IkenaiNegativeHeads = ["いけな", "いけね", "いけぬ", "いけん", "いけへん", "いけませ"];
 
     private void PinVerb(WordInfo word, int wordId, string lemma, string conjugationSurface, string? conjugationBase = null)
     {

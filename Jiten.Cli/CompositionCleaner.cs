@@ -5,12 +5,13 @@ using Microsoft.EntityFrameworkCore;
 namespace Jiten.Cli;
 
 /// <summary>
-/// Removes the three garbage classes from jmdict."WordCompositions":
+/// Removes the four garbage classes from jmdict."WordCompositions":
 ///   1. parent is a proper noun (name-type POS) — "Composed of" for names is noise;
 ///   2. any unflagged component is purely a particle / auxiliary (the composition is really a phrase);
-///   3. every component is a single character — redundant with the kanji breakdown (赤本 -> 赤+本).
+///   3. every component is a single character — redundant with the kanji breakdown (赤本 -> 赤+本);
+///   4. a name entry fills a hiragana or single-kanji slot, which is a verb stem resolved to a name (かけ in かけつける, 引 in 引寄せる).
 ///
-/// All three are predicate-based DELETEs, so this command is idempotent / rerunnable.
+/// All four are predicate-based DELETEs, so this command is idempotent / rerunnable.
 /// Use with --dry-run to preview the counts (executed inside a rolled-back transaction).
 /// </summary>
 public static class CompositionCleaner
@@ -29,6 +30,13 @@ public static class CompositionCleaner
         "n", "pn", "num", "ctr", "adv", "adv-to", "int", "suf", "pref", "n-suf", "n-pref",
         "adj-i", "adj-ix", "adj-na", "adj-no", "adj-pn", "adj-t", "adj-f", "adj-ku", "adj-shiku", "adj-nari", "adj-kari"
     };
+
+    /// <summary>The C# form of rule 2: a grammatical tag with no content sense, so the cleaner reads the group as a phrase.</summary>
+    internal static bool MarksPhrase(string[] pos) =>
+        pos.Any(CompositionRules.GrammaticalTags.Contains)
+        && !pos.Any(p => ContentPos.Contains(p) || VerbTag.IsMatch(p));
+
+    private static readonly System.Text.RegularExpressions.Regex VerbTag = new("^v([0-9]|[kszrn]|-)");
 
     public static async Task Cleanup(IDbContextFactory<JitenDbContext> contextFactory, bool dryRun)
     {
@@ -70,16 +78,32 @@ WHERE (wc.""WordId"", wc.""ReadingIndex"") IN (
     HAVING bool_and(char_length(x.""ComponentSurface"") = 1)
 );";
 
+        var nameStemSql = $@"
+DELETE FROM jmdict.""WordCompositions"" wc
+WHERE (wc.""WordId"", wc.""ReadingIndex"") IN (
+    SELECT DISTINCT x.""WordId"", x.""ReadingIndex""
+    FROM jmdict.""WordCompositions"" x
+    JOIN jmdict.""Words"" cw ON cw.""WordId"" = x.""ComponentWordId""
+    WHERE NOT x.""IsGrammatical""
+      AND cw.""PartsOfSpeech"" && {ArrayLiteral(NamePos)}
+      AND NOT EXISTS (SELECT 1 FROM unnest(cw.""PartsOfSpeech"") p
+                      WHERE p = ANY({ArrayLiteral(ContentPos)}) OR p ~ '^v([0-9]|[kszrn]|-)')
+      AND (x.""ComponentSurface"" ~ '^[ぁ-ゖー]+$'
+           OR (char_length(x.""ComponentSurface"") = 1 AND x.""ComponentSurface"" ~ '[一-鿿㐀-䶿]'))
+);";
+
         var nameDeleted = await context.Database.ExecuteSqlRawAsync(nameSql);
         var particleDeleted = await context.Database.ExecuteSqlRawAsync(particleSql);
         var singleCharDeleted = await context.Database.ExecuteSqlRawAsync(singleCharSql);
+        var nameStemDeleted = await context.Database.ExecuteSqlRawAsync(nameStemSql);
 
-        var totalDeleted = nameDeleted + particleDeleted + singleCharDeleted;
+        var totalDeleted = nameDeleted + particleDeleted + singleCharDeleted + nameStemDeleted;
 
         Console.WriteLine($@"=== Composition Cleanup ({(dryRun ? "DRY RUN" : "APPLIED")}) ===
 Name-parent rows deleted:        {nameDeleted:N0}
 Particle-component rows deleted: {particleDeleted:N0}
 All-single-char rows deleted:    {singleCharDeleted:N0}
+Name-as-stem rows deleted:       {nameStemDeleted:N0}
 Total rows deleted:              {totalDeleted:N0}
 Rows remaining:                  {totalRows - totalDeleted:N0}");
 

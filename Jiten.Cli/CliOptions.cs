@@ -113,8 +113,11 @@ public class CliOptions
     [Option(longName: "split-type", Required = false, Default = "CB", HelpText = "SudachiDict split type to ingest (C, B, CB). Default CB.")]
     public string SplitType { get; set; } = "CB";
 
-    [Option(longName: "cleanup-compositions", Required = false, HelpText = "Delete name-parent, particle-component and all-single-char WordCompositions (idempotent/rerunnable). Combine with --dry-run to preview counts.")]
+    [Option(longName: "cleanup-compositions", Required = false, HelpText = "Delete name-parent, particle-component, all-single-char and name-as-stem WordCompositions (idempotent/rerunnable). Combine with --dry-run to preview counts.")]
     public bool CleanupCompositions { get; set; }
+
+    [Option(longName: "align-compositions", Required = false, HelpText = "Re-point kana WordComposition components at the homograph their kanji sibling form uses, and replace name-entry components (idempotent/rerunnable). Combine with --dry-run to preview.")]
+    public bool AlignCompositions { get; set; }
 
     [Option(longName: "backfill-compositions", Required = false, HelpText = "Fill WordCompositions for compounds with no rows via Sudachi Mode A + sense resolver (idempotent/rerunnable). Combine with --dry-run for a sampled coverage report.")]
     public bool BackfillCompositions { get; set; }
@@ -140,7 +143,7 @@ public class CliOptions
     [Option(longName: "sync-jmnedict", Required = false, HelpText = "Sync missing JMNedict entries and update partial entries with missing readings/definitions.")]
     public string? SyncJMNedict { get; set; }
 
-    [Option(longName: "sync-jmdict", Required = false, HelpText = "Sync JMDict metadata on WordForms and Definitions from XML source.")]
+    [Option(longName: "sync-jmdict", Required = false, HelpText = "Sync JMDict metadata on WordForms and Definitions from XML source. Ends with --backfill-compositions (after --sync-jmnedict when both are given) unless --dry-run.")]
     public bool SyncJmDict { get; set; }
 
     [Option(longName: "migrate-moved-forms", Required = false, HelpText = "Follow JMdict forms that moved to another entry: remove the old entry's lookups for them and copy frequency ranks to the new entry. Runs automatically inside --sync-jmdict; combine with --dry-run and --output to preview.")]
@@ -168,6 +171,9 @@ public class CliOptions
 
     [Option(longName: "parse-test", Required = false, HelpText = "Parse text with verbose diagnostic output. Use @filepath to read from file.")]
     public string? ParseTest { get; set; }
+
+    [Option(longName: "parse-batch", Required = false, HelpText = "Parse each line of a file as its own sentence and print one compact line per sentence: surface[WordId/ReadingIndex form]. Use with --parse-test-output to write to a file.")]
+    public string? ParseBatch { get; set; }
 
     [Option(longName: "parse-deck-test", Required = false, HelpText = "Parse text in deck mode (ParseTextToDeck). Use @filepath to read from file. Combine with --watch-word to focus output.")]
     public string? ParseDeckTest { get; set; }

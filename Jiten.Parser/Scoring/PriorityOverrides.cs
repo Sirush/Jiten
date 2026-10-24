@@ -15,6 +15,7 @@ internal static class PriorityOverrides
         1571330, // 舐る (ねぶる): beats 眠る's rare ねぶる reading
         1709300, // 数度 (すうど): beats the surname すどう that Sudachi guesses
         1467400, // 忍び: beats the fern しのぶ (2179930) on bare 忍, whose ruby priors come from the name Shinobu
+        1565940, // 奢る: kana おごる is "to treat", not 驕る, which Sudachi's NormalizedForm favours
     ];
 
     private static readonly HashSet<(int WordId, byte ReadingIndex)> FormLevelJitenIds =
@@ -26,6 +27,7 @@ internal static class PriorityOverrides
         (1593500, 2), // 轟々 ごうごう: beats 囂々, avoiding a margin=0 reseg
         (2013900, 4), // 赤 あか: beats 垢 and 銅
         (1529560, 1), // 無し なし: beats 梨 on the casual katakana negation ナシ
+        (1565750, 1), // 埃 ほこり: kana "dust" beats 誇り, which is normally written in kanji
     ];
 
     public static void Apply(JmDictWord word)

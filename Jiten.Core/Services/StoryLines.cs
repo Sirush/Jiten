@@ -37,6 +37,7 @@ public static class StoryLines
 
         var memberIds = members.Keys.ToList();
         var links = await LinksAmong(db.DeckRelationships.AsNoTracking(), memberIds)
+                          .Where(r => r.RelationshipType != DeckRelationshipType.Alternative)
                           .Select(r => new { r.SourceDeckId, r.TargetDeckId })
                           .ToListAsync(ct);
 

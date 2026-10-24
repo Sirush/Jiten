@@ -348,10 +348,10 @@ export function leaveGroup(state: BuilderState, seriesId: number, deckId: number
   else if (m.status === 'new') state.members = state.members.filter((x) => x !== m);
 }
 
-/** Decks joined by story links; settings never join lines. */
+/** Decks joined by story links; settings and alternative versions never join lines, so a remake can sit in its own series. */
 function storyLines(board: number[], edges: FranchiseEdge[]): number[][] {
   const uf = new UnionFind(board);
-  for (const e of edges) uf.join(e.sourceDeckId, e.targetDeckId);
+  for (const e of edges) if (e.relationshipType !== DeckRelationshipType.Alternative) uf.join(e.sourceDeckId, e.targetDeckId);
   return uf.groups(board);
 }
 

@@ -336,6 +336,12 @@ describe('line helpers', () => {
     expect(otherSeriesOfLine(state, groups, 10, 2)).toEqual([11]);
   });
 
+  it('keeps an alternative version out of the line', () => {
+    const state = stateWith([edge(2, 1, Sequel), edge(3, 1, Alternative)]);
+    expect(lineOf(state, 1).sort()).toEqual([1, 2]);
+    expect(lineOf(state, 3)).toEqual([3]);
+  });
+
   it('ignores removed links and memberships', () => {
     const state = stateWith([edge(2, 1, Sequel)]);
     state.members.push({ seriesId: 10, deckId: 4, status: 'removed' });
