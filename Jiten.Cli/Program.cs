@@ -137,15 +137,17 @@ public class Program
             await importCommands.ImportVocabularyOrigin(options);
         }
 
-        if (options.SyncJmDict)
-        {
-            await importCommands.SyncJmDict(options);
-        }
+        var jmDictSynced = options.SyncJmDict && await importCommands.SyncJmDict(options);
 
         // JMnedict runs after JMdict: both rewrite the name entries JMdict shares with JMnedict, and name-type POS must win.
         if (!string.IsNullOrEmpty(options.SyncJMNedict))
         {
             await importCommands.SyncJMNedict(options);
+        }
+
+        if (jmDictSynced && !options.DryRun)
+        {
+            await importCommands.BackfillCompositions(options);
         }
 
         if (options.BuildDerivations)
@@ -395,6 +397,12 @@ public class Program
         if (options.CleanupCompositions)
         {
             await importCommands.CleanupCompositions(options);
+            return;
+        }
+
+        if (options.AlignCompositions)
+        {
+            await importCommands.AlignCompositions(options);
             return;
         }
 

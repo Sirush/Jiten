@@ -17,7 +17,7 @@ namespace Jiten.Cli;
 /// </summary>
 public static class CompositionBackfill
 {
-    private static readonly HashSet<string> NamePos = new()
+    internal static readonly HashSet<string> NamePos = new()
     {
         "person", "place", "station", "organization", "company", "surname",
         "name-fem", "name-masc", "product", "work", "given", "char", "group",
@@ -52,12 +52,16 @@ public static class CompositionBackfill
         public readonly Dictionary<(int, short), (string Text, string Ruby)> KanjiForm = new();
     }
 
+    /// <summary>Aligns and cleans before the fill as well, so a group the cleaner drops (a name in a verb-stem slot) is refilled in the same run.</summary>
     public static async Task Backfill(IDbContextFactory<JitenDbContext> contextFactory, bool dryRun, int dryRunSample)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
         Console.WriteLine("Loading JMDict resolver data...");
         var data = await LoadData(context);
         Console.WriteLine($"Loaded {data.Pos.Count:N0} words, {data.KanjiForm.Count:N0} kanji forms.");
+
+        await CompositionAligner.Align(contextFactory, dryRun);
+        await CompositionCleaner.Cleanup(contextFactory, dryRun);
 
         Console.WriteLine("Loading gap targets (compounds with no composition rows)...");
         var targets = await LoadGapTargets(context, data, dryRun ? dryRunSample : 0);
@@ -154,6 +158,7 @@ Name-only component landings: {stats["nameLanding"]:N0}/{compTotal:N0} ({100.0 *
         }
 
         // Existing rows are never revisited by the backfill, so drift from dictionary syncs (a parent retagged as a name) is cleaned here.
+        await CompositionAligner.Align(contextFactory, dryRun);
         await CompositionCleaner.Cleanup(contextFactory, dryRun);
     }
 
@@ -292,7 +297,7 @@ Name-only component landings: {stats["nameLanding"]:N0}/{compTotal:N0} ({100.0 *
         return s;
     }
 
-    private static bool IsContent(string[] pos)
+    internal static bool IsContent(string[] pos)
     {
         foreach (var p in pos)
             if (!NamePos.Contains(p) && !MiscPos.Contains(p))
@@ -303,7 +308,7 @@ Name-only component landings: {stats["nameLanding"]:N0}/{compTotal:N0} ({100.0 *
     private static bool IsAffix(string[] pos) =>
         pos.Any(p => p is "suf" or "n-suf" or "pref" or "n-pref" or "ctr");
 
-    private static bool IsVerbOrAdj(string[] pos) =>
+    internal static bool IsVerbOrAdj(string[] pos) =>
         pos.Any(p => p.StartsWith('v') || p is "adj-i" or "adj-ix");
 
     private static bool PosMatch(PartOfSpeech pos, string[] tags)
@@ -330,6 +335,13 @@ Name-only component landings: {stats["nameLanding"]:N0}/{compTotal:N0} ({100.0 *
 
     private static List<(string Surface, string Reading)>? ParseRuby(string text, string ruby)
     {
+        var spans = RubySpans(text, ruby);
+        return spans is { Count: >= 2 } ? spans : null;
+    }
+
+    /// <summary>Splits ruby into kanji runs with their readings and single kana characters; null when the ruby carries no readings.</summary>
+    internal static List<(string Surface, string Reading)>? RubySpans(string text, string ruby)
+    {
         if (string.IsNullOrEmpty(ruby) || ruby == text) return null;
         var spans = new List<(string, string)>();
         int i = 0, pendingStart = 0;
@@ -350,7 +362,7 @@ Name-only component landings: {stats["nameLanding"]:N0}/{compTotal:N0} ({100.0 *
             pendingStart = i;
         }
         for (int j = pendingStart; j < ruby.Length; j++) spans.Add((ruby[j].ToString(), Hira(ruby[j].ToString())));
-        return spans.Count >= 2 ? spans : null;
+        return spans;
     }
 
     private static List<(string Surface, string Reading)>? RubyDecompose(ResolverData data, List<(string Surface, string Reading)> spans)
@@ -391,7 +403,7 @@ Name-only component landings: {stats["nameLanding"]:N0}/{compTotal:N0} ({100.0 *
 
     // ---- reading helpers ----
 
-    private static bool ReadingMatches(string citation, string target)
+    internal static bool ReadingMatches(string citation, string target)
     {
         if (citation == target) return true;
         if (citation.Length > 0 && Voice.TryGetValue(citation[0], out var voiced))
@@ -401,7 +413,7 @@ Name-only component landings: {stats["nameLanding"]:N0}/{compTotal:N0} ({100.0 *
         return false;
     }
 
-    private static string Hira(string s) =>
+    internal static string Hira(string s) =>
         string.IsNullOrEmpty(s) ? "" : JapaneseTextHelper.ToHiragana(s.Replace("ヮ", "わ").Replace("ゎ", "わ"));
 
     private static bool HasKanji(string s) => s.Any(JapaneseTextHelper.IsKanji);

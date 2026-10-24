@@ -71,6 +71,11 @@ public class ImportCommands(CliContext context)
         await CompositionCleaner.Cleanup(context.ContextFactory, options.DryRun);
     }
 
+    public async Task AlignCompositions(CliOptions options)
+    {
+        await CompositionAligner.Align(context.ContextFactory, options.DryRun);
+    }
+
     public async Task BackfillCompositions(CliOptions options)
     {
         await CompositionBackfill.Backfill(context.ContextFactory, options.DryRun, dryRunSample: 12000);
@@ -107,13 +112,14 @@ public class ImportCommands(CliContext context)
         Console.WriteLine("JMNedict sync complete.");
     }
 
-    public async Task SyncJmDict(CliOptions options)
+    /// <summary>Returns false when the sync could not start for missing paths.</summary>
+    public async Task<bool> SyncJmDict(CliOptions options)
     {
         if (string.IsNullOrEmpty(options.XmlPath) || string.IsNullOrEmpty(options.DictionaryPath) ||
             string.IsNullOrEmpty(options.FuriganaPath))
         {
             Console.WriteLine("For JMDict sync, you need to specify --xml path/to/jmdict_dtd.xml, --dic path/to/jmdict and --furi path/to/JmdictFurigana.json.");
-            return;
+            return false;
         }
 
         Console.WriteLine("Syncing JMDict entries with database...");
@@ -123,6 +129,7 @@ public class ImportCommands(CliContext context)
         if (!options.DryRun)
             await ParseDataEpochStore.BumpAsync(context.ContextFactory);
         Console.WriteLine("JMDict sync complete.");
+        return true;
     }
 
     public async Task BuildDerivations(CliOptions options)
