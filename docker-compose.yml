@@ -139,7 +139,7 @@ services:
       - "traefik.http.middlewares.jiten-errors.errors.query=/503.html"
 
   voicevox:
-    image: voicevox/voicevox_engine:cpu-latest
+    image: voicevox/voicevox_engine:cpu-0.25.2
     restart: unless-stopped
     entrypoint: /opt/voicevox_engine/run
     command: --host 0.0.0.0 --port 50021 --cpu_num_threads 4
