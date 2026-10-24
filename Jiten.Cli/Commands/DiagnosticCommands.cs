@@ -103,6 +103,51 @@ public class DiagnosticCommands(CliContext context)
         }
     }
 
+    public async Task ParseBatch(CliOptions options)
+    {
+        var path = options.ParseBatch!.TrimStart('@');
+        var lines = (await File.ReadAllLinesAsync(path))
+                    .Select(l => l.Trim())
+                    .Where(l => l.Length > 0 && !l.StartsWith('#'))
+                    .ToList();
+
+        var parsed = new List<(string Line, List<DeckWord> Words)>();
+        foreach (var line in lines)
+            parsed.Add((line, await Jiten.Parser.Parser.ParseText(context.ContextFactory, line)));
+
+        var ids = parsed.SelectMany(p => p.Words).Select(w => w.WordId).Distinct().ToList();
+        await using var db = await context.ContextFactory.CreateDbContextAsync();
+        var forms = await db.WordForms.AsNoTracking()
+                            .Where(f => ids.Contains(f.WordId))
+                            .Select(f => new { f.WordId, f.ReadingIndex, f.Text })
+                            .ToListAsync();
+        var formText = forms.ToDictionary(f => (f.WordId, (byte)f.ReadingIndex), f => f.Text);
+        var headword = forms.GroupBy(f => f.WordId).ToDictionary(g => g.Key, g => g.OrderBy(f => f.ReadingIndex).First().Text);
+
+        var sb = new StringBuilder();
+        foreach (var (line, words) in parsed)
+        {
+            sb.AppendLine(line);
+            sb.AppendLine("  " + string.Join(" | ", words.Select(w =>
+            {
+                var form = formText.GetValueOrDefault((w.WordId, w.ReadingIndex)) ?? "?";
+                var head = headword.GetValueOrDefault(w.WordId);
+                var label = head != null && head != form ? $"{form}/{head}" : form;
+                return $"{w.OriginalText}[{w.WordId}/{w.ReadingIndex} {label}]";
+            })));
+        }
+
+        if (!string.IsNullOrEmpty(options.ParseTestOutput))
+        {
+            await File.WriteAllTextAsync(options.ParseTestOutput, sb.ToString());
+            Console.WriteLine($"Written to {options.ParseTestOutput}");
+        }
+        else
+        {
+            Console.Write(sb.ToString());
+        }
+    }
+
     public async Task ParseDeckTest(CliOptions options)
     {
         var text = options.ParseDeckTest!;

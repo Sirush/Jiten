@@ -169,6 +169,9 @@ public class CliOptions
     [Option(longName: "parse-test", Required = false, HelpText = "Parse text with verbose diagnostic output. Use @filepath to read from file.")]
     public string? ParseTest { get; set; }
 
+    [Option(longName: "parse-batch", Required = false, HelpText = "Parse each line of a file as its own sentence and print one compact line per sentence: surface[WordId/ReadingIndex form]. Use with --parse-test-output to write to a file.")]
+    public string? ParseBatch { get; set; }
+
     [Option(longName: "parse-deck-test", Required = false, HelpText = "Parse text in deck mode (ParseTextToDeck). Use @filepath to read from file. Combine with --watch-word to focus output.")]
     public string? ParseDeckTest { get; set; }
 

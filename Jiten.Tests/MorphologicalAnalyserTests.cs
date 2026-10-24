@@ -2446,6 +2446,40 @@ public class MorphologicalAnalyserTests
         yield return ["電車に揺られて、目的地の駅に着く。", new[] { "電車", "に", "揺られて", "目的地", "の", "駅", "に", "着く" }];
         yield return ["そのまま揺られ続けた。", new[] { "そのまま", "揺られ", "続けた" }];
         yield return ["「いいから来いって」", new[] { "いい", "から", "来い", "って" }];
+
+        // Sudachi's 暇|はな|いっ|て fuses the topic は into はなる (離る); the particle peels off when ない is the common reading
+        yield return ["「休んでいる暇はないって言っただろ」", new[] { "休んでいる", "暇", "は", "ない", "って", "言った", "だろ" }];
+        yield return ["ないって、じゃあ幸せなことが南さんにはないってこと？", new[] { "ない", "って", "じゃあ", "幸せな", "こと", "が", "南", "さん", "には", "ない", "って", "こと" }];
+        // A rare word must not swallow the particle it starts with when an OOV blob is re-tokenised (の|はそう|いう)
+        yield return ["「消えるってのはそういうことか」", new[] { "消える", "ってのは", "そういうことか" }];
+        // くっ|て can't be 来る's te-form, so the stolen く returns to しばらく
+        yield return ["それもけっこうだけどね、あたしにいわせていただければ、しばらくっていったら、ふつう十日ぐらいよ。", new[] { "それも", "けっこう", "だけど", "ね", "あたし", "に", "いわせて", "いただければ", "しばらく", "って", "いったら", "ふつう", "十日", "ぐらい", "よ" }];
+        // The copula っす gives back the う it stole (そ|うっす, 手伝|うっす)
+        yield return ["そうっすね。", new[] { "そう", "っす", "ね" }];
+        yield return ["「よかったら自分も探すの手伝うっすよ？」", new[] { "よかったら", "自分", "も", "探す", "の", "手伝う", "っす", "よ" }];
+        // けどっ|て after a predicate is けど + って, not 気取る
+        yield return ["「どうして忘れたのかはよくわからないけどって」", new[] { "どうして", "忘れた", "の", "か", "は", "よく", "わからない", "けど", "って" }];
+        // An interjection げっ cut from a verb stem goes back to it (広|げっ|放し, 丸|投|げっ|ぽかっ)
+        yield return ["俺も急な来客、つまりいろはが来たせいでスケッチブックを広げっ放しにしてたのを", new[] { "俺", "も", "急な", "来客", "つまり", "いろは", "が", "来た", "せい", "で", "スケッチブック", "を", "広げ", "っ放し", "に", "してた", "の", "を" }];
+        yield return ["不言不動のリーダーは、最後の最後まで実質的なリーダーに丸投げっぽかった。", new[] { "不言", "不動", "の", "リーダー", "は", "最後の最後", "まで", "実質的な", "リーダー", "に", "丸投げ", "っぽかった" }];
+        // A name's honorific never closes a compound (シュウ|さん is not 蓚酸 or 集散)
+        yield return ["シュウさん、痛い。", new[] { "シュウ", "さん", "痛い" }];
+        // Sudachi's adverb 見るも swallows もの's も
+        yield return ["今日は他になにか見るものある？", new[] { "今日", "は", "他", "に", "なにか", "見る", "もの", "ある" }];
+        // Kana-only text: もうしょう(猛将)|が|ない, そ|れいぜん(霊前), いい|ない|しょ
+        yield return ["はるかさんがっかりと思った方がいたら、もうしょうがない。", new[] { "はるか", "さん", "がっかり", "と", "思った", "方", "が", "いたら", "もう", "しょうがない" }];
+        yield return ["「それいぜんに、うちの子にならないだろう」", new[] { "それ", "いぜん", "に", "うち", "の", "子", "に", "ならない", "だろう" }];
+        yield return ["いいないしょね。", new[] { "いい", "ないしょ", "ね" }];
+        // The film title is the phrase in running text
+        yield return ["もう、勝手にしやがれ。", new[] { "もう", "勝手に", "しやがれ" }];
+        // Sudachi reads 終|了っ|と as 了う; っと, like って, steals the noun's tail kanji
+        yield return ["これでボクの番は終了っと。", new[] { "これ", "で", "ボク", "の", "番", "は", "終了", "っと" }];
+        // An OOV blob ending in ぜ re-tokenises once ぜ is a known sentence-final particle
+        yield return ["もう終わりってことだぜ...", new[] { "もう", "終わり", "って", "こと", "だ", "ぜ" }];
+        // A kana compound verb missing from JMDict splits into its verbs instead of losing っ to って
+        yield return ["下ではお客さんたちが、こんなことをささやきあっていました。", new[] { "下", "では", "お客さん", "たち", "が", "こんな", "こと", "を", "ささやき", "あっていました" }];
+        // A te-form never takes a copula: あさっ|て|なの is the noun あさって
+        yield return ["おや、まあ、あさってなの、まだまだ先のことかと思ってたけど", new[] { "おや", "まあ", "あさって", "なの", "まだまだ", "先", "の", "こと", "か", "と", "思ってた", "けど" }];
     }
 
     [Theory]

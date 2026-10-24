@@ -438,6 +438,62 @@ public partial class MorphologicalAnalyser
             [new TokenPattern(Text: "うっす", RequireUnpinned: false)],
             [new TokenTemplate("", DictForm: "うっす", NormalizedForm: "うっす", Pos: PartOfSpeech.Interjection, Pin: 2262630)]),
 
+        // Sudachi's adverb 見るも (見るも無残) swallows the も of もの: 見るも|の before anything is 見る|もの.
+        new RewriteRule("miru-mono", RewritePhase.Cleanup,
+            [new TokenPattern(Text: "見るも", Pos: [PartOfSpeech.Adverb], RequireUnpinned: false),
+             new TokenPattern(Text: "の", RequireUnpinned: false)],
+            [new TokenTemplate("見る", DictForm: "見る", NormalizedForm: "見る", Pos: PartOfSpeech.Verb, Reading: "ミル", Pin: 1259290),
+             new TokenTemplate("もの", DictForm: "もの", NormalizedForm: "物", Pos: PartOfSpeech.Noun, Reading: "モノ", Pin: 1502390)]),
+
+        // Kana-only text: もうしょう(猛将)|が|ない is もう + しょうがない.
+        new RewriteRule("mou-shouganai", RewritePhase.Cleanup,
+            [new TokenPattern(Text: "もうしょう", RequireUnpinned: false),
+             new TokenPattern(Text: "が", RequireUnpinned: false),
+             new TokenPattern(Text: "ない", RequireUnpinned: false)],
+            [new TokenTemplate("もう", DictForm: "もう", NormalizedForm: "もう", Pos: PartOfSpeech.Adverb, Reading: "モウ", Pin: 1012480),
+             new TokenTemplate("しょうがない", DictForm: "しょうがない", NormalizedForm: "しょうがない", Pos: PartOfSpeech.Expression,
+                 Reading: "ショウガナイ", Pin: 1305510)]),
+
+        // Kana-only text: そ|れいぜん(霊前) is それ + いぜん (以前).
+        new RewriteRule("sore-izen", RewritePhase.Cleanup,
+            [new TokenPattern(Text: "そ", RequireUnpinned: false),
+             new TokenPattern(Text: "れいぜん", RequireUnpinned: false)],
+            [new TokenTemplate("それ", DictForm: "それ", NormalizedForm: "其れ", Pos: PartOfSpeech.Pronoun, Reading: "ソレ", Pin: 1006970),
+             new TokenTemplate("いぜん", DictForm: "以前", NormalizedForm: "以前", Pos: PartOfSpeech.Noun, Reading: "イゼン", Pin: 1155150)]),
+
+        // An i-adjective never takes ない directly, so いい|ない|しょ is いい + ないしょ (内緒).
+        new RewriteRule("naisho-after-adjective", RewritePhase.Early,
+            [new TokenPattern(Text: "ない", RequireUnpinned: false),
+             new TokenPattern(Text: "しょ", RequireUnpinned: false)],
+            [new TokenTemplate("ないしょ", DictForm: "ないしょ", NormalizedForm: "内緒", Pos: PartOfSpeech.Noun, Reading: "ナイショ", Pin: 1458510)],
+            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.IAdjective])),
+
+        // 割|に is the expression 割に "considering" (の割に); a numeral keeps the counter and 割に合う keeps its own entry.
+        new RewriteRule("wari-ni", RewritePhase.Cleanup,
+            [new TokenPattern(Text: "割", Pos: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun, PartOfSpeech.Suffix], RequireUnpinned: false),
+             new TokenPattern(Text: "に", Pos: [PartOfSpeech.Particle], RequireUnpinned: false)],
+            [new TokenTemplate("割に", DictForm: "割に", NormalizedForm: "割に", Pos: PartOfSpeech.Adverb, Reading: "ワリニ", Pin: 1606930)],
+            Prev: new ContextCond(Numeral: true, Negate: true),
+            Next: new ContextCond(TextStartsWithAnyOf: ["合", "あわ", "あう", "あい", "あっ"], Negate: true)),
+        new RewriteRule("wari-ni-wa", RewritePhase.Cleanup,
+            [new TokenPattern(Text: "割", Pos: [PartOfSpeech.Noun, PartOfSpeech.CommonNoun, PartOfSpeech.Suffix], RequireUnpinned: false),
+             new TokenPattern(Text: "には", RequireUnpinned: false)],
+            [new TokenTemplate("割に", DictForm: "割に", NormalizedForm: "割に", Pos: PartOfSpeech.Adverb, Reading: "ワリニ", Pin: 1606930),
+             new TokenTemplate("は", DictForm: "は", NormalizedForm: "は", Pos: PartOfSpeech.Particle, Reading: "ハ")],
+            Prev: new ContextCond(Numeral: true, Negate: true)),
+
+        // After a verb stem 尽くし is the auxiliary 尽くす (燃やし尽くし), not the noun suffix "all sorts of" (花尽くし).
+        new RewriteRule("tsukushi-aux", RewritePhase.Cleanup,
+            [new TokenPattern(TextAnyOf: ["尽くし", "つくし"], Pos: [PartOfSpeech.Verb], RequireUnpinned: false)],
+            [new TokenTemplate("", DictForm: "尽くす", NormalizedForm: "尽くす", Pos: PartOfSpeech.Verb, Pin: 1370090, RecoverConjugations: true)],
+            Prev: new ContextCond(PosAnyOf: [PartOfSpeech.Verb])),
+
+        // The film title 勝手にしやがれ is, in running text, the phrase 勝手に + しやがれ.
+        new RewriteRule("katte-ni-shiyagare", RewritePhase.Cleanup,
+            [new TokenPattern(Text: "勝手にしやがれ", RequireUnpinned: false)],
+            [new TokenTemplate("勝手に", DictForm: "勝手に", NormalizedForm: "勝手に", Pos: PartOfSpeech.Adverb, Reading: "カッテニ", Pin: 1346200),
+             new TokenTemplate("しやがれ", DictForm: "する", NormalizedForm: "為る", Pos: PartOfSpeech.Verb, Reading: "シヤガレ")]),
+
         // だっけ = the recollection ending, not だけ.
         new RewriteRule("dakke", RewritePhase.Cleanup,
             [new TokenPattern(Text: "だっけ", RequireUnpinned: false)],

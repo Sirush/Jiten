@@ -64,7 +64,7 @@ internal sealed class ParserRuntime
             await new MorphologicalAnalyser().Parse("食べた");
         });
 
-        var (lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds, wordMeta, wordObservedFrequencies, lookupsMs, freqMs, nameOnlyMs, metaMs) =
+        var (lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds, wordMeta, wordObservedFrequencies, partialKanaSpellings, lookupsMs, freqMs, nameOnlyMs, metaMs) =
             await LoadPreloadDataAsync(contextFactory);
         var dbWallMs = overallSw.ElapsedMilliseconds;
 
@@ -82,7 +82,7 @@ internal sealed class ParserRuntime
 
         var kanjiBackedWordIds = BuildKanjiBackedWordIds(lookups);
 
-        return new ParserRuntimeSnapshot(deckWordCache, jmDictCache, lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds, wordMeta, wordObservedFrequencies, kanjiBackedWordIds, prefillTask);
+        return new ParserRuntimeSnapshot(deckWordCache, jmDictCache, lookups, wordFrequencyRanks, nameOnlyWordIds, expressionWordIds, wordMeta, wordObservedFrequencies, kanjiBackedWordIds, partialKanaSpellings, prefillTask);
     }
 
     /// <summary>Words with a kanji form; a kana surface hitting one fits only if it is usually-kana (Parser.IsKanaAppropriateId).</summary>
@@ -102,6 +102,7 @@ internal sealed class ParserRuntime
     private static async Task<(Dictionary<string, List<int>> lookups, Dictionary<int, int> wordFrequencyRanks,
         HashSet<int> nameOnlyWordIds, HashSet<int> expressionWordIds, Dictionary<int, JmDictWordMeta> wordMeta,
         Dictionary<int, double> wordObservedFrequencies,
+        Dictionary<string, PartialKanaForm?> partialKanaSpellings,
         long lookupsMs, long freqMs, long nameOnlyMs, long metaMs)>
         LoadPreloadDataAsync(IDbContextFactory<JitenDbContext> contextFactory)
     {
@@ -112,6 +113,7 @@ internal sealed class ParserRuntime
         await using var ctx5 = await contextFactory.CreateDbContextAsync();
         await using var ctx6 = await contextFactory.CreateDbContextAsync();
         await using var ctx7 = await contextFactory.CreateDbContextAsync();
+        await using var ctx8 = await contextFactory.CreateDbContextAsync();
 
         long lookupsMs = 0, freqMs = 0, nameOnlyMs = 0, metaMs = 0;
         var sw = Stopwatch.StartNew();
@@ -131,12 +133,14 @@ internal sealed class ParserRuntime
                 TaskContinuationOptions.ExecuteSynchronously);
         var t6 = JmDictHelper.LoadFullyArchaicWordIds(ctx6);
         var t7 = JmDictHelper.LoadWordObservedFrequencies(ctx7);
+        var t8 = JmDictHelper.LoadNounRubyForms(ctx8);
 
-        await Task.WhenAll(t1, t2, t3, t4, t5, t6, t7);
+        await Task.WhenAll(t1, t2, t3, t4, t5, t6, t7, t8);
 
         var wordMeta = BuildWordMetadata(t5.Result, t6.Result);
+        var partialKanaSpellings = PartialKanaSpellings.Build(t8.Result);
 
-        return (t1.Result, t2.Result, t3.Result, t4.Result, wordMeta, t7.Result, lookupsMs, freqMs, nameOnlyMs, metaMs);
+        return (t1.Result, t2.Result, t3.Result, t4.Result, wordMeta, t7.Result, partialKanaSpellings, lookupsMs, freqMs, nameOnlyMs, metaMs);
     }
 
     private static Dictionary<int, JmDictWordMeta> BuildWordMetadata(
@@ -282,6 +286,7 @@ internal sealed class ParserRuntimeSnapshot(
     Dictionary<int, JmDictWordMeta> wordMeta,
     Dictionary<int, double> wordObservedFrequencies,
     HashSet<int> kanjiBackedWordIds,
+    Dictionary<string, PartialKanaForm?> partialKanaSpellings,
     Task jmDictPrefillTask)
 {
     public Task JmDictPrefillTask { get; } = jmDictPrefillTask;
@@ -294,4 +299,5 @@ internal sealed class ParserRuntimeSnapshot(
     public Dictionary<int, JmDictWordMeta> WordMeta { get; } = wordMeta;
     public Dictionary<int, double> WordObservedFrequencies { get; } = wordObservedFrequencies;
     public HashSet<int> KanjiBackedWordIds { get; } = kanjiBackedWordIds;
+    public Dictionary<string, PartialKanaForm?> PartialKanaSpellings { get; } = partialKanaSpellings;
 }

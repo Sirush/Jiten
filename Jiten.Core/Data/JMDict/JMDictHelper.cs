@@ -465,6 +465,35 @@ public static class JmDictHelper
         }
     }
 
+    /// <summary>Furigana of common nouns' kanji forms with two or more ruby segments (腹[はら]巻[ま]き); common = JMDict priority or corpus rank ≤ 60000.</summary>
+    public static async Task<List<(int WordId, short ReadingIndex, string RubyText)>> LoadNounRubyForms(JitenDbContext context)
+    {
+        var conn = (NpgsqlConnection)context.Database.GetDbConnection();
+        var shouldClose = conn.State == ConnectionState.Closed;
+        if (shouldClose) await conn.OpenAsync();
+        try
+        {
+            await using var cmd = new NpgsqlCommand("""
+                SELECT f."WordId", f."ReadingIndex", f."RubyText"
+                FROM jmdict."WordForms" f
+                JOIN jmdict."Words" w ON w."WordId" = f."WordId"
+                LEFT JOIN jmdict."WordFrequencies" q ON q."WordId" = f."WordId"
+                WHERE f."FormType" = 0 AND f."RubyText" LIKE '%]%[%' AND 'n' = ANY(w."PartsOfSpeech")
+                  AND (cardinality(w."Priorities") > 0 OR (q."FrequencyRank" > 0 AND q."FrequencyRank" <= 60000))
+                """, conn);
+            await using var reader = await cmd.ExecuteReaderAsync();
+
+            var result = new List<(int, short, string)>();
+            while (await reader.ReadAsync())
+                result.Add((reader.GetInt32(0), reader.GetInt16(1), reader.GetString(2)));
+            return result;
+        }
+        finally
+        {
+            if (shouldClose) await conn.CloseAsync();
+        }
+    }
+
     public static async Task<HashSet<int>> LoadNameOnlyWordIds(JitenDbContext context)
     {
         // Filter entirely in Postgres — avoids transferring all PartsOfSpeech text[] arrays to C#.

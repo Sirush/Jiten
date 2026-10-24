@@ -1323,7 +1323,9 @@ public class FormSelectionTests
         // フル+に now merges into the lexicalized adverb フルに (2854949) — and must never be 降る
         yield return ["五感をフルに活動する。", "フルに", 2854949, (byte)0];
         // S-E lopsided-frequency override (≥10× word-level prior between surface-exact homographs)
-        yield return ["こちら側か、むこう側か", "むこう", 1277140, (byte)2];
+        yield return ["むこうはどうだった？", "むこう", 1277140, (byte)2];
+        // Sudachi's むこう側 is 向こう側 written partly in kana, one word like こちら側
+        yield return ["こちら側か、むこう側か", "むこう側", 1604830, (byte)0];
         yield return ["雪さん――主をカイロ代わりとはいかがなものかと", "カイロ", 1200640, (byte)2];
         // ...but it must not flip context decisions: にもよる is 依る, not the more frequent homographs
         yield return ["懐具合にもよるが", "よる", 1168660, (byte)4];
@@ -2104,6 +2106,54 @@ public class FormSelectionTests
         yield return ["オラたちは…", "オラ", 2080360, (byte)3];
         yield return ["オラドラゴンボール…", "オラ", 2080360, (byte)3];
         yield return ["「オラを種馬として使うなら億はくだらねぇよ？」", "オラ", 2080360, (byte)3];
+
+        // Quotative re-cut しな|いっ|て → しない keeps the する lemma, so the kana reading of 市内 never wins
+        yield return ["俺は彼女にしかプレゼントしないって心に決めてるから。", "しない", 1157170, (byte)1];
+        yield return ["退屈しないって、こういうこと。", "しない", 1157170, (byte)1];
+        yield return ["「なのに返事をしないって、絶対に変だろうが」", "しない", 1157170, (byte)1];
+        // Nはないって is は + ない, not archaic はなる (離る)
+        yield return ["俺を突き放すために、あんなこと言ってるのか、ホントに自分に非はないって、思ってるのか。", "ない", 1529520, (byte)1];
+        // A collocating noun picks the kana verb homograph: 手/首をふる 振る, 風がふく 吹く, 下をむく 向く, 電話をかける 掛ける
+        yield return ["あした大川の橋の上で手をふります。", "ふります", 1361330, (byte)1];
+        yield return ["キキは首をふると、紙切れを中にしまい、上からそっと手でおさえました。", "ふる", 1361330, (byte)1];
+        yield return ["手をふって笑いあいながらいいました。", "ふって", 1361330, (byte)1];
+        yield return ["「この一年、風がふく日に鈴の音がきこえると、あなたを思い出していたのよ」", "ふく", 1370760, (byte)1];
+        yield return ["お客さんたちは、そういわれると、さわいだらわるいような気がして、そっと下をむきました", "むきました", 1277080, (byte)1];
+        yield return ["あぁ、やっとメアリが電話かけてくれた", "かけてくれた", 1207610, (byte)2];
+        // Kana いける read by Sudachi as 行く's potential is 行ける "to be good", not 生ける; its imperative stays 行く
+        yield return ["意外といけます。", "いけます", 1631370, (byte)1];
+        yield return ["いけそうな気がしてきた。", "いけそう", 1631370, (byte)1];
+        yield return ["早く学校へいけよ。", "いけよ", 1578850, (byte)0];
+        yield return ["いけ、ブリガロン。", "いけ", 1578850, (byte)0];
+        // Kana ふう after a predicate is 風 "manner", never 封
+        yield return ["だが美九は、そんな琴里と士道の様子に気づくふうもなく、話を続けた。", "ふう", 1499730, (byte)1];
+        // Clause-initial フウ before a pause is the sigh, not the sweetgum tree
+        yield return ["フウ、よかった。", "フウ", 2828104, (byte)0];
+        // Kana へんな is 変な; the negating へん follows a verb stem
+        yield return ["じつはだんだんこの日が近づくにつれ、キキは、うれしいのにこわいという、へんな気持がしているのです。", "へんな", 1510640, (byte)2];
+        // Kana おごる is 奢る "to treat", not 驕る
+        yield return ["今度、ラーメンおごるよ。", "おごる", 1565940, (byte)1];
+        yield return ["何かおごってあげよう。", "おごってあげよう", 1565940, (byte)1];
+        // Kana ほこり is 埃 "dust"; 誇り is written in kanji
+        yield return ["たたけば、ほこりが出るからだよ。", "ほこり", 1565750, (byte)1];
+        yield return ["服についたほこりを払いながら、十兵衛が独りごちる。", "ほこり", 1565750, (byte)1];
+        // 一分一秒 is いっぷん "one minute", not いちぶん "duty"
+        yield return ["「とにかく一分一秒でも時間を稼いどいて！」", "一分", 1166290, (byte)1];
+        // の割に / 割には is the expression 割に, not the noun 割 + に
+        yield return ["男の割に手際がいいじゃないか。", "割に", 1606930, (byte)0];
+        yield return ["経済的な事情からだろう、ホテルの規模の割には従業員の数は圧倒的に少ない。", "割に", 1606930, (byte)0];
+        // After a verb stem 尽くし is the auxiliary 尽くす, not the noun suffix "all sorts of"
+        yield return ["つけていたエネルギーをすべて燃やし尽くし、トラッシュしてしまうワザ。", "尽くし", 1370090, (byte)0];
+        // Sudachi's expression 付いている must give its 付く back to a noun+付く verb
+        yield return ["突然何をと思ったが、私の先程の発言に紐付いていることは分かった。", "紐付いている", 2849136, (byte)1];
+        // A bare kanji in a name is not an i-adjective stem (孝|宏, not 宏い)
+        yield return ["「わたしに孝宏って弟なんかいない！」", "宏", 5272342, (byte)0];
+        // Emphatic stretching and a doubled first mora keep the underlying word (パワーアップ, ぐんと)
+        yield return ["HPがググンと150までパワーアーップ!!", "パワーアーップ", 1103000, (byte)0];
+        yield return ["HPがググンと150までパワーアーップ!!", "ググンと", 1631860, (byte)1];
+        // Words written partly in kana (交ぜ書き) resolve to their kanji entry
+        yield return ["むかい風ですか。", "むかい風", 1604770, (byte)1];
+        yield return ["あの腹まきはどうしたのさ。", "腹まき", 1501150, (byte)0];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()
@@ -2145,6 +2195,15 @@ public class FormSelectionTests
 
         // The stem of 揺られる must never surface as the noun 揺 (ゆり)
         yield return ["電車に揺られて、目的地の駅に着く。", "揺"];
+
+        // Rare words must not swallow a particle (の|はそう|いう) or an honorific (南|さん as 南する)
+        yield return ["「消えるってのはそういうことか」", "はそう"];
+        yield return ["ないって、じゃあ幸せなことが南さんにはないってこと？", "南さん"];
+        // Single kanji that only ever resolve as misparses: 癒 as archaic 癒る, 離 as the I Ching trigram
+        yield return ["「お母上、すぐに癒者がきます。」", "癒"];
+        yield return ["離せっちゅうとんのがわからへんのか！", "離"];
+        // げっ inside あげっから is the verb stem, not the interjection
+        yield return ["しょうがねー、券あげっからさ。", "げっ"];
     }
 
     [Theory]

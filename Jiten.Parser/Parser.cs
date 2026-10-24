@@ -45,6 +45,7 @@ namespace Jiten.Parser
         private static HashSet<int> _expressionWordIds = null!;
         private static HashSet<int> _kanjiBackedWordIds = null!;
         internal static Dictionary<int, Data.JmDictWordMeta> WordMeta = null!;
+        private static Dictionary<string, Data.PartialKanaForm?> _partialKanaSpellings = new();
 
         private static int _maxLookupKeyLength;
         private static Dictionary<string, List<int>>.AlternateLookup<ReadOnlySpan<char>> _lookupsAlt;
@@ -97,7 +98,9 @@ namespace Jiten.Parser
             (1429010, 1), (2871946, 0), (2871946, 1), (2872080, 0), (2872080, 1),
             (1583240, 5), (2619520, 0), (1319210, 8),
             // Rare kana forms that surface only as fragments: うほー (禹歩), はむっ (鱧), や (矢), お (尾), ハハッ, だもの (駄物), てし (手四)
-            (2545990, 1), (1575020, 2), (1537760, 2), (1485770, 1), (2029740, 0), (1753980, 1), (2847163, 1)
+            (2545990, 1), (1575020, 2), (1537760, 2), (1485770, 1), (2029740, 0), (1753980, 1), (2847163, 1),
+            // Readings that only ever appear as misparses: 離 as the I Ching trigram, bare 癒 as archaic 癒る, dialect わだ (私) as 海
+            (2232330, 0), (2729170, 0), (1201190, 4)
         ];
 
         public static async Task WarmupAsync(IDbContextFactory<JitenDbContext> contextFactory, Action<string>? log = null)
@@ -126,6 +129,7 @@ namespace Jiten.Parser
             _nameOnlyWordIds = runtime.NameOnlyWordIds;
             _expressionWordIds = runtime.ExpressionWordIds;
             _kanjiBackedWordIds = runtime.KanjiBackedWordIds;
+            _partialKanaSpellings = runtime.PartialKanaSpellings;
             WordMeta = runtime.WordMeta;
             if (_compoundHashSet == null)
                 BuildCompoundHashSet();
@@ -728,7 +732,7 @@ namespace Jiten.Parser
 
             var (cleanText, furiganaHints) = FuriganaHintExtractor.Extract(text);
 
-            var parser = new MorphologicalAnalyser { Interactive = true, HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup, HasExpressionLookup = HasExpressionLookup, HasCounterSenseLookup = HasCounterSenseAvailable };
+            var parser = new MorphologicalAnalyser { Interactive = true, HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup, HasExpressionLookup = HasExpressionLookup, HasCounterSenseLookup = HasCounterSenseAvailable, GetPartialKanaSpelling = GetPartialKanaSpelling };
             var (sentences, cleanedOriginal) = await parser.ParseWithCleanedOriginal(cleanText, preserveStopToken: preserveStopToken, diagnostics: diagnostics);
 
             // ComputeTokenOffsets strips \r\n, so relocate in the same coordinate space.
@@ -883,7 +887,7 @@ namespace Jiten.Parser
             var timer = new Stopwatch();
             timer.Start();
 
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup, HasExpressionLookup = HasExpressionLookup, HasCounterSenseLookup = HasCounterSenseAvailable };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup, HasExpressionLookup = HasExpressionLookup, HasCounterSenseLookup = HasCounterSenseAvailable, GetPartialKanaSpelling = GetPartialKanaSpelling };
             var cleanedOriginals = new List<string>();
             var rawCharCounts = new List<int>();
             var batchedSentences = await parser.ParseBatch(cleanTexts, diagnostics: diagnostics, timings: timings, userDictCsv: userDictCsv, cleanedOriginals: cleanedOriginals, rawContentCharCounts: rawCharCounts);
@@ -1124,7 +1128,7 @@ namespace Jiten.Parser
         {
             await EnsureInitializedAsync(contextFactory);
 
-            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup, HasExpressionLookup = HasExpressionLookup, HasCounterSenseLookup = HasCounterSenseAvailable };
+            var parser = new MorphologicalAnalyser { HasCompoundLookup = HasLookupForCompound, HasNonNameCompoundLookup = HasNonNameLookup, HasPrioritizedNonNameCompoundLookup = HasPrioritizedNonNameLookup, HasKanaAppropriateCompoundLookup = HasKanaAppropriateLookup, HasSuruVerbCompoundLookup = HasSuruVerbLookup, GetNonNameCompoundWordId = GetNonNameCompoundId, GetNonNameCompoundFrequencyRank = GetBestNonNameFrequencyRank, HasVerbOrAdjectiveLookup = HasVerbOrAdjectiveLookup, HasExpressionLookup = HasExpressionLookup, HasCounterSenseLookup = HasCounterSenseAvailable, GetPartialKanaSpelling = GetPartialKanaSpelling };
             var sentences = await parser.Parse(text, morphemesOnly: true, diagnostics: diagnostics);
             var wordInfos = sentences.SelectMany(s => s.Words).Select(w => w.word).ToList();
 
@@ -1564,6 +1568,13 @@ namespace Jiten.Parser
             var verbFallback = await DeconjugateVerbOrAdjective(wordInfo, deconjugator, diagnostics, batchWordCache);
             wordInfo.PartOfSpeech = savedPos;
 
+            // A bare kanji is never a whole i-adjective form (孝|宏 is a name, not 宏い); clipped 寒っ is repaired upstream.
+            if (verbFallback.word is { } adjFallback
+                && wordInfo.Text.All(JapaneseTextHelper.IsKanji)
+                && adjFallback.PartsOfSpeech.Contains(PartOfSpeech.IAdjective)
+                && !adjFallback.PartsOfSpeech.Contains(PartOfSpeech.Verb))
+                verbFallback = (false, null, null, null);
+
             // Bare ichidan stems have no ending to deconjugate, so look up surface+る directly (抱え → 抱える).
             if (nounResult.word != null &&
                 (!verbFallback.success || verbFallback.word == null ||
@@ -1872,6 +1883,29 @@ namespace Jiten.Parser
             return false;
         }
 
+        /// <summary>腹まき for 腹巻き: the surface's kanji survive in order and the kana tail isn't okurigana of a real verb (屈し is 屈する, not 屈指).</summary>
+        private static bool IsPartialKanaSpelling(string text, string normalizedForm)
+        {
+            if (text.Length < 2 || !text.Any(JapaneseTextHelper.IsKanji) || !text.Any(JapaneseTextHelper.IsHiragana)
+                || _partialKanaSpellings.GetValueOrDefault(text) is null)
+                return false;
+
+            foreach (var f in Deconjugator.Instance.Deconjugate(KanaConverter.ToHiragana(text, convertLongVowelMark: false)))
+                if (f.Process.Length > 0 && f.Tags.Any(t => t.StartsWith('v') || t == "adj-i") && HasVerbOrAdjectiveLookup(f.Text))
+                    return false;
+
+            int n = 0;
+            foreach (var c in text)
+            {
+                if (!JapaneseTextHelper.IsKanji(c)) continue;
+                while (n < normalizedForm.Length && normalizedForm[n] != c) n++;
+                if (n == normalizedForm.Length) return false;
+                n++;
+            }
+
+            return true;
+        }
+
         // Okurigana rewritten into extra kanji is another lexeme (屈し ≠ 屈指); 敲き → 叩く and チックショー → 畜生 are fine.
         private static bool NormalizedFormIntroducesKanji(string text, string normalizedForm)
         {
@@ -1919,10 +1953,10 @@ namespace Jiten.Parser
                                                                     includeKanaNormalized: true, includeLongVowelStripped: true,
                                                                     normalizedTierGate: normalizedTierGate);
 
-                // NormalizedForm catches variants: チックショー → チクショー (畜生).
+                // NormalizedForm catches variants: チックショー → チクショー (畜生), partial-kana 腹まき → 腹巻き.
                 if (!string.IsNullOrEmpty(wordInfo.NormalizedForm) &&
                     wordInfo.NormalizedForm != text &&
-                    !NormalizedFormIntroducesKanji(text, wordInfo.NormalizedForm))
+                    (!NormalizedFormIntroducesKanji(text, wordInfo.NormalizedForm) || IsPartialKanaSpelling(text, wordInfo.NormalizedForm)))
                 {
                     var normalizedCollected = LookupCandidateCollector.CollectIds(_lookups, wordInfo.NormalizedForm,
                                                                                   includeKanaNormalized: true,
@@ -3804,6 +3838,9 @@ namespace Jiten.Parser
             HasLookupWhere(text, KanaFallback.None,
                            static ids => AnyWithPos(ids, PartOfSpeech.Verb) || AnyWithPos(ids, PartOfSpeech.IAdjective));
 
+        private static Data.PartialKanaForm? GetPartialKanaSpelling(string text) =>
+            _partialKanaSpellings.TryGetValue(text, out var form) ? form : null;
+
         private static bool HasExpressionLookup(string text) =>
             HasLookupWhere(text, KanaFallback.None, static ids => AnyWithPos(ids, PartOfSpeech.Expression));
 
@@ -3975,6 +4012,19 @@ namespace Jiten.Parser
         private static bool IsNameConnectorSymbol(WordInfo w) =>
             w.PartOfSpeech == PartOfSpeech.SupplementarySymbol && w.Text is "・" or "＝";
 
+        private static bool EndsOnNameHonorific(List<(WordInfo word, int position, int length)> words, int last) =>
+            last >= 1 && IsNameHonorificPair(words[last - 1].word, words[last].word);
+
+        /// <summary>A name's honorific stays outside any compound (シュウ|さん is not シュウさん 蓚酸 or 集散).</summary>
+        private static bool IsNameHonorificPair(WordInfo head, WordInfo honorific)
+        {
+            return honorific.PartOfSpeech is PartOfSpeech.Suffix or PartOfSpeech.NounSuffix
+                   && honorific.Text is "さん" or "くん" or "ちゃん" or "氏"
+                   && (head.PartOfSpeech == PartOfSpeech.Name
+                       || PosMapper.IsNameLikeSudachiNoun(head.PartOfSpeech, head.PartOfSpeechSection1,
+                           head.PartOfSpeechSection2, head.PartOfSpeechSection3));
+        }
+
         private static void CombineNounCompounds(List<SentenceInfo> sentences)
         {
             foreach (var sentence in sentences)
@@ -4069,6 +4119,9 @@ namespace Jiten.Parser
                         }
 
                         if (!allValid)
+                            continue;
+
+                        if (EndsOnNameHonorific(sentence.Words, i + windowSize - 1))
                             continue;
 
                         var combinedText = ConcatTokenTexts(sentence.Words, i, windowSize);
@@ -5193,6 +5246,9 @@ namespace Jiten.Parser
             Span<long> prefCumHash,
             Span<int> prefCumLen)
         {
+            if (wordIndex > 0 && IsNameHonorificPair(wordInfos[wordIndex - 1], wordInfos[wordIndex]))
+                return null;
+
             int dictFormLen = dictForm.Length;
             int maxKeyLen = _maxLookupKeyLength;
             Span<char> candidateBuf = maxKeyLen <= 256 ? stackalloc char[maxKeyLen] : new char[maxKeyLen];
@@ -5536,6 +5592,13 @@ namespace Jiten.Parser
                     bool nextIsForwardAnchor = nextInfo != null && TransitionRuleSets.ForwardAnchorSurfaces.Contains(nextInfo.Text);
                     bool prevNominalTarget = i > 0 && TransitionRuleSets.PrevNominalBoostSurfaces.Contains(currentInfo.Text);
 
+                    // A collocating noun (手を|ふる) must reach the boost even when the first pass was confident (降る's jiten priority).
+                    bool prevCollocationNoun = false;
+                    if (currentResult.PartsOfSpeech.Contains(PartOfSpeech.Verb))
+                        for (int k = Math.Max(0, i - 3); k < i && !prevCollocationNoun; k++)
+                            prevCollocationNoun = sentenceWords[k].result is { } kr
+                                                  && TransitionRuleSets.NounVerbCollocations.ContainsKey(kr.WordId);
+
                     // A counter homograph after a numeral (第二|話) stays rescorable; only pass 2 sees the numeral.
                     // A pick that is itself a numeral (ガンつく1|ワン) is already cohesive and must not reshuffle.
                     bool prevNumericCounter = i > 0
@@ -5563,21 +5626,15 @@ namespace Jiten.Parser
                         && currentResult.PartsOfSpeech.Contains(PartOfSpeech.Verb);
 
                     if (!isArchaicPass1 && !nextIsCopula && !nextIsForwardAnchor && !prevNominalTarget && !prevNumericCounter && !hasHint && !infinitiveAfterNominal && !sentenceFinalVerb
+                        && !prevCollocationNoun
                         && ScoringPolicy.IsHighConfidence(currentMargin))
                     {
                         Interlocked.Increment(ref ParserCounters.AdjHighConfidenceSkips);
                         continue;
                     }
 
-                    bool forceRederive = hasHint || nextIsForwardAnchor || prevNominalTarget || prevNumericCounter || ScoringPolicy.IsLowConfidence(currentMargin);
-
-                    if (!forceRederive)
-                        for (int k = Math.Max(0, i - 3); k < i; k++)
-                        {
-                            var kr = sentenceWords[k].result;
-                            if (kr != null && TransitionRuleSets.NounVerbCollocations.ContainsKey(kr.WordId))
-                            { forceRederive = true; break; }
-                        }
+                    bool forceRederive = hasHint || nextIsForwardAnchor || prevNominalTarget || prevNumericCounter || prevCollocationNoun
+                                         || ScoringPolicy.IsLowConfidence(currentMargin);
 
                     // infinitiveAfterNominal bypasses the prefilter: its context may turn nominal only in pass 2.
                     if (!forceRederive && !nextIsCopula && !isArchaicPass1 && !infinitiveAfterNominal
@@ -5668,10 +5725,17 @@ namespace Jiten.Parser
                     WordInfo? nextInfo = i < sentenceWords.Count - 1 ? sentenceWords[i + 1].word : null;
                     bool nextIsCopula = nextInfo != null && TransitionRuleSets.CopulaForms.Contains(nextInfo.Text);
 
-                    // A confident sentence-final verb gets only the interjection override, never an adjacency flip (行けよ).
+                    bool hasCollocationNoun = false;
+                    if (currentResult.PartsOfSpeech.Contains(PartOfSpeech.Verb))
+                        for (int k = Math.Max(0, i - 3); k < i && !hasCollocationNoun; k++)
+                            hasCollocationNoun = resolvedResults[k] is { } kr
+                                                 && TransitionRuleSets.NounVerbCollocations.ContainsKey(kr.WordId);
+
+                    // A confident sentence-final verb takes only the interjection override (行けよ), unless a collocating noun precedes it.
                     bool onlyInterjectionAllowed = i == sentenceWords.Count - 1
                         && ScoringPolicy.IsHighConfidence(currentMargin)
-                        && currentResult.PartsOfSpeech.Contains(PartOfSpeech.Verb);
+                        && currentResult.PartsOfSpeech.Contains(PartOfSpeech.Verb)
+                        && !hasCollocationNoun;
 
                     List<FormCandidate>? candidates = null;
                     bool fromFirstPassCache = false;
@@ -5704,7 +5768,7 @@ namespace Jiten.Parser
                         if (hasMemoKey && scoredMemo.TryGetValue(memoKey, out var memo))
                         {
                             Interlocked.Increment(ref ParserCounters.AdjMemoHits);
-                            if (diagnostics == null && memo.IsStableFor(currentResult, onlyInterjectionAllowed))
+                            if (diagnostics == null && !hasCollocationNoun && memo.IsStableFor(currentResult, onlyInterjectionAllowed))
                             {
                                 currentInfo.ResolvedWordId = currentResult.WordId;
                                 corrected.Add(currentResult);
@@ -5780,7 +5844,7 @@ namespace Jiten.Parser
                             currentResult.WordId, currentResult.ReadingIndex,
                             AllCandidatesRefineTo(candidates, scoringContext, currentResult), interjectionFlip);
                         scoredMemo[memoKey] = entry;
-                        if (diagnostics == null && entry.IsStableFor(currentResult, onlyInterjectionAllowed))
+                        if (diagnostics == null && !hasCollocationNoun && entry.IsStableFor(currentResult, onlyInterjectionAllowed))
                         {
                             currentInfo.ResolvedWordId = currentResult.WordId;
                             corrected.Add(currentResult);
@@ -5798,10 +5862,11 @@ namespace Jiten.Parser
                     {
                         var rr = resolvedResults[k];
                         if (rr != null
-                            && TransitionRuleSets.NounVerbCollocations.TryGetValue(rr.WordId, out var cv))
+                            && TransitionRuleSets.NounVerbCollocations.TryGetValue(rr.WordId, out var collocations))
                         {
                             collocMap ??= new Dictionary<int, int>();
-                            collocMap[cv.TargetWordId] = collocMap.GetValueOrDefault(cv.TargetWordId) + cv.Bonus;
+                            foreach (var cv in collocations)
+                                collocMap[cv.TargetWordId] = collocMap.GetValueOrDefault(cv.TargetWordId) + cv.Bonus;
                         }
                     }
 

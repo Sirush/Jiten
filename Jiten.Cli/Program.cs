@@ -241,6 +241,11 @@ public class Program
             await diagnosticCommands.ParseTest(options);
         }
 
+        if (options.ParseBatch != null)
+        {
+            await diagnosticCommands.ParseBatch(options);
+        }
+
         if (options.ParseDeckTest != null)
         {
             await diagnosticCommands.ParseDeckTest(options);

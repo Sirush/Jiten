@@ -127,10 +127,12 @@ public partial class MorphologicalAnalyser
             var word = wordInfos[idx];
             string dictForm = word.DictionaryForm;
 
+            // A kana surface qualifies when Sudachi's kanji lemma marks it as a compound verb (ささやきあう → 囁き合う).
             if (word.PartOfSpeech != PartOfSpeech.Verb ||
                 string.IsNullOrEmpty(dictForm) || dictForm.Length < 4 ||
                 word.Text.Length < 2 ||
-                !word.Text.Any(c => c is >= '一' and <= '鿿'))
+                !(word.Text.Any(c => c is >= '一' and <= '鿿')
+                  || (word.NormalizedForm.Length > 0 && word.NormalizedForm.Any(c => c is >= '一' and <= '鿿'))))
             {
                 result?.Add(word);
                 continue;
@@ -866,6 +868,8 @@ public partial class MorphologicalAnalyser
         ("よ", "ヨ", PartOfSpeech.Particle, PartOfSpeechSection.SentenceEndingParticle),
         ("さ", "サ", PartOfSpeech.Particle, PartOfSpeechSection.SentenceEndingParticle),
         ("わ", "ワ", PartOfSpeech.Particle, PartOfSpeechSection.SentenceEndingParticle),
+        ("ぜ", "ゼ", PartOfSpeech.Particle, PartOfSpeechSection.SentenceEndingParticle),
+        ("ぞ", "ゾ", PartOfSpeech.Particle, PartOfSpeechSection.SentenceEndingParticle),
         ("ん", "ン", PartOfSpeech.Particle, PartOfSpeechSection.Juntaijoushi),
         ("た", "タ", PartOfSpeech.Auxiliary, PartOfSpeechSection.None),
     ];
@@ -895,6 +899,10 @@ public partial class MorphologicalAnalyser
         return false;
     }
 
+    /// <summary>A word without JMDict priority must not swallow a grammar marker it starts with (の|はそう|いう is の|は|そういう).</summary>
+    private bool IsRareRemainderWord(string text) =>
+        HasPrioritizedNonNameCompoundLookup != null && !HasPrioritizedNonNameCompoundLookup(text);
+
     private List<WordInfo> TokenizeGrammarRemainder(string text, int startOffset)
     {
         var tokens = new List<WordInfo>();
@@ -917,6 +925,7 @@ public partial class MorphologicalAnalyser
                     if (cand[^1] is not ('う' or 'く' or 'ぐ' or 'す' or 'つ' or 'ぬ' or 'ぶ' or 'む' or 'る')) continue;
                     if (!HasNonNameCompoundLookup(cand)) continue;
                     if (!DeconjugatesToVerb(cand)) continue;
+                    if (markerLen > 0 && IsRareRemainderWord(cand)) continue;
                     verbLen = len;
                     break;
                 }
@@ -931,6 +940,7 @@ public partial class MorphologicalAnalyser
                     {
                         if (f.Text == cand || !HasNonNameCompoundLookup(f.Text)) continue;
                         if (!f.Tags.Any(t => t.StartsWith("adj", StringComparison.Ordinal))) continue;
+                        if (markerLen > 0 && IsRareRemainderWord(f.Text)) continue;
                         verbLen = len;
                         tailPos = PartOfSpeech.IAdjective;
                         break;
