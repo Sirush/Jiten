@@ -336,10 +336,11 @@ describe('line helpers', () => {
     expect(otherSeriesOfLine(state, groups, 10, 2)).toEqual([11]);
   });
 
-  it('keeps an alternative version out of the line', () => {
-    const state = stateWith([edge(2, 1, Sequel), edge(3, 1, Alternative)]);
+  it('keeps spin-offs and alternative versions out of the line', () => {
+    const state = stateWith([edge(2, 1, Sequel), edge(3, 1, Alternative), edge(4, 1, Spinoff), edge(5, 4, Sequel)]);
     expect(lineOf(state, 1).sort()).toEqual([1, 2]);
     expect(lineOf(state, 3)).toEqual([3]);
+    expect(lineOf(state, 5).sort()).toEqual([4, 5]);
   });
 
   it('ignores removed links and memberships', () => {

@@ -48,9 +48,13 @@ public class DeckRelationship
     public static readonly Expression<Func<DeckRelationship, bool>> IsStoryLink =
         r => r.RelationshipType >= DeckRelationshipType.Sequel && r.RelationshipType <= DeckRelationshipType.Alternative;
 
-    /// <summary>Every story link but Alternative joins a line, so a remake or alternate version can sit in its own series.</summary>
+    /// <summary>Spin-offs and alternative versions stay in the franchise but start their own line, so they can sit in their own series.</summary>
     public static bool JoinsLineType(DeckRelationshipType type) =>
-        IsStoryLinkType(type) && type != DeckRelationshipType.Alternative;
+        IsStoryLinkType(type) && type is not (DeckRelationshipType.Spinoff or DeckRelationshipType.Alternative);
+
+    public static readonly Expression<Func<DeckRelationship, bool>> JoinsLine =
+        r => r.RelationshipType >= DeckRelationshipType.Sequel && r.RelationshipType <= DeckRelationshipType.Alternative &&
+             r.RelationshipType != DeckRelationshipType.Spinoff && r.RelationshipType != DeckRelationshipType.Alternative;
 
     /// <summary>Null when the edge can be stored; otherwise the reason it cannot.</summary>
     public static string? ValidateEdge(int sourceDeckId, int targetDeckId, DeckRelationshipType type)
