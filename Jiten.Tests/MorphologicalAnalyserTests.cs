@@ -2480,6 +2480,9 @@ public class MorphologicalAnalyserTests
         yield return ["下ではお客さんたちが、こんなことをささやきあっていました。", new[] { "下", "では", "お客さん", "たち", "が", "こんな", "こと", "を", "ささやき", "あっていました" }];
         // A te-form never takes a copula: あさっ|て|なの is the noun あさって
         yield return ["おや、まあ、あさってなの、まだまだ先のことかと思ってたけど", new[] { "おや", "まあ", "あさって", "なの", "まだまだ", "先", "の", "こと", "か", "と", "思ってた", "けど" }];
+        // Kana words starting with あずま (東) stay whole instead of splitting off the noun
+        yield return ["あずましくねえべさ", new[] { "あずましくねえ", "べ", "さ" }];
+        yield return ["あずまや近くの一画。", new[] { "あずまや", "近く", "の", "一画" }];
     }
 
     [Theory]

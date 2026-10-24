@@ -2154,6 +2154,9 @@ public class FormSelectionTests
         // Words written partly in kana (交ぜ書き) resolve to their kanji entry
         yield return ["むかい風ですか。", "むかい風", 1604770, (byte)1];
         yield return ["あの腹まきはどうしたのさ。", "腹まき", 1501150, (byte)0];
+        // Hokkaido/Tohoku dialect あずましい (吾妻しい) and the arbour あずまや (東屋), not 東 + 敷く / や
+        yield return ["あずましくねえべさ", "あずましくねえ", 2107400, (byte)1];
+        yield return ["あずまや近くの一画。", "あずまや", 1447570, (byte)4];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()
