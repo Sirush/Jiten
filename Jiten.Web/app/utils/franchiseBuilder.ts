@@ -348,10 +348,13 @@ export function leaveGroup(state: BuilderState, seriesId: number, deckId: number
   else if (m.status === 'new') state.members = state.members.filter((x) => x !== m);
 }
 
-/** Decks joined by story links; settings and alternative versions never join lines, so a remake can sit in its own series. */
+/** Spin-offs and alternative versions start their own line, so they can sit in their own series. */
+const LINE_BREAKING_TYPES = new Set([DeckRelationshipType.Spinoff, DeckRelationshipType.Alternative]);
+
+/** Decks joined by story links; settings never join lines. */
 function storyLines(board: number[], edges: FranchiseEdge[]): number[][] {
   const uf = new UnionFind(board);
-  for (const e of edges) if (e.relationshipType !== DeckRelationshipType.Alternative) uf.join(e.sourceDeckId, e.targetDeckId);
+  for (const e of edges) if (!LINE_BREAKING_TYPES.has(e.relationshipType)) uf.join(e.sourceDeckId, e.targetDeckId);
   return uf.groups(board);
 }
 

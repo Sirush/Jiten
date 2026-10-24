@@ -231,15 +231,19 @@ public class FranchiseTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task Alternative_JoinsTheFranchise_ButNotTheLine()
+    public async Task SpinoffAndAlternative_JoinTheFranchise_ButNotTheLine()
     {
-        await SeedAsync(new[] { Deck(1, "Original"), Deck(2, "Original 2"), Deck(3, "Remake") },
-                        new[] { Rel(2, 1, DeckRelationshipType.Sequel), Rel(3, 1, DeckRelationshipType.Alternative) });
+        await SeedAsync(new[] { Deck(1, "Original"), Deck(2, "Original 2"), Deck(3, "Remake"), Deck(4, "Spin-off") },
+                        new[]
+                        {
+                            Rel(2, 1, DeckRelationshipType.Sequel), Rel(3, 1, DeckRelationshipType.Alternative),
+                            Rel(4, 1, DeckRelationshipType.Spinoff)
+                        });
 
         var dto = await GetFranchiseAsync(1);
-        dto.Nodes.Select(n => n.DeckId).Should().BeEquivalentTo(new[] { 1, 2, 3 });
-        dto.Edges.Should().HaveCount(2);
-        dto.Lines.Select(l => string.Join(",", l.DeckIds.Order())).Should().BeEquivalentTo("1,2", "3");
+        dto.Nodes.Select(n => n.DeckId).Should().BeEquivalentTo(new[] { 1, 2, 3, 4 });
+        dto.Edges.Should().HaveCount(3);
+        dto.Lines.Select(l => string.Join(",", l.DeckIds.Order())).Should().BeEquivalentTo("1,2", "3", "4");
     }
 
     [Fact]
