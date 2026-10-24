@@ -41,12 +41,16 @@ public class DeckRelationship
     public static bool IsLegacyGroupType(DeckRelationshipType type) =>
         type is DeckRelationshipType.SameSeries or DeckRelationshipType.SameSetting;
 
-    /// <summary>Story links (Sequel to Alternative) are the only storable types; they join lines and franchises.</summary>
+    /// <summary>Story links (Sequel to Alternative) are the only storable types; they join franchises.</summary>
     public static bool IsStoryLinkType(DeckRelationshipType type) =>
         type is >= DeckRelationshipType.Sequel and <= DeckRelationshipType.Alternative;
 
     public static readonly Expression<Func<DeckRelationship, bool>> IsStoryLink =
         r => r.RelationshipType >= DeckRelationshipType.Sequel && r.RelationshipType <= DeckRelationshipType.Alternative;
+
+    /// <summary>Every story link but Alternative joins a line, so a remake or alternate version can sit in its own series.</summary>
+    public static bool JoinsLineType(DeckRelationshipType type) =>
+        IsStoryLinkType(type) && type != DeckRelationshipType.Alternative;
 
     /// <summary>Null when the edge can be stored; otherwise the reason it cannot.</summary>
     public static string? ValidateEdge(int sourceDeckId, int targetDeckId, DeckRelationshipType type)

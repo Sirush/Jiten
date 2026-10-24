@@ -153,7 +153,8 @@ public sealed class FranchiseService(JitenDbContext db, UserDbContext userContex
     private static List<FranchiseLineDto> BuildLines(List<FranchiseNodeDto> nodes, List<FranchiseEdgeDto> edges)
     {
         var byId = nodes.ToDictionary(n => n.DeckId);
-        return StoryLines.Components(byId.Keys, edges.Select(e => (e.SourceDeckId, e.TargetDeckId)))
+        return StoryLines.Components(byId.Keys, edges.Where(e => DeckRelationship.JoinsLineType(e.RelationshipType))
+                                                     .Select(e => (e.SourceDeckId, e.TargetDeckId)))
                          .Select(component =>
                          {
                              var anchor = component.Select(id => byId[id])
