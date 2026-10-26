@@ -52,6 +52,8 @@ export interface JitenPlusLimitValues {
   importWords: number;
   activeMediaRequests: number;
   customSentencesPerWord: number;
+  communityLists: number;
+  communityListItems: number;
 }
 
 export interface JitenPlusLimits extends JitenPlusLimitValues {
@@ -73,12 +75,16 @@ const FREE_LIMITS: JitenPlusLimits = {
   importWords: 50_000,
   activeMediaRequests: 20,
   customSentencesPerWord: 3,
+  communityLists: 10,
+  communityListItems: 100,
   plus: {
     studyDecks: 200,
     studyDeckWords: 300_000,
     importWords: 100_000,
     activeMediaRequests: 30,
     customSentencesPerWord: 10,
+    communityLists: 100,
+    communityListItems: 1000,
   },
 };
 

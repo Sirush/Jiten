@@ -2,6 +2,7 @@ import type { FranchiseSeries, FranchiseSetting, SeriesRef } from './series';
 import type { FranchiseLine, MediaGroupKind, MediaGroupTitles } from './mediaGroup';
 import type {
   ComparisonOutcome,
+  CommunityListStatus,
   MediaListEntryState,
   DeckRelationshipType,
   DeckStatus,
@@ -2405,6 +2406,8 @@ export interface JitenPlusPricingInfo {
     importWords: JitenPlusLimitPair;
     activeMediaRequests: JitenPlusLimitPair;
     customSentencesPerWord: JitenPlusLimitPair;
+    communityLists: JitenPlusLimitPair;
+    communityListItems: JitenPlusLimitPair;
   };
 }
 
@@ -2692,4 +2695,89 @@ export interface DeckIPlusOneSentencesResponse {
   sentences: DeckIPlusOneSentence[];
   total: number;
   checked: number;
+}
+
+export interface CommunityListSummary {
+  listId: number;
+  slug: string;
+  name: string;
+  description: string | null;
+  ownerDisplayName: string | null;
+  genres: Genre[];
+  tags: Tag[];
+  favouriteCount: number;
+  itemCount: number;
+  updatedAt: string;
+  publishedAt: string | null;
+  previewCoverNames: string[];
+  isFavourited: boolean;
+  isOwner: boolean;
+  /** Only sent to the owner and admins. */
+  status: CommunityListStatus | null;
+}
+
+export interface CommunityListCoverageSummary {
+  /** Viewer's mature coverage of every item, highest first. */
+  values: number[];
+  /** Null when the viewer has no coverage on any item. */
+  easiest: { deckId: number; originalTitle: string; romajiTitle: string | null; englishTitle: string | null; coverage: number } | null;
+}
+
+export interface CommunityListItem {
+  /** 1-based rank in curator order, whatever order the page is sorted in. */
+  position: number;
+  note: string | null;
+  deck: Deck;
+}
+
+export interface CommunityListDetail extends CommunityListSummary {
+  canEdit: boolean;
+  coverage: CommunityListCoverageSummary | null;
+  statusCounts: { status: DeckStatus; count: number }[] | null;
+  items: PaginatedResponse<CommunityListItem[]>;
+}
+
+export interface CommunityListQuota {
+  maxLists: number;
+  maxItems: number;
+  fullMaxLists: number;
+  fullMaxItems: number;
+  maxGenres: number;
+  maxTags: number;
+  listCount: number;
+  canCreate: boolean;
+}
+
+export interface CommunityListEditItem {
+  deckId: number;
+  note: string | null;
+  originalTitle: string;
+  romajiTitle: string | null;
+  englishTitle: string | null;
+  mediaType: MediaType;
+  coverName: string;
+  genres: Genre[];
+  tags: TagWithPercentage[];
+}
+
+export interface CommunityListEdit {
+  listId: number;
+  slug: string;
+  name: string;
+  description: string | null;
+  status: CommunityListStatus;
+  favouriteCount: number;
+  genres: Genre[];
+  tags: Tag[];
+  items: CommunityListEditItem[];
+  quota: CommunityListQuota;
+}
+
+export interface CommunityListBrowsePage extends PaginatedResponse<CommunityListSummary[]> {
+  seed: number | null;
+}
+
+export interface CommunityListFacets {
+  genres: Record<number, number>;
+  tags: Record<number, number>;
 }

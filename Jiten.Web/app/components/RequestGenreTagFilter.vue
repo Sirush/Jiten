@@ -10,8 +10,10 @@
       genreCounts?: Record<number, number>;
       tagCounts?: Record<number, number>;
       resultCount?: number | null;
+      noun?: string;
+      nounPlural?: string;
     }>(),
-    { genreCounts: () => ({}), tagCounts: () => ({}), resultCount: null }
+    { genreCounts: () => ({}), tagCounts: () => ({}), resultCount: null, noun: 'request', nounPlural: 'requests' }
   );
 
   const includeGenres = defineModel<number[]>('includeGenres', { required: true });
@@ -46,7 +48,7 @@
 
   const withCount = (label: string, count: number | undefined) => (count == null ? label : `${label} (${count.toLocaleString()})`);
 
-  // Only values some matching request carries are offered; an active selection stays visible so it can be cleared.
+  // Only values some matching item carries are offered; an active selection stays visible so it can be cleared.
   const genreEntries = computed<TagCloudEntry[]>(() =>
     getAllGenres()
       .filter((genre) => (props.genreCounts[genre.value] ?? 0) > 0 || genreState(genre.value) !== 'neutral')
@@ -82,7 +84,7 @@
   };
 
   const resultLabel = computed(() =>
-    props.resultCount == null ? 'Show results' : `Show ${props.resultCount.toLocaleString()} ${props.resultCount === 1 ? 'request' : 'requests'}`
+    props.resultCount == null ? 'Show results' : `Show ${props.resultCount.toLocaleString()} ${props.resultCount === 1 ? props.noun : props.nounPlural}`
   );
 
   const toggle = (event: Event) => {
@@ -119,7 +121,7 @@
           class="shrink-0 [&_.p-tag]:px-1.5 [&_.p-tag]:py-0.5 [&_.p-tag]:text-xs"
           :entries="genreEntries"
           :show-search="false"
-          empty-label="No request has a genre yet."
+          :empty-label="`No ${noun} has a genre yet.`"
           @set="setGenreState"
         />
 
@@ -134,7 +136,7 @@
           @set="setTagState"
         />
       </template>
-      <p v-else class="px-1 py-2 text-sm text-muted-color">None of these requests have genres or tags yet.</p>
+      <p v-else class="px-1 py-2 text-sm text-muted-color">None of these {{ nounPlural }} have genres or tags yet.</p>
 
       <div class="flex shrink-0 items-center border-t border-surface-200 pt-2 dark:border-surface-700">
         <span class="text-sm text-surface-500">Click once to include, twice to exclude.</span>
@@ -166,7 +168,13 @@
           <template v-if="hasAnyValues">
             <div>
               <div class="mb-1.5 text-[11px] font-semibold tracking-wider text-surface-500 uppercase">Genres</div>
-              <MediaListTagCloud v-model:search="genreSearch" :entries="genreEntries" :show-search="false" empty-label="No request has a genre yet." @set="setGenreState" />
+              <MediaListTagCloud
+                v-model:search="genreSearch"
+                :entries="genreEntries"
+                :show-search="false"
+                :empty-label="`No ${noun} has a genre yet.`"
+                @set="setGenreState"
+              />
             </div>
             <div>
               <div class="mb-1.5 text-[11px] font-semibold tracking-wider text-surface-500 uppercase">Tags</div>
@@ -179,7 +187,7 @@
               />
             </div>
           </template>
-          <p v-else class="py-2 text-sm text-muted-color">None of these requests have genres or tags yet.</p>
+          <p v-else class="py-2 text-sm text-muted-color">None of these {{ nounPlural }} have genres or tags yet.</p>
         </div>
 
         <div class="shrink-0 border-t border-surface-200 px-4 pt-3 pb-7 dark:border-surface-700">

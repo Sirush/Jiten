@@ -7,13 +7,16 @@ const UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
   ['minute', 60],
 ];
 
-export function formatRelativeTime(value: string | Date, now: Date = new Date()): string {
+export function formatRelativeTime(value: string | Date, now: Date = new Date(), style: Intl.RelativeTimeFormatStyle = 'long'): string {
   const date = typeof value === 'string' ? new Date(value) : value;
   const seconds = Math.round((now.getTime() - date.getTime()) / 1000);
   if (Math.abs(seconds) < 60) return 'just now';
-  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto' });
+  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto', style });
   for (const [unit, size] of UNITS) {
-    if (Math.abs(seconds) >= size) return rtf.format(-Math.round(seconds / size), unit);
+    if (Math.abs(seconds) >= size) {
+      const text = rtf.format(-Math.round(seconds / size), unit);
+      return style === 'long' ? text : text.replace(/\.(?=\s|$)/g, '');
+    }
   }
   return 'just now';
 }

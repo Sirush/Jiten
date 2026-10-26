@@ -12,6 +12,16 @@ public sealed class TieredLimit
     public int ForTier(JitenPlusTier tier) => tier == JitenPlusTier.None ? Free : Plus;
 }
 
+/// <summary>A limit that only the Full tier raises; Trial keeps the free allowance.</summary>
+public sealed class FullTierLimit
+{
+    public int Free { get; set; }
+
+    public int Full { get; set; }
+
+    public int ForTier(JitenPlusTier tier) => tier == JitenPlusTier.Full ? Full : Free;
+}
+
 /// <summary>
 /// Per-tier collection limits, bound from the <c>JitenPlus:Limits</c> config section so they can be
 /// retuned per environment without a code change. Limits gate growth only: a user who ends up above
@@ -34,4 +44,9 @@ public sealed class JitenPlusLimitsOptions
     public TieredLimit CustomSentencesPerWord { get; set; } = new() { Free = 3, Plus = 10 };
 
     public TieredLimit Roadmaps { get; set; } = new() { Free = 0, Plus = 50 };
+
+    public FullTierLimit CommunityLists { get; set; } = new() { Free = 10, Full = 100 };
+
+    /// <summary>Titles in a single community list.</summary>
+    public FullTierLimit CommunityListItems { get; set; } = new() { Free = 100, Full = 1000 };
 }

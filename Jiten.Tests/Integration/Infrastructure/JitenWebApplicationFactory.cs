@@ -1,4 +1,5 @@
 using Hangfire;
+using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data.Authentication;
 using Jiten.Core.Data.FSRS;
@@ -35,6 +36,8 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
 
     /// <summary>The stub external media list client. Singleton, so tests can set canned lists.</summary>
     public StubExternalMediaListClient ExternalLists => Services.GetRequiredService<StubExternalMediaListClient>();
+
+    public RecordingDiscordReportNotifier DiscordReports => Services.GetRequiredService<RecordingDiscordReportNotifier>();
 
     public JitenWebApplicationFactory()
     {
@@ -88,6 +91,10 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
             // Replace Redis with in-memory mock that supports GetDatabase()
             services.RemoveAll<IConnectionMultiplexer>();
             services.AddSingleton(InMemoryRedis.Create());
+
+            services.AddSingleton<RecordingDiscordReportNotifier>();
+            services.RemoveAll<IDiscordReportNotifier>();
+            services.AddSingleton<IDiscordReportNotifier>(sp => sp.GetRequiredService<RecordingDiscordReportNotifier>());
 
             // Register SQLite in-memory DbContexts (Npgsql is skipped via
             // environment guard in Program.cs, so no dual-provider conflict).
@@ -208,7 +215,7 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
         await _userConnection.DisposeAsync();
     }
 
-    /// <summary>Clears the jiten-side tables plus user deck preferences, profiles and study decks; every other user table (FSRS, promo, card media) and all jmdict word data is the test class's own job.</summary>
+    /// <summary>Clears the jiten-side tables (community lists included) plus user deck preferences, profiles and study decks; every other user table (FSRS, promo, card media) and all jmdict word data is the test class's own job.</summary>
     public async Task ResetDatabaseAsync()
     {
         using var scope = Services.CreateScope();
@@ -227,6 +234,7 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
         db.MediaRequestBoosts.RemoveRange(db.MediaRequestBoosts);
         db.MediaRequests.RemoveRange(db.MediaRequests);
         db.DeckActivityDailies.RemoveRange(db.DeckActivityDailies);
+        await db.CommunityLists.ExecuteDeleteAsync();
         await db.FranchiseMembers.ExecuteDeleteAsync();
         await db.SeriesMembers.ExecuteDeleteAsync();
         await db.Series.ExecuteDeleteAsync();

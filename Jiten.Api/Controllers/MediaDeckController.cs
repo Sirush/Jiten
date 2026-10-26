@@ -42,10 +42,9 @@ public class MediaDeckController(
     IDbContextFactory<JitenDbContext> contextFactory,
     UserDbContext userContext,
     ICurrentUserService currentUserService,
-    IConfiguration configuration,
     ILogger<MediaDeckController> logger,
     ILoggerFactory loggerFactory,
-    IHttpClientFactory httpClientFactory,
+    IDiscordReportNotifier discordReports,
     IDeckWordResolver deckWordResolver,
     IFrequencySourceResolver frequencySourceResolver,
     IDeckDownloadService downloadService,
@@ -2023,34 +2022,8 @@ public class MediaDeckController(
     public IResult RecordView(int id)
     {
         if (id > 0)
-            activityBuffer.RecordView(id, VisitorKey(HttpContext));
+            activityBuffer.RecordView(id, VisitorKeyHelper.For(HttpContext));
         return Results.NoContent();
-    }
-
-    /// <summary>The proxy-resolved connection address is the only value a client cannot forge; headers are a fallback for calls arriving from inside the network.</summary>
-    private static string VisitorKey(HttpContext context)
-    {
-        var remote = context.Connection.RemoteIpAddress;
-        if (remote != null && !IsInternal(remote)) return remote.ToString();
-
-        foreach (var header in new[] { "CF-Connecting-IP", "X-Real-IP", "X-Forwarded-For" })
-        {
-            var value = context.Request.Headers[header].FirstOrDefault();
-            if (string.IsNullOrEmpty(value)) continue;
-            var ip = value.Split(',')[0].Trim();
-            if (!string.IsNullOrEmpty(ip) && ip != "unknown") return ip;
-        }
-
-        return remote?.ToString() ?? "unknown";
-    }
-
-    private static bool IsInternal(System.Net.IPAddress ip)
-    {
-        if (System.Net.IPAddress.IsLoopback(ip)) return true;
-        if (ip.IsIPv4MappedToIPv6) ip = ip.MapToIPv4();
-        if (ip.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) return false;
-        var b = ip.GetAddressBytes();
-        return b[0] == 10 || (b[0] == 172 && b[1] >= 16 && b[1] <= 31) || (b[0] == 192 && b[1] == 168);
     }
 
     private async Task RecordDownloadAsync(int deckId)
@@ -2401,30 +2374,10 @@ public class MediaDeckController(
         if (deck == null)
             return BadRequest("Deck not found");
 
-        var safeComment = SanitizeForDiscord(request.Comment);
-        var safeIssueType = SanitizeForDiscord(request.IssueType);
+        var sent = await discordReports.SendAsync(currentUserService.UserId!, DiscordMarkdown.Sanitize(request.IssueType),
+                                                  $"[{deck.OriginalTitle}](https://jiten.moe/decks/media/{deck.DeckId}/detail)\n\nComment:\n{DiscordMarkdown.Sanitize(request.Comment)}");
 
-        var discordPayload = new
-                             {
-                                 content = $"A new report from user ID `{currentUserService.UserId}` came in.\n", tts = false, embeds =
-                                     new[]
-                                     {
-                                         new
-                                         {
-                                             id = 652627557, title = safeIssueType, description =
-                                                 $"[{deck.OriginalTitle}](https://jiten.moe/decks/media/{deck.DeckId}/detail)\n\nComment:\n{safeComment}",
-                                             color = 8266731, fields = Array.Empty<object>()
-                                         }
-                                     },
-                                 components = Array.Empty<object>(), actions = new { }, flags = 0, username = "IssueReporter"
-                             };
-        var embedJson = JsonSerializer.Serialize(discordPayload);
-        var webhook = configuration["DiscordWebhook"];
-        using var httpClient = httpClientFactory.CreateClient();
-        var content = new StringContent(embedJson, Encoding.UTF8, "application/json");
-        var result = await httpClient.PostAsync(webhook, content);
-
-        if (result.IsSuccessStatusCode)
+        if (sent)
         {
             logger.LogInformation("User reported deck issue: DeckId={DeckId}, IssueType={IssueType}",
                                   request.DeckId, request.IssueType);
@@ -2434,58 +2387,6 @@ public class MediaDeckController(
         logger.LogWarning("Failed to send deck issue report: DeckId={DeckId}, IssueType={IssueType}",
                           request.DeckId, request.IssueType);
         return BadRequest("Failed to send report");
-
-        string SanitizeForDiscord(string input)
-        {
-            if (string.IsNullOrEmpty(input))
-                return "";
-
-            var urlRegex = new Regex(@"(https?:\/\/[^\s)]+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-
-            var sb = new StringBuilder();
-            int lastIndex = 0;
-
-            foreach (Match match in urlRegex.Matches(input))
-            {
-                if (match.Index > lastIndex)
-                {
-                    var textPart = input.Substring(lastIndex, match.Index - lastIndex);
-                    sb.Append(EscapeMarkdown(textPart));
-                }
-
-                // Add URL unescaped
-                sb.Append(match.Value);
-
-                lastIndex = match.Index + match.Length;
-            }
-
-            if (lastIndex < input.Length)
-            {
-                sb.Append(EscapeMarkdown(input.Substring(lastIndex)));
-            }
-
-            return sb.ToString();
-        }
-
-        string EscapeMarkdown(string text)
-        {
-            if (string.IsNullOrEmpty(text))
-                return text;
-
-            var sb = new StringBuilder(text.Length);
-            foreach (char c in text)
-            {
-                // Escape markdown/meta characters but leave slashes and colons for URLs
-                if (c is '*' or '_' or '~' or '`' or '>' or '|' or '[' or ']' or '(' or ')' or '@' or '#' or ':' or '"')
-                {
-                    sb.Append('\\');
-                }
-
-                sb.Append(c);
-            }
-
-            return sb.ToString();
-        }
     }
 
     /// <summary>

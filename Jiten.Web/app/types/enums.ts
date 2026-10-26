@@ -240,6 +240,7 @@ export enum NotificationType {
   RequestAdminComment = 4,
   General = 10,
   SiteUpdate = 11,
+  CommunityListMilestone = 12,
 }
 
 export enum RequestAction {
@@ -280,4 +281,10 @@ export enum ComparisonOutcome {
   Same = 0,
   Harder = 1,
   MuchHarder = 2,
+}
+
+export enum CommunityListStatus {
+  Draft = 0,
+  Public = 1,
+  Unlisted = 2,
 }

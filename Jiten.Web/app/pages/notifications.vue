@@ -65,6 +65,8 @@
         return 'pi pi-upload';
       case NotificationType.SiteUpdate:
         return 'pi pi-megaphone';
+      case NotificationType.CommunityListMilestone:
+        return 'pi pi-heart';
       default:
         return 'pi pi-bell';
     }
@@ -80,6 +82,8 @@
         return 'text-orange-500';
       case NotificationType.SiteUpdate:
         return 'text-purple-500';
+      case NotificationType.CommunityListMilestone:
+        return 'text-pink-500';
       default:
         return 'text-muted-color';
     }

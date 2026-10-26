@@ -48,6 +48,8 @@
       { label: 'Words per import', ...l.importWords },
       { label: 'Active media requests', ...l.activeMediaRequests },
       { label: 'Custom sentences per word', ...l.customSentencesPerWord },
+      { label: 'Community lists', ...l.communityLists },
+      { label: 'Titles per community list', ...l.communityListItems },
     ].map((row) => ({ label: row.label, free: row.free.toLocaleString(), plus: row.plus.toLocaleString() }));
   });
 

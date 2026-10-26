@@ -15,6 +15,11 @@ describe('formatRelativeTime', () => {
     expect(formatRelativeTime(new Date('2026-03-14T12:00:00Z'), now)).toBe('6 months ago');
   });
 
+  it('drops the abbreviation full stops in the short style', () => {
+    expect(formatRelativeTime(new Date('2026-09-14T11:55:00Z'), now, 'short')).toBe('5 min ago');
+    expect(formatRelativeTime(new Date('2026-09-14T09:00:00Z'), now, 'short')).toBe('3 hr ago');
+  });
+
   it('accepts ISO strings', () => {
     expect(formatRelativeTime('2026-09-13T12:00:00Z', now)).toBe('yesterday');
   });

@@ -92,6 +92,30 @@
 
   const settings = ref();
   const userMenu = ref();
+  const mediaMenu = ref();
+
+  const mediaMenuItems = [
+    { label: 'Browse media', hint: 'Every title on Jiten', icon: 'material-symbols:auto-stories-outline', route: '/decks/media' },
+    { label: 'Community lists', hint: 'Picked by other learners', icon: 'material-symbols:format-list-bulleted-rounded', route: '/lists' },
+  ];
+  const isMediaSection = computed(() => route.path.startsWith('/decks/media') || route.path.startsWith('/lists'));
+
+  /** Delay lets the pointer cross the gap between the Media link and its menu without closing it. */
+  const MEDIA_MENU_CLOSE_DELAY_MS = 200;
+  let mediaMenuCloseTimer: ReturnType<typeof setTimeout> | undefined;
+  function openMediaMenu(event: Event) {
+    clearTimeout(mediaMenuCloseTimer);
+    mediaMenu.value?.show(event);
+  }
+  function scheduleMediaMenuClose() {
+    clearTimeout(mediaMenuCloseTimer);
+    mediaMenuCloseTimer = setTimeout(() => mediaMenu.value?.hide(), MEDIA_MENU_CLOSE_DELAY_MS);
+  }
+  const cancelMediaMenuClose = () => clearTimeout(mediaMenuCloseTimer);
+  watch(
+    () => route.fullPath,
+    () => mediaMenu.value?.hide()
+  );
 
   const userInitial = computed(() => auth.user?.userName?.trim()?.slice(0, 2)?.toUpperCase() || '');
 
@@ -156,7 +180,18 @@
 
         <!-- Desktop nav -->
         <nav class="hidden min-[900px]:flex items-center space-x-4">
-          <nuxt-link to="/decks/media" :class="route.path.startsWith('/decks/media') ? 'font-semibold !text-purple-200' : '!text-white'">Media</nuxt-link>
+          <div class="inline-flex items-center" @mouseenter="openMediaMenu" @mouseleave="scheduleMediaMenuClose">
+            <nuxt-link to="/decks/media" :class="isMediaSection ? 'font-semibold !text-purple-200' : '!text-white'">Media</nuxt-link>
+            <button
+              type="button"
+              class="inline-flex items-center rounded text-white hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-white"
+              aria-label="More media pages"
+              aria-haspopup="true"
+              @click="mediaMenu.toggle($event)"
+            >
+              <Icon name="material-symbols:keyboard-arrow-down" size="16" />
+            </button>
+          </div>
           <nuxt-link
             v-if="auth.isAuthenticated"
             to="/srs/decks"
@@ -270,6 +305,13 @@
               :class="route.path.startsWith('/decks/media') ? 'font-semibold !text-purple-200' : '!text-white'"
               @click="mobileMenuOpen = false"
               >Media</nuxt-link
+            >
+            <nuxt-link
+              to="/lists"
+              class="py-2 pl-7 pr-3 text-sm"
+              :class="route.path.startsWith('/lists') ? 'font-semibold !text-purple-200' : '!text-white'"
+              @click="mobileMenuOpen = false"
+              >Community lists</nuxt-link
             >
             <nuxt-link
               v-if="auth.isAuthenticated"
@@ -391,6 +433,33 @@
 
   <LazyAppHeaderSettings ref="settings" />
   <LazyHeaderSearchDialog />
+  <TieredMenu
+    ref="mediaMenu"
+    :model="mediaMenuItems"
+    popup
+    :pt="{
+      root: { class: 'min-w-60 !p-1', onMouseenter: cancelMediaMenuClose, onMouseleave: scheduleMediaMenuClose },
+      itemContent: { class: '!bg-transparent' },
+    }"
+  >
+    <template #item="{ item }">
+      <NuxtLink
+        :to="item.route"
+        class="flex items-center gap-3 rounded-md px-3 py-2 !no-underline transition-colors"
+        :class="route.path.startsWith(item.route) ? 'bg-purple-50 dark:bg-purple-900/30' : 'hover:bg-surface-100 dark:hover:bg-surface-800'"
+      >
+        <Icon :name="item.icon" size="20" class="shrink-0 text-purple-600 dark:text-purple-300" />
+        <span class="flex flex-col leading-tight">
+          <span
+            class="text-sm font-semibold"
+            :class="route.path.startsWith(item.route) ? 'text-purple-700 dark:text-purple-200' : 'text-surface-900 dark:text-surface-0'"
+            >{{ item.label }}</span
+          >
+          <span class="text-xs text-surface-500 dark:text-surface-400">{{ item.hint }}</span>
+        </span>
+      </NuxtLink>
+    </template>
+  </TieredMenu>
   <TieredMenu v-if="auth.isAuthenticated" ref="userMenu" :model="userMenuItems" popup>
     <template #item="{ item, props }">
       <NuxtLink v-if="item.route" v-slot="{ href, navigate }" :to="item.route" custom>

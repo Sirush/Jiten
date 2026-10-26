@@ -81,6 +81,8 @@
       { label: 'Words per import', value: l.importWords },
       { label: 'Active media requests', value: l.activeMediaRequests },
       { label: 'Custom sentences per word', value: l.customSentencesPerWord },
+      { label: 'Community lists', value: l.communityLists },
+      { label: 'Titles per community list', value: l.communityListItems },
     ].map((row) => ({ label: row.label, value: row.value.toLocaleString() }));
   });
 </script>

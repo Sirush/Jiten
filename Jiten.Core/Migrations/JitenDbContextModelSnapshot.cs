@@ -58,6 +58,221 @@ namespace Jiten.Core.Migrations
                     b.ToTable("BlacklistedComparisonDecks", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.CommunityLists.CommunityList", b =>
+                {
+                    b.Property<int>("ListId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("ListId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Description")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<int>("FavouriteCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("FavouriteMilestoneNotified")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("ItemCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("OwnerId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
+                    b.Property<DateTime?>("PublishedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Slug")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ListId");
+
+                    b.HasIndex("OwnerId")
+                        .HasDatabaseName("IX_CommunityList_OwnerId");
+
+                    b.HasIndex("Status", "FavouriteCount")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_CommunityList_Status_FavouriteCount");
+
+                    b.HasIndex("Status", "PublishedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_CommunityList_Status_PublishedAt");
+
+                    b.HasIndex("Status", "UpdatedAt")
+                        .IsDescending(false, true)
+                        .HasDatabaseName("IX_CommunityList_Status_UpdatedAt");
+
+                    b.ToTable("CommunityLists", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.CommunityLists.CommunityListActivityDaily", b =>
+                {
+                    b.Property<int>("ListId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("Date")
+                        .HasColumnType("date");
+
+                    b.Property<int>("Views")
+                        .HasColumnType("integer");
+
+                    b.HasKey("ListId", "Date");
+
+                    b.ToTable("CommunityListActivityDaily", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.CommunityLists.CommunityListFavourite", b =>
+                {
+                    b.Property<int>("ListId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ListId", "UserId");
+
+                    b.HasIndex("UserId")
+                        .HasDatabaseName("IX_CommunityListFavourite_UserId");
+
+                    b.HasIndex("CreatedAt", "ListId")
+                        .HasDatabaseName("IX_CommunityListFavourite_CreatedAt_ListId");
+
+                    b.ToTable("CommunityListFavourites", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.CommunityLists.CommunityListGenre", b =>
+                {
+                    b.Property<int>("ListId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Genre")
+                        .HasColumnType("integer");
+
+                    b.HasKey("ListId", "Genre");
+
+                    b.HasIndex("Genre", "ListId")
+                        .HasDatabaseName("IX_CommunityListGenre_Genre_ListId");
+
+                    b.ToTable("CommunityListGenres", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.CommunityLists.CommunityListItem", b =>
+                {
+                    b.Property<int>("ListId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int>("Position")
+                        .HasColumnType("integer");
+
+                    b.HasKey("ListId", "DeckId");
+
+                    b.HasIndex("DeckId")
+                        .HasDatabaseName("IX_CommunityListItem_DeckId");
+
+                    b.HasIndex("ListId", "Position")
+                        .HasDatabaseName("IX_CommunityListItem_ListId_Position");
+
+                    b.ToTable("CommunityListItems", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.CommunityLists.CommunityListReport", b =>
+                {
+                    b.Property<int>("ReportId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("ReportId"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ListId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("ReporterId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
+                    b.Property<DateTime?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ResolvedBy")
+                        .HasMaxLength(36)
+                        .HasColumnType("character varying(36)");
+
+                    b.HasKey("ReportId");
+
+                    b.HasIndex("ResolvedAt")
+                        .HasDatabaseName("IX_CommunityListReport_ResolvedAt");
+
+                    b.HasIndex("ListId", "ReporterId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_CommunityListReport_Open_ListId_ReporterId")
+                        .HasFilter("\"ResolvedAt\" IS NULL");
+
+                    b.ToTable("CommunityListReports", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.CommunityLists.CommunityListTag", b =>
+                {
+                    b.Property<int>("ListId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TagId")
+                        .HasColumnType("integer");
+
+                    b.HasKey("ListId", "TagId");
+
+                    b.HasIndex("TagId", "ListId")
+                        .HasDatabaseName("IX_CommunityListTag_TagId_ListId");
+
+                    b.ToTable("CommunityListTags", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.Deck", b =>
                 {
                     b.Property<int>("DeckId")
@@ -466,6 +681,25 @@ namespace Jiten.Core.Migrations
                         .HasDatabaseName("IX_DeckRelationships_TargetDeckId");
 
                     b.ToTable("DeckRelationships", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.DeckRelationshipOverride", b =>
+                {
+                    b.Property<int>("LowDeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("HighDeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("LowDeckId", "HighDeckId");
+
+                    b.HasIndex("HighDeckId")
+                        .HasDatabaseName("IX_DeckRelationshipOverrides_HighDeckId");
+
+                    b.ToTable("DeckRelationshipOverrides", "jiten");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.DeckSentenceProfile", b =>
@@ -2791,6 +3025,82 @@ namespace Jiten.Core.Migrations
                     b.Navigation("Deck");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.CommunityLists.CommunityListActivityDaily", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.CommunityLists.CommunityList", null)
+                        .WithMany()
+                        .HasForeignKey("ListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.CommunityLists.CommunityListFavourite", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.CommunityLists.CommunityList", null)
+                        .WithMany()
+                        .HasForeignKey("ListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.CommunityLists.CommunityListGenre", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.CommunityLists.CommunityList", "List")
+                        .WithMany("Genres")
+                        .HasForeignKey("ListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("List");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.CommunityLists.CommunityListItem", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", "Deck")
+                        .WithMany()
+                        .HasForeignKey("DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Jiten.Core.Data.CommunityLists.CommunityList", "List")
+                        .WithMany("Items")
+                        .HasForeignKey("ListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Deck");
+
+                    b.Navigation("List");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.CommunityLists.CommunityListReport", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.CommunityLists.CommunityList", null)
+                        .WithMany()
+                        .HasForeignKey("ListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.CommunityLists.CommunityListTag", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.CommunityLists.CommunityList", "List")
+                        .WithMany("Tags")
+                        .HasForeignKey("ListId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Jiten.Core.Data.Tag", "Tag")
+                        .WithMany()
+                        .HasForeignKey("TagId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("List");
+
+                    b.Navigation("Tag");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.Deck", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Franchise", "Franchise")
@@ -2898,6 +3208,21 @@ namespace Jiten.Core.Migrations
                     b.Navigation("SourceDeck");
 
                     b.Navigation("TargetDeck");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.DeckRelationshipOverride", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", null)
+                        .WithMany()
+                        .HasForeignKey("HighDeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Jiten.Core.Data.Deck", null)
+                        .WithMany()
+                        .HasForeignKey("LowDeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.DeckSentenceProfile", b =>
@@ -3409,6 +3734,15 @@ namespace Jiten.Core.Migrations
                         .IsRequired();
 
                     b.Navigation("Source");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.CommunityLists.CommunityList", b =>
+                {
+                    b.Navigation("Genres");
+
+                    b.Navigation("Items");
+
+                    b.Navigation("Tags");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.Deck", b =>

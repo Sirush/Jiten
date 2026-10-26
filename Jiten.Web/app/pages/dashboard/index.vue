@@ -169,6 +169,16 @@
       </Card>
 
       <Card class="shadow-md">
+        <template #title>Community lists</template>
+        <template #content>
+          <p class="mb-4">Review reports, unlist or restore lists, see views</p>
+          <div class="flex justify-center">
+            <Button label="Moderate Lists" icon="pi pi-list" class="p-button-primary" @click="navigateTo('/dashboard/lists')" />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
         <template #title>Jiten+</template>
         <template #content>
           <p class="mb-4">Grant Jiten+ rewards and manage promo codes</p>

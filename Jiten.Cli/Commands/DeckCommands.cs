@@ -306,14 +306,8 @@ public class DeckCommands(CliContext context)
                                                         serializerOptions);
             if (deck == null) return;
 
-            using var coverOptimized = new ImageMagick.MagickImage(Path.Combine(directory, "cover.jpg"));
-
-            coverOptimized.Resize(400, 400);
-            coverOptimized.Strip();
-            coverOptimized.Quality = 85;
-            coverOptimized.Format = ImageMagick.MagickFormat.Jpeg;
-
-            await JitenHelper.InsertDeck(context.ContextFactory, deck, coverOptimized.ToByteArray(), options.UpdateDecks);
+            var cover = await File.ReadAllBytesAsync(Path.Combine(directory, "cover.jpg"));
+            await JitenHelper.InsertDeck(context.ContextFactory, deck, cover, options.UpdateDecks);
 
             if (options.Verbose)
                 Console.WriteLine($"Deck {deck.OriginalTitle} inserted into the database.");

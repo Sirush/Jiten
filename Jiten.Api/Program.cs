@@ -490,6 +490,7 @@ builder.Services.Configure<Jiten.Core.Services.JitenPlusLimitsOptions>(
     builder.Configuration.GetSection(Jiten.Core.Services.JitenPlusLimitsOptions.SectionName));
 builder.Services.AddScoped<IUserLimitsService, UserLimitsService>();
 builder.Services.AddSingleton<IBillingAlertService, BillingAlertService>();
+builder.Services.AddSingleton<IDiscordReportNotifier, DiscordReportNotifier>();
 builder.Services.Configure<Jiten.Api.Services.Stripe.StripeOptions>(builder.Configuration.GetSection("Stripe"));
 builder.Services.Configure<Jiten.Api.Services.DiscourseOptions>(
     builder.Configuration.GetSection(Jiten.Api.Services.DiscourseOptions.SectionName));
@@ -547,6 +548,9 @@ builder.Services.AddSingleton<ISrsDebounceService, SrsDebounceService>();
 builder.Services.AddSingleton<IStudySessionService, StudySessionService>();
 builder.Services.AddSingleton<IPendingCoverageQueue, PendingCoverageQueue>();
 builder.Services.AddSingleton<IDeckActivityBuffer, DeckActivityBuffer>();
+builder.Services.AddSingleton<ICommunityListActivityBuffer, CommunityListActivityBuffer>();
+builder.Services.AddSingleton<IActivityBuffer>(sp => sp.GetRequiredService<IDeckActivityBuffer>());
+builder.Services.AddSingleton<IActivityBuffer>(sp => sp.GetRequiredService<ICommunityListActivityBuffer>());
 builder.Services.AddSingleton<IPendingEmbeddingQueue, PendingEmbeddingQueue>();
 builder.Services.AddSingleton<IUserActivityTracker, UserActivityTracker>();
 builder.Services.AddSingleton<IParseThrottleService, ParseThrottleService>();
@@ -566,7 +570,7 @@ builder.Services.AddHostedService<WordFormSiblingCacheWarmupService>();
 builder.Services.AddHostedService<DerivationLinkCacheWarmupService>();
 builder.Services.AddHostedService<DeckVectorCacheWarmupService>();
 if (!builder.Environment.IsEnvironment("Testing"))
-    builder.Services.AddHostedService<DeckActivityFlushService>();
+    builder.Services.AddHostedService<ActivityFlushService>();
 
 builder.Services.AddRateLimiter(options =>
 {

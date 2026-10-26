@@ -1,4 +1,5 @@
 using Jiten.Core.Data;
+using Jiten.Core.Data.CommunityLists;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data.WebNovel;
 using Jiten.Core.Data.YouTube;
@@ -55,6 +56,7 @@ public class JitenDbContext : DbContext
     public DbSet<ExternalTagMapping> ExternalTagMappings { get; set; }
 
     public DbSet<DeckRelationship> DeckRelationships { get; set; }
+    public DbSet<DeckRelationshipOverride> DeckRelationshipOverrides { get; set; }
     public DbSet<Franchise> Franchises { get; set; }
     public DbSet<Series> Series { get; set; }
     public DbSet<SeriesMember> SeriesMembers { get; set; }
@@ -96,6 +98,14 @@ public class JitenDbContext : DbContext
     public DbSet<Poll> Polls { get; set; }
     public DbSet<PollOption> PollOptions { get; set; }
     public DbSet<PollVote> PollVotes { get; set; }
+
+    public DbSet<CommunityList> CommunityLists { get; set; }
+    public DbSet<CommunityListItem> CommunityListItems { get; set; }
+    public DbSet<CommunityListGenre> CommunityListGenres { get; set; }
+    public DbSet<CommunityListTag> CommunityListTags { get; set; }
+    public DbSet<CommunityListFavourite> CommunityListFavourites { get; set; }
+    public DbSet<CommunityListReport> CommunityListReports { get; set; }
+    public DbSet<CommunityListActivityDaily> CommunityListActivityDailies { get; set; }
 
     public DbSet<ParseDataEpoch> ParseDataEpochs { get; set; }
 
@@ -960,6 +970,24 @@ public class JitenDbContext : DbContext
             entity.HasIndex(dr => dr.TargetDeckId).HasDatabaseName("IX_DeckRelationships_TargetDeckId");
         });
 
+        modelBuilder.Entity<DeckRelationshipOverride>(entity =>
+        {
+            entity.ToTable("DeckRelationshipOverrides", "jiten");
+            entity.HasKey(o => new { o.LowDeckId, o.HighDeckId });
+
+            entity.HasOne<Deck>()
+                  .WithMany()
+                  .HasForeignKey(o => o.LowDeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<Deck>()
+                  .WithMany()
+                  .HasForeignKey(o => o.HighDeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(o => o.HighDeckId).HasDatabaseName("IX_DeckRelationshipOverrides_HighDeckId");
+        });
+
         modelBuilder.Entity<Franchise>(entity =>
         {
             entity.ToTable("Franchises", "jiten");
@@ -1435,6 +1463,144 @@ public class JitenDbContext : DbContext
                   .OnDelete(DeleteBehavior.Cascade);
 
             entity.HasIndex(v => new { v.PollId, v.OptionId }).HasDatabaseName("IX_PollVote_PollId_OptionId");
+        });
+
+        modelBuilder.Entity<CommunityList>(entity =>
+        {
+            entity.ToTable("CommunityLists", "jiten");
+            entity.HasKey(l => l.ListId);
+            entity.Property(l => l.ListId).ValueGeneratedOnAdd();
+            entity.Property(l => l.OwnerId).IsRequired().HasMaxLength(36);
+            entity.Property(l => l.Name).IsRequired().HasMaxLength(CommunityList.MaxNameLength);
+            entity.Property(l => l.Description).HasMaxLength(CommunityList.MaxDescriptionLength);
+            entity.Property(l => l.Slug).IsRequired().HasMaxLength(CommunityList.MaxSlugLength);
+            entity.Property(l => l.FavouriteCount).HasDefaultValue(0);
+            entity.Property(l => l.FavouriteMilestoneNotified).HasDefaultValue(0);
+            entity.Property(l => l.ItemCount).HasDefaultValue(0);
+            entity.Property(l => l.CreatedAt).IsRequired();
+            entity.Property(l => l.UpdatedAt).IsRequired();
+
+            if (isNpgsql)
+            {
+                entity.HasIndex(l => new { l.Status, l.FavouriteCount })
+                      .IsDescending(false, true)
+                      .HasDatabaseName("IX_CommunityList_Status_FavouriteCount");
+                entity.HasIndex(l => new { l.Status, l.PublishedAt })
+                      .IsDescending(false, true)
+                      .HasDatabaseName("IX_CommunityList_Status_PublishedAt");
+                entity.HasIndex(l => new { l.Status, l.UpdatedAt })
+                      .IsDescending(false, true)
+                      .HasDatabaseName("IX_CommunityList_Status_UpdatedAt");
+            }
+            else
+            {
+                entity.HasIndex(l => new { l.Status, l.FavouriteCount })
+                      .HasDatabaseName("IX_CommunityList_Status_FavouriteCount");
+                entity.HasIndex(l => new { l.Status, l.PublishedAt })
+                      .HasDatabaseName("IX_CommunityList_Status_PublishedAt");
+                entity.HasIndex(l => new { l.Status, l.UpdatedAt })
+                      .HasDatabaseName("IX_CommunityList_Status_UpdatedAt");
+            }
+            entity.HasIndex(l => l.OwnerId).HasDatabaseName("IX_CommunityList_OwnerId");
+        });
+
+        modelBuilder.Entity<CommunityListItem>(entity =>
+        {
+            entity.ToTable("CommunityListItems", "jiten");
+            entity.HasKey(i => new { i.ListId, i.DeckId });
+            entity.Property(i => i.Note).HasMaxLength(CommunityListItem.MaxNoteLength);
+
+            entity.HasOne(i => i.List)
+                  .WithMany(l => l.Items)
+                  .HasForeignKey(i => i.ListId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(i => i.Deck)
+                  .WithMany()
+                  .HasForeignKey(i => i.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(i => new { i.ListId, i.Position }).HasDatabaseName("IX_CommunityListItem_ListId_Position");
+            entity.HasIndex(i => i.DeckId).HasDatabaseName("IX_CommunityListItem_DeckId");
+        });
+
+        modelBuilder.Entity<CommunityListGenre>(entity =>
+        {
+            entity.ToTable("CommunityListGenres", "jiten");
+            entity.HasKey(g => new { g.ListId, g.Genre });
+
+            entity.HasOne(g => g.List)
+                  .WithMany(l => l.Genres)
+                  .HasForeignKey(g => g.ListId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(g => new { g.Genre, g.ListId }).HasDatabaseName("IX_CommunityListGenre_Genre_ListId");
+        });
+
+        modelBuilder.Entity<CommunityListTag>(entity =>
+        {
+            entity.ToTable("CommunityListTags", "jiten");
+            entity.HasKey(t => new { t.ListId, t.TagId });
+
+            entity.HasOne(t => t.List)
+                  .WithMany(l => l.Tags)
+                  .HasForeignKey(t => t.ListId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(t => t.Tag)
+                  .WithMany()
+                  .HasForeignKey(t => t.TagId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(t => new { t.TagId, t.ListId }).HasDatabaseName("IX_CommunityListTag_TagId_ListId");
+        });
+
+        modelBuilder.Entity<CommunityListFavourite>(entity =>
+        {
+            entity.ToTable("CommunityListFavourites", "jiten");
+            entity.HasKey(f => new { f.ListId, f.UserId });
+            entity.Property(f => f.UserId).IsRequired().HasMaxLength(36);
+            entity.Property(f => f.CreatedAt).IsRequired();
+
+            entity.HasOne<CommunityList>()
+                  .WithMany()
+                  .HasForeignKey(f => f.ListId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(f => f.UserId).HasDatabaseName("IX_CommunityListFavourite_UserId");
+            entity.HasIndex(f => new { f.CreatedAt, f.ListId }).HasDatabaseName("IX_CommunityListFavourite_CreatedAt_ListId");
+        });
+
+        modelBuilder.Entity<CommunityListReport>(entity =>
+        {
+            entity.ToTable("CommunityListReports", "jiten");
+            entity.HasKey(r => r.ReportId);
+            entity.Property(r => r.ReportId).ValueGeneratedOnAdd();
+            entity.Property(r => r.ReporterId).IsRequired().HasMaxLength(36);
+            entity.Property(r => r.Reason).IsRequired().HasMaxLength(CommunityListReport.MaxReasonLength);
+            entity.Property(r => r.ResolvedBy).HasMaxLength(36);
+            entity.Property(r => r.CreatedAt).IsRequired();
+
+            entity.HasOne<CommunityList>()
+                  .WithMany()
+                  .HasForeignKey(r => r.ListId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(r => new { r.ListId, r.ReporterId })
+                  .IsUnique()
+                  .HasFilter("\"ResolvedAt\" IS NULL")
+                  .HasDatabaseName("IX_CommunityListReport_Open_ListId_ReporterId");
+            entity.HasIndex(r => r.ResolvedAt).HasDatabaseName("IX_CommunityListReport_ResolvedAt");
+        });
+
+        modelBuilder.Entity<CommunityListActivityDaily>(entity =>
+        {
+            entity.ToTable("CommunityListActivityDaily", "jiten");
+            entity.HasKey(a => new { a.ListId, a.Date });
+            entity.HasOne<CommunityList>()
+                  .WithMany()
+                  .HasForeignKey(a => a.ListId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<DifficultyVote>(entity =>
