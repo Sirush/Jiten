@@ -4,6 +4,7 @@
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { coverUrl } from '~/utils/coverImage';
   import { useJitenStore } from '~/stores/jitenStore';
+  import { formatDateShort, formatMonthYear } from '~/utils/dateFormat';
 
   const props = defineProps<{ provider: 'anilist' | 'vndb' | 'file' }>();
   const emit = defineEmits<{ changed: [] }>();
@@ -177,7 +178,7 @@
   function formatFinished(value: string | null): string {
     if (!value) return '';
     const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
+    return Number.isNaN(date.getTime()) ? '' : formatMonthYear(date);
   }
 
   const allRows = computed<PreviewRow[]>(() => preview.value?.matched ?? []);
@@ -549,8 +550,8 @@
     const [year, month, day] = iso.split('-').map(Number);
     const date = new Date(year!, (month ?? 1) - 1, day ?? 1);
     if (precision === 'year') return String(year);
-    if (precision === 'month') return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
-    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    if (precision === 'month') return formatMonthYear(date);
+    return formatDateShort(date);
   }
 
   function dateCell(row: PreviewRow, which: 'start' | 'finish'): { text: string; added: boolean } {

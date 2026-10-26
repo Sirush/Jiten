@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatDateTime } from '~/utils/dateFormat';
   useHead({ title: 'Jiten+ Management - Jiten' });
   definePageMeta({ middleware: ['auth-admin'] });
 
@@ -403,7 +404,7 @@
   }
 
   function formatDate(value: string | null) {
-    return value ? new Date(value).toLocaleString() : '—';
+    return value ? formatDateTime(value) : '—';
   }
 
   onMounted(() => {

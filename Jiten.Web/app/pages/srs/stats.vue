@@ -15,6 +15,7 @@
   import ChartDataLabels from 'chartjs-plugin-datalabels';
   import { FsrsState } from '~/types';
   import type { CardStatsResponseDto, RetentionResponseDto, ReviewForecast30dDto, AnswerButtonsDto, HourlyReviewDto } from '~/types';
+  import { formatDayMonth, formatWeekdayDayMonth } from '~/utils/dateFormat';
 
   ChartJS.register(CategoryScale, LinearScale, BarElement, PointElement, LineElement, ChartTooltip, Legend);
 
@@ -367,7 +368,7 @@
     return {
       labels: days.map((d) => {
         const date = new Date(d.date + 'T00:00:00');
-        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        return formatDayMonth(date);
       }),
       datasets: [
         {
@@ -410,7 +411,7 @@
             const day = forecast.value?.days[idx];
             if (!day) return '';
             const date = new Date(day.date + 'T00:00:00');
-            return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+            return formatWeekdayDayMonth(date);
           },
           label: (ctx) => {
             if (ctx.dataset.label === 'Cumulative') return `Cumulative: ${ctx.raw as number}`;

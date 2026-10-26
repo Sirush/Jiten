@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { useConfirm } from 'primevue/useconfirm';
+  import { formatDateShort } from '~/utils/dateFormat';
 
   const emit = defineEmits<{ changed: [] }>();
 
@@ -84,7 +85,7 @@
   function confirmPurge() {
     const range =
       purgeSince.value || purgeUntil.value
-        ? `between ${purgeSince.value ? purgeSince.value.toLocaleDateString() : 'the beginning'} and ${purgeUntil.value ? purgeUntil.value.toLocaleDateString() : 'now'}`
+        ? `between ${purgeSince.value ? formatDateShort(purgeSince.value) : 'the beginning'} and ${purgeUntil.value ? formatDateShort(purgeUntil.value) : 'now'}`
         : 'you have ever done';
     const archiveNote = purgeDropEmptyArchives.value ? ' Removed cards left with no reviews will be deleted for good.' : '';
     confirm.require({

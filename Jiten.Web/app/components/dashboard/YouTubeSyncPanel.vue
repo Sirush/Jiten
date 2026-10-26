@@ -11,6 +11,7 @@
   import Fieldset from 'primevue/fieldset';
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
+  import { formatDateShort, formatDateTime } from '~/utils/dateFormat';
 
   const props = defineProps<{
     deckId: number;
@@ -197,8 +198,8 @@
     }
   };
 
-  const formatDateTime = (value: string | null) => (value ? new Date(value).toLocaleString() : '—');
-  const formatDate = (value: string | null) => (value ? new Date(value).toLocaleDateString() : '—');
+  const formatDateTime = (value: string | null) => (value ? formatDateTime(value) : '—');
+  const formatDate = (value: string | null) => (value ? formatDateShort(value) : '—');
   const formatRuntime = (seconds: number | null) => {
     if (!seconds) return '—';
     const m = Math.floor(seconds / 60);

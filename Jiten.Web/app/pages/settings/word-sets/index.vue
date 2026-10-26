@@ -2,6 +2,7 @@
   import type { WordSetDto, UserWordSetSubscriptionDto } from '~/types/types';
   import { WordSetStateType } from '~/types';
   import { autoLinkUrls } from '~/utils/autoLinkUrls';
+  import { formatDateShort } from '~/utils/dateFormat';
 
   definePageMeta({
     middleware: ['auth'],
@@ -98,7 +99,7 @@
   }
 
   function formatDate(dateString: string): string {
-    return new Date(dateString).toLocaleDateString();
+    return formatDateShort(dateString);
   }
 
   onMounted(() => {

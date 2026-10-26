@@ -3,6 +3,7 @@
   import { stripRuby } from '~/utils/stripRuby';
   import type { Word } from '~/types/types';
   import { useSrsStore } from '~/stores/srsStore';
+  import { formatDateShort } from '~/utils/dateFormat';
 
   definePageMeta({ middleware: ['auth'] });
 
@@ -73,13 +74,13 @@
   }
 
   function formatDate(dateStr: string) {
-    return new Date(dateStr).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    return formatDateShort(dateStr);
   }
 
   function formatDateTime(dateStr: string) {
     const d = new Date(dateStr);
     return (
-      d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) +
+      formatDateShort(d) +
       ' ' +
       d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
     );

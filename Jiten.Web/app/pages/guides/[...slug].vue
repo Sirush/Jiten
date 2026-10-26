@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatDateLong } from '~/utils/dateFormat';
   const route = useRoute();
 
   const { data: page } = await useAsyncData(`guide-${route.path}`, () => queryCollection('guides').path(route.path).first());
@@ -90,13 +91,13 @@
           <p v-if="page.updated || page.verified" class="mt-2 text-xs text-surface-400">
             <template v-if="page.updated">
               Updated
-              <time :datetime="updatedIso">{{ new Date(page.updated).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }) }}</time>
+              <time :datetime="updatedIso">{{ formatDateLong(page.updated) }}</time>
             </template>
             <template v-if="page.verified">
               <template v-if="page.updated"> · </template>
               Last verified
               <time :datetime="new Date(page.verified).toISOString()">{{
-                new Date(page.verified).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' })
+                formatDateLong(page.verified)
               }}</time>
             </template>
           </p>

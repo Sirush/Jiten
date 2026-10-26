@@ -6,6 +6,7 @@
   import Tag from 'primevue/tag';
   import ToggleSwitch from 'primevue/toggleswitch';
   import { useToast } from 'primevue/usetoast';
+  import { formatDateTime } from '~/utils/dateFormat';
 
   const props = defineProps<{
     deckId: number;
@@ -108,7 +109,7 @@
     }
   };
 
-  const formatDateTime = (value: string | null) => (value ? new Date(value).toLocaleString() : '—');
+  const formatDateTime = (value: string | null) => (value ? formatDateTime(value) : '—');
   const formatNumber = (value: number) => value.toLocaleString('en-US');
 
   onMounted(load);

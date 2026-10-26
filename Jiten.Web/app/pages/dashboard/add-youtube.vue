@@ -10,6 +10,7 @@
   import Tag from 'primevue/tag';
   import { useToast } from 'primevue/usetoast';
   import CoverImageField from '~/components/dashboard/CoverImageField.vue';
+  import { formatDateTime } from '~/utils/dateFormat';
 
   useHead({
     title: 'Add YouTube Source - Jiten',
@@ -199,7 +200,7 @@
     }
   };
 
-  const formatDateTime = (value: string) => new Date(value).toLocaleString();
+  const formatDateTime = (value: string) => formatDateTime(value);
 
   onMounted(async () => {
     await loadRegistrations();

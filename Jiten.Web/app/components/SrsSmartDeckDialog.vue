@@ -8,6 +8,7 @@
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { apiErrorMessage, apiStatusCode } from '~/utils/apiErrorMessage';
   import { formatRelativeTime } from '~/utils/relativeTime';
+  import { formatDayMonthTime } from '~/utils/dateFormat';
 
   const props = defineProps<{ visible: boolean }>();
   const emit = defineEmits(['update:visible']);
@@ -290,7 +291,7 @@
     const at = smart.status.value?.lastRebuiltAt;
     if (!at) return null;
     const d = new Date(at);
-    return d.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return formatDayMonthTime(d);
   });
 
   const deckSummary = computed(() => {

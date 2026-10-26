@@ -2,6 +2,7 @@
   import { RequestAction } from '~/types';
   import type { RequestActivityLogDto, RequestUserSummaryDto } from '~/types/types';
   import { getRequestActionText, getRequestActionIcon, getRequestActionSeverity } from '~/utils/requestActionMapper';
+  import { formatDateShort } from '~/utils/dateFormat';
 
   useHead({
     title: 'Request Activity - Jiten Admin',
@@ -119,7 +120,7 @@
     if (diffHours < 24) return `${diffHours}h ago`;
     const diffDays = Math.floor(diffHours / 24);
     if (diffDays < 30) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
+    return formatDateShort(date);
   }
 
   onMounted(() => loadActivityLog());

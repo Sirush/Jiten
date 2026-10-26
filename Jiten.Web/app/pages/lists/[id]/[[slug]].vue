@@ -18,7 +18,7 @@
   import { DECK_STATUS_DISPLAY_ORDER as STATUS_ORDER, getDeckStatusColourClass, getDeckStatusText } from '~/utils/deckStatusMapper';
   import { getGenreText } from '~/utils/genreMapper';
   import { isMissingResource } from '~/utils/missingResource';
-  import { formatDateLong } from '~/utils/formatDateLong';
+  import { formatDateLong } from '~/utils/dateFormat';
   import { formatRelativeTime } from '~/utils/relativeTime';
 
   definePageMeta({

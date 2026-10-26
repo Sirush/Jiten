@@ -11,6 +11,7 @@
   import { Bar } from 'vue-chartjs';
   import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip as ChartTooltip } from 'chart.js';
   import ChartDataLabels from 'chartjs-plugin-datalabels';
+  import { formatDayMonth, formatWeekdayDayMonth } from '~/utils/dateFormat';
 
   ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip);
 
@@ -293,7 +294,7 @@
 
   function showMiniTooltip(event: MouseEvent, day: MiniDay) {
     const d = new Date(day.date + 'T00:00:00');
-    const dateStr = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    const dateStr = formatWeekdayDayMonth(d);
     miniTooltip.value = {
       visible: true,
       text: day.count === 0 ? `${dateStr}: No reviews` : `${dateStr}: ${day.count} reviews`,
@@ -324,7 +325,7 @@
     return {
       labels: forecast.days.map((d) => {
         const date = new Date(d.date + 'T00:00:00');
-        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        return formatDayMonth(date);
       }),
       datasets: [
         {
@@ -376,7 +377,7 @@
             const day = srsStore.reviewForecast30d?.days[idx];
             if (!day) return '';
             const date = new Date(day.date + 'T00:00:00');
-            return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+            return formatWeekdayDayMonth(date);
           },
           label: (context: any) => {
             const count = srsStore.reviewForecast30d?.days[context.dataIndex]?.count ?? 0;

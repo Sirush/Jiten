@@ -7,6 +7,7 @@
   import { getLinkTypeText, resolveLinkType } from '~/utils/linkTypeMapper';
   import { getGenreText } from '~/utils/genreMapper';
   import type { RequestFacets, BoostBalance, RequestGenreTagFilter } from '~/composables/useMediaRequests';
+  import { formatDateOmitCurrentYear } from '~/utils/dateFormat';
 
   definePageMeta({
     middleware: ['auth'],
@@ -291,7 +292,7 @@
     const now = new Date();
     const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000);
     if (diffDays < 30) return `${diffDays || 1}d ago`;
-    return `${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined })}`;
+    return formatDateOmitCurrentYear(date, now);
   }
 
   function formatTimeAgo(dateString: string): string {

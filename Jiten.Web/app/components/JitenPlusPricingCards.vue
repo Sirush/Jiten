@@ -3,6 +3,7 @@
   import { useToast } from 'primevue/usetoast';
   import { useAuthStore } from '~/stores/authStore';
   import { useLegalStore } from '~/stores/legalStore';
+  import { formatDateLong } from '~/utils/dateFormat';
 
   const props = defineProps<{
     pricing: JitenPlusPricingInfo | null;
@@ -22,7 +23,7 @@
     if (!raw) return null;
     const d = new Date(raw);
     if (Number.isNaN(d.getTime())) return null;
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+    return formatDateLong(d);
   });
 
   const showLifetimeNotice = computed(() => lifetimeAvailable.value && !!lifetimeWindowEndLabel.value && !isLifetime.value);

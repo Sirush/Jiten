@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatDateLong, formatDateShort } from '~/utils/dateFormat';
   useHead({ title: 'Legal Notices - Jiten' });
   definePageMeta({ middleware: ['auth-admin'] });
 
@@ -85,7 +86,7 @@
 
   function formatDate(value: string | null) {
     if (!value) return '—';
-    return new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+    return formatDateLong(value);
   }
 
   function statusSeverity(status: NoticeCandidate['status']) {
@@ -95,7 +96,7 @@
   function statusLabel(candidate: NoticeCandidate) {
     if (candidate.status === 'would-send') return 'Would send';
     if (candidate.status === 'sent') return 'Sent';
-    return `Sent ${candidate.sentAt ? new Date(candidate.sentAt).toLocaleDateString() : ''}`.trim();
+    return `Sent ${candidate.sentAt ? formatDateShort(candidate.sentAt) : ''}`.trim();
   }
 
   onMounted(loadDryRun);

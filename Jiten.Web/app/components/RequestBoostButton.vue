@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import type { BoostBalance } from '~/composables/useMediaRequests';
+  import { formatDayMonth } from '~/utils/dateFormat';
 
   const props = withDefaults(
     defineProps<{
@@ -48,7 +49,7 @@
 
   const resetDate = computed(() => {
     if (!balance.value) return '';
-    return new Date(balance.value.resetAt).toLocaleDateString('en-US', { month: 'long', day: 'numeric' });
+    return formatDayMonth(balance.value.resetAt, { long: true });
   });
 
   const exhausted = computed(() => balance.value !== null && balance.value.remaining <= 0);

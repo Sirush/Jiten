@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { RequestStatus, RequestKind, MediaType, LinkType, RequestMetadataStatus } from '~/types';
+  import { formatDateOmitCurrentYear, formatDateShort } from '~/utils/dateFormat';
   import type {
     Deck,
     DeckDetail,
@@ -711,7 +712,7 @@
     if (diffHours < 24) return `${diffHours}h ago`;
     const diffDays = Math.floor(diffHours / 24);
     if (diffDays < 30) return `${diffDays}d ago`;
-    return new Date(dateString).toLocaleDateString();
+    return formatDateShort(dateString);
   }
 
   function formatCompletedAt(dateString: string): string {
@@ -719,7 +720,7 @@
     const now = new Date();
     const diffDays = Math.floor((now.getTime() - date.getTime()) / 86400000);
     if (diffDays < 30) return `${diffDays || 1}d ago`;
-    return `on ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined })}`;
+    return `on ${formatDateOmitCurrentYear(date, now)}`;
   }
 
   const { load: loadTurnaround, fulfilmentRange } = useRequestTurnaround();

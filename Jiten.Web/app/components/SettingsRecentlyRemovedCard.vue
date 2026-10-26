@@ -1,5 +1,6 @@
 ﻿<script setup lang="ts">
   import { CardArchiveReason, type FsrsState } from '~/types/enums';
+  import { formatDateShort } from '~/utils/dateFormat';
 
   withDefaults(defineProps<{ archivedCount?: number; countLoading?: boolean }>(), {
     archivedCount: 0,
@@ -112,7 +113,7 @@
   }
 
   function formatDate(value: string): string {
-    return new Date(value).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    return formatDateShort(value);
   }
 
   function metaText(row: ArchivedRow): string {

@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import type { ForumPost } from '~/types/types';
-  import { formatDateLong } from '~/utils/formatDateLong';
+  import { formatDateLong } from '~/utils/dateFormat';
   import { formatRelativeTime } from '~/utils/relativeTime';
 
   const props = defineProps<{

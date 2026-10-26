@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import type { StudyHeatmapResponse } from '~/types';
+  import { MONTHS_SHORT, formatWeekdayDayMonth } from '~/utils/dateFormat';
 
   const props = defineProps<{
     username: string;
@@ -92,14 +93,13 @@
 
   const monthLabels = computed(() => {
     const labels: { text: string; col: number }[] = [];
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     let lastMonth = -1;
     for (let w = 0; w < weeks.value.length; w++) {
       for (const day of weeks.value[w]) {
         if (day.count === -1) continue;
         const m = day.date.getMonth();
         if (m !== lastMonth) {
-          labels.push({ text: monthNames[m], col: w });
+          labels.push({ text: MONTHS_SHORT[m], col: w });
           lastMonth = m;
         }
         break;
@@ -147,7 +147,7 @@
   }
 
   function formatDisplayDate(d: Date): string {
-    return d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    return formatWeekdayDayMonth(d);
   }
 
   function showTooltip(event: MouseEvent | TouchEvent, day: DayCell) {

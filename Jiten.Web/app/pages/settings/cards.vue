@@ -5,6 +5,7 @@
   import type { FsrsCardWithWordDto } from '~/types/types';
   import { FsrsState } from '~/types/enums';
   import { useSrsStore } from '~/stores/srsStore';
+  import { formatDateShort, formatDateTime } from '~/utils/dateFormat';
 
   definePageMeta({
     middleware: ['auth'],
@@ -228,13 +229,13 @@
   function formatFullDateTime(date: Date | undefined): string {
     if (!date) return '-';
     const d = new Date(date);
-    return d.toLocaleString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+    return formatDateTime(d);
   }
 
   function formatFullDate(date: Date | undefined): string {
     if (!date) return '-';
     const d = new Date(date);
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    return formatDateShort(d);
   }
 
   function formatStability(days: number | undefined): string {

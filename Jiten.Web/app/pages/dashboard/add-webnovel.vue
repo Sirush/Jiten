@@ -8,6 +8,7 @@
   import Tag from 'primevue/tag';
   import { useToast } from 'primevue/usetoast';
   import CoverImageField from '~/components/dashboard/CoverImageField.vue';
+  import { formatDateShort } from '~/utils/dateFormat';
 
   useHead({
     title: 'Add Webnovel - Jiten',
@@ -169,7 +170,7 @@
   });
 
   const formatNumber = (value: number) => value.toLocaleString('en-US');
-  const formatDate = (value: string | null) => (value ? new Date(value).toLocaleDateString() : '—');
+  const formatDate = (value: string | null) => (value ? formatDateShort(value) : '—');
 </script>
 
 <template>

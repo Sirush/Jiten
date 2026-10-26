@@ -4,7 +4,7 @@
   import { COMMUNITY_LIST_STATUS_TEXT } from '~/composables/useCommunityLists';
   import { coverUrl } from '~/utils/coverImage';
   import { getGenreText } from '~/utils/genreMapper';
-  import { formatDateLong } from '~/utils/formatDateLong';
+  import { formatDateLong } from '~/utils/dateFormat';
   import { formatRelativeTime } from '~/utils/relativeTime';
 
   const props = withDefaults(defineProps<{ list: CommunityListSummary; compact?: boolean }>(), { compact: false });

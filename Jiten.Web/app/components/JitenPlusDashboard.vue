@@ -2,6 +2,7 @@
   import type { BoostBalance } from '~/composables/useMediaRequests';
 
   import { useAuthStore } from '~/stores/authStore';
+  import { formatDateLong } from '~/utils/dateFormat';
 
   const { tier, isFull, isTrial, sources, quota, limits } = useJitenPlus();
   const { fetchBoostBalance } = useMediaRequests();
@@ -17,7 +18,7 @@
     if (!raw) return '';
     const d = new Date(raw);
     if (Number.isNaN(d.getTime())) return '';
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+    return formatDateLong(d);
   }
 
   const statusLine = computed(() => {

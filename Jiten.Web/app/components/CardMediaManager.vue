@@ -10,7 +10,7 @@
   } from '~/types';
   import { clipFailureToast, logClipFailure, playCustomAudio, type PlaybackHandle } from '~/utils/customAudioPlayback';
   import { formatBytes } from '~/utils/formatBytes';
-  import { formatDateShort } from '~/utils/formatDateShort';
+  import { formatDateShort } from '~/utils/dateFormat';
   import { debounce } from 'perfect-debounce';
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';

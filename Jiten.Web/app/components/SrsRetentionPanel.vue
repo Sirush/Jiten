@@ -1,7 +1,8 @@
 <script setup lang="ts">
   import { Line } from 'vue-chartjs';
-  import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, type ChartOptions, type ChartData } from 'chart.js';
+  import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend, type ChartOptions, type ChartData, type Scale } from 'chart.js';
   import type { RetentionResponseDto, RetentionWindowDto, RetentionBucketDto, PeriodRetentionDto } from '~/types';
+  import { formatDateShort, formatDayMonth, formatMonthShort, formatMonthYear } from '~/utils/dateFormat';
 
   ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Legend);
 
@@ -96,20 +97,37 @@
   });
   const showChart = computed(() => series.value.length >= 2);
 
-  const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  function periodDate(period: string): Date {
+    const [year, month, day] = period.split('-').map(Number);
+    return new Date(year!, month! - 1, day ?? 1);
+  }
 
-  function periodLabel(period: string): string {
-    const parts = period.split('-');
-    if (granularity.value === 'week') {
-      // "yyyy-MM-dd" → "Mon D" (week commencing).
-      return `${MONTH_NAMES[Number(parts[1]) - 1]} ${Number(parts[2])}`;
+  function periodLabel(period: string, withYear: boolean): string {
+    const date = periodDate(period);
+    if (granularity.value === 'week') return withYear ? formatDateShort(date) : formatDayMonth(date);
+    return withYear ? formatMonthYear(date) : formatMonthShort(date);
+  }
+
+  /** Runs after auto-skip so the year lands on the first visible tick of each year; a tick hidden by auto-skip would otherwise swallow it. */
+  function shortenVisibleTicks(axis: Scale) {
+    let previousYear: number | undefined;
+    for (const tick of axis.ticks) {
+      const period = series.value[tick.value]?.period;
+      if (!period) continue;
+      const year = periodDate(period).getFullYear();
+      tick.label = periodLabel(period, year !== previousYear);
+      previousYear = year;
     }
-    return `${MONTH_NAMES[Number(parts[1]) - 1]} ${String(parts[0]).slice(2)}`;
+  }
+
+  function periodTitle(period: string): string {
+    const date = periodDate(period);
+    return granularity.value === 'week' ? `Week of ${formatDateShort(date)}` : formatMonthYear(date, { long: true });
   }
 
   const chartData = computed<ChartData<'line'>>(() => {
     const rows = series.value;
-    const labels = rows.map((r) => periodLabel(r.period));
+    const labels = rows.map((r) => periodLabel(r.period, true));
     const target = rows.map(() => targetPct.value);
     return {
       labels,
@@ -169,6 +187,10 @@
       legend: { display: true, position: 'bottom', labels: { usePointStyle: true, padding: 12, boxWidth: 8, font: { size: 11 } } },
       tooltip: {
         callbacks: {
+          title: (items) => {
+            const row = series.value[items[0]?.dataIndex ?? -1];
+            return row ? periodTitle(row.period) : '';
+          },
           label: (ctx) => {
             const v = ctx.raw as number | null;
             if (v == null) return `${ctx.dataset.label}: —`;
@@ -197,7 +219,7 @@
         ticks: { stepSize: 25, callback: (v) => `${v}%` },
         grid: { color: 'rgba(107, 114, 128, 0.15)' },
       },
-      x: { grid: { display: false } },
+      x: { grid: { display: false }, afterUpdate: shortenVisibleTicks },
     },
   }));
 </script>

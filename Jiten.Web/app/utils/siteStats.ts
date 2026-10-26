@@ -1,5 +1,6 @@
 import { MediaType } from '~/types/enums';
 import type { SiteStatsFrequencyBand, SiteStatsReading } from '~/types/siteStats';
+import { formatDateLong, formatMonthShort, formatMonthYear } from '~/utils/dateFormat';
 
 const compactFormatter = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
 
@@ -70,12 +71,12 @@ export function watchedFigure(row: SiteStatsReading): WatchedFigure {
 /** Calendar month of a "YYYY-MM-DD" date, read in UTC so the label doesn't shift with the viewer's zone. */
 export function formatMonth(isoDate: string, withYear: boolean): string {
   const date = new Date(`${isoDate.slice(0, 10)}T00:00:00Z`);
-  return date.toLocaleString('en-US', withYear ? { month: 'short', year: 'numeric', timeZone: 'UTC' } : { month: 'short', timeZone: 'UTC' });
+  return withYear ? formatMonthYear(date, { utc: true }) : formatMonthShort(date, { utc: true });
 }
 
 export function formatSnapshotDate(isoDate: string): string {
   const date = new Date(`${isoDate.slice(0, 10)}T00:00:00Z`);
-  return date.toLocaleString('en-US', { day: 'numeric', month: 'long', year: 'numeric', timeZone: 'UTC' });
+  return formatDateLong(date, { utc: true });
 }
 
 /** Five shade steps relative to the largest cell; 0 stays empty. */

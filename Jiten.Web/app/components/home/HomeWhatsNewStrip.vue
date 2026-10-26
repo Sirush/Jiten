@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import type { SiteUpdate } from '~/types';
   import { useJitenStore } from '~/stores/jitenStore';
+  import { formatDayMonth } from '~/utils/dateFormat';
 
   defineProps<{ compact?: boolean }>();
 
@@ -25,7 +26,7 @@
 
   const publishedLabel = computed(() => {
     if (!update.value) return '';
-    return new Date(update.value.publishedAt).toLocaleDateString(undefined, { day: 'numeric', month: 'short' });
+    return formatDayMonth(update.value.publishedAt);
   });
 
   function markSeen() {

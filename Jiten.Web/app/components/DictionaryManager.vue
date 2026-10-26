@@ -4,6 +4,7 @@
   import { useConfirm } from 'primevue/useconfirm';
   import { JMDICT_DICTIONARY_ID } from '~/composables/useYomitanDictionary';
   import type { ImportProgress, DictionaryMeta } from '~/composables/useYomitanDictionary';
+  import { formatDateShort } from '~/utils/dateFormat';
 
   const toast = useToast();
   const confirm = useConfirm();
@@ -171,7 +172,7 @@
   }
 
   function formatDate(timestamp: number): string {
-    return new Date(timestamp).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    return formatDateShort(timestamp);
   }
 </script>
 
