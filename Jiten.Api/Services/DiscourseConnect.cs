@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Jiten.Core.Data;
 using Microsoft.AspNetCore.WebUtilities;
 
 namespace Jiten.Api.Services;
@@ -17,8 +18,17 @@ public class DiscourseOptions
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Url) && !string.IsNullOrWhiteSpace(SsoSecret);
 
-    /// <summary>Read-only key; only topic lookup by embed URL and topic creation use it, post reads stay anonymous.</summary>
+    /// <summary>Read-only global key for topic lookup by embed URL, which no granular scope covers; post reads stay anonymous.</summary>
     public string ApiKey { get; set; } = "";
+
+    /// <summary>Granular key with only topics:write, used to create discussion topics; falls back to <see cref="ApiKey"/> when empty.</summary>
+    public string TopicWriteApiKey { get; set; } = "";
+
+    /// <summary>Secret of the forum webhook that keeps stored reply counts current; the webhook endpoint answers 404 while it is empty.</summary>
+    public string WebhookSecret { get; set; } = "";
+
+    /// <summary>Forum category id per discussion subject (config keys "deck", "list", bound case-insensitively); a subject without one posts to Uncategorized.</summary>
+    public Dictionary<ForumSubject, int> CategoryIds { get; set; } = [];
 
     /// <summary>Must be staff: Discourse throttles topic creation for everyone else to one per minute site-wide.</summary>
     public string ApiUsername { get; set; } = "system";

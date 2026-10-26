@@ -5,6 +5,7 @@ using FluentAssertions;
 using Jiten.Api.Dtos;
 using Jiten.Api.Services;
 using Jiten.Api.Services.Forum;
+using Jiten.Core.Data;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
@@ -18,6 +19,9 @@ public class ForumDiscussionTests
     private const string EmbedUrl = "https://jiten.moe/lists/12";
     private const string MediaHost = "jiten-community.b-cdn.net";
     private static readonly ForumPostSanitizer Sanitizer = new(Forum, [MediaHost]);
+    private static readonly ForumTopicDraft Draft = new(ForumSubject.List, EmbedUrl, "My list", EmbedUrl);
+
+    private static ForumTopicDraft DeckDraft(int id) => new(ForumSubject.Deck, $"https://jiten.moe/decks/media/{id}/detail", $"Deck {id}", "");
 
     private static List<List<int>> Threads(params (int Number, int? ReplyTo)[] posts) =>
         ForumDiscussionService.BuildThreads(posts, p => p.Number, p => p.ReplyTo).Select(t => t.Select(p => p.Number).ToList()).ToList();
@@ -126,24 +130,53 @@ public class ForumDiscussionTests
         (await service.GetAsync(EmbedUrl, null, CancellationToken.None)).Status.Should().Be(ForumDiscussionStatus.NotStarted);
 
         forum.Requests.Should().ContainSingle(r => r.Path == "/embed/info");
-        forum.Requests.Should().NotContain(r => r.Path == "/embed/comments");
+        forum.Requests.Should().NotContain(r => r.Path == "/posts.json");
     }
 
     [Fact]
-    public async Task Start_AsksTheForumToCreateTheTopicOnce()
+    public async Task Start_CreatesTheTopicOnceAndShowsIt()
     {
         var forum = new FakeForum();
-        var service = forum.Service();
+        forum.Posts.Add(Post(1, 1));
+        var service = forum.Service(categories: new() { [ForumSubject.List] = 7 }, topicWriteKey: "write");
         await service.GetAsync(EmbedUrl, null, CancellationToken.None);
 
-        (await service.StartAsync(EmbedUrl, CancellationToken.None)).Status.Should().Be(ForumDiscussionStatus.Pending);
-        (await service.StartAsync(EmbedUrl, CancellationToken.None)).Status.Should().Be(ForumDiscussionStatus.Pending);
-        (await service.GetAsync(EmbedUrl, null, CancellationToken.None)).Status.Should().Be(ForumDiscussionStatus.Pending);
+        (await service.StartAsync(Draft, CancellationToken.None)).Status.Should().Be(ForumDiscussionStatus.Ready);
+        (await service.StartAsync(Draft, CancellationToken.None)).Status.Should().Be(ForumDiscussionStatus.Ready);
+        (await service.GetAsync(EmbedUrl, null, CancellationToken.None)).TopicUrl.Should().Be("https://community.jiten.moe/t/a-topic/43");
 
-        var creation = forum.Requests.Should().ContainSingle(r => r.Path == "/embed/comments").Subject;
-        creation.Query.Should().Be($"?embed_url={EmbedUrl}");
-        creation.ApiKey.Should().Be("key");
+        var creation = forum.Requests.Should().ContainSingle(r => r.Path == "/posts.json").Subject;
+        creation.Method.Should().Be(HttpMethod.Post);
+        creation.ApiKey.Should().Be("write");
+        forum.Requests.Where(r => r.Path == "/embed/info").Should().OnlyContain(r => r.ApiKey == "key");
         creation.ApiUsername.Should().Be("system");
+        var body = JsonDocument.Parse(creation.Body!).RootElement;
+        body.GetProperty("title").GetString().Should().Be("My list");
+        body.GetProperty("embed_url").GetString().Should().Be(EmbedUrl);
+        body.GetProperty("category").GetInt32().Should().Be(7);
+        body.GetProperty("skip_validations").GetBoolean().Should().BeTrue();
+    }
+
+    [Fact]
+    public async Task Start_WithoutACategoryLeavesItToTheForum()
+    {
+        var forum = new FakeForum();
+
+        await forum.Service(categories: new() { [ForumSubject.List] = 7 }).StartAsync(DeckDraft(1), CancellationToken.None);
+
+        JsonDocument.Parse(forum.Requests.Single(r => r.Path == "/posts.json").Body!).RootElement.TryGetProperty("category", out _).Should().BeFalse();
+    }
+
+    [Fact]
+    public async Task Start_RefusedCreationFindsATopicCreatedElsewhere()
+    {
+        var forum = new FakeForum { CreateStatus = HttpStatusCode.UnprocessableEntity, TopicIdAfterRefusal = 43 };
+        forum.Posts.AddRange([Post(1, 1), Post(2, 2)]);
+
+        var result = await forum.Service().StartAsync(Draft, CancellationToken.None);
+
+        result.Status.Should().Be(ForumDiscussionStatus.Ready);
+        result.Threads.Should().ContainSingle();
     }
 
     [Fact]
@@ -152,11 +185,27 @@ public class ForumDiscussionTests
         var forum = new FakeForum { TopicId = 43 };
         forum.Posts.AddRange([Post(1, 1), Post(2, 2)]);
 
-        var result = await forum.Service().StartAsync(EmbedUrl, CancellationToken.None);
+        var result = await forum.Service().StartAsync(Draft, CancellationToken.None);
 
         result.Status.Should().Be(ForumDiscussionStatus.Ready);
         result.Threads.Should().ContainSingle();
-        forum.Requests.Should().NotContain(r => r.Path == "/embed/comments");
+        forum.Requests.Should().NotContain(r => r.Path == "/posts.json");
+    }
+
+    [Theory]
+    [InlineData("シュタインズ・ゲート", "Steins;Gate", "Steins;Gate (シュタインズ・ゲート)")]
+    [InlineData("ゆるキャン△", null, "ゆるキャン△")]
+    [InlineData("Clannad", " clannad ", "Clannad")]
+    public void DeckTitle_PutsRomajiFirstAndTheOriginalAfterWhenItDiffers(string original, string? romaji, string expected)
+    {
+        ForumDiscussionSubjects.DeckTitle(original, romaji).Should().Be(expected);
+    }
+
+    [Fact]
+    public void Body_PutsTheUrlAloneOnTheFirstLineAndQuotesTheDescription()
+    {
+        ForumDiscussionSubjects.Body(EmbedUrl, "one\r\ntwo").Should().Be($"{EmbedUrl}\n\n> one\n> two");
+        ForumDiscussionSubjects.Body(EmbedUrl, "  ").Should().Be(EmbedUrl);
     }
 
     [Fact]
@@ -168,16 +217,16 @@ public class ForumDiscussionTests
         for (var i = 0; i < 5; i++)
             await service.GetAsync($"https://jiten.moe/decks/media/{i}/detail", null, CancellationToken.None);
         for (var i = 10; i < 15; i++)
-            await service.StartAsync($"https://jiten.moe/decks/media/{i}/detail", CancellationToken.None);
+            await service.StartAsync(DeckDraft(i), CancellationToken.None);
 
         forum.Requests.Count(r => r.Path == "/embed/info").Should().Be(3);
-        forum.Requests.Count(r => r.Path == "/embed/comments").Should().Be(0);
+        forum.Requests.Count(r => r.Path == "/posts.json").Should().Be(0);
 
-        var fresh = new FakeForum();
-        var starter = fresh.Service(lookups: 10, creations: 2);
+        var fresh = new FakeForum { CreateStatus = HttpStatusCode.UnprocessableEntity };
+        var starter = fresh.Service(lookups: 20, creations: 2);
         for (var i = 0; i < 5; i++)
-            await starter.StartAsync($"https://jiten.moe/decks/media/{i}/detail", CancellationToken.None);
-        fresh.Requests.Count(r => r.Path == "/embed/comments").Should().Be(2);
+            await starter.StartAsync(DeckDraft(i), CancellationToken.None);
+        fresh.Requests.Count(r => r.Path == "/posts.json").Should().Be(2);
     }
 
     [Fact]
@@ -299,11 +348,16 @@ public class ForumDiscussionTests
         reply_to_user = replyToUser == null ? null : new { username = replyToUser }
     };
 
-    private record SeenRequest(string Path, string Query, string? ApiKey, string? ApiUsername);
+    private record SeenRequest(HttpMethod Method, string Path, string Query, string? ApiKey, string? ApiUsername, string? Body);
 
     private class FakeForum : HttpMessageHandler, IHttpClientFactory
     {
-        public int? TopicId { get; init; }
+        public int? TopicId { get; set; }
+        public HttpStatusCode CreateStatus { get; init; } = HttpStatusCode.OK;
+
+        /// <summary>Simulates another instance creating the topic just before this one's creation is refused.</summary>
+        public int? TopicIdAfterRefusal { get; init; }
+
         public HttpStatusCode InfoStatus { get; init; } = HttpStatusCode.OK;
         public HttpStatusCode TopicStatus { get; init; } = HttpStatusCode.OK;
         public int PostsInTopicResponse { get; init; } = 20;
@@ -311,11 +365,13 @@ public class ForumDiscussionTests
         public List<object> Posts { get; } = [];
         public List<SeenRequest> Requests { get; } = [];
 
-        public ForumDiscussionService Service(string apiKey = "key", int lookups = 15, int creations = 5) =>
+        public ForumDiscussionService Service(string apiKey = "key", int lookups = 15, int creations = 5, Dictionary<ForumSubject, int>? categories = null,
+                                              string topicWriteKey = "") =>
             new(this, new MemoryCache(new MemoryCacheOptions()),
                 Options.Create(new DiscourseOptions
                 {
-                    Url = Forum, ApiKey = apiKey, MediaHosts = [MediaHost], LookupsPerMinute = lookups, CreationsPerMinute = creations
+                    Url = Forum, ApiKey = apiKey, MediaHosts = [MediaHost], LookupsPerMinute = lookups, CreationsPerMinute = creations,
+                    CategoryIds = categories ?? [], TopicWriteApiKey = topicWriteKey
                 }),
                 NullLogger<ForumDiscussionService>.Instance);
 
@@ -325,16 +381,27 @@ public class ForumDiscussionTests
         {
             if (Delay > TimeSpan.Zero) await Task.Delay(Delay, cancellationToken);
             var uri = request.RequestUri!;
-            lock (Requests) Requests.Add(new SeenRequest(uri.AbsolutePath, Uri.UnescapeDataString(uri.Query),
+            var body = request.Content == null ? null : await request.Content.ReadAsStringAsync(cancellationToken);
+            lock (Requests) Requests.Add(new SeenRequest(request.Method, uri.AbsolutePath, Uri.UnescapeDataString(uri.Query),
                 request.Headers.TryGetValues("Api-Key", out var key) ? key.Single() : null,
-                request.Headers.TryGetValues("Api-Username", out var user) ? user.Single() : null));
+                request.Headers.TryGetValues("Api-Username", out var user) ? user.Single() : null, body));
+
+            if (uri.AbsolutePath == "/posts.json")
+            {
+                if (CreateStatus != HttpStatusCode.OK)
+                {
+                    TopicId = TopicIdAfterRefusal;
+                    return new HttpResponseMessage(CreateStatus);
+                }
+                TopicId = 43;
+                return Json(new { id = 900, topic_id = TopicId, topic_slug = "a-topic" });
+            }
 
             return uri.AbsolutePath switch
             {
                 "/embed/info" when InfoStatus != HttpStatusCode.OK => new HttpResponseMessage(InfoStatus),
                 "/embed/info" when TopicId == null => new HttpResponseMessage(HttpStatusCode.NotFound),
                 "/embed/info" => Json(new { topic_id = TopicId }),
-                "/embed/comments" => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("<html></html>") },
                 var p when p == $"/t/{TopicId}.json" && TopicStatus != HttpStatusCode.OK => new HttpResponseMessage(TopicStatus),
                 var p when p == $"/t/{TopicId}.json" => Json(new
                 {

@@ -114,7 +114,14 @@ services:
       - Discourse__SsoSecret=${DISCOURSE_SSO_SECRET:-}
       # Read-only forum key; list and media discussions show as unavailable until it is set.
       - Discourse__ApiKey=${DISCOURSE_API_KEY:-}
+      # Granular key with only topics:write, for "Start the discussion"; empty falls back to the read-only key, which the forum refuses.
+      - Discourse__TopicWriteApiKey=${DISCOURSE_TOPIC_WRITE_API_KEY:-}
       - Discourse__ApiUsername=${DISCOURSE_API_USERNAME:-system}
+      # Secret of the forum webhook (post and topic events) that keeps discussion reply counts on deck cards current.
+      - Discourse__WebhookSecret=${DISCOURSE_WEBHOOK_SECRET:-}
+      # Forum category ids for new discussion topics; 0 posts them to Uncategorized.
+      - Discourse__CategoryIds__deck=${DISCOURSE_DECK_CATEGORY_ID:-0}
+      - Discourse__CategoryIds__list=${DISCOURSE_LIST_CATEGORY_ID:-0}
       # Per-instance budgets sized for Discourse's default limits; raise them only after raising the forum's own
       # (DISCOURSE_MAX_ADMIN_API_REQS_PER_MINUTE, and DISCOURSE_MAX_REQS_PER_IP_EXCEPTIONS for this server's IP).
       - Discourse__LookupsPerMinute=${DISCOURSE_LOOKUPS_PER_MINUTE:-15}

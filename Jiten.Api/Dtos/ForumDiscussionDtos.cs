@@ -3,10 +3,6 @@ namespace Jiten.Api.Dtos;
 public enum ForumDiscussionStatus
 {
     Ready = 0,
-
-    /// <summary>The forum is still creating the topic from the page; retrying a few seconds later usually finds it.</summary>
-    Pending = 1,
-
     Unavailable = 2,
 
     /// <summary>No topic yet; one is only created when a signed-in reader starts the discussion.</summary>
@@ -37,11 +33,11 @@ public record ForumThreadDto
 
 public record ForumDiscussionDto
 {
-    public static readonly ForumDiscussionDto Pending = new() { Status = ForumDiscussionStatus.Pending };
     public static readonly ForumDiscussionDto Unavailable = new() { Status = ForumDiscussionStatus.Unavailable };
     public static readonly ForumDiscussionDto NotStarted = new() { Status = ForumDiscussionStatus.NotStarted };
 
     public ForumDiscussionStatus Status { get; init; }
+    public int? TopicId { get; init; }
     public string? TopicUrl { get; init; }
     public int ReplyCount { get; init; }
 

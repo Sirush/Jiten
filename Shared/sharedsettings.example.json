@@ -96,6 +96,12 @@
     "Url": "https://community.jiten.moe",
     "SsoSecret": "",
     "ApiKey": "",
-    "ApiUsername": "system"
+    "TopicWriteApiKey": "",
+    "WebhookSecret": "",
+    "ApiUsername": "system",
+    "CategoryIds": {
+      "deck": 0,
+      "list": 0
+    }
   }
 }

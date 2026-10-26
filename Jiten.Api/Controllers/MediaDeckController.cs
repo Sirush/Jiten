@@ -11,6 +11,7 @@ using Jiten.Api.Enums;
 using Jiten.Api.Helpers;
 using Jiten.Api.Jobs;
 using Jiten.Api.Services;
+using Jiten.Api.Services.Forum;
 using Jiten.Api.Telemetry;
 using Jiten.Core;
 using Jiten.Core.Data;
@@ -70,8 +71,8 @@ public class MediaDeckController(
             await MediaListEntryHelper.ApplyListEntriesAsync(userContext, context, currentUserService.UserId!, dtos);
     }
 
-    /// <summary>Fills ChildrenDeckCount with one grouped count instead of loading every child row.</summary>
-    private async Task ApplyChildDeckCountsAsync(List<DeckDto> dtos)
+    /// <summary>Fills ChildrenDeckCount with one grouped count instead of loading every child row, and DiscussionReplyCount from stored forum topics.</summary>
+    private async Task ApplyDeckCountsAsync(List<DeckDto> dtos)
     {
         if (dtos.Count == 0) return;
         var ids = dtos.Select(d => d.DeckId).ToList();
@@ -80,8 +81,12 @@ public class MediaDeckController(
                                   .GroupBy(d => d.ParentDeckId!.Value)
                                   .Select(g => new { ParentDeckId = g.Key, Count = g.Count() })
                                   .ToDictionaryAsync(x => x.ParentDeckId, x => x.Count);
+        var replies = await ForumTopicStore.ReplyCountsAsync(context, ForumSubject.Deck, ids);
         foreach (var dto in dtos)
+        {
             dto.ChildrenDeckCount = counts.GetValueOrDefault(dto.DeckId);
+            dto.DiscussionReplyCount = replies.GetValueOrDefault(dto.DeckId);
+        }
     }
 
     /// <summary>
@@ -280,7 +285,7 @@ public class MediaDeckController(
         }
 
         var matchedDecks = result.Select(r => r.Deck).ToList();
-        await ApplyChildDeckCountsAsync(matchedDecks);
+        await ApplyDeckCountsAsync(matchedDecks);
         await seriesService.ApplyRefsAsync(matchedDecks);
 
         // Per-user data must not be shared from the response cache.
@@ -1027,7 +1032,7 @@ public class MediaDeckController(
             }
         }
 
-        await ApplyChildDeckCountsAsync(dtos);
+        await ApplyDeckCountsAsync(dtos);
         await seriesService.ApplyRefsAsync(dtos);
         await ApplyViewerListEntriesAsync(dtos);
         return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset ?? 0);
@@ -1132,7 +1137,7 @@ public class MediaDeckController(
 
             coverages.ApplyTo(dtos);
 
-            await ApplyChildDeckCountsAsync(dtos);
+            await ApplyDeckCountsAsync(dtos);
             await seriesService.ApplyRefsAsync(dtos);
             await ApplyViewerListEntriesAsync(dtos);
             return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset);
@@ -1167,7 +1172,7 @@ public class MediaDeckController(
 
             coverages.ApplyTo(dtos);
 
-            await ApplyChildDeckCountsAsync(dtos);
+            await ApplyDeckCountsAsync(dtos);
             await seriesService.ApplyRefsAsync(dtos);
             await ApplyViewerListEntriesAsync(dtos);
             return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset);
@@ -1488,7 +1493,7 @@ public class MediaDeckController(
             }
         }
 
-        await ApplyChildDeckCountsAsync(dtos);
+        await ApplyDeckCountsAsync(dtos);
         await seriesService.ApplyRefsAsync(dtos);
         await ApplyViewerListEntriesAsync(dtos);
         return new PaginatedResponse<List<DeckDto>>(dtos, totalCount, pageSize, offset);
@@ -1701,8 +1706,10 @@ public class MediaDeckController(
         if (deck == null)
             return new PaginatedResponse<DeckDetailDto?>(null, 0, pageSize, offset ?? 0);
 
-        var parentDeck = await context.Decks.AsNoTracking().Include(d => d.DeckGenres).Include(d => d.DeckTags).ThenInclude(dt => dt.Tag).Include(d => d.DeckDifficulty)
-                                      .FirstOrDefaultAsync(d => d.DeckId == deck.ParentDeckId);
+        var parentDeck = deck.ParentDeckId == null
+            ? null
+            : await context.Decks.AsNoTracking().Include(d => d.DeckGenres).Include(d => d.DeckTags).ThenInclude(dt => dt.Tag).Include(d => d.DeckDifficulty)
+                           .FirstOrDefaultAsync(d => d.DeckId == deck.ParentDeckId);
         var subDecks = context.Decks.AsNoTracking().Include(d => d.DeckGenres).Include(d => d.DeckTags).ThenInclude(dt => dt.Tag).Include(d => d.DeckDifficulty)
                               .Include(d => d.Links)
                               .Where(d => d.ParentDeckId == id);
@@ -1784,6 +1791,8 @@ public class MediaDeckController(
             subdeckDtos.Add(new DeckDto(subDeck));
 
         await seriesService.ApplyRefsAsync([mainDeckDto, ..subdeckDtos]);
+        if (deck.ParentDeckId == null)
+            mainDeckDto.DiscussionReplyCount = await ForumTopicStore.ReplyCountAsync(context, ForumSubject.Deck, deck.DeckId);
 
         if (currentUserService.IsAuthenticated)
         {

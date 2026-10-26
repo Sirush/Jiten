@@ -280,6 +280,8 @@
     }
   });
 
+  const discussionSection = ref<{ jump: () => void } | null>(null);
+
   useDeckViewBeacon(deckId);
 
   onMediaListChange((change) => {
@@ -314,6 +316,7 @@
 
   const mainDeck = computed(() => response.value?.data?.mainDeck);
   const parentDeck = computed(() => response.value?.data?.parentDeck);
+  const isTopLevel = computed(() => parentDeck.value == null);
 
   const metaDescription = computed(() => {
     const d = mainDeck.value;
@@ -401,9 +404,17 @@
       </Card>
     </div>
     <div v-else-if="response?.data?.mainDeck">
-      <MediaDeckCard :deck="response.data.mainDeck" title-tag="h1" hide-detail-button :open-study="openStudy" @update:deck="updateMainDeck" />
+      <MediaDeckCard
+        :deck="response.data.mainDeck"
+        title-tag="h1"
+        hide-detail-button
+        :open-study="openStudy"
+        :show-discussion-link="isTopLevel"
+        @update:deck="updateMainDeck"
+        @discussion="discussionSection?.jump()"
+      />
 
-      <DeckStudyOverview v-if="showSeoBlocks && response.data.parentDeck == null" :deck="response.data.mainDeck" />
+      <DeckStudyOverview v-if="showSeoBlocks && isTopLevel" :deck="response.data.mainDeck" />
 
       <LazyCoverageJourneyCard :deck-id="response.data.mainDeck.deckId" />
 
@@ -522,7 +533,16 @@
         <SimilarMediaSection :deck="response.data.mainDeck" />
       </div>
 
-      <DeckVocabularyHighlights v-if="showSeoBlocks && response.data.parentDeck == null" :key="response.data.mainDeck.deckId" :deck="response.data.mainDeck" />
+      <ForumDiscussion
+        v-if="isTopLevel"
+        :id="response.data.mainDeck.deckId"
+        :key="response.data.mainDeck.deckId"
+        ref="discussionSection"
+        subject="deck"
+        class="mt-6"
+      />
+
+      <DeckVocabularyHighlights v-if="showSeoBlocks && isTopLevel" :key="response.data.mainDeck.deckId" :deck="response.data.mainDeck" />
     </div>
     <div v-else class="text-center py-12 flex flex-col items-center gap-4">
       <p class="text-surface-500 dark:text-surface-400">Failed to load this deck.</p>

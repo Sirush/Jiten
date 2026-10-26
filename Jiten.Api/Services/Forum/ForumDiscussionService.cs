@@ -1,6 +1,7 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.RateLimiting;
 using Jiten.Api.Dtos;
 using Jiten.Api.Helpers;
@@ -17,11 +18,14 @@ public interface IForumDiscussionService
     /// </summary>
     Task<ForumDiscussionDto> GetAsync(string embedUrl, int? before, CancellationToken ct);
 
-    /// <summary>Asks the forum to create the topic for <paramref name="embedUrl"/>, or returns it when it already exists.</summary>
-    Task<ForumDiscussionDto> StartAsync(string embedUrl, CancellationToken ct);
+    /// <summary>Creates the topic for <paramref name="draft"/>, or returns it when it already exists.</summary>
+    Task<ForumDiscussionDto> StartAsync(ForumTopicDraft draft, CancellationToken ct);
 
     /// <summary>Reads a known topic without the API key; lets development preview real threads for pages that don't exist on the live site.</summary>
     Task<ForumDiscussionDto> GetByTopicIdAsync(int topicId, int? before, CancellationToken ct);
+
+    /// <summary>Re-reads a topic past its cache, for a forum webhook reporting a change to it.</summary>
+    Task<ForumDiscussionDto> RefreshTopicAsync(int topicId, CancellationToken ct);
 }
 
 public class ForumDiscussionService(
@@ -60,18 +64,16 @@ public class ForumDiscussionService(
     /// <summary>Concurrent views of a cold page share one keyed lookup, so they spend one permit of the lookup budget.</summary>
     private readonly ConcurrentDictionary<string, Lazy<Task<int?>>> _topicIdLookups = new();
 
+    /// <summary>Concurrent starts of one page share a creation; a second would be refused, since the forum allows one topic per embed URL.</summary>
+    private readonly ConcurrentDictionary<string, Lazy<Task<int?>>> _topicCreations = new();
+
     private long _pausedUntilTicks;
 
     /// <summary>An embed URL keeps its topic for good, so a found id only expires to pick up a topic a moderator deleted.</summary>
     private static readonly TimeSpan TopicIdTtl = TimeSpan.FromHours(6);
 
-    /// <summary>Shorter than the client's polling interval while a topic is being created, so each poll looks it up again.</summary>
-    private static readonly TimeSpan MissingTopicTtl = TimeSpan.FromSeconds(1);
-
     /// <summary>Topics only appear through <see cref="StartAsync"/>, which clears this, so a page without one can stay cached for a while.</summary>
     private static readonly TimeSpan NoTopicTtl = TimeSpan.FromMinutes(10);
-
-    private static readonly TimeSpan CreationCooldown = TimeSpan.FromMinutes(10);
 
     private static readonly TimeSpan TopicTtl = TimeSpan.FromMinutes(1);
 
@@ -89,33 +91,51 @@ public class ForumDiscussionService(
         GuardAsync(options.Value.IsDiscussionConfigured, embedUrl, ct, async () =>
         {
             var topicId = await FindTopicIdAsync(embedUrl, ct);
-            if (topicId != null) return await ReadTopicAsync(topicId.Value, before, ct);
-            return CreationRequested(embedUrl) ? ForumDiscussionDto.Pending : ForumDiscussionDto.NotStarted;
+            return topicId != null ? await ReadTopicAsync(topicId.Value, before, ct) : ForumDiscussionDto.NotStarted;
         });
 
-    public Task<ForumDiscussionDto> StartAsync(string embedUrl, CancellationToken ct) =>
-        GuardAsync(options.Value.IsDiscussionConfigured, embedUrl, ct, async () =>
+    public Task<ForumDiscussionDto> StartAsync(ForumTopicDraft draft, CancellationToken ct) =>
+        GuardAsync(options.Value.IsDiscussionConfigured, draft.EmbedUrl, ct, async () =>
         {
-            cache.Remove(TopicIdKey(embedUrl));
-            var topicId = await FindTopicIdAsync(embedUrl, ct);
-            if (topicId != null) return await ReadTopicAsync(topicId.Value, null, ct);
-            if (CreationRequested(embedUrl)) return ForumDiscussionDto.Pending;
-            if (!TryTake(_creations, "creation")) return ForumDiscussionDto.Unavailable;
-
-            cache.Set(CreationKey(embedUrl), true, CreationCooldown);
-            cache.Set(TopicIdKey(embedUrl), (int?)null, MissingTopicTtl);
-            using var response = await SendAsync(KeyedRequest($"embed/comments?embed_url={Uri.EscapeDataString(embedUrl)}"), ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                logger.LogWarning("Forum refused to create a topic for {EmbedUrl}: {Status}", embedUrl, (int)response.StatusCode);
-                return ForumDiscussionDto.Unavailable;
-            }
-
-            return ForumDiscussionDto.Pending;
+            cache.Remove(TopicIdKey(draft.EmbedUrl));
+            var topicId = await FindTopicIdAsync(draft.EmbedUrl, ct)
+                          ?? await Coalesce(_topicCreations, draft.EmbedUrl, _ => CreateTopicAsync(draft)).WaitAsync(ct);
+            return topicId != null ? await ReadTopicAsync(topicId.Value, null, ct) : ForumDiscussionDto.Unavailable;
         });
+
+    /// <summary>
+    /// Skips validation like the forum's own embed import, since deck titles repeat across media types and can be shorter than the forum's
+    /// minimum. A refusal usually means another instance created the topic first, so the page is looked up again.
+    /// </summary>
+    private async Task<int?> CreateTopicAsync(ForumTopicDraft draft)
+    {
+        if (!TryTake(_creations, "creation")) throw new ForumBusyException();
+
+        var categoryId = options.Value.CategoryIds.GetValueOrDefault(draft.Subject);
+        var request = KeyedRequest(HttpMethod.Post, "posts.json", WriteApiKey);
+        request.Content = JsonContent.Create(
+            new CreateTopicBody(draft.Title, draft.Raw, draft.EmbedUrl, SkipValidations: true, categoryId > 0 ? categoryId : null), options: Json);
+        using var response = await SendAsync(request, CancellationToken.None);
+
+        if (response.IsSuccessStatusCode && await response.Content.ReadFromJsonAsync<CreatedPost>(Json) is { } created)
+        {
+            cache.Set(TopicIdKey(draft.EmbedUrl), (int?)created.TopicId, TopicIdTtl);
+            return created.TopicId;
+        }
+
+        logger.LogWarning("Forum refused to create a topic for {EmbedUrl}: {Status}", draft.EmbedUrl, (int)response.StatusCode);
+        cache.Remove(TopicIdKey(draft.EmbedUrl));
+        return await LookUpTopicIdAsync(draft.EmbedUrl);
+    }
 
     public Task<ForumDiscussionDto> GetByTopicIdAsync(int topicId, int? before, CancellationToken ct) =>
         GuardAsync(true, $"topic {topicId}", ct, () => ReadTopicAsync(topicId, before, ct));
+
+    public Task<ForumDiscussionDto> RefreshTopicAsync(int topicId, CancellationToken ct)
+    {
+        cache.Remove(ThreadsKey(topicId));
+        return GetByTopicIdAsync(topicId, null, ct);
+    }
 
     /// <summary>Forum failures and spent budgets degrade to <see cref="ForumDiscussionDto.Unavailable"/>; only the caller's own cancellation propagates.</summary>
     private async Task<ForumDiscussionDto> GuardAsync(bool configured, string subject, CancellationToken ct, Func<Task<ForumDiscussionDto>> body)
@@ -143,6 +163,7 @@ public class ForumDiscussionService(
         return new ForumDiscussionDto
         {
             Status = ForumDiscussionStatus.Ready,
+            TopicId = topicId,
             TopicUrl = topic.TopicUrl,
             ReplyCount = topic.ReplyCount,
             Threads = threads.Select(t => t.Thread).ToList(),
@@ -197,11 +218,11 @@ public class ForumDiscussionService(
         if (cache.TryGetValue(key, out int? cached)) return cached;
         if (!TryTake(_lookups, "lookup")) throw new ForumBusyException();
 
-        using var response = await SendAsync(KeyedRequest($"embed/info?embed_url={Uri.EscapeDataString(embedUrl)}"), CancellationToken.None);
+        using var response = await SendAsync(KeyedRequest(HttpMethod.Get, $"embed/info?embed_url={Uri.EscapeDataString(embedUrl)}", options.Value.ApiKey), CancellationToken.None);
 
         if (response.StatusCode == HttpStatusCode.NotFound)
         {
-            cache.Set(key, (int?)null, CreationRequested(embedUrl) ? MissingTopicTtl : NoTopicTtl);
+            cache.Set(key, (int?)null, NoTopicTtl);
             return null;
         }
 
@@ -214,14 +235,6 @@ public class ForumDiscussionService(
     }
 
     private static (string, string) TopicIdKey(string embedUrl) => ("forum-topic-id", embedUrl);
-
-    /// <summary>
-    /// Set when the forum was asked to create the topic (embed/comments, which crawls the page in a background job).
-    /// Lasts long enough to cover the crawl, and stops a page the crawler can't import from being re-queued.
-    /// </summary>
-    private static (string, string) CreationKey(string embedUrl) => ("forum-topic-requested", embedUrl);
-
-    private bool CreationRequested(string embedUrl) => cache.TryGetValue(CreationKey(embedUrl), out _);
 
     private static (string, int) ThreadsKey(int topicId) => ("forum-threads", topicId);
 
@@ -388,10 +401,12 @@ public class ForumDiscussionService(
         return false;
     }
 
-    private HttpRequestMessage KeyedRequest(string path)
+    private string WriteApiKey => string.IsNullOrWhiteSpace(options.Value.TopicWriteApiKey) ? options.Value.ApiKey : options.Value.TopicWriteApiKey;
+
+    private HttpRequestMessage KeyedRequest(HttpMethod method, string path, string apiKey)
     {
-        var request = new HttpRequestMessage(HttpMethod.Get, path);
-        request.Headers.Add("Api-Key", options.Value.ApiKey);
+        var request = new HttpRequestMessage(method, path);
+        request.Headers.Add("Api-Key", apiKey);
         request.Headers.Add("Api-Username", options.Value.ApiUsername);
         return request;
     }
@@ -408,6 +423,15 @@ public class ForumDiscussionService(
     private record ThreadedTopic(string TopicUrl, int ReplyCount, List<CachedThread> Threads);
 
     private record EmbedInfo(int TopicId);
+
+    private record CreatedPost(int TopicId);
+
+    private record CreateTopicBody(
+        string Title,
+        string Raw,
+        string EmbedUrl,
+        bool SkipValidations,
+        [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? Category);
 
     /// <summary>PostsCount counts only regular posts, unlike the stream, which also lists moderator notices such as "pinned".</summary>
     private record TopicJson(int Id, string Slug, int PostsCount, TopicPostStream PostStream);

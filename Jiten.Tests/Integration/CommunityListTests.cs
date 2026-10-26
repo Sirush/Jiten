@@ -393,6 +393,19 @@ public class CommunityListTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task StartDiscussion_OnlyForParentDecks()
+    {
+        var parent = (await SeedDecks(1))[0];
+        var child = (await SeedDecks(1, parent))[0];
+
+        (await Send(HttpMethod.Post, $"/api/forum/discussions/deck/{child}/start", TestUsers.UserB)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        var started = await Send(HttpMethod.Post, $"/api/forum/discussions/deck/{parent}/start", TestUsers.UserB);
+        started.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await started.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("topicUrl").GetString().Should().Be($"https://jiten.moe/decks/media/{parent}/detail");
+    }
+
+    [Fact]
     public async Task Draft_IsOnlyVisibleToOwnerAndAdmin()
     {
         var listId = await CreateList(TestUsers.UserA);

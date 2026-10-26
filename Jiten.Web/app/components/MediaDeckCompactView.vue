@@ -125,6 +125,10 @@
               <span>Sentences:</span>
               <span class="tabular-nums">{{ Math.floor(deck.readableSentences) }}%</span>
             </div>
+            <div v-if="deck.discussionReplyCount > 0" class="flex justify-between">
+              <span>Replies:</span>
+              <span class="tabular-nums">{{ deck.discussionReplyCount.toLocaleString() }}</span>
+            </div>
             <div v-if="deck.difficulty != -1" class="flex justify-between">
               <span>Difficulty:</span>
               <Tooltip :content="difficultyRef?.tooltip ?? ''">

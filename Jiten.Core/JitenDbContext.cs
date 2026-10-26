@@ -106,6 +106,7 @@ public class JitenDbContext : DbContext
     public DbSet<CommunityListFavourite> CommunityListFavourites { get; set; }
     public DbSet<CommunityListReport> CommunityListReports { get; set; }
     public DbSet<CommunityListActivityDaily> CommunityListActivityDailies { get; set; }
+    public DbSet<ForumTopic> ForumTopics { get; set; }
 
     public DbSet<ParseDataEpoch> ParseDataEpochs { get; set; }
 
@@ -1601,6 +1602,13 @@ public class JitenDbContext : DbContext
                   .WithMany()
                   .HasForeignKey(a => a.ListId)
                   .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ForumTopic>(entity =>
+        {
+            entity.ToTable("ForumTopics", "jiten");
+            entity.HasKey(t => new { t.Subject, t.SubjectId });
+            entity.HasIndex(t => t.TopicId).IsUnique().HasDatabaseName("IX_ForumTopic_TopicId");
         });
 
         modelBuilder.Entity<DifficultyVote>(entity =>

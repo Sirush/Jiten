@@ -1144,6 +1144,32 @@ namespace Jiten.Core.Migrations
                     b.ToTable("ExternalTagMappings", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.ForumTopic", b =>
+                {
+                    b.Property<int>("Subject")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("SubjectId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("ReplyCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TopicId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Subject", "SubjectId");
+
+                    b.HasIndex("TopicId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_ForumTopic_TopicId");
+
+                    b.ToTable("ForumTopics", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.Franchise", b =>
                 {
                     b.Property<int>("FranchiseId")

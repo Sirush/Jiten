@@ -18,54 +18,41 @@
   /** Longer threads open on their newest replies, with the earlier ones a click away. */
   const REPLIES_SHOWN = 3;
 
-  /** The forum creates a topic in a background job that crawls the page, usually within seconds; each poll spends a forum lookup, so a slow crawl gets fewer of them. */
-  const PENDING_POLL_DELAYS_MS = [2_000, 3_000, 4_000, 6_000, 8_000, 10_000, 10_000];
-
   const { $api } = useNuxtApp();
   const toast = useToast();
   const authStore = useAuthStore();
   const { authLink } = useGuestPrompt();
   const communityUrl = useRuntimeConfig().public.communityUrl as string;
 
-  /** Client-only so the forum's crawler, which builds the topic from the SSR page, never picks up this section. */
   const mounted = ref(false);
   const root = ref<HTMLElement | null>(null);
   const discussion = ref<ForumDiscussion | null>(null);
   const expanded = ref(new Set<number>());
   const loadingOlder = ref(false);
   const starting = ref(false);
-  const pendingGaveUp = ref(false);
 
   const path = computed(() => `forum/discussions/${props.subject}/${props.id}`);
+
+  const PROMPTS: Record<typeof props.subject, string> = {
+    deck: 'Share your experience with this title or ask questions before starting it.',
+    list: 'Share your experience with immersing in some titles for this list, give suggestions of titles to add or simply show some love!',
+  };
 
   /** Development only: `?forumTopic=<id>` previews a real forum thread on a page that doesn't exist on the live site. */
   const route = useRoute();
   const previewTopic = import.meta.dev && route.query.forumTopic ? String(route.query.forumTopic) : undefined;
   const status = computed(() => discussion.value?.status);
   const threads = computed(() => discussion.value?.threads ?? []);
-  const replyLabel = computed(() => {
-    const count = discussion.value?.replyCount ?? 0;
-    return `${count.toLocaleString()} ${count === 1 ? 'reply' : 'replies'}`;
-  });
+  const replyLabel = computed(() => replyCountLabel(discussion.value?.replyCount ?? 0));
 
-  let pollTimer: ReturnType<typeof setTimeout> | null = null;
-  let pollIndex = 0;
   let started = false;
 
   /** Set by a jump made before the replies arrived; the section is short until then, so the jump lands wherever the page ends. */
   let realignAfterLoad = false;
 
-  function show(result: ForumDiscussion) {
-    discussion.value = result;
-    if (result.status !== ForumDiscussionStatus.Pending) return;
-    const delay = PENDING_POLL_DELAYS_MS[pollIndex++];
-    if (delay != null) pollTimer = setTimeout(() => load(), delay);
-    else pendingGaveUp.value = true;
-  }
-
   async function load() {
     try {
-      show(await $api<ForumDiscussion>(path.value, { query: { previewTopic } }));
+      discussion.value = await $api<ForumDiscussion>(path.value, { query: { previewTopic } });
     } catch {
       discussion.value = { status: ForumDiscussionStatus.Unavailable, topicUrl: null, replyCount: 0, threads: [], nextBefore: null };
     }
@@ -103,9 +90,7 @@
         toast.add({ severity: 'error', summary: "The discussion couldn't be started. Try again in a minute.", life: 5000 });
         return;
       }
-      pendingGaveUp.value = false;
-      pollIndex = 0;
-      show(result);
+      discussion.value = result;
     } catch (e) {
       toast.add({ severity: 'error', summary: apiErrorMessage(e, "The discussion couldn't be started"), life: 5000 });
     } finally {
@@ -154,7 +139,6 @@
 
   onBeforeUnmount(() => {
     intersection?.disconnect();
-    if (pollTimer) clearTimeout(pollTimer);
   });
 </script>
 
@@ -176,6 +160,7 @@
         size="small"
       />
     </div>
+    <p class="m-0 px-1 text-sm text-muted-color">{{ PROMPTS[subject] }}</p>
 
     <div class="rounded-lg border border-surface-200 bg-surface-0 dark:border-surface-700 dark:bg-surface-900">
       <ol v-if="threads.length" class="m-0 list-none divide-y divide-surface-200 p-0 dark:divide-surface-700" @click="revealSpoiler">
@@ -206,10 +191,6 @@
         <p class="m-0 text-sm text-muted-color">No one has started a discussion about this yet.</p>
         <Button label="Start the discussion" icon="pi pi-comments" size="small" :loading="starting" @click="startDiscussion" />
       </div>
-      <p v-else-if="status === ForumDiscussionStatus.Pending && pendingGaveUp" class="m-0 px-4 py-8 text-center text-sm text-muted-color">
-        The forum is taking longer than usual to set up this discussion. Please check back in a minute.
-      </p>
-      <p v-else-if="status === ForumDiscussionStatus.Pending" class="m-0 px-4 py-8 text-center text-sm text-muted-color">Setting up the discussion…</p>
       <p v-else-if="status === ForumDiscussionStatus.Unavailable" class="m-0 px-4 py-8 text-center text-sm text-muted-color">
         The discussion didn't load. Please try again later.
         <a :href="communityUrl" target="_blank" rel="noopener">Open the forum</a>

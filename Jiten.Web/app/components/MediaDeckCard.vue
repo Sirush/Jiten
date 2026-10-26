@@ -33,12 +33,23 @@
     /** Opens the study dialog once mounted, for a visitor coming back from sign-up through the guest Study button. */
     openStudy?: boolean;
     readOnlyList?: boolean;
+    showDiscussionLink?: boolean;
   }>();
 
   const emit = defineEmits<{
     'update:deck': [deck: Deck];
     'status-menu': [open: boolean];
+    discussion: [];
   }>();
+
+  const discussionTooltip = computed(() => (props.deck.discussionReplyCount > 0 ? discussionReplyLabel(props.deck.discussionReplyCount) : 'Discussion'));
+
+  /** On the deck's own page the link scrolls to the discussion below instead of reloading the route. */
+  function onDiscussionClick(event: MouseEvent) {
+    if (!props.showDiscussionLink) return;
+    event.preventDefault();
+    emit('discussion');
+  }
 
   const showDownloadDialog = ref(false);
   const showStudyDeckDialog = ref(false);
@@ -538,6 +549,19 @@
                 </button>
               </Tooltip>
               <ShareButton v-if="!isCompact" :path="`/decks/media/${deck.deckId}/detail`" :title="shareTitle" />
+              <Tooltip v-if="showDiscussionLink || (!isCompact && deck.discussionReplyCount > 0)" :content="discussionTooltip">
+                <NuxtLink
+                  :to="`/decks/media/${deck.deckId}/detail#discussion`"
+                  :aria-label="discussionTooltip"
+                  class="flex items-center gap-1 p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer no-underline"
+                  @click="onDiscussionClick"
+                >
+                  <i class="pi pi-comments utility-icon" />
+                  <span v-if="deck.discussionReplyCount > 0" class="text-xs font-semibold leading-none tabular-nums text-gray-600 dark:text-gray-300">
+                    {{ deck.discussionReplyCount.toLocaleString() }}
+                  </span>
+                </NuxtLink>
+              </Tooltip>
               <Tooltip content="View stats">
                 <router-link
                   :to="`/decks/media/${deck.deckId}/stats`"

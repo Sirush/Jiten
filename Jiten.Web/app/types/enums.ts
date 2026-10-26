@@ -291,8 +291,6 @@ export enum CommunityListStatus {
 
 export enum ForumDiscussionStatus {
   Ready = 0,
-  /** The forum is still creating the topic; a retry a few seconds later usually finds it. */
-  Pending = 1,
   Unavailable = 2,
   /** No topic yet; a signed-in reader creates it by starting the discussion. */
   NotStarted = 3,

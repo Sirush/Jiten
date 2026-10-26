@@ -112,6 +112,7 @@ export interface Deck {
   links: Link[];
   aliases: string[];
   childrenDeckCount: number;
+  discussionReplyCount: number;
   selectedWordOccurrences: number;
   dialoguePercentage: number;
   coverage: number;

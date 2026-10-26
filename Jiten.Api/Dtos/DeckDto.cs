@@ -35,6 +35,7 @@ public class DeckDto : IDeckCoverageTarget
     public List<string> Aliases { get; set; } = new();
     public List<DeckDictionaryEntryDto> DictionaryEntries { get; set; } = new();
     public int ChildrenDeckCount { get; set; }
+    public int DiscussionReplyCount { get; set; }
     public int SelectedWordOccurrences { get; set; }
     public float DialoguePercentage { get; set; }
     public bool HideDialoguePercentage { get; set; }

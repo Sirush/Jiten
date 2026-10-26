@@ -321,33 +321,31 @@
     </Message>
 
     <section class="flex flex-col gap-4 rounded-lg border border-surface-200 bg-surface-0 p-4 md:p-6 dark:border-surface-700 dark:bg-surface-900">
-      <ForumDiscussionSource class="flex flex-col gap-4">
-        <div class="flex flex-col gap-1.5">
-          <h1 class="m-0 text-2xl leading-tight font-bold md:text-3xl" v-bind="japaneseTextAttrs(list.name)">{{ list.name }}</h1>
-          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-color">
-            <span v-if="list.ownerDisplayName" class="flex items-center gap-1.5" :aria-label="`By ${list.ownerDisplayName}`">
-              <i class="pi pi-user text-xs" aria-hidden="true" />
-              <span class="font-semibold text-surface-800 dark:text-surface-100">{{ list.ownerDisplayName }}</span>
-            </span>
-            <span class="flex items-center gap-1.5">
-              <i class="pi pi-book text-xs" aria-hidden="true" />
-              {{ list.itemCount.toLocaleString() }} {{ list.itemCount === 1 ? 'title' : 'titles' }}
-            </span>
-            <ClientOnly>
-              <Tooltip :content="`Updated ${formatDateLong(list.updatedAt)}`">
-                <span class="flex items-center gap-1.5" :aria-label="`Updated ${formatRelativeTime(list.updatedAt)}`">
-                  <i class="pi pi-clock text-xs" aria-hidden="true" />
-                  {{ formatRelativeTime(list.updatedAt) }}
-                </span>
-              </Tooltip>
-            </ClientOnly>
-          </div>
+      <div class="flex flex-col gap-1.5">
+        <h1 class="m-0 text-2xl leading-tight font-bold md:text-3xl" v-bind="japaneseTextAttrs(list.name)">{{ list.name }}</h1>
+        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-color">
+          <span v-if="list.ownerDisplayName" class="flex items-center gap-1.5" :aria-label="`By ${list.ownerDisplayName}`">
+            <i class="pi pi-user text-xs" aria-hidden="true" />
+            <span class="font-semibold text-surface-800 dark:text-surface-100">{{ list.ownerDisplayName }}</span>
+          </span>
+          <span class="flex items-center gap-1.5">
+            <i class="pi pi-book text-xs" aria-hidden="true" />
+            {{ list.itemCount.toLocaleString() }} {{ list.itemCount === 1 ? 'title' : 'titles' }}
+          </span>
+          <ClientOnly>
+            <Tooltip :content="`Updated ${formatDateLong(list.updatedAt)}`">
+              <span class="flex items-center gap-1.5" :aria-label="`Updated ${formatRelativeTime(list.updatedAt)}`">
+                <i class="pi pi-clock text-xs" aria-hidden="true" />
+                {{ formatRelativeTime(list.updatedAt) }}
+              </span>
+            </Tooltip>
+          </ClientOnly>
         </div>
+      </div>
 
-        <p v-if="list.description" class="m-0 max-w-[68ch] whitespace-pre-line leading-relaxed" v-bind="japaneseTextAttrs(list.description)">
-          {{ list.description }}
-        </p>
-      </ForumDiscussionSource>
+      <p v-if="list.description" class="m-0 max-w-[68ch] whitespace-pre-line leading-relaxed" v-bind="japaneseTextAttrs(list.description)">
+        {{ list.description }}
+      </p>
 
       <div v-if="list.genres.length || list.tags.length" class="flex flex-col gap-2">
         <div v-if="list.genres.length" class="flex flex-wrap items-center gap-2">
