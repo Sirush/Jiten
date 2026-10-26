@@ -13,6 +13,7 @@
   import type { Deck, DeckDetail, DeckRelationship, DeckRelationshipType, Link, MediaType, MediaSuggestion, Tag, Genre } from '~/types';
   import type { MediaRequestUploadAdminDto } from '~/types/types';
   import Message from 'primevue/message';
+  import { coverUrl } from '~/utils/coverImage';
   import { formatBytes } from '~/utils/formatBytes';
   import { debounce } from 'perfect-debounce';
   import AutoComplete from 'primevue/autocomplete';
@@ -1560,7 +1561,7 @@
                 <template #option="{ option }">
                   <div class="flex items-center gap-2">
                     <img
-                      :src="option.coverName && option.coverName !== 'nocover.jpg' ? option.coverName : '/img/nocover.jpg'"
+                      :src="coverUrl(option.coverName, 'xs')"
                       :alt="getDeckLabel(option)"
                       class="h-10 w-7 object-cover rounded shrink-0"
                     />

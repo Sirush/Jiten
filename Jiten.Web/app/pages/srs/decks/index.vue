@@ -3,6 +3,7 @@
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
   import { DeckOrder, MediaType, StudyDeckType, type StudyDeckDto } from '~/types';
+  import { coverUrl } from '~/utils/coverImage';
   import { formatRelativeTime } from '~/utils/relativeTime';
   import { groupFilterSummary } from '~/utils/mediaGroup';
   import { studyDeckPresentation } from '~/utils/studyDeckPresentation';
@@ -94,7 +95,7 @@
 
   function getCoverUrl(coverName?: string) {
     if (!coverName || coverName === 'nocover.jpg') return null;
-    return coverName;
+    return coverUrl(coverName, 'sm');
   }
 
   const orderLabels: Record<number, string> = {

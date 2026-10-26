@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { DisplayStyle, MediaType } from '~/types';
+  import { coverUrl } from '~/utils/coverImage';
   import { useApiFetchPaginated } from '~/composables/useApiFetch';
   import { useJitenStore } from '~/stores/jitenStore';
   import { useAuthStore } from '~/stores/authStore';
@@ -304,9 +305,11 @@
     return title;
   });
 
-  const coverUrl = computed(() => {
-    const cover = response.value?.data?.mainDeck?.coverName;
-    return cover && cover !== 'nocover.jpg' ? cover : undefined;
+  /** Must request the same size MediaDeckCard renders, or the preloaded image goes unused. */
+  const coverPreloadUrl = computed(() => {
+    const deck = response.value?.data?.mainDeck;
+    if (!deck?.coverName || deck.coverName === 'nocover.jpg') return undefined;
+    return coverUrl(deck.coverName, deck.mediaType === MediaType.YouTube && !!deck.parentDeckId ? 'lg' : 'md');
   });
 
   const mainDeck = computed(() => response.value?.data?.mainDeck);
@@ -346,7 +349,7 @@
   });
 
   useHead(() => ({
-    link: coverUrl.value ? [{ rel: 'preload', as: 'image', href: coverUrl.value, fetchpriority: 'high' }] : [],
+    link: coverPreloadUrl.value ? [{ rel: 'preload', as: 'image', href: coverPreloadUrl.value, fetchpriority: 'high' }] : [],
   }));
 
   // Subdecks (episodes, volumes) differ from their siblings only by number, so Google collapses them

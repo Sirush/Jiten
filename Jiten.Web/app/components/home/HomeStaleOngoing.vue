@@ -54,7 +54,7 @@
   });
 
   const rowTitle = (deck: StaleDeck) => (deck.parent ? `${localiseTitle(deck.parent)} - ${localiseTitle(deck)}` : localiseTitle(deck));
-  const rowCover = (deck: StaleDeck) => coverUrl(deck.parent?.coverName ?? deck.coverName);
+  const rowCover = (deck: StaleDeck) => coverUrl(deck.parent?.coverName ?? deck.coverName, 'xs');
 
   function rowFacts(deck: StaleDeck): string[] {
     const facts: string[] = [];

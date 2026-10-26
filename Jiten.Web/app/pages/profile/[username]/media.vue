@@ -623,7 +623,7 @@
               :class="{ 'bg-primary-50 dark:bg-primary-900/20': selected.includes(deck.deckId) }"
             >
               <Checkbox :model-value="selected.includes(deck.deckId)" :binary="true" @update:model-value="toggleSelected(deck.deckId)" />
-              <img :src="coverUrl(deck.coverName)" alt="" class="h-12 w-8 flex-none rounded-xs object-cover" loading="lazy" />
+              <img :src="coverUrl(deck.coverName, 'xs')" alt="" class="h-12 w-8 flex-none rounded-xs object-cover" loading="lazy" />
               <div class="min-w-0 flex-1">
                 <div class="truncate font-medium" v-bind="japaneseTextAttrs(localiseTitle(deck))">{{ localiseTitle(deck) }}</div>
                 <div class="flex flex-wrap gap-x-3 text-xs text-surface-500 dark:text-surface-400">

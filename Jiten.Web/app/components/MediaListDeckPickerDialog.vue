@@ -209,7 +209,7 @@
                 @update:model-value="toggle(e.deckId)"
               />
               <img
-                :src="coverUrl(e.coverName)"
+                :src="coverUrl(e.coverName, 'xs')"
                 alt=""
                 class="h-14 w-10 object-cover rounded shrink-0"
                 @error="(ev) => ((ev.target as HTMLImageElement).src = '/img/nocover.jpg')"

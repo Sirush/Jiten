@@ -853,7 +853,7 @@
                   <Icon name="material-symbols:drag-indicator" />
                 </span>
               </Tooltip>
-              <img :src="coverUrl(deck(id)!.coverName)" alt="" class="h-12 w-8 rounded-xs object-cover" loading="lazy" draggable="false" />
+              <img :src="coverUrl(deck(id)!.coverName, 'xs')" alt="" class="h-12 w-8 rounded-xs object-cover" loading="lazy" draggable="false" />
               <div class="min-w-0">
                 <div class="break-words text-[13px] font-medium leading-tight" v-bind="japaneseTextAttrs(title(id))">{{ title(id) }}</div>
                 <div class="break-words text-[11.5px] text-gray-500 dark:text-gray-400">

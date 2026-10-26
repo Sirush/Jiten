@@ -2,9 +2,20 @@
 // Pure browser functions, no Nuxt context — callers resolve a Blob/File first
 // (remote URLs go through the admin/proxy-image endpoint to avoid canvas tainting).
 
-/** Cover URL for display, substituting the local placeholder for works with no art. */
-export function coverUrl(coverName: string | null | undefined): string {
-  return !coverName || coverName === 'nocover.jpg' ? '/img/nocover.jpg' : coverName;
+const OPTIMIZED_COVER_HOST = 'cdn.jiten.moe';
+
+/**
+ * Widths Bunny Optimizer resizes covers to, about twice the largest box each is shown in for high-DPI screens.
+ * A fixed set keeps the CDN cache from fragmenting into one variant per arbitrary width.
+ */
+export const COVER_SIZES = { xs: 96, sm: 160, md: 320, lg: 640 } as const;
+export type CoverSize = keyof typeof COVER_SIZES;
+
+/** Cover URL for display, substituting the local placeholder for works with no art. Without a size the stored original is returned. */
+export function coverUrl(coverName: string | null | undefined, size?: CoverSize): string {
+  if (!coverName || coverName === 'nocover.jpg') return '/img/nocover.jpg';
+  if (!size || !coverName.startsWith(`https://${OPTIMIZED_COVER_HOST}/`)) return coverName;
+  return `${coverName}${coverName.includes('?') ? '&' : '?'}width=${COVER_SIZES[size]}`;
 }
 
 export const COVER_WIDTH = 400;

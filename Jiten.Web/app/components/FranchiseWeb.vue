@@ -849,7 +849,7 @@
         @click.stop="onNodeClick(p)"
       >
         <img
-          :src="coverUrl(p.node.coverName)"
+          :src="coverUrl(p.node.coverName, 'lg')"
           :alt="localiseTitle(p.node)"
           class="h-32 w-full rounded-t-md object-cover"
           loading="lazy"
