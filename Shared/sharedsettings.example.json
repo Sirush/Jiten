@@ -94,6 +94,8 @@
   },
   "Discourse": {
     "Url": "https://community.jiten.moe",
-    "SsoSecret": ""
+    "SsoSecret": "",
+    "ApiKey": "",
+    "ApiUsername": "system"
   }
 }

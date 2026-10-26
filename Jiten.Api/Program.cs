@@ -494,6 +494,14 @@ builder.Services.AddSingleton<IDiscordReportNotifier, DiscordReportNotifier>();
 builder.Services.Configure<Jiten.Api.Services.Stripe.StripeOptions>(builder.Configuration.GetSection("Stripe"));
 builder.Services.Configure<Jiten.Api.Services.DiscourseOptions>(
     builder.Configuration.GetSection(Jiten.Api.Services.DiscourseOptions.SectionName));
+builder.Services.AddHttpClient(Jiten.Api.Services.Forum.ForumDiscussionService.HttpClientName, (sp, client) =>
+{
+    var forumUrl = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Jiten.Api.Services.DiscourseOptions>>().Value.Url;
+    if (Uri.TryCreate(forumUrl.TrimEnd('/') + "/", UriKind.Absolute, out var baseAddress)) client.BaseAddress = baseAddress;
+    client.Timeout = TimeSpan.FromSeconds(5);
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+}).ConfigurePrimaryHttpMessageHandler(Jiten.Api.Services.Forum.ForumDiscussionService.CreatePrimaryHandler);
+builder.Services.AddSingleton<Jiten.Api.Services.Forum.IForumDiscussionService, Jiten.Api.Services.Forum.ForumDiscussionService>();
 builder.Services.Configure<Jiten.Api.Services.Legal.LegalDocumentsOptions>(
     builder.Configuration.GetSection(Jiten.Api.Services.Legal.LegalDocumentsOptions.SectionName));
 builder.Services.AddSingleton<Jiten.Api.Services.Stripe.IStripeGateway, Jiten.Api.Services.Stripe.StripeGateway>();
@@ -684,6 +692,14 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true
             });
     });
+
+    options.AddPolicy("forum-start", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            $"forum-start:{context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? GetClientIp(context)}",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10, Window = TimeSpan.FromHours(1), QueueLimit = 0, AutoReplenishment = true
+            }));
 
     // Single media coverage refresh
     options.AddPolicy("coverage-refresh", context =>

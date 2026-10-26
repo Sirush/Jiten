@@ -172,6 +172,8 @@
     }
   }
 
+  const discussionSection = ref<{ jump: () => void } | null>(null);
+
   const reportOpen = ref(false);
   const reportReason = ref('');
   const reportSending = ref(false);
@@ -319,31 +321,33 @@
     </Message>
 
     <section class="flex flex-col gap-4 rounded-lg border border-surface-200 bg-surface-0 p-4 md:p-6 dark:border-surface-700 dark:bg-surface-900">
-      <div class="flex flex-col gap-1.5">
-        <h1 class="m-0 text-2xl leading-tight font-bold md:text-3xl" v-bind="japaneseTextAttrs(list.name)">{{ list.name }}</h1>
-        <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-color">
-          <span v-if="list.ownerDisplayName" class="flex items-center gap-1.5" :aria-label="`By ${list.ownerDisplayName}`">
-            <i class="pi pi-user text-xs" aria-hidden="true" />
-            <span class="font-semibold text-surface-800 dark:text-surface-100">{{ list.ownerDisplayName }}</span>
-          </span>
-          <span class="flex items-center gap-1.5">
-            <i class="pi pi-book text-xs" aria-hidden="true" />
-            {{ list.itemCount.toLocaleString() }} {{ list.itemCount === 1 ? 'title' : 'titles' }}
-          </span>
-          <ClientOnly>
-            <Tooltip :content="`Updated ${formatDateLong(list.updatedAt)}`">
-              <span class="flex items-center gap-1.5" :aria-label="`Updated ${formatRelativeTime(list.updatedAt)}`">
-                <i class="pi pi-clock text-xs" aria-hidden="true" />
-                {{ formatRelativeTime(list.updatedAt) }}
-              </span>
-            </Tooltip>
-          </ClientOnly>
+      <ForumDiscussionSource class="flex flex-col gap-4">
+        <div class="flex flex-col gap-1.5">
+          <h1 class="m-0 text-2xl leading-tight font-bold md:text-3xl" v-bind="japaneseTextAttrs(list.name)">{{ list.name }}</h1>
+          <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-color">
+            <span v-if="list.ownerDisplayName" class="flex items-center gap-1.5" :aria-label="`By ${list.ownerDisplayName}`">
+              <i class="pi pi-user text-xs" aria-hidden="true" />
+              <span class="font-semibold text-surface-800 dark:text-surface-100">{{ list.ownerDisplayName }}</span>
+            </span>
+            <span class="flex items-center gap-1.5">
+              <i class="pi pi-book text-xs" aria-hidden="true" />
+              {{ list.itemCount.toLocaleString() }} {{ list.itemCount === 1 ? 'title' : 'titles' }}
+            </span>
+            <ClientOnly>
+              <Tooltip :content="`Updated ${formatDateLong(list.updatedAt)}`">
+                <span class="flex items-center gap-1.5" :aria-label="`Updated ${formatRelativeTime(list.updatedAt)}`">
+                  <i class="pi pi-clock text-xs" aria-hidden="true" />
+                  {{ formatRelativeTime(list.updatedAt) }}
+                </span>
+              </Tooltip>
+            </ClientOnly>
+          </div>
         </div>
-      </div>
 
-      <p v-if="list.description" class="m-0 max-w-[68ch] whitespace-pre-line leading-relaxed" v-bind="japaneseTextAttrs(list.description)">
-        {{ list.description }}
-      </p>
+        <p v-if="list.description" class="m-0 max-w-[68ch] whitespace-pre-line leading-relaxed" v-bind="japaneseTextAttrs(list.description)">
+          {{ list.description }}
+        </p>
+      </ForumDiscussionSource>
 
       <div v-if="list.genres.length || list.tags.length" class="flex flex-col gap-2">
         <div v-if="list.genres.length" class="flex flex-wrap items-center gap-2">
@@ -398,6 +402,16 @@
         </span>
         <ShareButton v-if="isPublic" :path="canonicalPath" :title="list.name" />
         <CommunityListShareImageButton v-if="isPublic || list.status === CommunityListStatus.Draft" :list="list" />
+        <Button
+          v-if="isPublic"
+          as="a"
+          href="#discussion"
+          label="Discussion"
+          icon="pi pi-comments"
+          text
+          size="small"
+          @click.prevent="discussionSection?.jump()"
+        />
         <Button v-if="list.canEdit" label="Edit" icon="pi pi-pencil" text size="small" @click="navigateTo(`/lists/${list.listId}/edit`)" />
         <span class="flex-1" />
         <template v-if="authStore.isAdmin && jitenStore.displayAdminFunctions && !list.isOwner">
@@ -558,6 +572,8 @@
       :aria-label="`Page ${currentPage} of ${totalPages}`"
       @page="onPageChange"
     />
+
+    <ForumDiscussion v-if="isPublic" :id="list.listId" ref="discussionSection" subject="list" class="mt-4" />
 
     <Dialog v-model:visible="reportOpen" modal header="Report this list to the moderators" :draggable="false" class="w-[30rem] max-w-[calc(100vw-2rem)]">
       <form class="flex flex-col gap-2" @submit.prevent="sendReport">

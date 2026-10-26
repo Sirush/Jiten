@@ -3,6 +3,7 @@ import type { FranchiseLine, MediaGroupKind, MediaGroupTitles } from './mediaGro
 import type {
   ComparisonOutcome,
   CommunityListStatus,
+  ForumDiscussionStatus,
   MediaListEntryState,
   DeckRelationshipType,
   DeckStatus,
@@ -2780,4 +2781,31 @@ export interface CommunityListBrowsePage extends PaginatedResponse<CommunityList
 export interface CommunityListFacets {
   genres: Record<number, number>;
   tags: Record<number, number>;
+}
+
+export interface ForumPost {
+  postId: number;
+  username: string;
+  avatarUrl: string;
+  createdAt: string;
+  /** Sanitised by the API, every link absolute. */
+  html: string;
+  replyToUsername: string | null;
+  url: string;
+}
+
+export interface ForumThread {
+  post: ForumPost;
+  /** Every reply below the post, however deep, in posting order. */
+  replies: ForumPost[];
+}
+
+export interface ForumDiscussion {
+  status: ForumDiscussionStatus;
+  topicUrl: string | null;
+  replyCount: number;
+  /** Latest activity first. */
+  threads: ForumThread[];
+  /** Cursor for the next page of threads; null once the last one is loaded. */
+  nextBefore: number | null;
 }

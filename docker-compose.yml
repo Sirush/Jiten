@@ -112,6 +112,14 @@ services:
       # Forum login answers 503 until the secret is set; it must equal the forum's discourse_connect_secret.
       - Discourse__Url=${DISCOURSE_URL:-https://community.jiten.moe}
       - Discourse__SsoSecret=${DISCOURSE_SSO_SECRET:-}
+      # Read-only forum key; list and media discussions show as unavailable until it is set.
+      - Discourse__ApiKey=${DISCOURSE_API_KEY:-}
+      - Discourse__ApiUsername=${DISCOURSE_API_USERNAME:-system}
+      # Per-instance budgets sized for Discourse's default limits; raise them only after raising the forum's own
+      # (DISCOURSE_MAX_ADMIN_API_REQS_PER_MINUTE, and DISCOURSE_MAX_REQS_PER_IP_EXCEPTIONS for this server's IP).
+      - Discourse__LookupsPerMinute=${DISCOURSE_LOOKUPS_PER_MINUTE:-15}
+      - Discourse__CreationsPerMinute=${DISCOURSE_CREATIONS_PER_MINUTE:-5}
+      - Discourse__AnonymousReadsPer10Seconds=${DISCOURSE_ANONYMOUS_READS_PER_10S:-30}
     volumes:
       - ./Shared:/app/Shared:ro
       - uploads:/app/uploads

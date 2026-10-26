@@ -355,6 +355,44 @@ public class CommunityListTests(JitenWebApplicationFactory factory)
     // ---- Visibility ---------------------------------------------------------
 
     [Fact]
+    public async Task Discussion_ExistsOnlyForPublicListsAndParentDecks()
+    {
+        var draft = await CreateList(TestUsers.UserA, "Draft");
+        var published = await CreatePublicList(TestUsers.UserA, "Published");
+        var parent = (await SeedDecks(1))[0];
+        var child = (await SeedDecks(1, parent))[0];
+
+        async Task<string?> TopicUrl(string path)
+        {
+            var response = await Send(HttpMethod.Get, path, TestUsers.UserA);
+            if (response.StatusCode == HttpStatusCode.NotFound) return null;
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            return (await response.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("topicUrl").GetString();
+        }
+
+        (await TopicUrl($"/api/forum/discussions/list/{published}")).Should().Be($"https://jiten.moe/lists/{published}");
+        (await TopicUrl($"/api/forum/discussions/deck/{parent}")).Should().Be($"https://jiten.moe/decks/media/{parent}/detail");
+        (await TopicUrl($"/api/forum/discussions/list/{draft}")).Should().BeNull();
+        (await TopicUrl($"/api/forum/discussions/deck/{child}")).Should().BeNull();
+        (await TopicUrl($"/api/forum/discussions/user/{published}")).Should().BeNull();
+        (await TopicUrl($"/api/forum/discussions/list/{published}?previewTopic=43")).Should().Be($"https://jiten.moe/lists/{published}");
+    }
+
+    [Fact]
+    public async Task StartDiscussion_NeedsASignedInUserAndAPublicList()
+    {
+        var draft = await CreateList(TestUsers.UserA, "Draft");
+        var published = await CreatePublicList(TestUsers.UserA, "Published");
+
+        (await Send(HttpMethod.Post, $"/api/forum/discussions/list/{published}/start")).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+        (await Send(HttpMethod.Post, $"/api/forum/discussions/list/{draft}/start", TestUsers.UserB)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        var started = await Send(HttpMethod.Post, $"/api/forum/discussions/list/{published}/start", TestUsers.UserB);
+        started.StatusCode.Should().Be(HttpStatusCode.OK);
+        (await started.Content.ReadFromJsonAsync<JsonElement>()).GetProperty("topicUrl").GetString().Should().Be($"https://jiten.moe/lists/{published}");
+    }
+
+    [Fact]
     public async Task Draft_IsOnlyVisibleToOwnerAndAdmin()
     {
         var listId = await CreateList(TestUsers.UserA);

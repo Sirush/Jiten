@@ -170,6 +170,10 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
             services.AddSingleton<Jiten.Api.Services.ExternalMediaList.IExternalMediaListClient>(sp =>
                 sp.GetRequiredService<StubExternalMediaListClient>());
 
+            // Replace the forum client so discussions never hit Discourse; it echoes the embed URL it was asked for.
+            services.RemoveAll<Jiten.Api.Services.Forum.IForumDiscussionService>();
+            services.AddSingleton<Jiten.Api.Services.Forum.IForumDiscussionService, StubForumDiscussionService>();
+
             // Replace the Stripe gateway with a stub (canned network, real signature verification).
             services.RemoveAll<Jiten.Api.Services.Stripe.IStripeGateway>();
             services.AddSingleton<StubStripeGateway>();
