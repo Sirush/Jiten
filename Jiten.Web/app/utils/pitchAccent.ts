@@ -2,10 +2,35 @@ export type PitchCategory = 'heiban' | 'atamadaka' | 'nakadaka' | 'odaka';
 
 const SMALL_KANA = /[ぁぃぅぇぉゃゅょゎァィゥェォャュョヮ]/g;
 const KANA = /[ぁ-ゖァ-ヺー]/g;
+/** ヵ and ヶ count as ruby base text: in 一[いっ]ヶ月[かげつ] they are read by the furigana. A lone kana base is a counter like 何[なん]ケ[か]月[げつ]. */
+const RUBY_BASE = /(?:[^[\]ぁ-ゖゝゞァ-ヴヷ-ヺヽヾー〜～]+|[ぁ-ゖァ-ヺ])(?=\[)/gu;
+const DAKUTEN = '゙';
+const LIGATURES: Record<string, string> = { ゟ: 'より', ヿ: 'コト' };
 
-/** The kana of a reading written as ruby markup (食[た]べる) or as plain kana. */
+function voiced(kana: string): string {
+  const composed = (kana + DAKUTEN).normalize('NFC');
+  return composed.length === 1 ? composed : kana;
+}
+
+/** Expands ゝゞヽヾ to the kana they repeat, since each is a mora of its own. */
+function expandIterationMarks(kana: string): string {
+  let out = '';
+  for (const ch of kana) {
+    const previous = out.at(-1);
+    if (previous && (ch === 'ゝ' || ch === 'ヽ')) out += previous;
+    else if (previous && (ch === 'ゞ' || ch === 'ヾ')) out += voiced(previous);
+    else out += ch;
+  }
+  return out;
+}
+
+/** The kana of a reading written as ruby markup (食[た]べる) or as plain kana; 〜 reads as ー and punctuation such as ・ is not a mora. */
 export function readingKana(reading: string): string {
-  return (reading.replace(/[一-鿿０-ｚ々ヵヶ]+(?=\[)/g, '').match(KANA) ?? []).join('');
+  const kana = reading
+    .replace(RUBY_BASE, '')
+    .replace(/[〜～]/g, 'ー')
+    .replace(/[ゟヿ]/g, (ligature) => LIGATURES[ligature]!);
+  return (expandIterationMarks(kana).match(KANA) ?? []).join('');
 }
 
 /** Small kana share the mora of the kana before them; っ and ー are morae of their own. */
