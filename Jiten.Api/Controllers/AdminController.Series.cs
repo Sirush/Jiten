@@ -265,6 +265,9 @@ public partial class AdminController
             return Conflict(new { Message = $"These links would form a cycle: {string.Join(" -> ", cycle)}." });
         }
 
+        await RelationshipOverrides.MarkAsync(dbContext, removedEdges.Select(e => (e.SourceDeckId, e.TargetDeckId))
+                                                                     .Concat(addedEdges.Select(e => (e.SourceDeckId, e.TargetDeckId))));
+
         var existingMembers = await dbContext.SeriesMembers
                                              .Where(m => seriesIds.Contains(m.SeriesId) && memberDeckIds.Contains(m.DeckId))
                                              .ToListAsync();

@@ -662,6 +662,53 @@ public class SeriesTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Importer_SkipsPairsAnAdminEdited()
+    {
+        Deck Vn(int id)
+        {
+            var deck = new Deck { DeckId = id, OriginalTitle = $"VN {id}", MediaType = MediaType.VisualNovel };
+            deck.Links.Add(new Link { LinkType = LinkType.Vndb, Url = $"https://vndb.org/v{id}", Deck = deck });
+            return deck;
+        }
+        await SeedAsync([Vn(1), Vn(2), Vn(3), Vn(4)], [Rel(2, 1, DeckRelationshipType.Sequel), Rel(4, 1, DeckRelationshipType.Sequel)]);
+
+        var response = await AdminSendAsync(HttpMethod.Post, "/api/admin/franchise-builder/save", new
+        {
+            anchorDeckId = 1,
+            addEdges = new[] { new { sourceDeckId = 2, targetDeckId = 1, relationshipType = (int)DeckRelationshipType.Spinoff } },
+            removeEdges = new[]
+            {
+                new { sourceDeckId = 2, targetDeckId = 1, relationshipType = (int)DeckRelationshipType.Sequel },
+                new { sourceDeckId = 4, targetDeckId = 1, relationshipType = (int)DeckRelationshipType.Sequel }
+            },
+            addMembers = Array.Empty<object>(),
+            removeMembers = Array.Empty<object>()
+        });
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        MetadataRelation SequelOf(int target) => new()
+        {
+            ExternalId = $"v{target}", LinkType = LinkType.Vndb, RelationshipType = DeckRelationshipType.Sequel,
+            TargetMediaType = MediaType.VisualNovel
+        };
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+        await MetadataProviderHelper.ProcessRelations(db, 2, [SequelOf(1), SequelOf(3)]);
+        await MetadataProviderHelper.ProcessRelations(db, 1, [new MetadataRelation
+        {
+            ExternalId = "v4", LinkType = LinkType.Vndb, RelationshipType = DeckRelationshipType.Sequel,
+            TargetMediaType = MediaType.VisualNovel, SwapDirection = true
+        }]);
+
+        (await db.DeckRelationships.AsNoTracking().Select(r => new { r.SourceDeckId, r.TargetDeckId, r.RelationshipType }).ToListAsync())
+            .Should().BeEquivalentTo([
+                new { SourceDeckId = 2, TargetDeckId = 1, RelationshipType = DeckRelationshipType.Spinoff },
+                new { SourceDeckId = 2, TargetDeckId = 3, RelationshipType = DeckRelationshipType.Sequel }
+            ]);
+    }
+
+    [Fact]
     public async Task DeckMetadataPatch_RejectsLegacyGroupTypes()
     {
         await SeedAsync([Deck(1, "A"), Deck(2, "B")]);

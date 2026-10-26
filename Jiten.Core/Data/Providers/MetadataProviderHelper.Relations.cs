@@ -113,7 +113,8 @@ public static partial class MetadataProviderHelper
             var sourceDeckId = relation.SwapDirection ? targetDeckId : deckId;
             var actualTargetId = relation.SwapDirection ? deckId : targetDeckId;
 
-            if (DeckRelationship.ValidateEdge(sourceDeckId, actualTargetId, relation.RelationshipType) != null)
+            if (DeckRelationship.ValidateEdge(sourceDeckId, actualTargetId, relation.RelationshipType) != null ||
+                await RelationshipOverrides.IsCuratedAsync(context, sourceDeckId, actualTargetId))
                 continue;
 
             var sameEdge = DeckRelationship.SameEdge(sourceDeckId, actualTargetId, relation.RelationshipType);

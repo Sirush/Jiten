@@ -336,6 +336,21 @@ public class FranchiseSyncTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task DeckMetadataPatch_RemovingALink_MarksThePairCurated()
+    {
+        await SeedAsync([Deck(1, "A"), Deck(2, "B"), Deck(3, "C")], [Rel(2, 1, DeckRelationshipType.Sequel), Rel(3, 1, DeckRelationshipType.Sequel)]);
+
+        var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Patch, "/api/admin/deck/1/metadata").WithAdmin()
+                                                   .WithJsonContent(new { relationships = new[] { new { sourceDeckId = 3, targetDeckId = 1, relationshipType = 1 } } }));
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+        (await db.DeckRelationshipOverrides.AsNoTracking().Select(o => new { o.LowDeckId, o.HighDeckId }).ToListAsync())
+            .Should().BeEquivalentTo([new { LowDeckId = 1, HighDeckId = 2 }]);
+    }
+
+    [Fact]
     public async Task DeckDetail_CarriesTheFranchise()
     {
         await SeedAsync([Deck(1, "Alpha One"), Deck(2, "Alpha Two"), Deck(3, "Alone")], [Rel(1, 2)]);
