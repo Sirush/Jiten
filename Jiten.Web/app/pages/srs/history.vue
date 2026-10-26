@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { FsrsRating, type RecentReviewDto } from '~/types';
   import { stripRuby } from '~/utils/stripRuby';
+  import { formatDateShort } from '~/utils/dateFormat';
 
   definePageMeta({ middleware: ['auth'] });
   useHead({ title: 'Review History' });
@@ -35,7 +36,7 @@
   function formatDateTime(dateStr: string) {
     const d = new Date(dateStr);
     return (
-      d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) +
+      formatDateShort(d) +
       ' ' +
       d.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
     );

@@ -1,4 +1,3 @@
-using ImageMagick;
 using Jiten.Core.Data;
 using Jiten.Core.Data.YouTube;
 using Microsoft.EntityFrameworkCore;
@@ -202,13 +201,7 @@ public class YouTubeDrainService(
 
         try
         {
-            using var image = new MagickImage(bytes);
-            // Thumbnails stay 16:9; the card renders them landscape
-            image.Resize(480, 270);
-            image.Strip();
-            image.Quality = 85;
-            image.Format = MagickFormat.Jpeg;
-            return await BunnyCdnHelper.UploadFile(image.ToByteArray(), $"{deckId}/cover.jpg");
+            return await BunnyCdnHelper.UploadFile(CoverImage.Normalize(bytes), $"{deckId}/cover.jpg");
         }
         catch (Exception ex)
         {

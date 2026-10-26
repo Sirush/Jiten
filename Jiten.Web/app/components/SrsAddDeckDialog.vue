@@ -10,6 +10,7 @@
     StudyDeckType,
     MediaType,
   } from '~/types';
+  import { coverUrl } from '~/utils/coverImage';
   import { buildGroupStudyFilter, groupTypesForForm } from '~/utils/mediaGroupStudyDeck';
   import { countByMediaType, mediaGroupKindWord } from '~/utils/mediaGroup';
   import { studyDeckPresentation } from '~/utils/studyDeckPresentation';
@@ -848,7 +849,7 @@
           @keydown.enter="selectMediaDeck(result)"
         >
           <img
-            :src="result.coverName && result.coverName !== 'nocover.jpg' ? result.coverName : '/img/nocover.jpg'"
+            :src="coverUrl(result.coverName, 'xs')"
             :alt="localiseTitle(result)"
             class="w-10 h-14 object-cover rounded shrink-0"
           />

@@ -32,6 +32,8 @@ public class JitenPlusController(
 
     private static object Pair(TieredLimit limit) => new { free = limit.Free, plus = limit.Plus };
 
+    private static object Pair(FullTierLimit limit) => new { free = limit.Free, plus = limit.Full };
+
     /// <summary>
     /// Public pricing/window info for the marketing page. Anonymous-readable so /jiten-plus renders
     /// server-side for logged-out visitors.
@@ -54,7 +56,9 @@ public class JitenPlusController(
                 studyDeckWords = Pair(limits.StudyDeckWords),
                 importWords = Pair(limits.ImportWords),
                 activeMediaRequests = Pair(limits.ActiveMediaRequests),
-                customSentencesPerWord = Pair(limits.CustomSentencesPerWord)
+                customSentencesPerWord = Pair(limits.CustomSentencesPerWord),
+                communityLists = Pair(limits.CommunityLists),
+                communityListItems = Pair(limits.CommunityListItems)
             }
         });
     }
@@ -110,13 +114,17 @@ public class JitenPlusController(
                 importWords = limits.ImportWords,
                 activeMediaRequests = limits.ActiveMediaRequests,
                 customSentencesPerWord = limits.CustomSentencesPerWord,
+                communityLists = limits.CommunityLists,
+                communityListItems = limits.CommunityListItems,
                 plus = new
                 {
                     studyDecks = limits.Allowances.StudyDecks.Plus,
                     studyDeckWords = limits.Allowances.StudyDeckWords.Plus,
                     importWords = limits.Allowances.ImportWords.Plus,
                     activeMediaRequests = limits.Allowances.ActiveMediaRequests.Plus,
-                    customSentencesPerWord = limits.Allowances.CustomSentencesPerWord.Plus
+                    customSentencesPerWord = limits.Allowances.CustomSentencesPerWord.Plus,
+                    communityLists = limits.Allowances.CommunityLists.Full,
+                    communityListItems = limits.Allowances.CommunityListItems.Full
                 }
             }
         });

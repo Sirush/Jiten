@@ -3774,44 +3774,9 @@ public partial class UserController(
     /// </summary>
     private async Task<List<(Deck Display, DeckStatus Status, bool IsFavourite)>> BuildMediaListAsync(string userId)
     {
-        var prefs = await userContext.UserDeckPreferences
-                                     .AsNoTracking()
-                                     .Where(p => p.UserId == userId && p.Status != DeckStatus.None)
-                                     .Select(p => new { p.DeckId, p.Status, p.IsFavourite })
-                                     .ToListAsync();
-
-        if (prefs.Count == 0)
+        var agg = await MediaListStatusHelper.GetDisplayStatusesAsync(userContext, jitenContext, userId);
+        if (agg.Count == 0)
             return new List<(Deck, DeckStatus, bool)>();
-
-        var prefDeckIds = prefs.Select(p => p.DeckId).ToList();
-
-        var parentByDeck = await jitenContext.Decks
-                                             .AsNoTracking()
-                                             .Where(d => prefDeckIds.Contains(d.DeckId))
-                                             .Select(d => new { d.DeckId, d.ParentDeckId })
-                                             .ToDictionaryAsync(d => d.DeckId, d => d.ParentDeckId);
-
-        var agg = new Dictionary<int, (DeckStatus Status, bool Own, bool Fav)>();
-        foreach (var p in prefs)
-        {
-            if (!parentByDeck.TryGetValue(p.DeckId, out var parentId)) continue;
-            var displayId = parentId ?? p.DeckId;
-            var isOwn = displayId == p.DeckId;
-
-            if (!agg.TryGetValue(displayId, out var cur))
-            {
-                agg[displayId] = (p.Status, isOwn, p.IsFavourite);
-                continue;
-            }
-
-            var statusValue = cur.Status;
-            if (isOwn && !cur.Own)
-                statusValue = p.Status;
-            else if (isOwn == cur.Own && p.Status.Rank() > cur.Status.Rank())
-                statusValue = p.Status;
-
-            agg[displayId] = (statusValue, cur.Own || isOwn, cur.Fav || p.IsFavourite);
-        }
 
         var displayIds = agg.Keys.ToList();
         var displayDecks = await jitenContext.Decks
@@ -3827,7 +3792,7 @@ public partial class UserController(
                                              .ToListAsync();
 
         return displayDecks
-               .Select(d => (Display: d, agg[d.DeckId].Status, agg[d.DeckId].Fav))
+               .Select(d => (Display: d, agg[d.DeckId].Status, agg[d.DeckId].IsFavourite))
                .ToList();
     }
 

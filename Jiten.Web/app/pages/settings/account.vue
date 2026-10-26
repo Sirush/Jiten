@@ -3,6 +3,7 @@
   import { useConfirm } from 'primevue/useconfirm';
   import { useAuthStore } from '~/stores/authStore';
   import type { AccountInfo, DisplayNameUpdateResponse, TokenResponse } from '~/types/types';
+  import { formatDateLong } from '~/utils/dateFormat';
 
   definePageMeta({
     middleware: ['auth'],
@@ -42,7 +43,7 @@
     return methods;
   });
 
-  const formatDate = (dateString: string) => new Date(dateString).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  const formatDate = (dateString: string) => formatDateLong(dateString);
 
   const idCopied = ref(false);
   const copyUserId = async () => {

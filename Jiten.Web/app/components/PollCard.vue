@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import type { Poll } from '~/types';
   import { useToast } from 'primevue/usetoast';
+  import { formatDateShort } from '~/utils/dateFormat';
 
   const props = defineProps<{
     poll: Poll;
@@ -38,7 +39,7 @@
 
   const sortedOptions = computed(() => [...props.poll.options].sort((a, b) => a.sortOrder - b.sortOrder));
 
-  const formatDate = (date: string) => new Date(date).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+  const formatDate = (date: string) => formatDateShort(date);
 
   const closedLabel = computed(() => (props.poll.closesAt ? `Closed ${formatDate(props.poll.closesAt)}` : 'Closed'));
 

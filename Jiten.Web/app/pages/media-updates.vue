@@ -5,6 +5,7 @@
   import Skeleton from 'primevue/skeleton';
   import Button from 'primevue/button';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { formatDateLong } from '~/utils/dateFormat';
   import { useToast } from 'primevue/usetoast';
 
   const route = useRoute();
@@ -48,16 +49,6 @@
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   });
 
-  // Format for display
-  const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-  };
-
   // Function to group decks by media type
   const groupDecksByMediaType = (decks: Deck[]) => {
     const decksByType: Record<MediaType, Deck[]> = {} as Record<MediaType, Deck[]>;
@@ -82,7 +73,7 @@
   const toast = useToast();
 
   const generateDiscordMarkdown = (date: string, decks: Deck[]) => {
-    let markdown = `**${formatDate(date)}**\n\n`;
+    let markdown = `**${formatDateLong(date)}**\n\n`;
 
     // Group decks by media type
     const decksByType: Record<MediaType, Deck[]> = {} as Record<MediaType, Deck[]>;
@@ -174,7 +165,7 @@
             <div class="flex flex-col gap-2">
               <!-- Date header with copy button -->
               <div class="flex items-center gap-2">
-                <h2 class="text-xl font-bold">{{ formatDate(group.date) }}</h2>
+                <h2 class="text-xl font-bold">{{ formatDateLong(group.date) }}</h2>
                 <Button
                   icon="pi pi-copy"
                   size="small"

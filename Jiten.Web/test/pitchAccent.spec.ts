@@ -12,6 +12,31 @@ describe('readingKana', () => {
     expect(readingKana('りんご')).toBe('りんご');
     expect(readingKana('コーヒー')).toBe('コーヒー');
   });
+
+  it('drops ruby bases that are not kanji', () => {
+    expect(readingKana('徐[じょ]々[じょ]に')).toBe('じょじょに');
+    expect(readingKana('〆[しめ]')).toBe('しめ');
+    expect(readingKana('○[まる]')).toBe('まる');
+    expect(readingKana('β[ベータ]テスト')).toBe('ベータテスト');
+    expect(readingKana('𠮟[しか]る')).toBe('しかる');
+    expect(readingKana('何[なん]ケ[か]月[げつ]')).toBe('なんかげつ');
+  });
+
+  it('keeps okurigana between ruby groups', () => {
+    expect(readingKana('取[と]り扱[あつか]い')).toBe('とりあつかい');
+    expect(readingKana('ゴミ箱[ばこ]')).toBe('ゴミばこ');
+  });
+
+  it('reads iteration marks, wave dashes and ligatures as the morae they stand for', () => {
+    expect(readingKana('こゝろ')).toBe('こころ');
+    expect(readingKana('いすゞ')).toBe('いすず');
+    expect(readingKana('え〜と')).toBe('えーと');
+    expect(readingKana('ゟ')).toBe('より');
+  });
+
+  it('drops punctuation', () => {
+    expect(readingKana('アイス・クリーム')).toBe('アイスクリーム');
+  });
 });
 
 describe('moraCount', () => {

@@ -120,7 +120,7 @@ public class BunnyCdnHelper
     }
 
     /// <summary>
-    /// Purges the pull-zone cache for a single URL so an overwritten file is refreshed immediately.
+    /// Purges the pull-zone cache for a URL and every query-string variant of it (the optimizer's resized copies), so an overwritten file is refreshed immediately.
     /// Best-effort: silently no-ops when no account API key is configured and never throws.
     /// </summary>
     public static async Task PurgeUrl(string cdnUrl)
@@ -131,7 +131,7 @@ public class BunnyCdnHelper
         try
         {
             var request = new HttpRequestMessage(HttpMethod.Post,
-                                                 $"https://api.bunny.net/purge?url={Uri.EscapeDataString(cdnUrl)}&async=false");
+                                                 $"https://api.bunny.net/purge?url={Uri.EscapeDataString(cdnUrl + "*")}&async=false");
             request.Headers.Add("AccessKey", _apiKey);
             var response = await _httpClient.SendAsync(request);
             if (!response.IsSuccessStatusCode)

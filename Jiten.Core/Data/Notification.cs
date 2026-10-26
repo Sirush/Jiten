@@ -20,5 +20,6 @@ public enum NotificationType
     RequestFileUploaded = 3,
     RequestAdminComment = 4,
     General = 10,
-    SiteUpdate = 11
+    SiteUpdate = 11,
+    CommunityListMilestone = 12
 }

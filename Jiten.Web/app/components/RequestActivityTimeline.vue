@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import type { RequestActivityLogDto } from '~/types/types';
   import { getRequestActionText, getRequestActionIcon, getRequestActionSeverity } from '~/utils/requestActionMapper';
+  import { formatDateShort } from '~/utils/dateFormat';
 
   const props = defineProps<{
     requestId: number;
@@ -31,7 +32,7 @@
     if (diffHours < 24) return `${diffHours}h ago`;
     const diffDays = Math.floor(diffHours / 24);
     if (diffDays < 30) return `${diffDays}d ago`;
-    return date.toLocaleDateString();
+    return formatDateShort(date);
   }
 
   defineExpose({ load });

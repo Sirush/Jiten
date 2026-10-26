@@ -11,9 +11,13 @@ namespace Jiten.Core;
 
 public class EbookExtractor
 {
-    private List<string> _bannedChapterNames =
+    /// <summary>Matched as substrings of the file name; short words like "ad" or "nav" are left out because base-36 file names such as c7AD.xhtml contain them.</summary>
+    private static readonly string[] _bannedChapterNames =
     [
-        "cover", "toc", "fmatter", "credit", "illust", "colophon", "cover", "toc", "fmatter"
+        "cover", "toc", "fmatter", "frontmatter", "credit", "illust", "colophon", "titlepage", "tobira", "hyoushi", "sankou",
+        "caution", "proviso", "disclaimer", "bookwalker", "profile", "author", "auther", "creator",
+        "character", "okuzuke", "okuduke", "shoshutsu", "shoshutu", "mokuji", "navigation",
+        "copyright", "feedback", "funpage"
     ];
 
     private static readonly string[] _boilerplateKeywords =
@@ -21,10 +25,21 @@ public class EbookExtractor
         "ISBN", "©", "発行", "印刷", "出版", "CONTENTS", "目次", "初版", "奥付",
         "無断で複製", "第三者に譲渡", "転載", "配信", "角川書店", "KADOKAWA",
         "ＫＡＤＯＫＡＷＡ", "電子書籍", "プリント版", "デザイン事務所", "特別収録",
-        "初出", "BOOK☆WALKER", "本作品", "ＣＯＮＴＥＮＴＳ"
+        "初出", "BOOK☆WALKER", "本作品", "ＣＯＮＴＥＮＴＳ", "著者", "プロフィール",
+        "刊行", "ファンレター", "ご意見", "ご感想", "あて先", "編集部", "Illustration", "イラスト"
     ];
 
+    private static readonly string[] _tableOfContentsHeadings = ["目次", "目　次", "もくじ", "CONTENTS", "ＣＯＮＴＥＮＴＳ"];
+
     private const int BoilerplateMaxLength = 500;
+
+    /// <summary>Longest page that can be a heading-only ToC; whole books shipped as one file also open with 目次.</summary>
+    private const int HeadedTableOfContentsMaxLength = 3000;
+
+    /// <summary>XHTML allows &lt;a/&gt;, but the HTML parser leaves it open and the anchor would swallow the rest of the page.</summary>
+    private static readonly Regex SelfClosingAnchorRegex = new(@"<a\b([^>]*?)/>", RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+    private record ChapterPage(string Text, bool IsTableOfContents);
 
     public async Task<string> ExtractTextFromEbook(string? filePath)
     {
@@ -112,25 +127,43 @@ public class EbookExtractor
         return await ExtractFromReadingOrder(chapters);
     }
 
-    private async Task<string> ExtractFromReadingOrder(IEnumerable<(string Key, string Content)> chapters)
+    internal async Task<string> ExtractFromReadingOrder(IEnumerable<(string Key, string Content)> chapters)
     {
         StringBuilder extractedText = new();
-        Regex regex = new(@"\b.*?\d{1,6}.*?\.x?html\b");
 
-        var filteredChapters = chapters
-            .Where(chapter => regex.IsMatch(chapter.Key) &&
-                              !_bannedChapterNames.Any(bannedName => chapter.Key.Contains(bannedName, StringComparison.OrdinalIgnoreCase)));
-
-        foreach (var chapter in filteredChapters)
+        foreach (var chapter in chapters.Where(chapter => !IsBannedChapterName(chapter.Key)))
         {
-            var chapterText = await ExtractTextFromChapter(chapter.Content);
-            if (IsBoilerplate(chapterText))
+            var page = await ExtractTextFromChapter(chapter.Content);
+            if (page.IsTableOfContents || IsBoilerplate(page.Text))
                 continue;
 
-            extractedText.Append(chapterText);
+            extractedText.Append(page.Text);
         }
 
         return extractedText.ToString();
+    }
+
+    private static bool IsBannedChapterName(string key)
+    {
+        var fileName = Path.GetFileName(key);
+        return _bannedChapterNames.Any(bannedName => fileName.Contains(bannedName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>A page whose text is mostly links, or a short page under a 目次/CONTENTS heading, is a table of contents even when its entries end in 。.</summary>
+    private static bool IsTableOfContents(int textLength, int linkTextLength, int linkCount, string text)
+    {
+        if (textLength == 0)
+            return false;
+
+        if (linkTextLength * 2 >= textLength)
+            return true;
+
+        if (linkCount >= 5 && linkTextLength * 5 >= textLength && text.Count(c => c == '。') <= 2)
+            return true;
+
+        var start = text.TrimStart().TrimStart('{');
+        return textLength < HeadedTableOfContentsMaxLength &&
+               _tableOfContentsHeadings.Any(heading => start.StartsWith(heading, StringComparison.OrdinalIgnoreCase));
     }
 
     private static bool IsBoilerplate(string text)
@@ -141,14 +174,14 @@ public class EbookExtractor
         return _boilerplateKeywords.Any(kw => text.Contains(kw, StringComparison.OrdinalIgnoreCase));
     }
 
-    private async Task<string> ExtractTextFromChapter(string htmlContent)
+    private async Task<ChapterPage> ExtractTextFromChapter(string htmlContent)
     {
         var parser = new HtmlParser();
         var document = await parser.ParseDocumentAsync(PreprocessHtml(htmlContent));
 
         var body = document.Body;
         if (body == null)
-            return "";
+            return new ChapterPage("", false);
 
         RubyHtmlHelper.InlineRubyAnnotations(body, document);
 
@@ -160,12 +193,19 @@ public class EbookExtractor
 
         StringBuilder extractedText = new();
         StringBuilder lineBuilder = new();
+        int textLength = 0;
+        int linkTextLength = 0;
 
         foreach (var node in textNodes)
         {
             string text = node.TextContent;
             if (!string.IsNullOrWhiteSpace(text))
             {
+                int visibleLength = text.Count(c => !char.IsWhiteSpace(c));
+                textLength += visibleLength;
+                if (node.ParentElement!.Closest("a[href]") != null)
+                    linkTextLength += visibleLength;
+
                 lineBuilder.Append(text.Trim());
                 if (lineBuilder.Length > 0 &&
                     (text.EndsWith('。') || text.EndsWith('！') || text.EndsWith('？')))
@@ -181,7 +221,9 @@ public class EbookExtractor
             extractedText.AppendLine(lineBuilder.ToString());
         }
 
-        return extractedText.ToString();
+        var chapterText = extractedText.ToString();
+        int linkCount = body.QuerySelectorAll("a[href]").Length;
+        return new ChapterPage(chapterText, IsTableOfContents(textLength, linkTextLength, linkCount, chapterText));
     }
 
 
@@ -191,6 +233,7 @@ public class EbookExtractor
         htmlContent = Regex.Replace(htmlContent, @"<script[^>]*/>", "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
         htmlContent = Regex.Replace(htmlContent, @"<style[^>]*>[\s\S]*?<\/style>", "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
         htmlContent = Regex.Replace(htmlContent, @"<style[^>]*/>", "", RegexOptions.Singleline | RegexOptions.IgnoreCase);
+        htmlContent = SelfClosingAnchorRegex.Replace(htmlContent, "<a$1></a>");
 
         return htmlContent;
     }

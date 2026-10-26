@@ -13,7 +13,7 @@ function undo(message: ToastMessageOptions) {
 </script>
 
 <template>
-  <Toast position="bottom-center" :group="UNDO_TOAST_GROUP" :pt="{ root: { class: '!z-[20000]' } }">
+  <Toast position="bottom-center" :group="UNDO_TOAST_GROUP" :pt="{ root: { class: '!z-[20000]', style: 'bottom: var(--undo-toast-bottom, 20px)' } }">
     <template #message="{ message }">
       <div class="flex w-full items-center gap-3">
         <span class="text-sm font-medium">{{ message.summary }}</span>

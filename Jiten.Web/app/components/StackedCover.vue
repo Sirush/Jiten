@@ -1,4 +1,6 @@
 <script setup lang="ts">
+  import { coverUrl } from '~/utils/coverImage';
+
   const props = defineProps<{ covers: string[]; alt: string }>();
 
   const LAYER_COUNT = 3;
@@ -29,7 +31,7 @@
     >
       <img
         v-if="layer.cover"
-        :src="layer.cover"
+        :src="coverUrl(layer.cover, 'sm')"
         :alt="layer.depth === 0 ? alt : ''"
         class="w-full h-full object-cover"
         :class="{ 'brightness-85': layer.depth > 0 }"

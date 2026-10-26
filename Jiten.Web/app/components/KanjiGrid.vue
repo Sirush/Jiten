@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import type { KanjiGridResponse, KanjiGridItem } from '~/types';
   import { type DisplayType, displayTypeOptions, groupKanji } from '~/data/kanjiGroupings';
+  import { formatDateShort } from '~/utils/dateFormat';
 
   const props = defineProps<{
     username: string;
@@ -115,7 +116,7 @@
 
   const formatDate = (dateString: string | null): string => {
     if (!dateString) return 'Never';
-    return new Date(dateString).toLocaleDateString();
+    return formatDateShort(dateString);
   };
 
   const seenPercentage = computed(() => {

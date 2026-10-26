@@ -490,9 +490,18 @@ builder.Services.Configure<Jiten.Core.Services.JitenPlusLimitsOptions>(
     builder.Configuration.GetSection(Jiten.Core.Services.JitenPlusLimitsOptions.SectionName));
 builder.Services.AddScoped<IUserLimitsService, UserLimitsService>();
 builder.Services.AddSingleton<IBillingAlertService, BillingAlertService>();
+builder.Services.AddSingleton<IDiscordReportNotifier, DiscordReportNotifier>();
 builder.Services.Configure<Jiten.Api.Services.Stripe.StripeOptions>(builder.Configuration.GetSection("Stripe"));
 builder.Services.Configure<Jiten.Api.Services.DiscourseOptions>(
     builder.Configuration.GetSection(Jiten.Api.Services.DiscourseOptions.SectionName));
+builder.Services.AddHttpClient(Jiten.Api.Services.Forum.ForumDiscussionService.HttpClientName, (sp, client) =>
+{
+    var forumUrl = sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<Jiten.Api.Services.DiscourseOptions>>().Value.Url;
+    if (Uri.TryCreate(forumUrl.TrimEnd('/') + "/", UriKind.Absolute, out var baseAddress)) client.BaseAddress = baseAddress;
+    client.Timeout = TimeSpan.FromSeconds(5);
+    client.DefaultRequestHeaders.Accept.ParseAdd("application/json");
+}).ConfigurePrimaryHttpMessageHandler(Jiten.Api.Services.Forum.ForumDiscussionService.CreatePrimaryHandler);
+builder.Services.AddSingleton<Jiten.Api.Services.Forum.IForumDiscussionService, Jiten.Api.Services.Forum.ForumDiscussionService>();
 builder.Services.Configure<Jiten.Api.Services.Legal.LegalDocumentsOptions>(
     builder.Configuration.GetSection(Jiten.Api.Services.Legal.LegalDocumentsOptions.SectionName));
 builder.Services.AddSingleton<Jiten.Api.Services.Stripe.IStripeGateway, Jiten.Api.Services.Stripe.StripeGateway>();
@@ -547,6 +556,9 @@ builder.Services.AddSingleton<ISrsDebounceService, SrsDebounceService>();
 builder.Services.AddSingleton<IStudySessionService, StudySessionService>();
 builder.Services.AddSingleton<IPendingCoverageQueue, PendingCoverageQueue>();
 builder.Services.AddSingleton<IDeckActivityBuffer, DeckActivityBuffer>();
+builder.Services.AddSingleton<ICommunityListActivityBuffer, CommunityListActivityBuffer>();
+builder.Services.AddSingleton<IActivityBuffer>(sp => sp.GetRequiredService<IDeckActivityBuffer>());
+builder.Services.AddSingleton<IActivityBuffer>(sp => sp.GetRequiredService<ICommunityListActivityBuffer>());
 builder.Services.AddSingleton<IPendingEmbeddingQueue, PendingEmbeddingQueue>();
 builder.Services.AddSingleton<IUserActivityTracker, UserActivityTracker>();
 builder.Services.AddSingleton<IParseThrottleService, ParseThrottleService>();
@@ -566,7 +578,7 @@ builder.Services.AddHostedService<WordFormSiblingCacheWarmupService>();
 builder.Services.AddHostedService<DerivationLinkCacheWarmupService>();
 builder.Services.AddHostedService<DeckVectorCacheWarmupService>();
 if (!builder.Environment.IsEnvironment("Testing"))
-    builder.Services.AddHostedService<DeckActivityFlushService>();
+    builder.Services.AddHostedService<ActivityFlushService>();
 
 builder.Services.AddRateLimiter(options =>
 {
@@ -680,6 +692,14 @@ builder.Services.AddRateLimiter(options =>
                 AutoReplenishment = true
             });
     });
+
+    options.AddPolicy("forum-start", context =>
+        RateLimitPartition.GetFixedWindowLimiter(
+            $"forum-start:{context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value ?? GetClientIp(context)}",
+            _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 10, Window = TimeSpan.FromHours(1), QueueLimit = 0, AutoReplenishment = true
+            }));
 
     // Single media coverage refresh
     options.AddPolicy("coverage-refresh", context =>

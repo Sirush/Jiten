@@ -94,6 +94,14 @@
   },
   "Discourse": {
     "Url": "https://community.jiten.moe",
-    "SsoSecret": ""
+    "SsoSecret": "",
+    "ApiKey": "",
+    "TopicWriteApiKey": "",
+    "WebhookSecret": "",
+    "ApiUsername": "system",
+    "CategoryIds": {
+      "deck": 0,
+      "list": 0
+    }
   }
 }

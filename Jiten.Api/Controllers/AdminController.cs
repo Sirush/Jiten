@@ -1,5 +1,6 @@
 ﻿using System.Net;
 using Hangfire;
+using ImageMagick;
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Helpers;
@@ -390,7 +391,15 @@ public partial class AdminController(
         {
             using var memoryStream = new MemoryStream();
             await model.CoverImage.CopyToAsync(memoryStream);
-            var cover = memoryStream.ToArray();
+            byte[] cover;
+            try
+            {
+                cover = CoverImage.Normalize(memoryStream.ToArray());
+            }
+            catch (MagickException)
+            {
+                return BadRequest(new { Message = "The cover image couldn't be read." });
+            }
 
             var coverUrl = await BunnyCdnHelper.UploadFile(cover, $"{deck.DeckId}/cover.jpg");
             deck.CoverName = coverUrl;

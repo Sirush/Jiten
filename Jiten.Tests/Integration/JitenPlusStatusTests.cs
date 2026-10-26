@@ -112,6 +112,9 @@ public class JitenPlusStatusTests(JitenWebApplicationFactory factory)
         var studyDecks = body.GetProperty("limits").GetProperty("studyDecks");
         studyDecks.GetProperty("free").GetInt32().Should().Be(defaults.StudyDecks.Free);
         studyDecks.GetProperty("plus").GetInt32().Should().Be(defaults.StudyDecks.Plus);
+        var communityLists = body.GetProperty("limits").GetProperty("communityLists");
+        communityLists.GetProperty("free").GetInt32().Should().Be(defaults.CommunityLists.Free);
+        communityLists.GetProperty("plus").GetInt32().Should().Be(defaults.CommunityLists.Full);
     }
 
     [Fact]
@@ -155,8 +158,11 @@ public class JitenPlusStatusTests(JitenWebApplicationFactory factory)
         limits.GetProperty("importWords").GetInt32().Should().Be(defaults.ImportWords.Free);
         limits.GetProperty("activeMediaRequests").GetInt32().Should().Be(defaults.ActiveMediaRequests.Free);
         limits.GetProperty("customSentencesPerWord").GetInt32().Should().Be(defaults.CustomSentencesPerWord.Free);
+        limits.GetProperty("communityLists").GetInt32().Should().Be(defaults.CommunityLists.Free);
+        limits.GetProperty("communityListItems").GetInt32().Should().Be(defaults.CommunityListItems.Free);
 
         limits.GetProperty("plus").GetProperty("studyDecks").GetInt32().Should().Be(defaults.StudyDecks.Plus);
+        limits.GetProperty("plus").GetProperty("communityLists").GetInt32().Should().Be(defaults.CommunityLists.Full);
     }
 
     /// <summary>The trial tier gets the same raised limits as a paid plan.</summary>
@@ -172,6 +178,7 @@ public class JitenPlusStatusTests(JitenWebApplicationFactory factory)
         limits.GetProperty("studyDecks").GetInt32().Should().Be(defaults.StudyDecks.Plus);
         limits.GetProperty("studyDeckWords").GetInt32().Should().Be(defaults.StudyDeckWords.Plus);
         limits.GetProperty("customSentencesPerWord").GetInt32().Should().Be(defaults.CustomSentencesPerWord.Plus);
+        limits.GetProperty("communityLists").GetInt32().Should().Be(defaults.CommunityLists.Free);
 
         var quotaResponse = await _client.SendAsync(
             new HttpRequestMessage(HttpMethod.Get, "/api/requests/my-quota").WithUser(TestUsers.UserA));

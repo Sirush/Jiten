@@ -5,6 +5,7 @@
   import Skeleton from 'primevue/skeleton';
   import Button from 'primevue/button';
   import { useToast } from 'primevue/usetoast';
+  import { formatDateLong } from '~/utils/dateFormat';
 
   const route = useRoute();
   const toast = useToast();
@@ -24,7 +25,7 @@
 
   const hasMultiplePages = computed(() => totalItems.value > (response.value?.pageSize ?? 10));
 
-  const formatDate = (date: string) => new Date(date).toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+  const formatDate = (date: string) => formatDateLong(date);
 
   const wasEdited = (update: SiteUpdate) => !!update.updatedAt && new Date(update.updatedAt).getTime() > new Date(update.publishedAt).getTime();
 

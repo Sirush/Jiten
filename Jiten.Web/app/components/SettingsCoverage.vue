@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import type { UserMetadata } from '~/types';
   import { useToast } from 'primevue/usetoast';
+  import { formatDateTime } from '~/utils/dateFormat';
 
   interface CoverageRefreshResponse {
     status: 'queued' | 'already_in_progress';
@@ -21,7 +22,7 @@
   });
 
   const status = computed(() =>
-    lastRefresh.value ? `Refreshed ${lastRefresh.value.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : 'Never refreshed'
+    lastRefresh.value ? `Refreshed ${formatDateTime(lastRefresh.value)}` : 'Never refreshed'
   );
 
   const isRefreshing = ref(false);

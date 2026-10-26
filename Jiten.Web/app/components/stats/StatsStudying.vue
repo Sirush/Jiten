@@ -21,7 +21,7 @@
           style="grid-template-columns: 1.25rem 2.5rem minmax(0, 1fr) auto"
         >
           <span class="text-right text-sm tabular-nums text-gray-500 dark:text-gray-400">{{ index + 1 }}</span>
-          <img :src="coverUrl(deck.coverName)" alt="" width="40" height="60" loading="lazy" class="w-10 h-15 object-cover rounded-sm bg-surface-200 dark:bg-surface-800" />
+          <img :src="coverUrl(deck.coverName, 'xs')" alt="" width="40" height="60" loading="lazy" class="w-10 h-15 object-cover rounded-sm bg-surface-200 dark:bg-surface-800" />
           <span class="min-w-0">
             <span class="block truncate font-medium text-primary-700 dark:text-primary-300" v-bind="japaneseTextAttrs(localiseTitle(deck))">{{ localiseTitle(deck) }}</span>
             <span class="block text-xs text-gray-500 dark:text-gray-400">{{ getMediaTypeText(deck.mediaType) }}</span>

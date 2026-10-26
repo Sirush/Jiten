@@ -24,7 +24,7 @@
     isExporting.value = true;
     try {
       const [coverBitmap, logoBitmap] = await Promise.all([
-        loadExportBitmap(coverUrl(props.deck.coverName)),
+        loadExportBitmap(coverUrl(props.deck.coverName, 'lg')),
         loadExportBitmap('/favicon-96x96.png'),
         document.fonts.ready,
       ]);

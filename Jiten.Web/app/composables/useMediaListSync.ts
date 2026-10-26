@@ -53,7 +53,7 @@ export interface UndoDetail {
 }
 
 export const UNDO_TOAST_GROUP = 'media-list-undo';
-const UNDO_VISIBLE_MS = 8000;
+export const UNDO_VISIBLE_MS = 8000;
 
 type Listener = (change: MediaListChange) => void;
 const listeners = new Set<Listener>();

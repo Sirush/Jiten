@@ -3,6 +3,7 @@ import { drawCoverImage, fitCanvasText, type ExportPalette } from '~/utils/image
 import { formatBucketDated } from '~/utils/journeyFormat';
 import { formatCharacters } from '~/utils/mediaListEntry';
 import { getCompletedDisplay } from '~/utils/mediaTypeMapper';
+import { MONTHS_SHORT, formatDateLong } from '~/utils/dateFormat';
 
 const SCALE = 2;
 const W = 640;
@@ -191,7 +192,7 @@ export function drawProfileShareCard(options: ProfileShareCardOptions): HTMLCanv
 
   ctx.font = `500 13px ${FONT}`;
   ctx.fillStyle = pal.sub;
-  ctx.fillText(new Date().toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' }), PAD, y + 74);
+  ctx.fillText(formatDateLong(new Date()), PAD, y + 74);
   y += HEADER_H;
 
   if (vocab) {
@@ -401,7 +402,6 @@ export function drawProfileShareCard(options: ProfileShareCardOptions): HTMLCanv
     const gridW = weeks.length * CELL_STEP - CELL_GAP;
     const gridX = PAD + Math.max(0, (INNER - gridW) / 2);
     const thresholds = heatmapThresholds(heat);
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
     ctx.font = `500 9px ${FONT}`;
     ctx.fillStyle = pal.foot;
@@ -413,7 +413,7 @@ export function drawProfileShareCard(options: ProfileShareCardOptions): HTMLCanv
       dayOfYear.setDate(dayOfYear.getDate() + w * 7 + firstInYear - dayOfYearOffset(heat.year));
       const month = dayOfYear.getMonth();
       if (month !== lastMonth) {
-        ctx.fillText(monthNames[month]!, gridX + w * CELL_STEP, y + 9);
+        ctx.fillText(MONTHS_SHORT[month]!, gridX + w * CELL_STEP, y + 9);
         lastMonth = month;
       }
     });

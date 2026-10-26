@@ -4,6 +4,7 @@
 
 <script setup lang="ts">
   import { type DeckCard, MediaType } from '~/types';
+  import { coverUrl } from '~/utils/coverImage';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import Card from 'primevue/card';
   import { useAuthStore } from '~/stores/authStore';
@@ -74,7 +75,7 @@
       <div class="relative h-full" @click.stop="toggleOverlay">
         <!-- Cover image -->
         <img
-          :src="deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : deck.coverName"
+          :src="coverUrl(deck.coverName, 'md')"
           :alt="localiseTitle(deck)"
           class="w-full h-full object-cover"
           :loading="lazyCover ? 'lazy' : 'eager'"
@@ -123,6 +124,10 @@
             <div v-if="deck.readableSentences != null" class="flex justify-between">
               <span>Sentences:</span>
               <span class="tabular-nums">{{ Math.floor(deck.readableSentences) }}%</span>
+            </div>
+            <div v-if="deck.discussionReplyCount > 0" class="flex justify-between">
+              <span>Replies:</span>
+              <span class="tabular-nums">{{ deck.discussionReplyCount.toLocaleString() }}</span>
             </div>
             <div v-if="deck.difficulty != -1" class="flex justify-between">
               <span>Difficulty:</span>

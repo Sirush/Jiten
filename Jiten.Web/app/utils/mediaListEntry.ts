@@ -1,6 +1,7 @@
 import { DeckStatus, MediaListEntryState, MediaType } from '~/types/enums';
 import type { Deck, MediaListEntry, MediaListEntrySummary } from '~/types/types';
 import { getChildrenCountText } from '~/utils/mediaTypeMapper';
+import { formatDateShort } from '~/utils/dateFormat';
 
 /** Highest character count the server accepts on an entry. */
 export const MAX_CHARACTERS_READ = 100_000_000;
@@ -149,7 +150,7 @@ export function entryProgressPercent(entry: MediaListEntrySummary | null | undef
 }
 
 export function formatReadDate(iso: string): string {
-  return isoToDate(iso).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+  return formatDateShort(isoToDate(iso));
 }
 
 /** The release date as a pick, when it is known and not in the future. */

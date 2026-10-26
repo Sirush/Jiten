@@ -346,7 +346,7 @@
             @click.capture="onCardClick($event, node.deckId)"
           >
             <img
-              :src="coverUrl(node.coverName)"
+              :src="coverUrl(node.coverName, compact ? 'sm' : 'lg')"
               :alt="localiseTitle(node)"
               :class="compact ? 'h-16 w-12 shrink-0 rounded-l-md object-cover' : 'h-28 w-full rounded-t-md object-cover sm:h-32 md:h-40'"
               loading="lazy"

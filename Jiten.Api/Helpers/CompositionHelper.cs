@@ -1,5 +1,6 @@
 using Jiten.Api.Dtos;
 using Jiten.Core;
+using Jiten.Core.Data.JMDict;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Api.Helpers;
@@ -74,42 +75,38 @@ public static class CompositionHelper
         }).ToList();
     }
 
+    /// <summary>One row per parent word, not per form: a word whose spellings all contain the component is listed once, ranked by its best form.</summary>
     public static async Task<(List<WordSummaryDto> Items, int Total)> LoadUsedIn(
         IDbContextFactory<JitenDbContext> contextFactory, int componentWordId, short componentReadingIndex,
         int skip, int take)
     {
         await using var ctx = await contextFactory.CreateDbContextAsync();
 
-        var distinctParents = ctx.WordCompositions
+        var matches = ctx.WordCompositions
             .AsNoTracking()
             .Where(c => c.ComponentWordId == componentWordId && c.ComponentReadingIndex == componentReadingIndex
-                        && !c.IsGrammatical)
-            .Select(c => new { c.WordId, c.ReadingIndex })
-            .Distinct();
+                        && !c.IsGrammatical);
 
-        var total = await distinctParents.CountAsync();
+        var total = await matches.Select(c => c.WordId).Distinct().CountAsync();
         if (total == 0) return (new List<WordSummaryDto>(), 0);
 
-        var pagedParents = await distinctParents
-            .Select(p => new
-            {
-                p.WordId,
-                p.ReadingIndex,
-                Rank = ctx.WordFormFrequencies
-                    .Where(f => f.WordId == p.WordId && f.ReadingIndex == p.ReadingIndex)
-                    .Select(f => (int?)f.FrequencyRank)
-                    .FirstOrDefault()
-            })
+        var pagedParents = await (
+                from c in matches
+                join f in ctx.WordFormFrequencies.Where(f => f.FrequencyRank > 0)
+                    on new { c.WordId, c.ReadingIndex } equals new { f.WordId, f.ReadingIndex } into fs
+                from f in fs.DefaultIfEmpty()
+                group (int?)f.FrequencyRank by c.WordId
+                into g
+                select new { WordId = g.Key, Rank = g.Min() })
             .OrderBy(x => x.Rank == null)
             .ThenBy(x => x.Rank)
             .ThenBy(x => x.WordId)
-            .ThenBy(x => x.ReadingIndex)
             .Skip(skip).Take(take)
             .ToListAsync();
 
         if (pagedParents.Count == 0) return (new List<WordSummaryDto>(), total);
 
-        var parentIds = pagedParents.Select(p => p.WordId).Distinct().ToList();
+        var parentIds = pagedParents.Select(p => p.WordId).ToList();
 
         var definitions = await ctx.Definitions
             .AsNoTracking()
@@ -123,36 +120,76 @@ public static class CompositionHelper
             .ToDictionary(g => g.Key, g => g.First().EnglishMeanings.FirstOrDefault());
 
         var forms = await WordFormHelper.LoadWordForms(ctx, parentIds);
-
-        var surfaceRows = await ctx.WordCompositions
+        var freqs = await WordFormHelper.LoadWordFormFrequencies(ctx, parentIds);
+        var componentText = await ctx.WordForms
             .AsNoTracking()
-            .Where(c => c.ComponentWordId == componentWordId
-                        && c.ComponentReadingIndex == componentReadingIndex
-                        && !c.IsGrammatical
-                        && parentIds.Contains(c.WordId))
+            .Where(f => f.WordId == componentWordId && f.ReadingIndex == componentReadingIndex)
+            .Select(f => f.Text)
+            .FirstOrDefaultAsync() ?? "";
+
+        var surfaceRows = await matches
+            .Where(c => parentIds.Contains(c.WordId))
             .OrderBy(c => c.WordId).ThenBy(c => c.ReadingIndex).ThenBy(c => c.Position)
             .Select(c => new { c.WordId, c.ReadingIndex, c.ComponentSurface })
             .ToListAsync();
 
-        var surfaceMap = surfaceRows
-            .GroupBy(s => (s.WordId, s.ReadingIndex))
-            .ToDictionary(g => g.Key, g => g.First().ComponentSurface);
+        var surfacesByWord = surfaceRows
+            .GroupBy(s => s.WordId)
+            .ToDictionary(
+                g => g.Key,
+                g => g.GroupBy(s => s.ReadingIndex).ToDictionary(r => r.Key, r => r.First().ComponentSurface));
 
         var items = pagedParents.Select(p =>
         {
-            var form = forms.GetValueOrDefault((p.WordId, p.ReadingIndex));
+            var surfaces = surfacesByWord[p.WordId];
+            var readingIndex = PickDisplayForm(p.WordId, componentText, surfaces, forms, freqs);
+            var form = forms.GetValueOrDefault((p.WordId, readingIndex));
             return new WordSummaryDto
             {
                 WordId = p.WordId,
-                ReadingIndex = (byte)p.ReadingIndex,
+                ReadingIndex = (byte)readingIndex,
                 Reading = form?.Text ?? "",
                 ReadingFurigana = form?.RubyText ?? form?.Text ?? "",
                 MainDefinition = firstDefByWord.GetValueOrDefault(p.WordId),
-                FrequencyRank = p.Rank > 0 ? p.Rank : null,
-                MatchSurface = surfaceMap.GetValueOrDefault((p.WordId, p.ReadingIndex))
+                FrequencyRank = p.Rank,
+                MatchSurface = surfaces[readingIndex]
             };
         }).ToList();
 
         return (items, total);
     }
+
+    /// <summary>
+    /// Picks among the forms that spell the component the way the component's page does (another kanji variant or a kana
+    /// slot would not highlight), then the JMDict headword among those, then the best-ranked one.
+    /// </summary>
+    internal static short PickDisplayForm(int wordId, string componentText,
+                                          IReadOnlyDictionary<short, string> surfacesByReadingIndex,
+                                          IReadOnlyDictionary<(int, short), JmDictWordForm> forms,
+                                          IReadOnlyDictionary<(int, short), JmDictWordFormFrequency> freqs)
+    {
+        var all = surfacesByReadingIndex.Keys.Order().ToList();
+        var sameSpelling = all.Where(ri => SpellsLike(surfacesByReadingIndex[ri], componentText)).ToList();
+        var candidates = sameSpelling.Count > 0 ? sameSpelling : all;
+
+        foreach (var ri in candidates)
+            if (forms.GetValueOrDefault((wordId, ri)) is { } form && IsHeadwordKanji(form))
+                return ri;
+
+        return candidates
+            .OrderBy(ri => freqs.GetValueOrDefault((wordId, ri))?.FrequencyRank is int rank and > 0 ? rank : int.MaxValue)
+            .ThenBy(ri => ri)
+            .First();
+    }
+
+    /// <summary>Compares kanji only, so an inflected slot (食べ in 食べ物) matches 食べる and any kana slot matches a kana page.</summary>
+    internal static bool SpellsLike(string surface, string componentText)
+        => surface.Where(JapaneseTextHelper.IsKanji).SequenceEqual(componentText.Where(JapaneseTextHelper.IsKanji));
+
+    private static bool IsHeadwordKanji(JmDictWordForm form)
+        => form.FormType == JmDictFormType.KanjiForm
+           && form.IsActiveInLatestSource
+           && !form.IsObsolete
+           && !form.IsSearchOnly
+           && form.InfoTags?.Any(t => t is "rK" or "iK") != true;
 }

@@ -456,7 +456,7 @@
                     @click="scrollToNode(id)"
                   >
                     <img
-                      :src="coverUrl(nodeById.get(id)!.coverName)"
+                      :src="coverUrl(nodeById.get(id)!.coverName, 'xs')"
                       alt=""
                       class="h-8 w-6 shrink-0 rounded-sm object-cover"
                       :class="id === currentDeckId ? 'outline-2 outline-offset-1 outline-primary' : ''"

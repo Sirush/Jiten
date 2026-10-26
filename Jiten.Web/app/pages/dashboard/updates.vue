@@ -10,6 +10,7 @@
   import type { AdminSiteUpdate } from '~/types';
   import { convertHeifImage, isHeifBlob } from '~/utils/heifImage';
   import { linkifySelection, spliceAsParagraph, toDiscordMarkdown } from '~/utils/siteUpdateMarkdown';
+  import { formatDateShort } from '~/utils/dateFormat';
 
   useHead({ title: 'Site Updates - Jiten' });
 
@@ -267,7 +268,7 @@
       .catch(() => toast.add({ severity: 'error', summary: 'Error', detail: 'Failed to copy', life: 3000 }));
   }
 
-  const formatDate = (date?: string | null) => (date ? new Date(date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '');
+  const formatDate = (date?: string | null) => (date ? formatDateShort(date) : '');
 </script>
 
 <template>

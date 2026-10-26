@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using Jiten.Core.Data;
 using Microsoft.AspNetCore.WebUtilities;
 
 namespace Jiten.Api.Services;
@@ -16,6 +17,39 @@ public class DiscourseOptions
     public string SsoSecret { get; set; } = "";
 
     public bool IsConfigured => !string.IsNullOrWhiteSpace(Url) && !string.IsNullOrWhiteSpace(SsoSecret);
+
+    /// <summary>Read-only global key for topic lookup by embed URL, which no granular scope covers; post reads stay anonymous.</summary>
+    public string ApiKey { get; set; } = "";
+
+    /// <summary>Granular key with only topics:write, used to create discussion topics; falls back to <see cref="ApiKey"/> when empty.</summary>
+    public string TopicWriteApiKey { get; set; } = "";
+
+    /// <summary>Secret of the forum webhook that keeps stored reply counts current; the webhook endpoint answers 404 while it is empty.</summary>
+    public string WebhookSecret { get; set; } = "";
+
+    /// <summary>Forum category id per discussion subject (config keys "deck", "list", bound case-insensitively); a subject without one posts to Uncategorized.</summary>
+    public Dictionary<ForumSubject, int> CategoryIds { get; set; } = [];
+
+    /// <summary>Must be staff: Discourse throttles topic creation for everyone else to one per minute site-wide.</summary>
+    public string ApiUsername { get; set; } = "system";
+
+    /// <summary>Hosts besides the forum's own that post images may load from, such as its upload CDN; any other image becomes a link.</summary>
+    public string[] MediaHosts { get; set; } = ["jiten-community.b-cdn.net"];
+
+    /// <summary>
+    /// Keyed calls per minute per API instance. Discourse counts every API-key request against one forum-wide limit
+    /// (DISCOURSE_MAX_ADMIN_API_REQS_PER_MINUTE, 60 by default), and two instances overlap during a deploy.
+    /// </summary>
+    public int LookupsPerMinute { get; set; } = 15;
+
+    /// <inheritdoc cref="LookupsPerMinute"/>
+    public int CreationsPerMinute { get; set; } = 5;
+
+    /// <summary>All anonymous reads come from this server's IP; Discourse blocks an IP past 50 per 10 seconds unless it is in DISCOURSE_MAX_REQS_PER_IP_EXCEPTIONS.</summary>
+    public int AnonymousReadsPer10Seconds { get; set; } = 30;
+
+    /// <summary>Https only: the key travels in request headers.</summary>
+    public bool IsDiscussionConfigured => Url.StartsWith("https://", StringComparison.OrdinalIgnoreCase) && !string.IsNullOrWhiteSpace(ApiKey);
 }
 
 /// <summary>DiscourseConnect payload signing, with Jiten as the identity provider (https://meta.discourse.org/t/13045).</summary>

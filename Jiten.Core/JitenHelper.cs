@@ -1,7 +1,6 @@
 ﻿using System.Diagnostics;
 using System.Text;
 using System.Threading;
-using ImageMagick;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Services;
@@ -53,14 +52,7 @@ public static class JitenHelper
         try
         {
             if (cover.Length > 0)
-            {
-                using var coverOptimized = new MagickImage(cover);
-                coverOptimized.Resize(400, 400);
-                coverOptimized.Strip();
-                coverOptimized.Quality = 85;
-                coverOptimized.Format = MagickFormat.Jpeg;
-                optimizedCoverBytes = coverOptimized.ToByteArray();
-            }
+                optimizedCoverBytes = CoverImage.Normalize(cover);
         }
         catch (Exception ex)
         {

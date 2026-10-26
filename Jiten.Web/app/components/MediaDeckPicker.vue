@@ -2,6 +2,7 @@
   import type { MediaSuggestion } from '~/types/types';
   import type { AutoCompleteCompleteEvent } from 'primevue/autocomplete';
   import { debounce } from 'perfect-debounce';
+  import { coverUrl } from '~/utils/coverImage';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
 
   const props = withDefaults(
@@ -129,7 +130,7 @@
     <template #option="{ option }">
       <div class="flex items-center gap-2">
         <img
-          :src="option.coverName && option.coverName !== 'nocover.jpg' ? option.coverName : '/img/nocover.jpg'"
+          :src="coverUrl(option.coverName, 'xs')"
           :alt="getDeckLabel(option)"
           class="h-10 w-7 object-cover rounded shrink-0"
         />

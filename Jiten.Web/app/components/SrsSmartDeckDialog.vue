@@ -8,6 +8,7 @@
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { apiErrorMessage, apiStatusCode } from '~/utils/apiErrorMessage';
   import { formatRelativeTime } from '~/utils/relativeTime';
+  import { formatDayMonthTime } from '~/utils/dateFormat';
 
   const props = defineProps<{ visible: boolean }>();
   const emit = defineEmits(['update:visible']);
@@ -290,7 +291,7 @@
     const at = smart.status.value?.lastRebuiltAt;
     if (!at) return null;
     const d = new Date(at);
-    return d.toLocaleString(undefined, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return formatDayMonthTime(d);
   });
 
   const deckSummary = computed(() => {
@@ -468,7 +469,7 @@
               </div>
               <ul v-else class="flex flex-col divide-y divide-surface-200 dark:divide-surface-700 rounded-lg border border-surface-200 dark:border-surface-700">
                 <li v-for="t in visibleDriving" :key="t.deckId" class="flex items-center gap-3 px-3 py-2">
-                  <img :src="coverUrl(t.coverName)" :alt="''" class="w-8 h-11 rounded object-cover bg-surface-100 dark:bg-surface-700 shrink-0" />
+                  <img :src="coverUrl(t.coverName, 'xs')" :alt="''" class="w-8 h-11 rounded object-cover bg-surface-100 dark:bg-surface-700 shrink-0" />
                   <div class="min-w-0 flex-1">
                     <div class="text-sm font-medium truncate">
                       <NuxtLink :to="`/decks/media/${t.deckId}/detail`" class="hover:text-primary-500" v-bind="japaneseTextAttrs(localiseTitle(t))">{{ localiseTitle(t) }}</NuxtLink>
@@ -652,7 +653,7 @@
                       class="w-full flex items-center gap-2 py-1.5 text-left hover:bg-surface-50 dark:hover:bg-surface-800 rounded px-1"
                       @click="pick(r)"
                     >
-                      <img :src="coverUrl(r.coverName)" alt="" class="w-6 h-8 rounded object-cover shrink-0" />
+                      <img :src="coverUrl(r.coverName, 'xs')" alt="" class="w-6 h-8 rounded object-cover shrink-0" />
                       <span class="text-sm truncate" v-bind="japaneseTextAttrs(localiseTitle(r))">{{ localiseTitle(r) }}</span>
                       <span class="text-xs text-gray-400 shrink-0">{{ getMediaTypeText(r.mediaType) }}</span>
                     </button>

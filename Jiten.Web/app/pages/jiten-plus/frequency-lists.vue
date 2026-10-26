@@ -719,7 +719,7 @@
                     <template #option="{ option }">
                       <div class="flex items-center gap-2">
                         <img
-                          :src="coverUrl(option.coverName)"
+                          :src="coverUrl(option.coverName, 'xs')"
                           alt=""
                           class="w-6 h-8 object-cover rounded"
                           @error="(e) => ((e.target as HTMLImageElement).src = '/img/nocover.jpg')"
@@ -742,7 +742,7 @@
                           class="flex items-center gap-3 min-w-0 border border-surface-200 dark:border-surface-700 rounded-lg p-2"
                         >
                           <img
-                            :src="coverUrl(d.coverName)"
+                            :src="coverUrl(d.coverName, 'xs')"
                             alt=""
                             class="h-16 w-11 object-cover rounded shrink-0"
                             @error="(e) => ((e.target as HTMLImageElement).src = '/img/nocover.jpg')"

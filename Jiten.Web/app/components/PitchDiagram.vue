@@ -4,7 +4,7 @@
   import type { Context } from 'chartjs-plugin-datalabels';
   import ChartDataLabels from 'chartjs-plugin-datalabels'; // Import datalabels plugin and Context type
   import { hatsuon, getPitchPatternName } from 'hatsuon/dist/index.es';
-  import { pitchCategory, type PitchCategory } from '~/utils/pitchAccent';
+  import { pitchCategory, readingKana, type PitchCategory } from '~/utils/pitchAccent';
 
   ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, ChartDataLabels);
 
@@ -38,10 +38,7 @@
   const hatsuonResult = computed(() => {
     if (props.reading && props.pitchAccent !== -1) {
       try {
-        const regex = /[\u4E00-\u9FFF\u3400-\u4DBF\uFF10-\uFF5A[\]A-Za-z0-9]/g;
-        const reading = props.reading.replace(regex, '');
-
-        return hatsuon({ reading: reading, pitchNum: props.pitchAccent });
+        return hatsuon({ reading: readingKana(props.reading), pitchNum: props.pitchAccent });
       } catch (error) {
         console.error('Error calculating hatsuon:', error);
         return null;

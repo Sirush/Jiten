@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import InputText from 'primevue/inputtext';
   import ProgressSpinner from 'primevue/progressspinner';
+  import { coverUrl } from '~/utils/coverImage';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import type { MediaSuggestion } from '~/types/types';
   import { TitleLanguage } from '~/types';
@@ -214,7 +215,7 @@
   const isOriginalTitle = (suggestion: MediaSuggestion): boolean => getTitle(suggestion) === suggestion.originalTitle;
 
   const getCoverUrl = (coverName: string): string => {
-    return coverName === 'nocover.jpg' ? '/img/nocover.jpg' : coverName;
+    return coverUrl(coverName, 'xs');
   };
 
   const remainingCount = computed(() => {

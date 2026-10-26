@@ -3,6 +3,7 @@
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
   import { DeckOrder, MediaType, StudyDeckType, type StudyDeckDto } from '~/types';
+  import { coverUrl } from '~/utils/coverImage';
   import { formatRelativeTime } from '~/utils/relativeTime';
   import { groupFilterSummary } from '~/utils/mediaGroup';
   import { studyDeckPresentation } from '~/utils/studyDeckPresentation';
@@ -10,6 +11,7 @@
   import { Bar } from 'vue-chartjs';
   import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip as ChartTooltip } from 'chart.js';
   import ChartDataLabels from 'chartjs-plugin-datalabels';
+  import { formatDayMonth, formatWeekdayDayMonth } from '~/utils/dateFormat';
 
   ChartJS.register(CategoryScale, LinearScale, BarElement, ChartTooltip);
 
@@ -94,7 +96,7 @@
 
   function getCoverUrl(coverName?: string) {
     if (!coverName || coverName === 'nocover.jpg') return null;
-    return coverName;
+    return coverUrl(coverName, 'sm');
   }
 
   const orderLabels: Record<number, string> = {
@@ -292,7 +294,7 @@
 
   function showMiniTooltip(event: MouseEvent, day: MiniDay) {
     const d = new Date(day.date + 'T00:00:00');
-    const dateStr = d.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    const dateStr = formatWeekdayDayMonth(d);
     miniTooltip.value = {
       visible: true,
       text: day.count === 0 ? `${dateStr}: No reviews` : `${dateStr}: ${day.count} reviews`,
@@ -323,7 +325,7 @@
     return {
       labels: forecast.days.map((d) => {
         const date = new Date(d.date + 'T00:00:00');
-        return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+        return formatDayMonth(date);
       }),
       datasets: [
         {
@@ -375,7 +377,7 @@
             const day = srsStore.reviewForecast30d?.days[idx];
             if (!day) return '';
             const date = new Date(day.date + 'T00:00:00');
-            return date.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+            return formatWeekdayDayMonth(date);
           },
           label: (context: any) => {
             const count = srsStore.reviewForecast30d?.days[context.dataIndex]?.count ?? 0;

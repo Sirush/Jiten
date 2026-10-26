@@ -2109,37 +2109,25 @@ public partial class RequestController(
                                 || (r.EnglishTitle != null && EF.Functions.ILike(r.EnglishTitle, pattern, "\\")));
     }
 
-    private sealed record GenreTagFilter(string? Genres, string? ExcludeGenres, string? Tags, string? ExcludeTags);
-
-    /// <summary>Included genres and tags must all be present; any excluded one rules a request out. Same rules as the media list.</summary>
+    /// <summary>Same rules as the media list.</summary>
     private static IQueryable<MediaRequest> ApplyGenreTagFilters(IQueryable<MediaRequest> query, GenreTagFilter filter)
     {
-        foreach (var genre in ParseIds(filter.Genres).Select(id => (Genre)id))
+        foreach (var genre in filter.IncludedGenres)
             query = query.Where(r => r.Genres.Any(g => g.Genre == genre));
 
-        var excludedGenres = ParseIds(filter.ExcludeGenres).Select(id => (Genre)id).ToList();
+        var excludedGenres = filter.ExcludedGenres;
         if (excludedGenres.Count > 0)
             query = query.Where(r => !r.Genres.Any(g => excludedGenres.Contains(g.Genre)));
 
-        foreach (var tagId in ParseIds(filter.Tags))
+        foreach (var tagId in filter.IncludedTags)
             query = query.Where(r => r.Tags.Any(t => t.TagId == tagId));
 
-        var excludedTags = ParseIds(filter.ExcludeTags);
+        var excludedTags = filter.ExcludedTags;
         if (excludedTags.Count > 0)
             query = query.Where(r => !r.Tags.Any(t => excludedTags.Contains(t.TagId)));
 
         return query;
     }
-
-    private static List<int> ParseIds(string? csv) =>
-        string.IsNullOrEmpty(csv)
-            ? []
-            : csv.Split(',', StringSplitOptions.RemoveEmptyEntries)
-                 .Select(v => int.TryParse(v, out var id) ? (int?)id : null)
-                 .Where(id => id.HasValue)
-                 .Select(id => id!.Value)
-                 .Distinct()
-                 .ToList();
 
     private async Task<RequestGenresAndTags> LoadGenresAndTagsAsync(List<MediaRequest> requests)
     {

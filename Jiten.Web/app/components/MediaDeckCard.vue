@@ -3,10 +3,11 @@
   import Card from 'primevue/card';
   import TieredMenu from 'primevue/tieredmenu';
   import Popover from 'primevue/popover';
+  import { coverUrl } from '~/utils/coverImage';
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { ordinal } from '~/utils/ordinal';
   import { getLinkLabel } from '~/utils/linkTypeMapper';
-  import { getDeckStatusText, isInProgressStatus } from '~/utils/deckStatusMapper';
+  import { getDeckStatusColourClass, getDeckStatusText, isInProgressStatus } from '~/utils/deckStatusMapper';
   import { useJitenStore } from '~/stores/jitenStore';
   import { formatDateAsYyyyMmDd } from '~/utils/formatDateAsYyyyMmDd';
   import { useAuthStore } from '~/stores/authStore';
@@ -32,12 +33,23 @@
     /** Opens the study dialog once mounted, for a visitor coming back from sign-up through the guest Study button. */
     openStudy?: boolean;
     readOnlyList?: boolean;
+    showDiscussionLink?: boolean;
   }>();
 
   const emit = defineEmits<{
     'update:deck': [deck: Deck];
     'status-menu': [open: boolean];
+    discussion: [];
   }>();
+
+  const discussionTooltip = computed(() => (props.deck.discussionReplyCount > 0 ? discussionReplyLabel(props.deck.discussionReplyCount) : 'Discussion'));
+
+  /** On the deck's own page the link scrolls to the discussion below instead of reloading the route. */
+  function onDiscussionClick(event: MouseEvent) {
+    if (!props.showDiscussionLink) return;
+    event.preventDefault();
+    emit('discussion');
+  }
 
   const showDownloadDialog = ref(false);
   const showStudyDeckDialog = ref(false);
@@ -113,7 +125,7 @@
     const seconds = props.deck.parentDeckId ? props.deck.runtimeSeconds : props.deck.medianChildRuntimeSeconds;
     return seconds ? formatRuntime(seconds) : '';
   });
-  const coverSrc = computed(() => (props.deck.coverName == 'nocover.jpg' ? '/img/nocover.jpg' : props.deck.coverName));
+  const coverSrc = computed(() => coverUrl(props.deck.coverName, hasLandscapeCover.value ? 'lg' : 'md'));
 
   const hasChildren = computed(() => props.deck.childrenDeckCount > 0);
   const childrenLabel = computed(() => getChildrenCountText(props.deck.mediaType));
@@ -356,24 +368,7 @@
     return isInProgressStatus(currentStatus.value) && progressLabel.value ? `${status}, ${progressLabel.value}` : status;
   });
 
-  const statusColor = computed(() => {
-    if (!props.deck.status || props.deck.status === DeckStatus.None) return '';
-
-    switch (props.deck.status) {
-      case DeckStatus.Planning:
-        return 'text-gray-500 dark:text-gray-400';
-      case DeckStatus.Ongoing:
-        return 'text-yellow-500';
-      case DeckStatus.Paused:
-        return 'text-sky-600 dark:text-sky-400';
-      case DeckStatus.Completed:
-        return 'text-green-500';
-      case DeckStatus.Dropped:
-        return 'text-red-500';
-      default:
-        return '';
-    }
-  });
+  const statusColor = computed(() => getDeckStatusColourClass(props.deck.status));
 
   const sortedLinks = computed(() => {
     if (!props.deck.links || props.deck.links.length === 0) return [];
@@ -554,6 +549,19 @@
                 </button>
               </Tooltip>
               <ShareButton v-if="!isCompact" :path="`/decks/media/${deck.deckId}/detail`" :title="shareTitle" />
+              <Tooltip v-if="showDiscussionLink || (!isCompact && deck.discussionReplyCount > 0)" :content="discussionTooltip">
+                <NuxtLink
+                  :to="`/decks/media/${deck.deckId}/detail#discussion`"
+                  :aria-label="discussionTooltip"
+                  class="flex items-center gap-1 p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer no-underline"
+                  @click="onDiscussionClick"
+                >
+                  <i class="pi pi-comments utility-icon" />
+                  <span v-if="deck.discussionReplyCount > 0" class="text-xs font-semibold leading-none tabular-nums text-gray-600 dark:text-gray-300">
+                    {{ deck.discussionReplyCount.toLocaleString() }}
+                  </span>
+                </NuxtLink>
+              </Tooltip>
               <Tooltip content="View stats">
                 <router-link
                   :to="`/decks/media/${deck.deckId}/stats`"

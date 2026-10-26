@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import { DisplayStyle, MediaType } from '~/types';
+  import { coverUrl } from '~/utils/coverImage';
   import { useApiFetchPaginated } from '~/composables/useApiFetch';
   import { useJitenStore } from '~/stores/jitenStore';
   import { useAuthStore } from '~/stores/authStore';
@@ -279,6 +280,8 @@
     }
   });
 
+  const discussionSection = ref<{ jump: () => void } | null>(null);
+
   useDeckViewBeacon(deckId);
 
   onMediaListChange((change) => {
@@ -304,13 +307,16 @@
     return title;
   });
 
-  const coverUrl = computed(() => {
-    const cover = response.value?.data?.mainDeck?.coverName;
-    return cover && cover !== 'nocover.jpg' ? cover : undefined;
+  /** Must request the same size MediaDeckCard renders, or the preloaded image goes unused. */
+  const coverPreloadUrl = computed(() => {
+    const deck = response.value?.data?.mainDeck;
+    if (!deck?.coverName || deck.coverName === 'nocover.jpg') return undefined;
+    return coverUrl(deck.coverName, deck.mediaType === MediaType.YouTube && !!deck.parentDeckId ? 'lg' : 'md');
   });
 
   const mainDeck = computed(() => response.value?.data?.mainDeck);
   const parentDeck = computed(() => response.value?.data?.parentDeck);
+  const isTopLevel = computed(() => parentDeck.value == null);
 
   const metaDescription = computed(() => {
     const d = mainDeck.value;
@@ -346,7 +352,7 @@
   });
 
   useHead(() => ({
-    link: coverUrl.value ? [{ rel: 'preload', as: 'image', href: coverUrl.value, fetchpriority: 'high' }] : [],
+    link: coverPreloadUrl.value ? [{ rel: 'preload', as: 'image', href: coverPreloadUrl.value, fetchpriority: 'high' }] : [],
   }));
 
   // Subdecks (episodes, volumes) differ from their siblings only by number, so Google collapses them
@@ -398,9 +404,17 @@
       </Card>
     </div>
     <div v-else-if="response?.data?.mainDeck">
-      <MediaDeckCard :deck="response.data.mainDeck" title-tag="h1" hide-detail-button :open-study="openStudy" @update:deck="updateMainDeck" />
+      <MediaDeckCard
+        :deck="response.data.mainDeck"
+        title-tag="h1"
+        hide-detail-button
+        :open-study="openStudy"
+        :show-discussion-link="isTopLevel"
+        @update:deck="updateMainDeck"
+        @discussion="discussionSection?.jump()"
+      />
 
-      <DeckStudyOverview v-if="showSeoBlocks && response.data.parentDeck == null" :deck="response.data.mainDeck" />
+      <DeckStudyOverview v-if="showSeoBlocks && isTopLevel" :deck="response.data.mainDeck" />
 
       <LazyCoverageJourneyCard :deck-id="response.data.mainDeck.deckId" />
 
@@ -519,7 +533,16 @@
         <SimilarMediaSection :deck="response.data.mainDeck" />
       </div>
 
-      <DeckVocabularyHighlights v-if="showSeoBlocks && response.data.parentDeck == null" :key="response.data.mainDeck.deckId" :deck="response.data.mainDeck" />
+      <ForumDiscussion
+        v-if="isTopLevel"
+        :id="response.data.mainDeck.deckId"
+        :key="response.data.mainDeck.deckId"
+        ref="discussionSection"
+        subject="deck"
+        class="mt-6"
+      />
+
+      <DeckVocabularyHighlights v-if="showSeoBlocks && isTopLevel" :key="response.data.mainDeck.deckId" :deck="response.data.mainDeck" />
     </div>
     <div v-else class="text-center py-12 flex flex-col items-center gap-4">
       <p class="text-surface-500 dark:text-surface-400">Failed to load this deck.</p>

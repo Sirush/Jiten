@@ -1,6 +1,7 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using Jiten.Api.Helpers;
 using Jiten.Core.Data;
 
 namespace Jiten.Api.Services.ExternalMediaList;
@@ -63,7 +64,7 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
             if (response.StatusCode != HttpStatusCode.TooManyRequests)
                 return response;
 
-            var wait = ReadRetryAfter(response) ?? DefaultRetryAfter;
+            var wait = RetryAfterHeader.Read(response) ?? DefaultRetryAfter;
             response.Dispose();
 
             if (attempt >= MaxRateLimitRetries || wait > budget)
@@ -73,16 +74,6 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
             logger.LogInformation("External list fetch rate limited: Provider={Provider}, Wait={Wait}", provider, wait);
             await Task.Delay(wait, ct);
         }
-    }
-
-    private static TimeSpan? ReadRetryAfter(HttpResponseMessage response)
-    {
-        var retryAfter = response.Headers.RetryAfter;
-        if (retryAfter == null)
-            return null;
-
-        var wait = retryAfter.Delta ?? (retryAfter.Date.HasValue ? retryAfter.Date.Value - DateTimeOffset.UtcNow : null);
-        return wait is { } value && value > TimeSpan.Zero ? value : null;
     }
 
     private async Task<ExternalListFetchResult> FetchAnilistAsync(string username, CancellationToken ct)

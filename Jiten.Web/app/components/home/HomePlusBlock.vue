@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatDateShort } from '~/utils/dateFormat';
   defineProps<{ compact?: boolean }>();
 
   const { tier, sources, fetched } = useJitenPlus();
@@ -33,7 +34,7 @@
   const renewalLabel = computed(() => {
     const s = sources.value;
     if (!s || s.isLifetime || !s.subscriptionActive || !s.periodEnd) return null;
-    const date = new Date(s.periodEnd).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+    const date = formatDateShort(s.periodEnd);
     return s.cancelAtPeriodEnd ? `Access until ${date}` : `Renews ${date}`;
   });
 

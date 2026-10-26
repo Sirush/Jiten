@@ -6,6 +6,7 @@
   import { useToast } from 'primevue/usetoast';
   import ProgressSpinner from 'primevue/progressspinner';
   import type { Metadata } from '~/types';
+  import { formatDateShort } from '~/utils/dateFormat';
 
   const props = defineProps<{
     visible: boolean;
@@ -105,7 +106,7 @@
           </div>
           <div class="p-3">
             <div class="text-sm text-gray-500 dark:text-gray-400 mb-2">
-              {{ metadata.releaseDate ? new Date(metadata.releaseDate).toLocaleDateString() : 'Unknown date' }}
+              {{ metadata.releaseDate ? formatDateShort(metadata.releaseDate) : 'Unknown date' }}
             </div>
             <div class="mb-3">
               <div v-if="metadata.originalTitle" class="font-medium">{{ metadata.originalTitle }}</div>

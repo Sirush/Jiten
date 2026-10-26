@@ -65,6 +65,11 @@
             </div>
             <div class="flex flex-wrap items-center gap-x-3 text-xs text-gray-500 dark:text-gray-400">
               <span>{{ getMediaTypeText(deck.mediaType) }}</span>
+              <span v-if="deck.discussionReplyCount > 0" class="flex items-center gap-1" :title="discussionReplyLabel(deck.discussionReplyCount)">
+                <i class="pi pi-comments text-[10px]" aria-hidden="true" />
+                <span class="tabular-nums" aria-hidden="true">{{ deck.discussionReplyCount.toLocaleString() }}</span>
+                <span class="sr-only">{{ discussionReplyLabel(deck.discussionReplyCount) }}</span>
+              </span>
               <span v-for="fact in listEntryLine" :key="fact" class="text-gray-600 dark:text-gray-300">{{ fact }}</span>
               <MediaListProgressButton v-if="showProgressButton" :deck="deck" class="-my-1 -ml-2" />
             </div>

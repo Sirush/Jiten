@@ -3,6 +3,7 @@
   import { useConfirm } from 'primevue/useconfirm';
   import type { DifficultyVoteDto, DifficultyRatingDto, BlacklistedDeckDto, DeckSummaryDto } from '~/types/types';
   import { ComparisonOutcome, TitleLanguage } from '~/types';
+  import { formatDateShort } from '~/utils/dateFormat';
 
   definePageMeta({
     middleware: ['auth'],
@@ -58,8 +59,7 @@
   }
 
   function formatDate(dateString: string): string {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+    return formatDateShort(dateString);
   }
 
   const { chartColour } = useDifficultyColours();

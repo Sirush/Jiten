@@ -1,4 +1,5 @@
 using Hangfire;
+using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data.Authentication;
 using Jiten.Core.Data.FSRS;
@@ -29,12 +30,15 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
 
     public const string DiscourseUrl = "https://community.test";
     public const string DiscourseSsoSecret = "discourse-test-secret";
+    public const string DiscourseWebhookSecret = "discourse-webhook-test-secret";
 
     /// <summary>The stub Stripe gateway. Singleton, so tests can configure canned responses and read recorded calls.</summary>
     public StubStripeGateway Stripe => Services.GetRequiredService<StubStripeGateway>();
 
     /// <summary>The stub external media list client. Singleton, so tests can set canned lists.</summary>
     public StubExternalMediaListClient ExternalLists => Services.GetRequiredService<StubExternalMediaListClient>();
+
+    public RecordingDiscordReportNotifier DiscordReports => Services.GetRequiredService<RecordingDiscordReportNotifier>();
 
     public JitenWebApplicationFactory()
     {
@@ -58,6 +62,7 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
 
         Environment.SetEnvironmentVariable("Discourse__Url", DiscourseUrl);
         Environment.SetEnvironmentVariable("Discourse__SsoSecret", DiscourseSsoSecret);
+        Environment.SetEnvironmentVariable("Discourse__WebhookSecret", DiscourseWebhookSecret);
 
         // The SRS suites assert intervals computed from the FSRS-6 defaults for users without parameters.
         FsrsVersions.ConfigureUnoptimised(FsrsVersion.V6);
@@ -88,6 +93,10 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
             // Replace Redis with in-memory mock that supports GetDatabase()
             services.RemoveAll<IConnectionMultiplexer>();
             services.AddSingleton(InMemoryRedis.Create());
+
+            services.AddSingleton<RecordingDiscordReportNotifier>();
+            services.RemoveAll<IDiscordReportNotifier>();
+            services.AddSingleton<IDiscordReportNotifier>(sp => sp.GetRequiredService<RecordingDiscordReportNotifier>());
 
             // Register SQLite in-memory DbContexts (Npgsql is skipped via
             // environment guard in Program.cs, so no dual-provider conflict).
@@ -163,6 +172,10 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
             services.AddSingleton<Jiten.Api.Services.ExternalMediaList.IExternalMediaListClient>(sp =>
                 sp.GetRequiredService<StubExternalMediaListClient>());
 
+            // Replace the forum client so discussions never hit Discourse; it echoes the embed URL it was asked for.
+            services.RemoveAll<Jiten.Api.Services.Forum.IForumDiscussionService>();
+            services.AddSingleton<Jiten.Api.Services.Forum.IForumDiscussionService, StubForumDiscussionService>();
+
             // Replace the Stripe gateway with a stub (canned network, real signature verification).
             services.RemoveAll<Jiten.Api.Services.Stripe.IStripeGateway>();
             services.AddSingleton<StubStripeGateway>();
@@ -208,13 +221,14 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
         await _userConnection.DisposeAsync();
     }
 
-    /// <summary>Clears the jiten-side tables plus user deck preferences, profiles and study decks; every other user table (FSRS, promo, card media) and all jmdict word data is the test class's own job.</summary>
+    /// <summary>Clears the jiten-side tables (community lists included) plus user deck preferences, profiles and study decks; every other user table (FSRS, promo, card media) and all jmdict word data is the test class's own job.</summary>
     public async Task ResetDatabaseAsync()
     {
         using var scope = Services.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
 
         db.Notifications.RemoveRange(db.Notifications);
+        db.ForumTopics.RemoveRange(db.ForumTopics);
         db.SiteUpdates.RemoveRange(db.SiteUpdates);
         db.PollVotes.RemoveRange(db.PollVotes);
         db.PollOptions.RemoveRange(db.PollOptions);
@@ -227,6 +241,7 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
         db.MediaRequestBoosts.RemoveRange(db.MediaRequestBoosts);
         db.MediaRequests.RemoveRange(db.MediaRequests);
         db.DeckActivityDailies.RemoveRange(db.DeckActivityDailies);
+        await db.CommunityLists.ExecuteDeleteAsync();
         await db.FranchiseMembers.ExecuteDeleteAsync();
         await db.SeriesMembers.ExecuteDeleteAsync();
         await db.Series.ExecuteDeleteAsync();

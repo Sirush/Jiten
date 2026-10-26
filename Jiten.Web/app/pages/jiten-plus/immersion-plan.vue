@@ -919,8 +919,8 @@
       const goal = payload.goal;
 
       const [stepBitmaps, goalBitmap, logoBitmap] = await Promise.all([
-        Promise.all(exportSteps.map((s) => loadExportBitmap(coverUrl(s.coverName)))),
-        goal ? loadExportBitmap(coverUrl(goal.coverName)) : Promise.resolve<ImageBitmap | null>(null),
+        Promise.all(exportSteps.map((s) => loadExportBitmap(coverUrl(s.coverName, 'lg')))),
+        goal ? loadExportBitmap(coverUrl(goal.coverName, 'lg')) : Promise.resolve<ImageBitmap | null>(null),
         loadExportBitmap('/favicon-96x96.png'),
         document.fonts.ready,
       ]);
@@ -1333,7 +1333,7 @@
                   >
                     <template #option="{ option }">
                       <div class="flex items-center gap-3">
-                        <img :src="coverUrl(option.coverName)" :alt="localiseTitle(option)" class="h-14 w-10 shrink-0 rounded object-cover" />
+                        <img :src="coverUrl(option.coverName, 'xs')" :alt="localiseTitle(option)" class="h-14 w-10 shrink-0 rounded object-cover" />
                         <div class="min-w-0">
                           <div class="truncate text-sm font-medium" v-bind="japaneseTextAttrs(localiseTitle(option))">{{ localiseTitle(option) }}</div>
                           <div class="text-xs opacity-70">{{ getMediaTypeText(option.mediaType) }}</div>
@@ -1803,7 +1803,7 @@
                       class="!px-2 !py-0.5 !text-[0.65rem] !font-semibold !uppercase !tracking-wider"
                     />
                     <a :href="`/decks/media/${step.deckId}/detail`" target="_blank" rel="noopener">
-                      <img :src="coverUrl(step.coverName)" :alt="stepTitle(step)" class="h-28 w-20 rounded object-cover" loading="lazy" />
+                      <img :src="coverUrl(step.coverName, 'sm')" :alt="stepTitle(step)" class="h-28 w-20 rounded object-cover" loading="lazy" />
                     </a>
                   </div>
                 </div>
@@ -2022,7 +2022,7 @@
                     />
                     <a :href="`/decks/media/${activePayload.goal.deckId}/detail`" target="_blank" rel="noopener">
                       <img
-                        :src="coverUrl(activePayload.goal.coverName)"
+                        :src="coverUrl(activePayload.goal.coverName, 'sm')"
                         :alt="goalCardTitle(activePayload.goal)"
                         class="h-28 w-20 rounded object-cover"
                         loading="lazy"

@@ -10,6 +10,7 @@
   import { useToast } from 'primevue/usetoast';
   import { MediaType } from '~/types/enums';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { formatDateTime } from '~/utils/dateFormat';
 
   interface WordReplacementResult {
     deckWordsUpdated: number;
@@ -183,7 +184,7 @@
     }
 
     confirm.require({
-      message: `Are you sure you want to reparse all decks updated before "${selectedCutoffDate.value.toLocaleString()}"? This operation may take a long time.`,
+      message: `Are you sure you want to reparse all decks updated before "${formatDateTime(selectedCutoffDate.value)}"? This operation may take a long time.`,
       header: 'Confirmation',
       icon: 'pi pi-exclamation-triangle',
       acceptClass: 'p-button-primary',
@@ -211,7 +212,7 @@
       toast.add({
         severity: 'success',
         summary: 'Success',
-        detail: `Reparsing ${data.count} decks updated before ${selectedCutoffDate.value.toLocaleString()}`,
+        detail: `Reparsing ${data.count} decks updated before ${formatDateTime(selectedCutoffDate.value)}`,
         life: 5000,
       });
     } catch (error) {

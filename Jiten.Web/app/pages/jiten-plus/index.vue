@@ -2,6 +2,7 @@
   import type { JitenPlusPricingInfo } from '~/types';
   import { useToast } from 'primevue/usetoast';
   import { useAuthStore } from '~/stores/authStore';
+  import { formatDateLong } from '~/utils/dateFormat';
 
   const auth = useAuthStore();
   const toast = useToast();
@@ -31,7 +32,7 @@
     if (!raw) return null;
     const d = new Date(raw);
     if (Number.isNaN(d.getTime())) return null;
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+    return formatDateLong(d);
   });
 
   const fullStorageLabel = computed(() => {
@@ -48,6 +49,8 @@
       { label: 'Words per import', ...l.importWords },
       { label: 'Active media requests', ...l.activeMediaRequests },
       { label: 'Custom sentences per word', ...l.customSentencesPerWord },
+      { label: 'Community lists', ...l.communityLists },
+      { label: 'Titles per community list', ...l.communityListItems },
     ].map((row) => ({ label: row.label, free: row.free.toLocaleString(), plus: row.plus.toLocaleString() }));
   });
 

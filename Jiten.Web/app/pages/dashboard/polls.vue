@@ -10,6 +10,7 @@
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
   import type { AdminPoll } from '~/types';
+  import { formatDateShort } from '~/utils/dateFormat';
 
   useHead({ title: 'Polls - Jiten' });
 
@@ -189,7 +190,7 @@
     }
   }
 
-  const formatDate = (date?: string | null) => (date ? new Date(date).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : '');
+  const formatDate = (date?: string | null) => (date ? formatDateShort(date) : '');
 
   const expandedId = ref<number | null>(null);
 

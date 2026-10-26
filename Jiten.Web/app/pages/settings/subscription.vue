@@ -2,6 +2,7 @@
   import type { CardMediaManageSummary } from '~/types';
   import RedeemPromoCode from '~/components/RedeemPromoCode.vue';
   import { useToast } from 'primevue/usetoast';
+  import { formatDateLong } from '~/utils/dateFormat';
 
   definePageMeta({
     middleware: ['auth'],
@@ -26,7 +27,7 @@
     if (!raw) return '';
     const d = new Date(raw);
     if (Number.isNaN(d.getTime())) return '';
-    return d.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
+    return formatDateLong(d);
   }
 
   const planName = computed(() => {

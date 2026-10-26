@@ -1,9 +1,10 @@
 <script setup lang="ts">
   import { DeckStatus, MediaListEntryState, type MediaType } from '~/types';
-  import { getDeckStatusText } from '~/utils/deckStatusMapper';
+  import { DECK_STATUS_DISPLAY_ORDER, getDeckStatusText } from '~/utils/deckStatusMapper';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { coverUrl } from '~/utils/coverImage';
   import { useJitenStore } from '~/stores/jitenStore';
+  import { formatDateShort, formatMonthYear } from '~/utils/dateFormat';
 
   const props = defineProps<{ provider: 'anilist' | 'vndb' | 'file' }>();
   const emit = defineEmits<{ changed: [] }>();
@@ -133,7 +134,7 @@
     subdecksCompleted: number;
   } | null>(null);
 
-  const statusOrder = [DeckStatus.Completed, DeckStatus.Ongoing, DeckStatus.Paused, DeckStatus.Planning, DeckStatus.Dropped];
+  const statusOrder = DECK_STATUS_DISPLAY_ORDER;
 
   const statusChipClass: Record<number, string> = {
     [DeckStatus.Planning]: 'bg-gray-100 text-gray-600 dark:bg-gray-700/40 dark:text-gray-300',
@@ -177,7 +178,7 @@
   function formatFinished(value: string | null): string {
     if (!value) return '';
     const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? '' : date.toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
+    return Number.isNaN(date.getTime()) ? '' : formatMonthYear(date);
   }
 
   const allRows = computed<PreviewRow[]>(() => preview.value?.matched ?? []);
@@ -549,8 +550,8 @@
     const [year, month, day] = iso.split('-').map(Number);
     const date = new Date(year!, (month ?? 1) - 1, day ?? 1);
     if (precision === 'year') return String(year);
-    if (precision === 'month') return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short' });
-    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+    if (precision === 'month') return formatMonthYear(date);
+    return formatDateShort(date);
   }
 
   function dateCell(row: PreviewRow, which: 'start' | 'finish'): { text: string; added: boolean } {
@@ -1155,7 +1156,7 @@
                   />
                   <div class="flex min-w-0 items-center gap-2.5">
                     <img
-                      :src="coverUrl(item.coverName)"
+                      :src="coverUrl(item.coverName, 'xs')"
                       alt=""
                       class="h-10 w-7 flex-none rounded-xs bg-surface-200 object-cover dark:bg-surface-700"
                       loading="lazy"
@@ -1212,7 +1213,7 @@
                   <Checkbox :model-value="isRowIncluded(item)" :binary="true" :disabled="item.isIgnored" @update:model-value="toggleRow(item)" />
                   <div class="flex min-w-0 items-center gap-2.5">
                     <img
-                      :src="coverUrl(item.coverName)"
+                      :src="coverUrl(item.coverName, 'xs')"
                       alt=""
                       class="h-10 w-7 flex-none rounded-xs bg-surface-200 object-cover dark:bg-surface-700"
                       loading="lazy"

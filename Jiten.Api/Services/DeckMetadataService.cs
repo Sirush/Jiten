@@ -1,6 +1,7 @@
 using Jiten.Api.Dtos;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Api.Services;
@@ -87,7 +88,7 @@ public sealed class DeckMetadataService(JitenDbContext dbContext)
         if (patch.Links != null)
             ApplyLinks(deck, patch.Links);
         if (patch.Relationships != null)
-            ApplyRelationships(deck, patch.Relationships);
+            await ApplyRelationshipsAsync(deck, patch.Relationships, ct);
 
         deck.LastUpdate = DateTime.UtcNow;
         return null;
@@ -254,7 +255,7 @@ public sealed class DeckMetadataService(JitenDbContext dbContext)
     /// Edges are stored canonically and may have this deck on either side, so both directions are
     /// reconciled against a payload that carries every edge touching the deck.
     /// </summary>
-    private void ApplyRelationships(Deck deck, List<DeckMetadataRelationshipPatch> relationships)
+    private async Task ApplyRelationshipsAsync(Deck deck, List<DeckMetadataRelationshipPatch> relationships, CancellationToken ct)
     {
         var target = relationships
                      .Select(r => (r.SourceDeckId, r.TargetDeckId, r.RelationshipType))
@@ -265,22 +266,24 @@ public sealed class DeckMetadataService(JitenDbContext dbContext)
                                 .Where(e => !DeckRelationship.IsLegacyGroupType(e.RelationshipType))
                                 .ToList();
 
-        foreach (var existing in existingEdges)
-            if (!target.Contains((existing.SourceDeckId, existing.TargetDeckId, existing.RelationshipType)))
-                dbContext.DeckRelationships.Remove(existing);
+        var removed = existingEdges.Where(e => !target.Contains((e.SourceDeckId, e.TargetDeckId, e.RelationshipType))).ToList();
+        dbContext.DeckRelationships.RemoveRange(removed);
 
         var present = existingEdges
                       .Select(e => (e.SourceDeckId, e.TargetDeckId, e.RelationshipType))
                       .ToHashSet();
 
-        foreach (var edge in target)
-            if (!present.Contains(edge))
-                dbContext.DeckRelationships.Add(new DeckRelationship
-                                                {
-                                                    SourceDeckId = edge.SourceDeckId,
-                                                    TargetDeckId = edge.TargetDeckId,
-                                                    RelationshipType = edge.RelationshipType
-                                                });
+        var added = target.Where(edge => !present.Contains(edge)).ToList();
+        foreach (var edge in added)
+            dbContext.DeckRelationships.Add(new DeckRelationship
+                                            {
+                                                SourceDeckId = edge.SourceDeckId,
+                                                TargetDeckId = edge.TargetDeckId,
+                                                RelationshipType = edge.RelationshipType
+                                            });
+
+        await RelationshipOverrides.MarkAsync(dbContext, removed.Select(e => (e.SourceDeckId, e.TargetDeckId))
+                                                                .Concat(added.Select(e => (e.SourceDeckId, e.TargetDeckId))), ct);
     }
 
     private static string? NullIfBlank(string value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

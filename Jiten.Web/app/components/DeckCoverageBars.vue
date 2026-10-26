@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import type { Deck } from '~/types';
 
-  const props = defineProps<{ deck: Deck }>();
+  const props = defineProps<{ deck: Deck; dense?: boolean }>();
 
   const combinedCoverage = computed(() => Math.min(props.deck.coverage + props.deck.youngCoverage, 100));
   const combinedUniqueCoverage = computed(() => Math.min(props.deck.uniqueCoverage + props.deck.youngUniqueCoverage, 100));
@@ -31,11 +31,12 @@
       `\n${whole(readableWithOneLookup.value)} with at most one new word`
   );
 
-  const barClass = computed(() => (hasSentenceStats.value ? 'h-2 mt-0.5' : 'h-2.5 mt-1'));
+  const barClass = computed(() => (props.dense ? 'h-1.5 mt-0.5' : hasSentenceStats.value ? 'h-2 mt-0.5' : 'h-2.5 mt-1'));
+  const containerClass = computed(() => (props.dense ? 'gap-1 text-xs' : hasSentenceStats.value ? 'gap-1.5 text-xs' : 'gap-2 text-sm'));
 </script>
 
 <template>
-  <div class="flex flex-col" :class="hasSentenceStats ? 'gap-1.5 text-xs' : 'gap-2 text-sm'">
+  <div class="flex flex-col" :class="containerClass">
     <Tooltip :content="coverageTooltip" block>
       <div class="flex items-baseline justify-between gap-2">
         <span class="min-w-0 truncate text-gray-600 dark:text-gray-400 font-normal">Coverage</span>

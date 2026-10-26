@@ -12,7 +12,7 @@
 
   const localiseTitle = useLocaliseTitle();
   const title = computed(() => localiseTitle(props.node));
-  const cover = computed(() => coverUrl(props.node.coverName));
+  const cover = computed(() => coverUrl(props.node.coverName, 'sm'));
   const coveragePercent = computed(() => Math.min(100, props.node.coverage).toFixed(0));
 </script>
 
