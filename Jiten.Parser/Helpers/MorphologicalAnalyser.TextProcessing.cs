@@ -67,6 +67,14 @@ public partial class MorphologicalAnalyser
     [GeneratedRegex(@"[）)](?=\r?\n)")]
     private static partial Regex LineEndParenRegex();
 
+    /// <summary>A line-final 』 ends the sentence unless a 「 on that line is still open or the next line closes a quote.</summary>
+    [GeneratedRegex(@"^(?:[^「」\r\n]|「[^「」\r\n]*」)*』(?=\r?\n(?![ 　]*[」』）]))", RegexOptions.Multiline)]
+    private static partial Regex LineEndDoubleQuoteRegex();
+
+    /// <summary>Middle-dot and period runs (・・・, ･･･, ...) written as an ellipsis.</summary>
+    [GeneratedRegex(@"[・･．]{2,}|\.{2,}")]
+    private static partial Regex DotEllipsisRegex();
+
     [GeneratedRegex(@"([ァ-ヴ]ンッ)(?=[ァ-ヴぁ-ゔ\p{IsCJKUnifiedIdeographs}])")]
     private static partial Regex KatakanaInterjectionTsuRegex();
 
@@ -227,7 +235,10 @@ public partial class MorphologicalAnalyser
         text = StripChineseLines(text);
         text = HashRubyAnnotationRegex().Replace(text, "");
         text = text.Replace("<", " ").Replace(">", " ").Replace("〝", " ").Replace("〟", " ");
-        text = text.Replace('‥', '…');
+        text = text.Replace('‥', '…').Replace('⋯', '…').Replace('!', '！').Replace('?', '？')
+                   .Replace('︕', '！').Replace('︖', '？')
+                   .Replace("‼", "！！").Replace("⁉", "！？").Replace("⁈", "？！").Replace("⁇", "？？");
+        text = DotEllipsisRegex().Replace(text, "…");
         text = text.ToFullWidthDigits();
         text = NonJapaneseCharRegex().Replace(text, "");
 
@@ -237,6 +248,7 @@ public partial class MorphologicalAnalyser
             text = text.Replace(_stopToken, "");
 
         text = LineEndParenRegex().Replace(text, m => m.Value + LineEndParenMark);
+        text = LineEndDoubleQuoteRegex().Replace(text, m => m.Value + LineEndParenMark);
 
         text = text
             .Replace("「", "\n「 ")
@@ -448,7 +460,7 @@ public partial class MorphologicalAnalyser
         }
     }
 
-    /// <summary>Strips the ） marks; returns their positions in the text with line breaks removed.</summary>
+    /// <summary>Strips the line-end ） and 』 marks; returns their positions in the text with line breaks removed.</summary>
     private static HashSet<int> TakeLineEndParenMarks(ref string text)
     {
         var positions = new HashSet<int>();

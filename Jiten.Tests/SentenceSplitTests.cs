@@ -34,6 +34,37 @@ public class SentenceSplitTests
     }
 
     [Theory]
+    [InlineData("マジ!?\nそうだよ\n", new[] { "マジ！？", "そうだよ" })]
+    [InlineData("え!本当?\n", new[] { "え！", "本当？" })]
+    [InlineData("すごい︕\nうん\n", new[] { "すごい！", "うん" })]
+    [InlineData("ほんと‼\nうん\n", new[] { "ほんと！！", "うん" })]
+    public async Task AsciiMarksEndTheSentence(string text, string[] expected)
+    {
+        (await Split(text)).Should().Equal(expected);
+    }
+
+    [Theory]
+    [InlineData("もう寝ようかなあ・・・\nおやすみ\n", new[] { "もう寝ようかなあ。", "おやすみ" })]
+    [InlineData("もう寝ようかなあ･･･\nおやすみ\n", new[] { "もう寝ようかなあ。", "おやすみ" })]
+    [InlineData("もう寝ようかなあ...\nおやすみ\n", new[] { "もう寝ようかなあ。", "おやすみ" })]
+    [InlineData("もう寝ようかなあ⋯⋯\nおやすみ\n", new[] { "もう寝ようかなあ。", "おやすみ" })]
+    [InlineData("サント・アンヌ号に乗った\n", new[] { "サント・アンヌ号に乗った" })]
+    public async Task DotRunsAreEllipses(string text, string[] expected)
+    {
+        (await Split(text)).Should().Equal(expected);
+    }
+
+    [Theory]
+    [InlineData("『もしもし』\n『聞こえる？』\n", new[] { "『もしもし』", "『聞こえる？』" })]
+    [InlineData("あいつは『本』\nだと言った\n", new[] { "あいつは『本』", "だと言った" })]
+    [InlineData("「あの『本』\nだよ」\n", new[] { "「あの『本』だよ」" })]
+    [InlineData("「『本』\n」\n", new[] { "「『本』」" })]
+    public async Task LineFinalDoubleQuoteEndsTheSentence(string text, string[] expected)
+    {
+        (await Split(text)).Should().Equal(expected);
+    }
+
+    [Theory]
     [InlineData("「え、私みたいに。？」", "「え、私みたいに？」")]
     [InlineData("同じことを何度も何度も。。", "同じことを何度も何度も。")]
     [InlineData("そう。ですか？", "そう。ですか？")]
