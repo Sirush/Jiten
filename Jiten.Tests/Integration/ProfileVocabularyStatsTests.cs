@@ -29,25 +29,6 @@ public class ProfileVocabularyStatsTests(JitenWebApplicationFactory factory)
 
     public Task DisposeAsync() => Task.CompletedTask;
 
-    private async Task ConfigureProfile(string userId, bool isPublic)
-    {
-        using var scope = factory.Services.CreateScope();
-        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
-
-        var user = await userDb.Users.FirstAsync(u => u.Id == userId);
-        user.NormalizedUserName = (user.UserName ?? userId).ToUpperInvariant();
-
-        var profile = await userDb.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
-        if (profile == null)
-        {
-            profile = new UserProfile { UserId = userId };
-            userDb.UserProfiles.Add(profile);
-        }
-        profile.IsPublic = isPublic;
-
-        await userDb.SaveChangesAsync();
-    }
-
     /// <summary>Seeds one word per tier so word-level counts stay independent of the per-word max-state rule.</summary>
     private async Task SeedCards(string userId)
     {
@@ -95,7 +76,7 @@ public class ProfileVocabularyStatsTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task OwnProfile_ReturnsCounts_EvenWhenPrivate()
     {
-        await ConfigureProfile(TestUsers.UserA, isPublic: false);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: false);
         await SeedCards(TestUsers.UserA);
 
         var request = new HttpRequestMessage(HttpMethod.Get, $"/api/user/profile/{TestUsers.UserA}/vocabulary-stats")
@@ -112,7 +93,7 @@ public class ProfileVocabularyStatsTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task Response_OmitsBlacklistedAndFormCounts()
     {
-        await ConfigureProfile(TestUsers.UserA, isPublic: true);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
         await SeedCards(TestUsers.UserA);
 
         var request = new HttpRequestMessage(HttpMethod.Get, $"/api/user/profile/{TestUsers.UserA}/vocabulary-stats");
@@ -128,7 +109,7 @@ public class ProfileVocabularyStatsTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task PublicProfile_VisibleToOtherUser()
     {
-        await ConfigureProfile(TestUsers.UserA, isPublic: true);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
         await SeedCards(TestUsers.UserA);
 
         var request = new HttpRequestMessage(HttpMethod.Get, $"/api/user/profile/{TestUsers.UserA}/vocabulary-stats")
@@ -143,7 +124,7 @@ public class ProfileVocabularyStatsTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task PublicProfile_VisibleAnonymously()
     {
-        await ConfigureProfile(TestUsers.UserA, isPublic: true);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
         await SeedCards(TestUsers.UserA);
 
         var response = await _client.GetAsync($"/api/user/profile/{TestUsers.UserA}/vocabulary-stats");
@@ -156,7 +137,7 @@ public class ProfileVocabularyStatsTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task PrivateProfile_HiddenFromOtherUser()
     {
-        await ConfigureProfile(TestUsers.UserA, isPublic: false);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: false);
         await SeedCards(TestUsers.UserA);
 
         var request = new HttpRequestMessage(HttpMethod.Get, $"/api/user/profile/{TestUsers.UserA}/vocabulary-stats")
@@ -177,7 +158,7 @@ public class ProfileVocabularyStatsTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task MasteredWordSet_ReportedSeparatelyFromKnownWords()
     {
-        await ConfigureProfile(TestUsers.UserA, isPublic: true);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
         await SeedCards(TestUsers.UserA);
         await SeedMasteredWordSet(TestUsers.UserA);
 
@@ -192,7 +173,7 @@ public class ProfileVocabularyStatsTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task CountsMatchOwnVocabularyEndpoint()
     {
-        await ConfigureProfile(TestUsers.UserA, isPublic: true);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
         await SeedCards(TestUsers.UserA);
         await SeedMasteredWordSet(TestUsers.UserA);
 
@@ -221,7 +202,7 @@ public class ProfileVocabularyStatsTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task WordWithBlacklistedSiblingForm_CountsAsKnown()
     {
-        await ConfigureProfile(TestUsers.UserA, isPublic: true);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
         await SeedCards(TestUsers.UserA);
         var now = DateTime.UtcNow;
         await AddCards(
@@ -240,7 +221,7 @@ public class ProfileVocabularyStatsTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task WordWithAllFormsBlacklisted_StaysBlacklisted()
     {
-        await ConfigureProfile(TestUsers.UserA, isPublic: true);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
         await SeedCards(TestUsers.UserA);
         await AddCards(new FsrsCard(TestUsers.UserA, 400, 1, state: FsrsState.Blacklisted));
 
@@ -259,7 +240,7 @@ public class ProfileVocabularyStatsTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task ResetCard_DoesNotCountAsKnown()
     {
-        await ConfigureProfile(TestUsers.UserA, isPublic: true);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
         await SeedCards(TestUsers.UserA);
         var now = DateTime.UtcNow;
         // Reviewed but holding no active schedule: back in the new queue, so it counts as neither young nor mature.

@@ -342,6 +342,8 @@
         </div>
       </template>
 
+      <ProfileSharedShelf v-if="auth.isAuthenticated && !isOwnProfile && profile.isMediaListPublic" :username="displayUsername" />
+
       <!-- Study Heatmap -->
       <Card>
         <template #title>

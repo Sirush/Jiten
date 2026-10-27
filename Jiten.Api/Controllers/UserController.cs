@@ -3507,15 +3507,15 @@ public partial class UserController(
 
         var entries = await BuildMediaListAsync(userId);
 
-        // Dates and character counts stay private even on a public list.
-        var listEntries = userService.UserId == userId
+        var isOwner = userService.UserId == userId;
+        var listEntries = isOwner
             ? await MediaListEntryHelper.BuildSummariesAsync(userContext, jitenContext, userId, entries.Select(e => e.Display.DeckId).ToList(),
                                                              entries.Where(e => e.Display.Children.Count > 0).Select(e => e.Display.DeckId).ToList())
             : new Dictionary<int, MediaListEntrySummary>();
         var dtos = entries
                    .Select(e => new DeckDto(e.Display)
                                 {
-                                    Status = e.Status, IsFavourite = e.IsFavourite, ListEntry = listEntries.GetValueOrDefault(e.Display.DeckId)
+                                    Status = e.Status, IsFavourite = isOwner && e.IsFavourite, ListEntry = listEntries.GetValueOrDefault(e.Display.DeckId)
                                 })
                    .OrderBy(d => d.OriginalTitle)
                    .ToList();

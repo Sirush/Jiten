@@ -183,6 +183,19 @@ export interface DeckCard {
   iPlusOneSentences?: number | null;
 }
 
+export interface SharedShelfItem {
+  deck: DeckCard;
+  yourStatus: DeckStatus;
+}
+
+export interface SharedShelf {
+  viewerHasList: boolean;
+  sharedCount: number;
+  theirsOnlyCount: number;
+  shared: SharedShelfItem[];
+  theirsOnly: SharedShelfItem[];
+}
+
 export interface SimilarDeck {
   deck: DeckCard;
   similarity: number;
