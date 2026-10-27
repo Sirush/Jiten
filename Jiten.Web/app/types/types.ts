@@ -1610,7 +1610,7 @@ export type CardImageLayout = 'beside' | 'below' | 'background';
 export type CardImagePosition = 'Front' | 'Back';
 export type CardAudioAutoPlayPosition = 'Front' | 'Back' | 'Both';
 export type ExampleSentenceSorting = 'Random' | 'EasiestFirst' | 'HardestFirst';
-export type ExampleSentenceSource = 'StudyDecks' | 'Random';
+export type ExampleSentenceSource = 'StudyDecks' | 'Random' | 'CompletedMedia';
 
 /** "Speed Focus" timed-review preferences. Behaviour is entirely client-side; the server round-trips it. */
 export interface TimedReviewSettings {
