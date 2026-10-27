@@ -76,7 +76,7 @@ const FREE_LIMITS: JitenPlusLimits = {
   activeMediaRequests: 20,
   customSentencesPerWord: 3,
   communityLists: 10,
-  communityListItems: 100,
+  communityListItems: 200,
   plus: {
     studyDecks: 200,
     studyDeckWords: 300_000,
@@ -84,7 +84,7 @@ const FREE_LIMITS: JitenPlusLimits = {
     activeMediaRequests: 30,
     customSentencesPerWord: 10,
     communityLists: 100,
-    communityListItems: 1000,
+    communityListItems: 2500,
   },
 };
 
