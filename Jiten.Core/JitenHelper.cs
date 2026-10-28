@@ -15,6 +15,9 @@ public static class JitenHelper
     // Cap concurrent PostgreSQL COPY operations to reduce server pressure/timeouts
     private static readonly SemaphoreSlim CopySemaphore = new SemaphoreSlim(6);
 
+    /// <summary>Mirrors CK_DeckTitles_Title_Length; longer provider aliases are dropped rather than failing the whole insert.</summary>
+    private const int DeckTitleMaxLength = 200;
+
     private static string? StripNul(string? value) =>
         value != null && value.Contains('\0') ? value.Replace("\0", "") : value;
 
@@ -27,6 +30,8 @@ public static class JitenHelper
 
         foreach (var title in deck.Titles)
             title.Title = StripNul(title.Title) ?? title.Title;
+
+        deck.Titles = deck.Titles.Where(t => t.Title.Length <= DeckTitleMaxLength).ToList();
 
         foreach (var link in deck.Links)
             link.Url = StripNul(link.Url) ?? link.Url;
@@ -42,7 +47,8 @@ public static class JitenHelper
             SanitizeDeckStrings(child);
     }
 
-    public static async Task InsertDeck(IDbContextFactory<JitenDbContext> contextFactory, Deck deck, byte[] cover, bool update = false)
+    /// <summary>Errors are logged, not thrown; returns false when the deck could not be written, in which case DeckId must not be trusted.</summary>
+    public static async Task<bool> InsertDeck(IDbContextFactory<JitenDbContext> contextFactory, Deck deck, byte[] cover, bool update = false)
     {
         var totalTimer = Stopwatch.StartNew();
         SanitizeDeckStrings(deck);
@@ -85,7 +91,7 @@ public static class JitenHelper
                 {
                     Console.WriteLine($"[{DateTime.UtcNow:O}] Deck {deck.OriginalTitle} already exists, no update flag or deck not changed, skipping.");
                     await transaction.RollbackAsync();
-                    return;
+                    return true;
                 }
 
                 Console.WriteLine($"[{DateTime.UtcNow:O}] Deck {deck.OriginalTitle} exists, updating metadata...");
@@ -113,7 +119,7 @@ public static class JitenHelper
                     childBulkData.Select(c => (c.deckId, c.sentenceProfile)).Append((existingDeck.DeckId, deck.SentenceProfile)));
 
                 Console.WriteLine($"[{DateTime.UtcNow:O}] Update completed.");
-                return;
+                return true;
             }
             else
             {
@@ -221,7 +227,7 @@ public static class JitenHelper
 
                 Console.WriteLine($"[{DateTime.UtcNow:O}] Bulk inserts for deck and children completed.");
                 Console.WriteLine($"Insert took {totalTimer.ElapsedMilliseconds} ms.");
-                return;
+                return true;
             }
         }
         catch (Exception ex)
@@ -240,7 +246,7 @@ public static class JitenHelper
             for (var inner = ex.InnerException; inner != null; inner = inner.InnerException)
                 detail += $"\n  -> {inner.GetType().Name}: {inner.Message}";
             Console.WriteLine($"[{DateTime.UtcNow:O}] Error inserting deck: {detail}");
-            return;
+            return false;
         }
     }
 
