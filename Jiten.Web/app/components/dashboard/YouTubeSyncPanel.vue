@@ -198,7 +198,7 @@
     }
   };
 
-  const formatDateTime = (value: string | null) => (value ? formatDateTime(value) : '—');
+  const formatOptionalDateTime = (value: string | null) => (value ? formatDateTime(value) : '—');
   const formatDate = (value: string | null) => (value ? formatDateShort(value) : '—');
   const formatRuntime = (seconds: number | null) => {
     if (!seconds) return '—';
@@ -252,11 +252,11 @@
         </div>
         <div>
           <div class="text-surface-500 dark:text-surface-400">Last synced</div>
-          <div class="font-medium">{{ formatDateTime(source.lastSyncedAt) }}</div>
+          <div class="font-medium">{{ formatOptionalDateTime(source.lastSyncedAt) }}</div>
         </div>
         <div>
           <div class="text-surface-500 dark:text-surface-400">Next feed check</div>
-          <div class="font-medium">{{ formatDateTime(source.nextCheckAt) }}</div>
+          <div class="font-medium">{{ formatOptionalDateTime(source.nextCheckAt) }}</div>
         </div>
       </div>
 

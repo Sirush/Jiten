@@ -200,8 +200,6 @@
     }
   };
 
-  const formatDateTime = (value: string) => formatDateTime(value);
-
   onMounted(async () => {
     await loadRegistrations();
     mode.value = serverFetch.value ? 'server' : 'cli';
