@@ -1,4 +1,5 @@
 using Jiten.Api.Dtos;
+using Jiten.Api.Helpers;
 using Jiten.Core.Data;
 using Jiten.Core.Data.User;
 
@@ -106,6 +107,12 @@ public interface IDeckWordResolver
     Task<(int Count, bool WasTruncated)> CountGlobalDynamicWords(int? minFreq, int? maxFreq, string? posFilter, bool excludeKana,
         bool excludeMatureMasteredBlacklisted = false, bool excludeAllTrackedWords = false,
         FrequencyScope scope = default);
+    /// <summary>Word-set forms a global dynamic deck's filters match, split by the state that wins for each form.</summary>
+    Task<(int Mastered, int Blacklisted)> CountGlobalDynamicSetForms(int? minFreq, int? maxFreq, string? posFilter, bool excludeKana,
+        FrequencyScope scope, UserWordSets wordSets);
+    /// <summary>Forms of a shared tier layer a global dynamic deck's filters match, counted per tier.</summary>
+    Task<IReadOnlyDictionary<VocabularyTier, int>> CountGlobalDynamicTiers(int? minFreq, int? maxFreq, string? posFilter,
+        bool excludeKana, FrequencyScope scope, RedundantTiers redundantTiers);
     /// <summary>Rank per word key inside the given scope, for the supplied words only; absent = unranked there.</summary>
     Task<Dictionary<(int, byte), int>> GetFrequencyRanks(List<int> wordIds, FrequencyScope scope = default);
     Task<FrequencyOrderKeys> LoadFrequencyOrderKeys(List<int> wordIds, FrequencyScope scope);

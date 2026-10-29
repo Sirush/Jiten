@@ -627,7 +627,8 @@ public class RoadmapTests(JitenWebApplicationFactory factory)
             readScope.ServiceProvider.GetRequiredService<UserDbContext>(),
             readScope.ServiceProvider.GetRequiredService<IWordFormSiblingCache>(),
             readScope.ServiceProvider.GetRequiredService<IDerivationLinkCache>(),
-            readScope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>());
+            readScope.ServiceProvider.GetRequiredService<Microsoft.Extensions.Caching.Memory.IMemoryCache>(),
+            readScope.ServiceProvider.GetRequiredService<IWordSetMemberCache>());
 
         var keys = forms.Select(f => (f.WordId, (byte)f.ReadingIndex)).ToList();
         var states = await runtime.GetKnownWordsState(keys);

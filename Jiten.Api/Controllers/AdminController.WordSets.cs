@@ -1,6 +1,7 @@
 using Jiten.Api.Dtos;
 using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Helpers;
+using Jiten.Api.Services;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Microsoft.AspNetCore.Mvc;
@@ -99,7 +100,7 @@ public partial class AdminController
     }
 
     [HttpDelete("word-sets/{setId:int}")]
-    public async Task<IActionResult> DeleteWordSet(int setId)
+    public async Task<IActionResult> DeleteWordSet(int setId, [FromServices] IWordSetMemberCache wordSetCache)
     {
         var wordSet = await dbContext.WordSets.FirstOrDefaultAsync(ws => ws.SetId == setId);
         if (wordSet == null)
@@ -113,6 +114,7 @@ public partial class AdminController
         // Delete the word set (cascade handles members)
         dbContext.WordSets.Remove(wordSet);
         await dbContext.SaveChangesAsync();
+        wordSetCache.Invalidate(setId);
 
         logger.LogWarning("Admin deleted word set: SetId={SetId}, Slug={Slug}", setId, wordSet.Slug);
 
@@ -211,7 +213,8 @@ public partial class AdminController
     }
 
     [HttpPost("word-sets/{setId:int}/members")]
-    public async Task<IActionResult> AddMembers(int setId, [FromBody] AddWordSetMembersRequest request)
+    public async Task<IActionResult> AddMembers(int setId, [FromBody] AddWordSetMembersRequest request,
+                                                [FromServices] IWordSetMemberCache wordSetCache)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
@@ -274,6 +277,7 @@ public partial class AdminController
         if (added > 0)
         {
             await dbContext.SaveChangesAsync();
+            wordSetCache.Invalidate(setId);
 
             wordSet.WordCount = await dbContext.WordSetMembers
                 .Where(m => m.SetId == setId)
@@ -290,7 +294,8 @@ public partial class AdminController
     }
 
     [HttpPost("word-sets/{setId:int}/members/remove")]
-    public async Task<IActionResult> RemoveMembers(int setId, [FromBody] RemoveWordSetMembersRequest request)
+    public async Task<IActionResult> RemoveMembers(int setId, [FromBody] RemoveWordSetMembersRequest request,
+                                                   [FromServices] IWordSetMemberCache wordSetCache)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
@@ -309,6 +314,7 @@ public partial class AdminController
 
         if (removed > 0)
         {
+            wordSetCache.Invalidate(setId);
             wordSet.WordCount = await dbContext.WordSetMembers
                 .Where(m => m.SetId == setId)
                 .Select(m => m.WordId)

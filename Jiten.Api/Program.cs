@@ -511,6 +511,7 @@ builder.Services.AddSingleton<Jiten.Api.Services.Stripe.IStripeGateway, Jiten.Ap
 builder.Services.AddScoped<Jiten.Api.Services.Stripe.StripeService>();
 builder.Services.AddSingleton<IWordFormSiblingCache, WordFormSiblingCache>();
 builder.Services.AddSingleton<IDerivationLinkCache, DerivationLinkCache>();
+builder.Services.AddSingleton<IWordSetMemberCache, WordSetMemberCache>();
 builder.Services.AddSingleton<Jiten.Api.Services.SmartDeck.IWordReferenceCache, Jiten.Api.Services.SmartDeck.WordReferenceCache>();
 builder.Services.AddScoped<Jiten.Api.Services.SmartDeck.ISmartDeckBuilder, Jiten.Api.Services.SmartDeck.SmartDeckBuilder>();
 builder.Services.AddSingleton<Jiten.Api.Services.SmartDeck.ISmartDeckDirtyService, Jiten.Api.Services.SmartDeck.SmartDeckDirtyService>();
@@ -958,7 +959,7 @@ builder.Services.AddCors(options =>
             })
             .AllowAnyHeader()
             .AllowAnyMethod()
-            .WithExposedHeaders("Retry-After")
+            .WithExposedHeaders("Retry-After", Jiten.Api.Controllers.StudyController.OverviewVersionHeader)
             // Chromium caps preflight caching at 2 hours; origin or header changes take up to this long to reach cached clients.
             .SetPreflightMaxAge(TimeSpan.FromHours(2));
     });

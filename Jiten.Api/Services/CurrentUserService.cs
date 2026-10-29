@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using Jiten.Api.Helpers;
@@ -16,7 +17,8 @@ public class CurrentUserService(
     UserDbContext userContext,
     IWordFormSiblingCache wordFormCache,
     IDerivationLinkCache derivationCache,
-    IMemoryCache memoryCache)
+    IMemoryCache memoryCache,
+    IWordSetMemberCache wordSetCache)
     : ICurrentUserService
 {
     public ClaimsPrincipal? Principal => httpContextAccessor.HttpContext?.User;
@@ -51,8 +53,8 @@ public class CurrentUserService(
 
         var wordIds = keysSet.Select(k => k.WordId).Distinct().ToList();
 
-        // Family keys are a pure function of the requested keys, so they can widen the card and word-set
-        // queries below instead of costing a second round trip.
+        // Family keys are a pure function of the requested keys, so they can widen the card
+        // query below instead of costing a second round trip.
         var coversByKey = await ResolveDerivationCovers(keysSet);
         var lookupWordIds = wordIds;
         if (coversByKey.Count > 0)
@@ -65,7 +67,7 @@ public class CurrentUserService(
         }
 
         var cardsByKey = await LoadCardSnapshots(lookupWordIds);
-        var setDerivedStates = await GetWordSetDerivedStates(lookupWordIds);
+        var wordSets = await GetWordSets();
 
         return keysSet.ToDictionary(k => k, k =>
         {
@@ -74,7 +76,7 @@ public class CurrentUserService(
             if (cardsByKey.TryGetValue(k, out var card))
                 return GetKnownStatesFromCard(card);
 
-            if (setDerivedStates.TryGetValue((k.WordId, k.ReadingIndex), out var setState))
+            if (wordSets.TryGetState(k, out var setState))
             {
                 return setState switch
                 {
@@ -85,22 +87,17 @@ public class CurrentUserService(
             }
 
             coversByKey.TryGetValue(k, out var covers);
-            return ResolveRedundantStates(k, cardsByKey, setDerivedStates, covers) ?? [KnownState.New];
+            return ResolveRedundantStates(k, cardsByKey, wordSets, covers) ?? [KnownState.New];
         });
     }
 
-    /// <summary>
-    /// States of every card-less, set-less form the given cards and word-set states make redundant, resolved
-    /// exactly as <see cref="GetKnownWordsState"/> would. Callers that already hold the user's whole card set
-    /// (study-deck stats) use this instead of re-querying per deck.
-    /// </summary>
-    public async Task<Dictionary<(int WordId, byte ReadingIndex), List<KnownState>>> ResolveRedundantStates(
+    /// <summary>Matches <see cref="GetKnownWordsState"/>; a card only changes forms it reaches by kana sibling or derivation, so only those resolve per request.</summary>
+    public async Task<RedundantTiers> ResolveRedundantTiers(
         IReadOnlyDictionary<(int WordId, byte ReadingIndex), KnownCardSnapshot> cardsByKey,
-        Dictionary<(int, byte), WordSetStateType> setDerivedStates)
+        UserWordSets wordSets)
     {
-        var result = new Dictionary<(int WordId, byte ReadingIndex), List<KnownState>>();
         if (!IsAuthenticated)
-            return result;
+            return RedundantTiers.Empty;
 
         var categories = derivationCache.IsEmpty
             ? new HashSet<DerivationCategory>()
@@ -119,41 +116,72 @@ public class CurrentUserService(
                     candidates.Add((covered.WordId, covered.ReadingIndex));
         }
 
-        foreach (var ((wordId, ri), setState) in setDerivedStates)
-        {
-            if (setState is not (WordSetStateType.Mastered or WordSetStateType.Blacklisted)) continue;
-            if (cardsByKey.ContainsKey((wordId, ri))) continue;
-
-            var kanaIndexes = wordFormCache.GetKanaIndexesForKanji(wordId, ri);
-            if (kanaIndexes != null)
-                foreach (var kanaRi in kanaIndexes)
-                    candidates.Add((wordId, kanaRi));
-
-            if (categories.Count > 0)
-                foreach (var covered in derivationCache.GetCoveredKeys(wordId, ri, categories))
-                    candidates.Add((covered.WordId, covered.ReadingIndex));
-        }
-
+        var cardDriven = new Dictionary<long, VocabularyTier>();
         foreach (var key in candidates)
         {
-            if (cardsByKey.ContainsKey(key) || setDerivedStates.ContainsKey(key)) continue;
+            if (cardsByKey.ContainsKey(key) || wordSets.Contains(key)) continue;
 
-            var covers = categories.Count > 0
-                ? derivationCache.GetCoveringKeys(key.WordId, key.ReadingIndex, categories)
-                : null;
-            var states = ResolveRedundantStates(key, cardsByKey, setDerivedStates, covers);
+            var states = ResolveRedundantStates(key, cardsByKey, wordSets, CoveringKeys(key, categories));
             if (states != null)
-                result[key] = states;
+                cardDriven[WordFormHelper.EncodeWordKey(key.WordId, key.ReadingIndex)] = VocabularyDisplayFilter.ResolveTier(states);
         }
 
-        return result;
+        var (setDriven, setDrivenCacheKey) = await GetSetDrivenRedundantTiers(wordSets, categories);
+        var cardKeys = setDriven.Count == 0
+            ? []
+            : cardsByKey.Keys.Select(k => WordFormHelper.EncodeWordKey(k.WordId, k.ReadingIndex)).ToHashSet();
+        return new RedundantTiers(cardDriven, setDriven, setDrivenCacheKey, cardKeys);
     }
+
+    private static readonly TimeSpan SetDrivenTiersLifetime = TimeSpan.FromHours(1);
+
+    /// <summary>Keyed on the subscription mix and derivation categories only, so users sharing both read one copy.</summary>
+    private async Task<(FrozenDictionary<long, VocabularyTier> Tiers, string CacheKey)> GetSetDrivenRedundantTiers(
+        UserWordSets sets, IReadOnlySet<DerivationCategory> categories)
+    {
+        if (sets.IsEmpty)
+            return (FrozenDictionary<long, VocabularyTier>.Empty, "");
+
+        var cacheKey = $"wordset-redundant:{sets.CacheKey}:{DerivationSettingsHelper.ToCacheKey(categories)}";
+        var tiers = await memoryCache.GetOrCreateOnceAsync(cacheKey,
+                                                           new MemoryCacheEntryOptions().SetAbsoluteExpiration(SetDrivenTiersLifetime),
+                                                           () => BuildSetDrivenRedundantTiers(sets, categories));
+        return (tiers, cacheKey);
+    }
+
+    private async Task<FrozenDictionary<long, VocabularyTier>> BuildSetDrivenRedundantTiers(
+        UserWordSets sets, IReadOnlySet<DerivationCategory> categories)
+    {
+        var candidates = new HashSet<long>();
+        foreach (var set in sets.Sets)
+        {
+            candidates.UnionWith(await wordSetCache.GetKanaRedundantAsync(set.SetId));
+            candidates.UnionWith(await wordSetCache.GetDerivationRedundantAsync(set.SetId, categories));
+        }
+
+        var noCards = new Dictionary<(int WordId, byte ReadingIndex), KnownCardSnapshot>();
+        var tiers = new Dictionary<long, VocabularyTier>();
+        foreach (var encoded in candidates)
+        {
+            if (sets.Contains(encoded)) continue;
+
+            var key = WordFormHelper.DecodeWordKey(encoded);
+            var states = ResolveRedundantStates(key, noCards, sets, CoveringKeys(key, categories));
+            if (states != null)
+                tiers[encoded] = VocabularyDisplayFilter.ResolveTier(states);
+        }
+
+        return tiers.ToFrozenDictionary();
+    }
+
+    private IReadOnlyList<DerivationCover>? CoveringKeys((int WordId, byte ReadingIndex) key, IReadOnlySet<DerivationCategory> categories)
+        => categories.Count > 0 ? derivationCache.GetCoveringKeys(key.WordId, key.ReadingIndex, categories) : null;
 
     /// <summary>Kana-sibling cover is tried before the derivation family, so both entry points agree.</summary>
     private List<KnownState>? ResolveRedundantStates(
         (int WordId, byte ReadingIndex) key,
         IReadOnlyDictionary<(int WordId, byte ReadingIndex), KnownCardSnapshot> cardsByKey,
-        Dictionary<(int, byte), WordSetStateType> setDerivedStates,
+        UserWordSets wordSets,
         IReadOnlyList<DerivationCover>? covers)
     {
         var kanjiIndexes = wordFormCache.GetKanjiIndexesForKana(key.WordId, key.ReadingIndex);
@@ -178,8 +206,7 @@ public class CurrentUserService(
             List<KnownState>? bestSetStates = null;
             foreach (var kanjiRi in kanjiIndexes)
             {
-                if (!setDerivedStates.TryGetValue((key.WordId, kanjiRi), out var setState)) continue;
-                if (setState is not (WordSetStateType.Mastered or WordSetStateType.Blacklisted)) continue;
+                if (!wordSets.TryGetState((key.WordId, kanjiRi), out var setState)) continue;
                 var mastered = setState == WordSetStateType.Mastered;
                 var rank = mastered ? MasteredRank : BlacklistedRank;
                 if (rank <= bestSetRank) continue;
@@ -192,7 +219,7 @@ public class CurrentUserService(
         }
 
         if (covers != null && covers.Count > 0)
-            return ResolveFromDerivationFamily(covers, cardsByKey, setDerivedStates)?.States;
+            return ResolveFromDerivationFamily(covers, cardsByKey, wordSets)?.States;
 
         return null;
     }
@@ -238,8 +265,7 @@ public class CurrentUserService(
         if (cardsByKey.ContainsKey(key))
             return null;
 
-        var setStates = await GetWordSetDerivedStates(familyWordIds);
-        return ResolveFromDerivationFamily(covers, cardsByKey, setStates)?.Cover;
+        return ResolveFromDerivationFamily(covers, cardsByKey, await GetWordSets())?.Cover;
     }
 
     /// <summary>
@@ -249,7 +275,7 @@ public class CurrentUserService(
     private static (List<KnownState> States, DerivationCover Cover)? ResolveFromDerivationFamily(
         IReadOnlyList<DerivationCover> covers,
         IReadOnlyDictionary<(int WordId, byte ReadingIndex), KnownCardSnapshot> cardsByKey,
-        Dictionary<(int, byte), WordSetStateType> setDerivedStates)
+        UserWordSets wordSets)
     {
         List<KnownState>? best = null;
         DerivationCover bestCover = default;
@@ -266,8 +292,7 @@ public class CurrentUserService(
                 states = GetKnownStatesFromCard(card);
                 rank = GetKnownStateRank(card);
             }
-            else if (setDerivedStates.TryGetValue(coverKey, out var setState) &&
-                     setState is WordSetStateType.Mastered or WordSetStateType.Blacklisted)
+            else if (wordSets.TryGetState(coverKey, out var setState))
             {
                 var mastered = setState == WordSetStateType.Mastered;
                 states = mastered ? [KnownState.Mastered] : [KnownState.Blacklisted];
@@ -362,51 +387,8 @@ public class CurrentUserService(
         return knownState;
     }
 
-    public Task<Dictionary<(int, byte), WordSetStateType>> GetWordSetDerivedStates() =>
-        GetWordSetDerivedStates(null);
-
-    private async Task<Dictionary<(int, byte), WordSetStateType>> GetWordSetDerivedStates(List<int>? wordIds)
-    {
-        if (!IsAuthenticated)
-            return new();
-
-        var userSetStates = await userContext.UserWordSetStates
-            .AsNoTracking()
-            .Where(uwss => uwss.UserId == UserId)
-            .ToListAsync();
-
-        if (userSetStates.Count == 0)
-            return new();
-
-        var subscribedSetIds = userSetStates.Select(s => s.SetId).ToList();
-
-        IQueryable<WordSetMember> query = jitenDbContext.WordSetMembers
-            .Where(wsm => subscribedSetIds.Contains(wsm.SetId));
-        if (wordIds != null)
-            query = query.Where(wsm => wordIds.Contains(wsm.WordId));
-
-        var memberships = await query
-            .Select(wsm => new { wsm.WordId, wsm.ReadingIndex, wsm.SetId })
-            .ToListAsync();
-
-        var setStateDict = userSetStates.ToDictionary(s => s.SetId, s => s.State);
-        var result = new Dictionary<(int, byte), WordSetStateType>();
-
-        foreach (var m in memberships)
-        {
-            if (m.ReadingIndex < 0 || m.ReadingIndex > byte.MaxValue) continue;
-            var key = (m.WordId, (byte)m.ReadingIndex);
-
-            var newState = setStateDict[m.SetId];
-
-            if (!result.TryGetValue(key, out var existingState))
-                result[key] = newState;
-            else if (newState == WordSetStateType.Mastered && existingState == WordSetStateType.Blacklisted)
-                result[key] = WordSetStateType.Mastered;
-        }
-
-        return result;
-    }
+    public Task<UserWordSets> GetWordSets() =>
+        IsAuthenticated ? wordSetCache.LoadForUserAsync(userContext, UserId!) : Task.FromResult(UserWordSets.Empty);
 
     public async Task<List<KnownState>> GetKnownWordState(int wordId, byte readingIndex)
     {

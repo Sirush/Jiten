@@ -17,6 +17,7 @@ public class WordReplacementService(
     IDbContextFactory<UserDbContext> userContextFactory,
     IBackgroundJobClient backgroundJobs,
     IConnectionMultiplexer redis,
+    IWordSetMemberCache wordSetCache,
     ILogger<WordReplacementService> logger)
 {
     private readonly IDatabase _redis = redis.GetDatabase();
@@ -336,6 +337,9 @@ public class WordReplacementService(
 
             await transaction.CommitAsync();
             await userTransaction.CommitAsync();
+
+            foreach (var setId in affectedSetIds)
+                wordSetCache.Invalidate(setId);
 
             var setUserIds = affectedSetIds.Count == 0
                 ? []

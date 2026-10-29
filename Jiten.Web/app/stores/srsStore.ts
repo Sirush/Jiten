@@ -23,6 +23,18 @@ import { DEFAULT_KEYBINDS } from '~/composables/useStudyKeyboard';
 import { DEFAULT_CARD_DISPLAY_SETTINGS } from '~/utils/defaultStudySettings';
 import { useAuthStore } from '~/stores/authStore';
 import { cardReading } from '~/utils/srsWriteIn';
+import {
+  type CachedStudyDecks,
+  OVERVIEW_VERSION_HEADER,
+  UNVERIFIED_VERSION,
+  canSkipRefetch,
+  mayStillBeFresh,
+  parseOverviewVersion,
+  readStudyDecksCache,
+  removeStudyDecksCache,
+  tokenSubject,
+  writeStudyDecksCache,
+} from '~/utils/studyDecksCache';
 
 interface SessionReview {
   wordId: number;
@@ -417,13 +429,28 @@ export const useSrsStore = defineStore('srs', () => {
   }
 
   let fetchStudyDecksPromise: Promise<void> | null = null;
+  let studyDecksFetchedThisLoad = false;
+
+  function studyDecksCacheOwner() {
+    return import.meta.client ? tokenSubject(useAuthStore().accessToken) : null;
+  }
 
   async function fetchStudyDecks() {
     if (fetchStudyDecksPromise) return fetchStudyDecksPromise;
     fetchStudyDecksPromise = (async () => {
       try {
-        studyDecks.value = await $api<StudyDeckDto[]>('srs/study-decks');
+        let version: number | null = null;
+        const decks = await $api<StudyDeckDto[]>('srs/study-decks', {
+          onResponse({ response }) {
+            version = parseOverviewVersion(response.headers.get(OVERVIEW_VERSION_HEADER));
+          },
+        });
+        studyDecks.value = decks;
         fetchError.value = null;
+        studyDecksFetchedThisLoad = true;
+
+        const owner = studyDecksCacheOwner();
+        if (owner) writeStudyDecksCache(owner, { version: version ?? UNVERIFIED_VERSION, savedAt: Date.now(), decks });
       } catch (error) {
         console.error('Failed to fetch study decks:', error);
         fetchError.value = 'Failed to load study decks. Please try again.';
@@ -432,6 +459,38 @@ export const useSrsStore = defineStore('srs', () => {
       }
     })();
     return fetchStudyDecksPromise;
+  }
+
+  /** Shows the list saved by the last page load at once; the caller decides whether it needs revalidating. */
+  function hydrateStudyDecksFromCache(): CachedStudyDecks | null {
+    if (studyDecks.value.length > 0) return null;
+    const owner = studyDecksCacheOwner();
+    if (!owner) return null;
+    const cached = readStudyDecksCache(owner);
+    if (cached) studyDecks.value = cached.decks;
+    return cached;
+  }
+
+  /** Refetches unless the saved copy is recent and still carries the server's overview version, or a page already fetched. */
+  async function revalidateStudyDecks(cached: CachedStudyDecks) {
+    if (studyDecksFetchedThisLoad || fetchStudyDecksPromise) return;
+
+    if (mayStillBeFresh(cached, Date.now())) {
+      const current = await $api<{ version: number }>('srs/overview-version').catch(() => null);
+      if (studyDecksFetchedThisLoad || fetchStudyDecksPromise) return;
+      if (current && canSkipRefetch(cached, current.version, Date.now())) {
+        overviewVersion.value = current.version;
+        return;
+      }
+    }
+
+    await fetchStudyDecks();
+  }
+
+  /** Local edits change the list without a refetch, so the saved copy would show the pre-edit list on the next load. */
+  function forgetCachedStudyDecks() {
+    const owner = studyDecksCacheOwner();
+    if (owner) removeStudyDecksCache(owner);
   }
 
   let fetchDueSummaryPromise: Promise<void> | null = null;
@@ -505,6 +564,7 @@ export const useSrsStore = defineStore('srs', () => {
       method: 'POST',
       body: request,
     });
+    forgetCachedStudyDecks();
     studyDecks.value.push({
       userStudyDeckId: result.userStudyDeckId,
       deckType: request.deckType,
@@ -563,6 +623,7 @@ export const useSrsStore = defineStore('srs', () => {
       method: 'PUT',
       body: request,
     });
+    forgetCachedStudyDecks();
     const deck = studyDecks.value.find((d) => d.userStudyDeckId === id);
     if (deck) {
       if (request.name != null) deck.name = request.name;
@@ -591,6 +652,7 @@ export const useSrsStore = defineStore('srs', () => {
 
   async function removeStudyDeck(id: number) {
     await $api(`srs/study-decks/${id}`, { method: 'DELETE' });
+    forgetCachedStudyDecks();
     studyDecks.value = studyDecks.value.filter((d) => d.userStudyDeckId !== id);
     invalidateSession();
     refreshOverview();
@@ -726,6 +788,7 @@ export const useSrsStore = defineStore('srs', () => {
       body: { items },
     });
     
+    forgetCachedStudyDecks();
     for (const saved of response?.items ?? []) {
       const deck = studyDecks.value.find((d) => d.userStudyDeckId === saved.userStudyDeckId);
       if (deck && deck.isActive !== saved.isActive) deck.isActive = saved.isActive;
@@ -740,6 +803,7 @@ export const useSrsStore = defineStore('srs', () => {
   }
 
   async function reorderStudyDecks(reorderedDecks: StudyDeckDto[], options?: { debounce?: boolean }) {
+    forgetCachedStudyDecks();
     studyDecks.value = reorderedDecks;
     const items = buildReorderItems(reorderedDecks);
 
@@ -1845,6 +1909,8 @@ export const useSrsStore = defineStore('srs', () => {
     hasCards,
     progress,
     refreshOverview,
+    hydrateStudyDecksFromCache,
+    revalidateStudyDecks,
     refreshStudySummary,
     fetchStudyDecks,
     fetchDueSummary,

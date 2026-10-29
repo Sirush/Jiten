@@ -6,6 +6,8 @@ import { CookieMonitor, readCookie } from '~/utils/cookieMonitor';
 import { useSrsStore } from '~/stores/srsStore';
 import { useLegalStore } from '~/stores/legalStore';
 import { trackPendingSignup } from '~/utils/analytics';
+import { clearStudyDecksCache } from '~/utils/studyDecksCache';
+import { decodeJwtPayload } from '~/utils/jwt';
 
 const dbg = (...args: unknown[]) => {
   if (import.meta.dev) console.log(...args);
@@ -123,6 +125,7 @@ export const useAuthStore = defineStore('auth', () => {
     if (import.meta.client) {
       tokenCookie.value = null;
       refreshTokenCookie.value = null;
+      clearStudyDecksCache();
     }
 
     nuxtApp.runWithContext(() => {
@@ -132,12 +135,8 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   function tokenExpiry(token: string | null | undefined): number {
-    if (!token) return 0;
-    try {
-      return JSON.parse(atob(token.split('.')[1])).exp ?? 0;
-    } catch {
-      return 0;
-    }
+    const exp = decodeJwtPayload(token)?.exp;
+    return typeof exp === 'number' ? exp : 0;
   }
 
   // Check if token is expired or about to expire (within 5 minutes)

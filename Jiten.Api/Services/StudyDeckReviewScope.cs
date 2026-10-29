@@ -37,7 +37,8 @@ public class StudyDeckReviewScope(
     IStudyDeckMembershipService deckMembership,
     IWordFormSiblingCache wordFormCache,
     IDerivationLinkCache derivationCache,
-    IMemoryCache memoryCache) : IStudyDeckReviewScope
+    IMemoryCache memoryCache,
+    IWordSetMemberCache wordSetCache) : IStudyDeckReviewScope
 {
     private const int MaxConcurrentDeckQueries = 6;
     private const int MaxHoistedFrequencyKeys = 400_000;
@@ -183,7 +184,7 @@ public class StudyDeckReviewScope(
             await using var ctx = await contextFactory.CreateDbContextAsync();
             await using var uCtx = await userContextFactory.CreateDbContextAsync();
             var userService = new CurrentUserService(httpContextAccessor, ctx, uCtx, wordFormCache, derivationCache,
-                                                     memoryCache);
+                                                     memoryCache, wordSetCache);
             return await query(ctx, uCtx, userService);
         }
         finally
