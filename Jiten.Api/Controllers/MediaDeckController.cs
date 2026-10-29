@@ -1513,6 +1513,7 @@ public class MediaDeckController(
     /// <param name="limit">Page size, clamped to 1-200.</param>
     /// <returns>Paginated deck vocabulary list.</returns>
     [HttpGet("{id}/vocabulary")]
+    [ServiceFilter(typeof(DeckQuotaFilter))]
     [SwaggerOperation(Summary = "Get deck vocabulary")]
     [ProducesResponseType(typeof(PaginatedResponse<DeckVocabularyListDto?>), StatusCodes.Status200OK)]
     public async Task<PaginatedResponse<DeckVocabularyListDto?>> GetVocabulary(int id, string? sortBy = "",
@@ -1951,6 +1952,7 @@ public class MediaDeckController(
     /// <returns>File content result with the generated deck.</returns>
     [HttpPost("{id}/download")]
     [EnableRateLimiting("download")]
+    [ServiceFilter(typeof(DeckQuotaFilter))]
     [SwaggerOperation(Summary = "Download a deck",
                       Description = "Generate a deck file (Anki, CSV, TXT, Yomitan) with optional filters and ordering.")]
     [Produces("application/x-binary", "text/csv", "text/plain", "application/zip")]

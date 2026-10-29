@@ -726,10 +726,12 @@
       }
     } catch (err) {
       console.error('Error:', err);
+      const body = (err as { data?: unknown })?.data;
+      const limitMessage = apiStatusCode(err) === 429 && body instanceof Blob ? (await body.text()).trim() : '';
       toast.add({
         severity: 'error',
         summary: 'Download failed',
-        detail: extractApiError(err, 'Could not generate the deck. Please try again.'),
+        detail: limitMessage || extractApiError(err, 'Could not generate the deck. Please try again.'),
         life: 6000,
       });
     } finally {

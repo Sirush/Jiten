@@ -125,7 +125,7 @@
       empty-message="Try adjusting your search or filters"
     >
       <template #error="{ error: err }">
-        <div>Error: {{ err }}</div>
+        <div>{{ apiStatusCode(err) === 429 ? apiErrorMessage(err, 'Too many requests. Please try again later.') : `Error: ${err}` }}</div>
       </template>
     </VocabularyList>
     <PaginationControls

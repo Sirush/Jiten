@@ -200,6 +200,9 @@ bool IsTrustedIp(HttpContext ctx) => rateLimitTrustedIps.Count > 0 && rateLimitT
 bool IsFirstPartyBrowser(HttpContext ctx) =>
     !ctx.User.HasClaim("auth_scheme", "ApiKey") && ctx.Request.Headers.Origin.ToString() == "https://jiten.moe";
 
+builder.Services.AddSingleton(new DeckQuotaExemption(ctx => IsTrustedSsr(ctx) || IsTrustedIp(ctx)));
+builder.Services.AddScoped<DeckQuotaFilter>();
+
 // OpenTelemetry Configuration
 var otelConfig = builder.Configuration.GetSection("OpenTelemetry");
 var enableOtlpExporter = otelConfig.GetValue<bool>("EnableOtlpExporter");
@@ -542,6 +545,7 @@ builder.Services.AddScoped<FranchiseSuggestionService>();
 builder.Services.AddSingleton<FranchiseResponseCache>();
 builder.Services.AddScoped<FranchiseSyncRunner>();
 builder.Services.AddScoped<SeriesService>();
+builder.Services.AddScoped<IProfileAccessService, ProfileAccessService>();
 builder.Services.AddScoped<MediaGroupService>();
 builder.Services.AddScoped<MediaTitleSearchService>();
 builder.Services.AddScoped<MediaDuplicateService>();
