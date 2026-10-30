@@ -1690,6 +1690,27 @@ public partial class UserController(
         if (request?.Cards == null || request.Cards.Count == 0)
             return Results.BadRequest("No cards provided.");
 
+        await userContext.Database.OpenConnectionAsync();
+        try
+        {
+            await LockAnkiImport(userId, HttpContext.RequestAborted);
+            try
+            {
+                return await ImportAnkiCardsWithRetry(request, userId);
+            }
+            finally
+            {
+                await UnlockAnkiImport(userId);
+            }
+        }
+        finally
+        {
+            await userContext.Database.CloseConnectionAsync();
+        }
+    }
+
+    private async Task<IResult> ImportAnkiCardsWithRetry(AnkiImportRequest request, string userId)
+    {
         for (var attempt = 0;; attempt++)
         {
             try
@@ -1705,12 +1726,25 @@ public partial class UserController(
                     return Results.Problem("Import failed: " + ex.Message);
                 }
 
-                logger.LogInformation("Anki import chunk collided with a concurrent chunk, retrying: UserId={UserId}, Attempt={Attempt}",
+                logger.LogInformation("Anki import collided with a concurrent card write, retrying: UserId={UserId}, Attempt={Attempt}",
                                       userId, attempt + 1);
             }
         }
     }
 
+    /// <summary>Serialises one user's parallel import chunks, which can touch the same card; session-scoped, so the connection must stay open until unlock.</summary>
+    private Task LockAnkiImport(string userId, CancellationToken ct) =>
+        userContext.Database.IsNpgsql()
+            ? userContext.Database.ExecuteSqlRawAsync("SELECT pg_advisory_lock({0}, hashtext({1}))", [AnkiImportLockClass, userId], ct)
+            : Task.CompletedTask;
+
+    private Task UnlockAnkiImport(string userId) =>
+        userContext.Database.IsNpgsql()
+            ? userContext.Database.ExecuteSqlRawAsync("SELECT pg_advisory_unlock({0}, hashtext({1}))", AnkiImportLockClass, userId)
+            : Task.CompletedTask;
+
+    /// <summary>Namespaces the import's advisory locks so the per-user key cannot collide with another feature's.</summary>
+    private const int AnkiImportLockClass = 0x414E4B;
     private const int MaxAnkiImportConflictRetries = 2;
     private const long MaxAnkiImportBodyBytes = 30_000_000;
 
