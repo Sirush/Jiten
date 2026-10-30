@@ -1,18 +1,15 @@
 export function applySSRProxyHeaders(headers: Headers): void {
   if (!import.meta.server) return;
 
-  const proxyHeaders = useRequestHeaders(['x-forwarded-for', 'cf-connecting-ip', 'user-agent']);
+  const proxyHeaders = useRequestHeaders(['x-forwarded-for', 'user-agent']);
 
   // Pin the real visitor IP as the leftmost X-Forwarded-For so the API rate-limits SSR
   // calls per visitor instead of collapsing them onto the SSR server's IP. Only effective
   // if the API's reverse proxy (Traefik) trusts this host's XFF; the bypass key below is
   // the unconditional safety net.
-  const clientIp = proxyHeaders['cf-connecting-ip'] || proxyHeaders['x-forwarded-for'];
+  const clientIp = proxyHeaders['x-forwarded-for'];
   if (clientIp) {
     headers.set('X-Forwarded-For', clientIp);
-  }
-  if (proxyHeaders['cf-connecting-ip']) {
-    headers.set('CF-Connecting-IP', proxyHeaders['cf-connecting-ip']);
   }
   if (proxyHeaders['user-agent']) {
     headers.set('User-Agent', proxyHeaders['user-agent']);
