@@ -17,6 +17,14 @@
 
 @custom-variant dark (&:where(.dark-mode, .dark-mode *));
 
+@utility no-scrollbar {
+  scrollbar-width: none;
+
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @theme {
   /* @fontsource-variable registers "Noto Sans JP Variable"; the unsuffixed name covers a switch back to
        Google Fonts or a system install. Japanese system fonts precede sans-serif because bare sans-serif
@@ -50,6 +58,16 @@
 
 :root.stable-gutter {
   scrollbar-gutter: stable;
+}
+
+/** Stable-gutter pages keep their scrollbar under a modal; PrimeVue's scroll lock would shift them and leave an undimmed strip. */
+:root.stable-gutter:has(> body.p-overflow-hidden) {
+  overflow-y: scroll;
+}
+
+:root.stable-gutter > body.p-overflow-hidden {
+  overflow: visible !important;
+  padding-right: 0 !important;
 }
 
 :root.dark-mode {
@@ -220,6 +238,11 @@ ruby rp {
 
 a:not(.p-button) {
   @apply text-blue-500 hover:underline;
+}
+
+/** Pages with their own banner set --page-header-tint on <html> so the site bar continues it. */
+.app-header-bar {
+  background: var(--page-header-tint, #312e81);
 }
 
 .dark-mode a:not(.p-button) {

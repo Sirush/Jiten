@@ -66,21 +66,34 @@ function prune(deckId: number, queue: DeckQueue) {
   deckQueues.delete(deckId);
 }
 
-/** Runs a save in the title's queue, so it lands in order with the progress step's and history dialog's saves. */
-export function enqueueDeckSave(deckId: number, task: () => Promise<MediaListEntrySummary | null | false>, options: { quiet?: boolean } = {}) {
+function runInDeckQueue(deckId: number, task: (shared: DeckQueue) => Promise<boolean>, options: { quiet?: boolean } = {}) {
   const shared = deckQueue(deckId);
   return shared
-    .enqueue(async () => {
-      const result = await task();
-      if (result === false) return false;
-      shared.latest = result;
-      return true;
-    }, options)
+    .enqueue(() => task(shared), options)
     .finally(() => {
       if (!shared.isIdle()) return;
       shared.latest = null;
       prune(deckId, shared);
     });
+}
+
+/** Runs a save in the title's queue, so it lands in order with the progress step's and history dialog's saves. */
+export function enqueueDeckSave(deckId: number, task: () => Promise<MediaListEntrySummary | null | false>, options: { quiet?: boolean } = {}) {
+  return runInDeckQueue(
+    deckId,
+    async (shared) => {
+      const result = await task();
+      if (result === false) return false;
+      shared.latest = result;
+      return true;
+    },
+    options
+  );
+}
+
+/** Runs a save that doesn't touch the title's progress in the title's queue, so the entry dialog's "Saved" covers it too. */
+export function enqueueDeckSideSave(deckId: number, task: () => Promise<boolean>) {
+  return runInDeckQueue(deckId, task);
 }
 
 /** One queue per title for the progress step and history dialog; `latest` is the last reply while saves are pending, before the deck props catch up. */

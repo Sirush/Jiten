@@ -27,7 +27,8 @@ public record ExternalListEntry(
     DateOnly? CompletedOn = null,
     int? RepeatCount = null,
     DatePrecision StartedPrecision = DatePrecision.Day,
-    DatePrecision CompletedPrecision = DatePrecision.Day);
+    DatePrecision CompletedPrecision = DatePrecision.Day,
+    short? Score = null);
 
 public record ExternalListFetchResult(List<ExternalListEntry> Entries, string? Error)
 {

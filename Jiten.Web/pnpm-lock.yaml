@@ -34,6 +34,12 @@ importers:
       '@fontsource/klee-one':
         specifier: 5.3.0
         version: 5.3.0
+      '@fontsource/shippori-mincho-b1':
+        specifier: 5.3.0
+        version: 5.3.0
+      '@fontsource/yuji-syuku':
+        specifier: 5.3.0
+        version: 5.3.0
       '@fontsource/zen-maru-gothic':
         specifier: ^5.3.0
         version: 5.3.0
@@ -834,6 +840,12 @@ packages:
 
   '@fontsource/klee-one@5.3.0':
     resolution: {integrity: sha512-1mnMRQO70AnTCHaWy5ovYKjbvszpOp7//bMDZ+PnjBMmar5YRcbskVzM4u+Syd8CMWw353R3BvsrsKQrwVRnEw==}
+
+  '@fontsource/shippori-mincho-b1@5.3.0':
+    resolution: {integrity: sha512-H4NvSJntaViHN8LjwmPTzZgJ8pyWcNetaJMHT4kfg6n1VR60QO2cYl/KDEIP4z2SR83//nlZb5gfQyZUpeNVNA==}
+
+  '@fontsource/yuji-syuku@5.3.0':
+    resolution: {integrity: sha512-f3NZC2hVWB/Feo7PzhEXrGbgJxwxNMQYxld/uBPmGAmjaPvfCEI9hc/xcMytFEBbOh+imRkW5Se68em1sSIGOA==}
 
   '@fontsource/zen-maru-gothic@5.3.0':
     resolution: {integrity: sha512-BuigfmzszMR3AOyAMSocQZ9bEq9o5sGCMOC/laI4TMpba1/KB1jxsdNFXWMUz02wVPd4vAVuMhsV00AQizFj3w==}
@@ -6789,8 +6801,8 @@ packages:
       vite:
         optional: true
 
-  vue3-google-signin@2.1.1:
-    resolution: {integrity: sha512-RwlwyeCv8+PZjK35C/UyJN4/9MH+Fsz4bJDO7IjtmRuOaTMrvmMmI6SP5qkJgD7w9MIKOCj5rYVFMAL7+NCM0A==}
+  vue3-google-signin@3.0.1:
+    resolution: {integrity: sha512-cb9kXe+9IM6AO+kjovzD31ZkgKqZRxfvHHcvGLlgvnCrzGb+rwAbr2VDJMkPpXrjQJf6bRZ4E4acyGfYkl6zYw==}
     peerDependencies:
       vue: ^3
 
@@ -7524,6 +7536,10 @@ snapshots:
   '@fontsource/biz-udpgothic@5.3.0': {}
 
   '@fontsource/klee-one@5.3.0': {}
+
+  '@fontsource/shippori-mincho-b1@5.3.0': {}
+
+  '@fontsource/yuji-syuku@5.3.0': {}
 
   '@fontsource/zen-maru-gothic@5.3.0': {}
 
@@ -12744,7 +12760,7 @@ snapshots:
       '@nuxt/kit': 4.5.2(magic-string@1.2.2)(magicast@0.5.4)(oxc-parser@0.143.0)(rolldown@1.2.5)(unplugin@3.3.0(esbuild@0.27.7)(rolldown@1.2.5)(rollup@4.62.0)(vite@8.2.2(@types/node@25.9.3)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(yaml@2.9.0)))
       defu: 6.1.7
       unimport: 5.7.0
-      vue3-google-signin: 2.1.1(vue@3.5.41(typescript@5.9.3))
+      vue3-google-signin: 3.0.1(vue@3.5.41(typescript@5.9.3))
     transitivePeerDependencies:
       - magic-string
       - magicast
@@ -14897,7 +14913,7 @@ snapshots:
       - unloader
       - webpack
 
-  vue3-google-signin@2.1.1(vue@3.5.41(typescript@5.9.3)):
+  vue3-google-signin@3.0.1(vue@3.5.41(typescript@5.9.3)):
     dependencies:
       vue: 3.5.41(typescript@5.9.3)
 

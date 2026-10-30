@@ -8,6 +8,13 @@ export function difficultyBand(difficulty: number): number {
   return Math.min(Math.max(Math.floor(difficulty), 0), difficultyNames.length - 1);
 }
 
+export const EXPERT_BAND = difficultyNames.indexOf('Expert');
+
+/** Personal stats fold Insane into Expert: such titles are rare on one shelf, and the two share a colour. */
+export function shelfDifficultyBand(difficulty: number): number {
+  return Math.min(difficultyBand(difficulty), EXPERT_BAND);
+}
+
 interface PaletteColours {
   text: readonly string[];
   chart: readonly string[];

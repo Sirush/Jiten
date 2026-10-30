@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { type Deck, LinkType, MediaType, DeckStatus } from '~/types';
+  import { type MediaListDeck, LinkType, MediaType, DeckStatus } from '~/types';
   import Card from 'primevue/card';
   import TieredMenu from 'primevue/tieredmenu';
   import Popover from 'primevue/popover';
@@ -17,10 +17,11 @@
   import { deckHasStatData, isDefaultMediaCardStatColumns, mediaCardStatColumns, type MediaCardStatId } from '~/utils/mediaCardStats';
   import { DEFAULT_MEDIA_CARD_SECTION_LAYOUT, type MediaCardSectionId } from '~/utils/mediaCardSections';
   import { getDifficultyName } from '~/utils/difficultyColours';
-  import { entryProgressLabel, listEntryFacts, mediaWords } from '~/utils/mediaListEntry';
+  import { entryProgressLabel, listEntryFacts } from '~/utils/mediaListEntry';
+  import { isMainEntry } from '~/utils/displayDeck';
 
   const props = defineProps<{
-    deck: Deck;
+    deck: MediaListDeck;
     isCompact?: boolean;
     hideControl?: boolean;
     hideDetailButton?: boolean;
@@ -34,10 +35,12 @@
     openStudy?: boolean;
     readOnlyList?: boolean;
     showDiscussionLink?: boolean;
+    /** Shows the list owner's score; only library rows carry one. */
+    showScore?: boolean;
   }>();
 
   const emit = defineEmits<{
-    'update:deck': [deck: Deck];
+    'update:deck': [deck: MediaListDeck];
     'status-menu': [open: boolean];
     discussion: [];
   }>();
@@ -247,7 +250,15 @@
     }
   };
 
+  const menuItemClass = 'gap-2 text-sm whitespace-nowrap !text-color !no-underline';
+
   const menuItems = computed(() => [
+    {
+      label: 'Your log',
+      icon: 'pi pi-book',
+      visible: !props.readOnlyList && canOpenHistory.value,
+      command: () => openHistory(),
+    },
     {
       label: props.deck.isIgnored ? 'Unignore' : 'Ignore',
       icon: props.deck.isIgnored ? 'pi pi-eye' : 'pi pi-eye-slash',
@@ -258,12 +269,6 @@
       icon: 'pi pi-gauge',
       visible: !props.readOnlyList && (props.deck.status === DeckStatus.Completed || !!props.deck.listEntry?.completedCount) && !props.deck.parentDeckId,
       command: () => openRatingDialog(props.deck.deckId, localiseTitle(props.deck)),
-    },
-    {
-      label: mediaWords(props.deck.mediaType).historyTitle,
-      icon: 'pi pi-history',
-      visible: !props.readOnlyList && canOpenHistory.value,
-      command: () => openHistory(),
     },
     {
       label: 'Refresh coverage',
@@ -349,10 +354,18 @@
 
   const canOpenHistory = computed(() => currentStatus.value !== DeckStatus.None || !!props.deck.listEntry);
 
+  const statusRowClass =
+    'flex items-center gap-3 px-3 py-1.5 rounded text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:bg-gray-100 dark:focus-visible:bg-gray-700 transition-colors cursor-pointer';
+
+  const hideStatusPopover = () => statusPopover.value?.hide();
+
   const openHistory = () => {
-    statusPopover.value?.hide();
+    hideStatusPopover();
     historyDeck.value = props.deck;
   };
+
+  const openEntryDialog = useEntryDialog();
+  const canEditScore = computed(() => !props.readOnlyList && isMainEntry(props.deck) && canOpenHistory.value);
 
   const statusTooltip = computed(() => {
     if (currentStatus.value === DeckStatus.None) return 'Set status';
@@ -586,6 +599,14 @@
         <template v-if="!isCompact" #subtitle>
           <span class="flex items-baseline gap-1 min-w-0 text-xs pl-0.5">
             <span class="font-semibold whitespace-nowrap text-gray-800 dark:text-gray-100">{{ getMediaTypeText(deck.mediaType) }}</span>
+            <DeckScoreChip
+              v-if="showScore && deck.score != null"
+              :score="deck.score"
+              :editable="canEditScore"
+              class="ml-1 bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-100"
+              hover-class="hover:bg-gray-200 dark:hover:bg-gray-700"
+              @edit="openEntryDialog(deck, 'score')"
+            />
             <template v-if="deck.popularityRank">
               <span class="text-gray-400 dark:text-gray-400">·</span>
               <Tooltip :content="popularityTooltip">
@@ -615,6 +636,7 @@
               </span>
             </template>
           </span>
+          <DeckNote v-if="deck.note" :note="deck.note" class="mt-1.5" />
         </template>
         <template #content>
           <div class="flex-gap-6" :class="isCompact ? 'h-full flex flex-col' : ''">
@@ -953,17 +975,17 @@
     <LazySrsAddDeckDialog v-if="showStudyDeckDialog" :visible="showStudyDeckDialog" :preselected-deck="deck" @update:visible="showStudyDeckDialog = $event" />
     <LazyReportIssueDialog v-if="showIssueDialog" :visible="showIssueDialog" :deck="deck" @update:visible="showIssueDialog = $event" />
 
-    <TieredMenu v-if="authStore.isAuthenticated && menuActivated" ref="menu" :model="menuItems" popup>
+    <TieredMenu v-if="authStore.isAuthenticated && menuActivated" ref="menu" :model="menuItems" popup :pt="{ root: { class: 'min-w-52' } }">
       <template #item="{ item, props: itemProps }">
         <NuxtLink v-if="item.route" v-slot="{ href, navigate }" :to="item.route" custom>
-          <a :href="href" v-bind="itemProps.action" @click="navigate">
-            <span :class="item.icon" />
-            <span class="ml-2">{{ item.label }}</span>
+          <a :href="href" v-bind="itemProps.action" :class="menuItemClass" @click="navigate">
+            <i :class="item.icon" class="text-xs" aria-hidden="true" />
+            {{ item.label }}
           </a>
         </NuxtLink>
-        <a v-else v-bind="itemProps.action">
-          <span :class="item.icon" />
-          <span class="ml-2">{{ item.label }}</span>
+        <a v-else v-bind="itemProps.action" :class="menuItemClass">
+          <i :class="item.icon" class="text-xs" aria-hidden="true" />
+          {{ item.label }}
         </a>
       </template>
     </TieredMenu>
@@ -977,16 +999,16 @@
               </div>
               <button
                 type="button"
-                class="flex items-center justify-between gap-3 px-3 py-1.5 rounded text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:bg-gray-100 dark:focus-visible:bg-gray-700 transition-colors cursor-pointer"
-                :class="showLogProgress ? 'font-semibold text-primary-700 dark:text-primary-300' : ''"
+                :class="[statusRowClass, 'justify-between', showLogProgress ? 'font-semibold text-primary-700 dark:text-primary-300' : '']"
                 @click="showLogProgress ? statusFlow.goTo('progress') : openHistory()"
               >
                 <span class="flex items-center gap-2">
-                  <i :class="['pi text-xs', showLogProgress ? 'pi-pen-to-square' : 'pi-history']" aria-hidden="true" />
-                  {{ showLogProgress ? 'Log progress' : mediaWords(deck.mediaType).historyTitle }}
+                  <i :class="['pi text-xs', showLogProgress ? 'pi-pen-to-square' : 'pi-book']" aria-hidden="true" />
+                  {{ showLogProgress ? 'Log progress' : 'Your log' }}
                 </span>
                 <i class="pi pi-chevron-right text-[10px]" aria-hidden="true" />
               </button>
+              <slot v-if="!readOnlyList" name="status-actions" :close="hideStatusPopover" :open-score="statusFlow.openScore" :row-class="statusRowClass" />
               <div class="my-1 border-t border-gray-200 dark:border-gray-700" role="separator" />
             </template>
             <div class="flex flex-col" role="menu" aria-label="Set status">

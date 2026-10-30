@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { formatDateTime } from '~/utils/dateFormat';
-  useHead({ title: 'Jiten+ Management - Jiten' });
+  useHead({ title: 'Jiten+ Management' });
   definePageMeta({ middleware: ['auth-admin'] });
 
   const { $api } = useNuxtApp();

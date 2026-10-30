@@ -334,8 +334,8 @@ public class CommunityListTests(JitenWebApplicationFactory factory)
         var listIds = new List<int>();
         for (var i = 0; i < FreeMaxLists + 2; i++)
             listIds.Add(await CreateList(TestUsers.UserA, $"List {i}"));
-        var decks = await SeedDecks(152);
-        (await PutItems(listIds[0], TestUsers.UserA, decks.Take(150))).StatusCode.Should().Be(HttpStatusCode.OK);
+        var decks = await SeedDecks(FreeMaxItems + 2);
+        (await PutItems(listIds[0], TestUsers.UserA, decks.Take(FreeMaxItems))).StatusCode.Should().Be(HttpStatusCode.OK);
         (await PutDetails(listIds[0], TestUsers.UserA, CommunityListStatus.Public)).StatusCode.Should().Be(HttpStatusCode.OK);
 
         await SetFull(TestUsers.UserA, false);
@@ -344,10 +344,10 @@ public class CommunityListTests(JitenWebApplicationFactory factory)
         (await PutDetails(listIds[1], TestUsers.UserA, CommunityListStatus.Draft, "Renamed")).StatusCode.Should().Be(HttpStatusCode.OK);
         (await Send(HttpMethod.Get, $"/api/lists/{listIds[0]}")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        (await PutItems(listIds[0], TestUsers.UserA, decks.Take(149))).StatusCode.Should().Be(HttpStatusCode.OK);
-        var swapped = decks.Take(148).Append(decks[151]).ToList();
+        (await PutItems(listIds[0], TestUsers.UserA, decks.Take(FreeMaxItems - 1))).StatusCode.Should().Be(HttpStatusCode.OK);
+        var swapped = decks.Take(FreeMaxItems - 2).Append(decks[FreeMaxItems + 1]).ToList();
         (await PutItems(listIds[0], TestUsers.UserA, swapped)).StatusCode.Should().Be(HttpStatusCode.OK);
-        (await ErrorCode(await PutItems(listIds[0], TestUsers.UserA, decks.Take(151)))).Should().Be("item_limit");
+        (await ErrorCode(await PutItems(listIds[0], TestUsers.UserA, decks.Take(FreeMaxItems + 1)))).Should().Be("item_limit");
 
         (await Send(HttpMethod.Delete, $"/api/lists/{listIds[2]}", TestUsers.UserA)).StatusCode.Should().Be(HttpStatusCode.NoContent);
     }

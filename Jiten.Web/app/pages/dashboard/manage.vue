@@ -63,7 +63,7 @@
   }
 
   useHead({
-    title: 'Meta Administration - Jiten',
+    title: 'Meta Administration',
   });
 
   definePageMeta({

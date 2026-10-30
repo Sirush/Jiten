@@ -1,9 +1,9 @@
 <script setup lang="ts">
-  import type { Deck } from '~/types';
+  import type { MediaListDeck } from '~/types';
   import type { useStatusFlow } from '~/composables/useStatusFlow';
 
   const props = defineProps<{
-    deck: Deck;
+    deck: MediaListDeck;
     flow: ReturnType<typeof useStatusFlow>;
     backLabel?: string;
   }>();
@@ -52,6 +52,14 @@
     :back-label="stepBackLabel"
     :disabled="flow.busy.value"
     @choose="flow.answer"
+    @back="back"
+  />
+  <StatusScoreStep
+    v-else-if="step === 'score'"
+    :deck="deck"
+    :after-completion="flow.scoreAfterCompletion.value"
+    :back-label="backLabel"
+    @done="flow.close()"
     @back="back"
   />
   <slot v-else />

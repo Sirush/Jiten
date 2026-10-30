@@ -176,11 +176,12 @@ public static class MediaListEntryHelper
         }
     }
 
+    /// <summary>Keeps the row while it <see cref="UserDeckPreference.HoldsUserData"/>, so leaving the list never drops a favourite, score, note or privacy flag.</summary>
     public static void ClearStatus(UserDbContext userContext, UserDeckPreference preference)
     {
         preference.CurrentEntry = null;
         preference.CurrentEntryId = null;
-        if (preference.IsFavourite || preference.IsIgnored)
+        if (preference.HoldsUserData)
             preference.Status = DeckStatus.None;
         else
             userContext.UserDeckPreferences.Remove(preference);

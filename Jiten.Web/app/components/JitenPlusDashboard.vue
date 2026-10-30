@@ -8,7 +8,10 @@
   const { fetchBoostBalance } = useMediaRequests();
   const auth = useAuthStore();
 
-  const mediaListLink = computed(() => (auth.user?.userName ? `/profile/${auth.user.userName}/media` : '/profile'));
+  const mediaListLink = computed(() => {
+    const handle = ownProfileHandle(auth.user);
+    return handle ? profilePath(handle, 'library') : '/profile';
+  });
 
   const badgeTier = computed<'full' | 'trial'>(() => (isTrial.value ? 'trial' : 'full'));
   const isLifetime = computed(() => !!sources.value?.isLifetime);

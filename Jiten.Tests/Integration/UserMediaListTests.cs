@@ -157,41 +157,32 @@ public class UserMediaListTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task UpdateProfile_MediaListPublicRequiresPublicProfile()
+    public async Task UpdateProfile_PrivateProfileMakesTheLibraryPrivate()
     {
-        // Make both public.
-        var patch1 = new HttpRequestMessage(HttpMethod.Patch, "/api/user/profile")
-            .WithUser(TestUsers.UserA)
-            .WithJsonContent(new { isPublic = true, isMediaListPublic = true });
-        (await _client.SendAsync(patch1)).StatusCode.Should().Be(HttpStatusCode.OK);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
 
-        var get1 = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/user/profile").WithUser(TestUsers.UserA));
-        var body1 = await get1.Content.ReadFromJsonAsync<JsonElement>();
-        body1.GetProperty("isPublic").GetBoolean().Should().BeTrue();
-        body1.GetProperty("isMediaListPublic").GetBoolean().Should().BeTrue();
+        async Task<JsonElement> Patch(object privacy)
+        {
+            var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Patch, "/api/user/profile")
+                                                   .WithUser(TestUsers.UserA)
+                                                   .WithJsonContent(new { privacy }));
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            return await response.Content.ReadFromJsonAsync<JsonElement>();
+        }
 
-        // Turning the profile private auto-deactivates the media list flag.
-        var patch2 = new HttpRequestMessage(HttpMethod.Patch, "/api/user/profile")
-            .WithUser(TestUsers.UserA)
-            .WithJsonContent(new { isPublic = false });
-        (await _client.SendAsync(patch2)).StatusCode.Should().Be(HttpStatusCode.OK);
+        var open = await Patch(new { profile = "public", sections = new Dictionary<string, string> { ["library"] = "everyone" }, hiddenFields = Array.Empty<string>(), hideAdultTitles = true });
+        open.GetProperty("sections").EnumerateArray().Select(s => s.GetString()).Should().Contain("library");
+        (await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, $"/api/user/profile/{TestUsers.UserA}/media-list").WithUser(TestUsers.UserB)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var get2 = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/user/profile").WithUser(TestUsers.UserA));
-        var body2 = await get2.Content.ReadFromJsonAsync<JsonElement>();
-        body2.GetProperty("isPublic").GetBoolean().Should().BeFalse();
-        body2.GetProperty("isMediaListPublic").GetBoolean().Should().BeFalse();
-    }
+        await Patch(new { profile = "private", sections = new Dictionary<string, string> { ["library"] = "everyone" }, hiddenFields = Array.Empty<string>(), hideAdultTitles = true });
+        (await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, $"/api/user/profile/{TestUsers.UserA}/media-list").WithUser(TestUsers.UserB)))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
 
-    [Fact]
-    public async Task SettingMediaListPublicWhileProfilePrivate_StaysFalse()
-    {
-        var patch = new HttpRequestMessage(HttpMethod.Patch, "/api/user/profile")
-            .WithUser(TestUsers.UserA)
-            .WithJsonContent(new { isMediaListPublic = true });
-        (await _client.SendAsync(patch)).StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var get = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/user/profile").WithUser(TestUsers.UserA));
-        var body = await get.Content.ReadFromJsonAsync<JsonElement>();
-        body.GetProperty("isMediaListPublic").GetBoolean().Should().BeFalse();
+        using var scope = factory.Services.CreateScope();
+        var profile = await scope.ServiceProvider.GetRequiredService<UserDbContext>().UserProfiles.AsNoTracking()
+                                 .FirstAsync(p => p.UserId == TestUsers.UserA);
+        profile.IsPublic.Should().BeFalse();
+        profile.IsMediaListPublic.Should().BeFalse();
     }
 }

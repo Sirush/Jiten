@@ -13,7 +13,7 @@
     middleware: ['auth'],
   });
 
-  useHead({ title: 'Media Requests - Jiten' });
+  useHead({ title: 'Media Requests' });
 
   const {
     requests,

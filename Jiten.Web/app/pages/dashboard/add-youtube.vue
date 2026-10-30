@@ -13,7 +13,7 @@
   import { formatDateTime } from '~/utils/dateFormat';
 
   useHead({
-    title: 'Add YouTube Source - Jiten',
+    title: 'Add YouTube Source',
   });
 
   definePageMeta({

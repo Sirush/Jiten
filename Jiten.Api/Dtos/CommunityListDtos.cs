@@ -86,6 +86,14 @@ public class CommunityListQuotaDto
     public bool CanCreate { get; set; }
 }
 
+public class CommunityListProfileDto
+{
+    public List<CommunityListSummaryDto> Written { get; set; } = [];
+
+    /// <summary>Null when the owner keeps favourited lists from this viewer.</summary>
+    public List<CommunityListSummaryDto>? Favourited { get; set; }
+}
+
 public class CommunityListMineDto
 {
     public List<CommunityListSummaryDto> Lists { get; set; } = [];

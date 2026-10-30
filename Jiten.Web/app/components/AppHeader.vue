@@ -8,6 +8,7 @@
 
   import { useToast } from 'primevue/usetoast';
   import { ThemeMode } from '~/types';
+  import { ownProfileHandle, profilePath } from '~/utils/profileAppearance';
 
   const toast = useToast();
   const store = useJitenStore();
@@ -100,52 +101,66 @@
   ];
   const isMediaSection = computed(() => route.path.startsWith('/decks/media') || route.path.startsWith('/lists'));
 
-  /** Delay lets the pointer cross the gap between the Media link and its menu without closing it. */
-  const MEDIA_MENU_CLOSE_DELAY_MS = 200;
-  let mediaMenuCloseTimer: ReturnType<typeof setTimeout> | undefined;
-  function openMediaMenu(event: Event) {
-    clearTimeout(mediaMenuCloseTimer);
-    mediaMenu.value?.show(event);
+  /** Delay lets the pointer cross the gap between a header link and its menu without closing it. */
+  const HOVER_MENU_CLOSE_DELAY_MS = 200;
+  function hoverMenu(menu: Ref<{ show: (event: Event) => void; hide: () => void } | undefined>) {
+    let closeTimer: ReturnType<typeof setTimeout> | undefined;
+    return {
+      open(event: Event) {
+        clearTimeout(closeTimer);
+        menu.value?.show(event);
+      },
+      scheduleClose() {
+        clearTimeout(closeTimer);
+        closeTimer = setTimeout(() => menu.value?.hide(), HOVER_MENU_CLOSE_DELAY_MS);
+      },
+      cancelClose: () => clearTimeout(closeTimer),
+    };
   }
-  function scheduleMediaMenuClose() {
-    clearTimeout(mediaMenuCloseTimer);
-    mediaMenuCloseTimer = setTimeout(() => mediaMenu.value?.hide(), MEDIA_MENU_CLOSE_DELAY_MS);
-  }
-  const cancelMediaMenuClose = () => clearTimeout(mediaMenuCloseTimer);
+
+  const { open: openMediaMenu, scheduleClose: scheduleMediaMenuClose, cancelClose: cancelMediaMenuClose } = hoverMenu(mediaMenu);
+
+  const toolsMenu = ref();
+  const toolsMenuItems = computed(() => [
+    { label: 'Frequency lists', hint: 'Yomitan and Anki frequency dictionaries', icon: 'material-symbols:bar-chart-rounded', route: '/frequency-dictionaries' },
+    { label: 'Site stats', hint: 'What everyone reads and learns', icon: 'material-symbols:monitoring', route: '/stats' },
+    ...(auth.isAuthenticated
+      ? [{ label: 'Kanji grid', hint: 'Every kanji, coloured by how well you know it', icon: 'material-symbols:grid-view-outline', route: '/kanji-grid' }]
+      : []),
+  ]);
+  const isToolsSection = computed(() => toolsMenuItems.value.some((item) => route.path.startsWith(item.route)));
+  const { open: openToolsMenu, scheduleClose: scheduleToolsMenuClose, cancelClose: cancelToolsMenuClose } = hoverMenu(toolsMenu);
+  const { open: openUserMenu, scheduleClose: scheduleUserMenuClose, cancelClose: cancelUserMenuClose } = hoverMenu(userMenu);
+
   watch(
     () => route.fullPath,
-    () => mediaMenu.value?.hide()
+    () => {
+      mediaMenu.value?.hide();
+      toolsMenu.value?.hide();
+      userMenu.value?.hide();
+    }
   );
 
-  const userInitial = computed(() => auth.user?.userName?.trim()?.slice(0, 2)?.toUpperCase() || '');
+  const avatarName = computed(() => auth.user?.displayName ?? auth.user?.userName ?? null);
+
+  const NuxtLink = resolveComponent('NuxtLink');
+
+  const ownLibraryPath = computed(() => {
+    const handle = ownProfileHandle(auth.user);
+    return handle ? profilePath(handle, 'library') : null;
+  });
+  const isOwnLibrary = computed(() => !!ownLibraryPath.value && decodeURI(route.path) === decodeURI(ownLibraryPath.value));
 
   const userMenuItems = computed(() => [
-    {
-      label: 'Profile',
-      icon: 'pi pi-user',
-      route: '/profile',
-    },
-    {
-      label: 'Settings',
-      icon: 'pi pi-cog',
-      route: '/settings',
-    },
-    {
-      label: 'Media Requests',
-      icon: 'pi pi-list',
-      route: '/requests',
-    },
-    {
-      label: 'Ratings',
-      icon: 'pi pi-star',
-      route: '/ratings',
-    },
+    { label: 'Profile', icon: 'material-symbols:person-outline', route: '/profile', active: route.path.startsWith('/profile') && !isOwnLibrary.value },
+    ...(ownLibraryPath.value
+      ? [{ label: 'Library', icon: 'mdi:bookshelf', route: ownLibraryPath.value, active: isOwnLibrary.value }]
+      : []),
+    { label: 'Settings', icon: 'material-symbols:settings-outline', route: '/settings', active: route.path.startsWith('/settings') },
+    { label: 'Media Requests', icon: 'material-symbols:post-add', route: '/requests', active: route.path.startsWith('/requests') },
+    { label: 'Ratings', icon: 'material-symbols:star-outline', route: '/ratings', active: route.path.startsWith('/ratings') },
     { separator: true },
-    {
-      label: 'Logout',
-      icon: 'pi pi-sign-out',
-      command: () => auth.logout(),
-    },
+    { label: 'Logout', icon: 'material-symbols:logout', command: () => auth.logout() },
   ]);
 
   const { totalDue } = useStudySummary();
@@ -170,7 +185,7 @@
 
 <template>
   <header>
-    <div class="bg-indigo-900">
+    <div class="app-header-bar">
       <div class="flex justify-between items-center mb-6 mx-auto p-4" :class="route.meta.wide ? 'max-w-7xl' : 'max-w-6xl'">
         <NuxtLink to="/" class="!no-underline" aria-label="Jiten home">
           <span class="text-2xl font-bold text-white"
@@ -207,9 +222,18 @@
               >
             </ClientOnly>
           </nuxt-link>
-          <nuxt-link to="/frequency-dictionaries" :class="route.path === '/frequency-dictionaries' ? 'font-semibold !text-purple-200' : '!text-white'"
-            >Tools</nuxt-link
-          >
+          <div class="inline-flex items-center" @mouseenter="openToolsMenu" @mouseleave="scheduleToolsMenuClose">
+            <nuxt-link to="/frequency-dictionaries" :class="isToolsSection ? 'font-semibold !text-purple-200' : '!text-white'">Tools</nuxt-link>
+            <button
+              type="button"
+              class="inline-flex items-center rounded text-white hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-white"
+              aria-label="More tools"
+              aria-haspopup="true"
+              @click="toolsMenu.toggle($event)"
+            >
+              <Icon name="material-symbols:keyboard-arrow-down" size="16" />
+            </button>
+          </div>
           <nuxt-link to="/guides" :class="route.path.startsWith('/guides') ? 'font-semibold !text-purple-200' : '!text-white'">Guides</nuxt-link>
           <a :href="communityUrl" class="!text-white">Community</a>
           <nuxt-link
@@ -241,16 +265,21 @@
           <button
             v-if="auth.isAuthenticated"
             type="button"
-            class="inline-flex items-center gap-0.5 p-1 rounded-full text-white cursor-pointer hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-white"
+            class="inline-flex items-center gap-0.5 p-1 rounded-lg text-white cursor-pointer hover:bg-indigo-800 focus:outline-none focus:ring-2 focus:ring-white"
             aria-label="User menu"
             aria-haspopup="true"
+            @mouseenter="openUserMenu"
+            @mouseleave="scheduleUserMenuClose"
             @click="userMenu.toggle($event)"
           >
-            <span
-              v-if="userInitial"
-              class="flex items-center justify-center w-8 h-8 rounded-full bg-purple-200 text-indigo-900 text-xs font-bold tracking-tight"
-              >{{ userInitial }}</span
-            >
+            <ProfileAvatar
+              v-if="avatarName"
+              :name="avatarName"
+              :kanji="auth.user?.avatarKanji"
+              :colour="auth.user?.avatarColour"
+              :avatar-style="auth.user?.avatarStyle"
+              :size="32"
+            />
             <span v-else class="flex items-center justify-center w-8 h-8 rounded-full bg-purple-200 text-indigo-900">
               <Icon name="material-symbols:person" />
             </span>
@@ -333,9 +362,17 @@
               v-if="auth.isAuthenticated"
               to="/profile"
               class="py-2 px-3"
-              :class="route.path.startsWith('/profile') ? 'font-semibold !text-purple-200' : '!text-white'"
+              :class="route.path.startsWith('/profile') && !isOwnLibrary ? 'font-semibold !text-purple-200' : '!text-white'"
               @click="mobileMenuOpen = false"
               >Profile</nuxt-link
+            >
+            <nuxt-link
+              v-if="auth.isAuthenticated && ownLibraryPath"
+              :to="ownLibraryPath"
+              class="py-2 px-3"
+              :class="isOwnLibrary ? 'font-semibold !text-purple-200' : '!text-white'"
+              @click="mobileMenuOpen = false"
+              >Library</nuxt-link
             >
             <nuxt-link
               v-if="auth.isAuthenticated"
@@ -367,6 +404,15 @@
               :class="route.path === '/frequency-dictionaries' ? 'font-semibold !text-purple-200' : '!text-white'"
               @click="mobileMenuOpen = false"
               >Tools</nuxt-link
+            >
+            <nuxt-link
+              v-for="item in toolsMenuItems.slice(1)"
+              :key="item.route"
+              :to="item.route"
+              class="py-2 pl-7 pr-3 text-sm"
+              :class="route.path.startsWith(item.route) ? 'font-semibold !text-purple-200' : '!text-white'"
+              @click="mobileMenuOpen = false"
+              >{{ item.label }}</nuxt-link
             >
             <nuxt-link
               to="/guides"
@@ -443,35 +489,46 @@
     }"
   >
     <template #item="{ item }">
-      <NuxtLink
-        :to="item.route"
-        class="flex items-center gap-3 rounded-md px-3 py-2 !no-underline transition-colors"
-        :class="route.path.startsWith(item.route) ? 'bg-purple-50 dark:bg-purple-900/30' : 'hover:bg-surface-100 dark:hover:bg-surface-800'"
-      >
-        <Icon :name="item.icon" size="20" class="shrink-0 text-purple-600 dark:text-purple-300" />
-        <span class="flex flex-col leading-tight">
-          <span
-            class="text-sm font-semibold"
-            :class="route.path.startsWith(item.route) ? 'text-purple-700 dark:text-purple-200' : 'text-surface-900 dark:text-surface-0'"
-            >{{ item.label }}</span
-          >
-          <span class="text-xs text-surface-500 dark:text-surface-400">{{ item.hint }}</span>
-        </span>
-      </NuxtLink>
+      <AppHeaderMenuItem :item="item" />
     </template>
   </TieredMenu>
-  <TieredMenu v-if="auth.isAuthenticated" ref="userMenu" :model="userMenuItems" popup>
-    <template #item="{ item, props }">
-      <NuxtLink v-if="item.route" v-slot="{ href, navigate }" :to="item.route" custom>
-        <a :href="href" v-bind="props.action" @click="navigate">
-          <span :class="item.icon" />
-          <span class="ml-2">{{ item.label }}</span>
-        </a>
-      </NuxtLink>
-      <a v-else v-bind="props.action">
-        <span :class="item.icon" />
-        <span class="ml-2">{{ item.label }}</span>
-      </a>
+  <TieredMenu
+    ref="toolsMenu"
+    :model="toolsMenuItems"
+    popup
+    :pt="{
+      root: { class: 'min-w-60 !p-1', onMouseenter: cancelToolsMenuClose, onMouseleave: scheduleToolsMenuClose },
+      itemContent: { class: '!bg-transparent' },
+    }"
+  >
+    <template #item="{ item }">
+      <AppHeaderMenuItem :item="item" />
+    </template>
+  </TieredMenu>
+  <TieredMenu
+    v-if="auth.isAuthenticated"
+    ref="userMenu"
+    :model="userMenuItems"
+    popup
+    :pt="{
+      root: { class: 'min-w-48 !p-1', onMouseenter: cancelUserMenuClose, onMouseleave: scheduleUserMenuClose },
+      itemContent: { class: '!bg-transparent' },
+    }"
+  >
+    <template #item="{ item }">
+      <component
+        :is="item.route ? NuxtLink : 'div'"
+        :to="item.route"
+        class="flex cursor-pointer items-center gap-3 rounded-md px-3 py-2 !no-underline transition-colors"
+        :class="item.active ? 'bg-purple-50 dark:bg-purple-900/30' : 'hover:bg-purple-50 dark:hover:bg-purple-900/20'"
+      >
+        <Icon :name="item.icon" size="20" class="shrink-0 text-purple-600 dark:text-purple-300" />
+        <span
+          class="text-sm"
+          :class="item.active ? 'text-purple-700 dark:text-purple-200' : 'text-surface-900 dark:text-surface-0'"
+          >{{ item.label }}</span
+        >
+      </component>
     </template>
   </TieredMenu>
 </template>

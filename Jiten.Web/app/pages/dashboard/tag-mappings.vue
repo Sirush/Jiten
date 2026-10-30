@@ -15,7 +15,7 @@
   import { getLinkTypeText } from '~/utils/linkTypeMapper';
   import type { TagMapping } from '~/types/types';
 
-  useHead({ title: 'Tag Mappings Management - Jiten' });
+  useHead({ title: 'Tag Mappings Management' });
   definePageMeta({ middleware: ['auth-admin'] });
 
   const { $api } = useNuxtApp();

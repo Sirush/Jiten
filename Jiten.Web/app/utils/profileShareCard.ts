@@ -369,12 +369,12 @@ export function drawProfileShareCard(options: ProfileShareCardOptions): HTMLCanv
 
     ctx.font = `800 17px ${FONT}`;
     ctx.fillStyle = accents.streak;
-    ctx.fillText(num(heat.currentStreak), PAD, y + 16);
-    let statX = PAD + ctx.measureText(num(heat.currentStreak)).width + 6;
+    ctx.fillText(num(heat.currentStreak ?? 0), PAD, y + 16);
+    let statX = PAD + ctx.measureText(num(heat.currentStreak ?? 0)).width + 6;
 
     const facts: [string, string][] = [
       ['day streak', ''],
-      ['Longest', `${num(heat.longestStreak)} days`],
+      ['Longest', `${num(heat.longestStreak ?? 0)} days`],
       ['Days studied', num(heat.totalReviewDays)],
       ['Reviews', num(heat.totalReviews)],
     ];

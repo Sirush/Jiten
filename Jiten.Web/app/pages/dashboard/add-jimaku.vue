@@ -8,7 +8,7 @@
   import InputGroup from 'primevue/inputgroup';
 
   useHead({
-    title: 'Add Media from Jimaku - Jiten',
+    title: 'Add Media from Jimaku',
   });
 
   definePageMeta({

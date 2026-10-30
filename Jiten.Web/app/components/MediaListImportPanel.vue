@@ -38,6 +38,8 @@
     datesTarget?: { inProgress: boolean; startedOn: string | null; finishedOn: string | null; hasCharacters?: boolean } | null;
     currentCompletions?: string[];
     repeatCount?: number | null;
+    score?: number | null;
+    note?: string | null;
     charactersRead?: number | null;
     history?: ImportedHistoryRow[] | null;
     volumes?: { deckId: number; status: DeckStatus; history: ImportedHistoryRow[] | null }[] | null;
@@ -732,6 +734,8 @@
               startedOn: sentStartedOn(r),
               finishedOn: sentFinishedOn(r),
               repeatCount: r.repeatCount ?? null,
+              score: r.score ?? null,
+              note: r.note ?? null,
               charactersRead: r.charactersRead ?? null,
               history: r.history ?? null,
               volumes,

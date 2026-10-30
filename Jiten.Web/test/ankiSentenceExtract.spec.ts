@@ -2,11 +2,11 @@ import { describe, expect, it } from 'vitest';
 import {
   buildSentenceForImport,
   extractSentenceFromField,
-  foldKana,
   locateWord,
   SENTENCE_MAX_LENGTH,
   truncateAroundWord,
 } from '../app/utils/ankiSentenceExtract';
+import { foldKana } from '../app/utils/kana';
 
 const marked = (html: string, candidates: string[]) => buildSentenceForImport(html, candidates).text;
 

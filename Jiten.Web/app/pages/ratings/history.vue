@@ -9,7 +9,7 @@
     middleware: ['auth'],
   });
 
-  useHead({ title: 'My Votes - Jiten' });
+  useHead({ title: 'My Votes' });
 
   const toast = useToast();
   const confirm = useConfirm();

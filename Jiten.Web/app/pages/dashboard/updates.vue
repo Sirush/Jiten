@@ -12,7 +12,7 @@
   import { linkifySelection, spliceAsParagraph, toDiscordMarkdown } from '~/utils/siteUpdateMarkdown';
   import { formatDateShort } from '~/utils/dateFormat';
 
-  useHead({ title: 'Site Updates - Jiten' });
+  useHead({ title: 'Site Updates' });
 
   definePageMeta({
     middleware: ['auth-admin'],

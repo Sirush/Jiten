@@ -7,7 +7,7 @@
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
 
-  useHead({ title: 'Send Notification - Jiten' });
+  useHead({ title: 'Send Notification' });
 
   definePageMeta({
     middleware: ['auth-admin'],

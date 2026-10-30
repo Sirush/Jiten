@@ -8,7 +8,7 @@
     middleware: ['auth'],
   });
 
-  useHead({ title: 'Compare Difficulty - Jiten' });
+  useHead({ title: 'Compare Difficulty' });
 
   const confirm = useConfirm();
   const { fetchSuggestions, fetchStats, fetchMySkipped, deleteSkip, fetchUnratedDecks, fetchCompletedDecks, deleteRating } = useDifficultyVotes();

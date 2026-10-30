@@ -40,6 +40,12 @@ public class MediaListImportEntry
 
     public bool IsFavourite { get; set; }
 
+    /// <summary>10 to 100 from the source; only fills a title that has no score yet.</summary>
+    public short? Score { get; set; }
+
+    /// <summary>Private note from a Jiten export; only fills a title that has no note yet.</summary>
+    public string? Note { get; set; }
+
     /// <summary>Reading history from the source; a title that already had history only gets its missing completions and an empty character count filled.</summary>
     public DateOnly? StartedOn { get; set; }
     public DateOnly? FinishedOn { get; set; }
@@ -82,5 +88,8 @@ public class BulkDeckPreferencesRequest
     public List<int> DeckIds { get; set; } = new();
     public DeckStatus? Status { get; set; }
     public bool? IsFavourite { get; set; }
+
+    public bool? IsPrivate { get; set; }
+
     public bool Remove { get; set; }
 }

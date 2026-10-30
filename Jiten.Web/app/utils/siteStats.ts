@@ -8,6 +8,13 @@ export function formatCompact(value: number): string {
   return value < 10_000 ? value.toLocaleString('en-US') : compactFormatter.format(value);
 }
 
+const approxFormatter = new Intl.NumberFormat('en-US', { notation: 'compact', maximumSignificantDigits: 2 });
+
+/** For figures labelled as approximate, so precision beyond two digits would contradict the label. */
+export function formatApprox(value: number): string {
+  return approxFormatter.format(value);
+}
+
 export function roundToHundred(value: number): number {
   return Math.round(value / 100) * 100;
 }

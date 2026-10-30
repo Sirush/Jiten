@@ -20,6 +20,11 @@ public record JitenExportEntry(int DeckId, string Title, string SourceStatus, De
     public List<ImportedMediaListEntry>? History { get; init; }
 
     public List<ImportedVolume>? Volumes { get; init; }
+
+    /// <summary>10 to 100; the file stores it as 1.0 to 10.0.</summary>
+    public short? Score { get; init; }
+
+    public string? Note { get; init; }
 }
 
 public record JitenExportParseResult(List<JitenExportEntry> Entries, string? Error)
@@ -87,6 +92,8 @@ public static partial class JitenExportParser
                             TimesCompleted = ReadInt(item, "timesCompleted") ?? 0,
                             History = ReadHistory(item, out var positions),
                             Volumes = ReadVolumes(item, positions),
+                            Score = ParseScore(ReadString(item, "score")),
+                            Note = UserDeckPreference.NormaliseNote(ReadString(item, "note")),
                         });
         }
 
@@ -133,6 +140,8 @@ public static partial class JitenExportParser
                             FinishedOn = ParseDate(Cell(row, "FinishedOn")),
                             CharactersRead = int.TryParse(Cell(row, "CharactersRead"), out var characters) ? characters : null,
                             TimesCompleted = int.TryParse(Cell(row, "TimesCompleted"), out var times) ? times : 0,
+                            Score = ParseScore(Cell(row, "Score")),
+                            Note = UserDeckPreference.NormaliseNote(Cell(row, "Note")),
                         });
         }
 
@@ -260,6 +269,11 @@ public static partial class JitenExportParser
                   JsonValueKind.Number => value.ToString(),
                   _ => null,
               }
+            : null;
+
+    private static short? ParseScore(string? raw) =>
+        decimal.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out var score) && score is >= 1 and <= 10
+            ? UserDeckPreference.ToStoredScore(score)
             : null;
 
     private static int? ReadInt(JsonElement item, string name)

@@ -2,13 +2,13 @@ using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
+using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.FSRS;
 using Jiten.Parser.Tests.Integration.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
-using StackExchange.Redis;
 
 namespace Jiten.Parser.Tests.Integration;
 
@@ -17,14 +17,11 @@ public class ProfileVocabularyStatsTests(JitenWebApplicationFactory factory)
 {
     private readonly HttpClient _client = factory.CreateClient();
 
+    /// <summary>The in-memory Redis outlives the reset and FSRS cards never move the profile generation, so each test starts a new one.</summary>
     public async Task InitializeAsync()
     {
         await factory.ResetDatabaseAsync();
-
-        // The in-memory Redis outlives ResetDatabaseAsync, so a previous test's entry would answer for this seed.
-        var redis = factory.Services.GetRequiredService<IConnectionMultiplexer>().GetDatabase();
-        foreach (var userId in new[] { TestUsers.UserA, TestUsers.UserB, TestUsers.Admin })
-            await redis.KeyDeleteAsync($"jiten:profile-vocab:{userId}");
+        await factory.Services.GetRequiredService<IProfileCacheService>().BumpGenerationAsync([TestUsers.UserA, TestUsers.UserB, TestUsers.Admin]);
     }
 
     public Task DisposeAsync() => Task.CompletedTask;

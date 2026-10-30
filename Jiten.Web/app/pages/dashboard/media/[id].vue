@@ -44,7 +44,7 @@
   const mediaId = route.params.id;
 
   useHead({
-    title: 'Edit Media - Admin Dashboard - Jiten',
+    title: 'Edit Media - Admin Dashboard',
   });
 
   definePageMeta({

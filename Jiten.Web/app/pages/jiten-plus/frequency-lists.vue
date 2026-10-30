@@ -27,7 +27,7 @@
   import type { TagState } from '~/components/TriStateTag.vue';
 
   definePageMeta({ middleware: ['auth'] });
-  useHead({ title: 'Custom Frequency Lists - Jiten' });
+  useHead({ title: 'Custom Frequency Lists' });
 
   const { $api } = useNuxtApp();
   const config = useRuntimeConfig();

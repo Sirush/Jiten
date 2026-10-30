@@ -1,10 +1,6 @@
 <script setup lang="ts">
   import type { KnowledgeGrowth } from '~/types';
 
-  const emit = defineEmits<{
-    loaded: [growth: KnowledgeGrowth | null];
-  }>();
-
   const { $api } = useNuxtApp();
 
   const isLoading = ref(true);
@@ -18,7 +14,6 @@
       growth.value = null;
     } finally {
       isLoading.value = false;
-      emit('loaded', growth.value);
     }
   };
 
@@ -37,10 +32,7 @@
 <template>
   <Card v-if="isLoading || hasData">
     <template #title>
-      <div class="flex items-center gap-2">
-        <Icon name="material-symbols:trending-up" />
-        Words Learned Over Time
-      </div>
+      <h2 class="text-base font-semibold">Words learned over time</h2>
     </template>
     <template #content>
       <div v-if="isLoading" class="flex flex-col gap-3">
@@ -50,22 +42,22 @@
 
       <div v-else class="flex flex-col gap-3">
         <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-          <span class="text-[clamp(1.5rem,6vw,2.25rem)] font-bold tabular-nums text-primary-600 dark:text-primary-300">
+          <span class="text-2xl font-bold tabular-nums text-primary-600 dark:text-primary-400">
             {{ learned.toLocaleString() }}
           </span>
-          <span class="text-gray-500 dark:text-gray-400">{{ learned === 1 ? 'word learned' : 'words learned' }}</span>
+          <span class="text-sm text-muted-color">{{ learned === 1 ? 'word learned' : 'words learned' }}</span>
           <span
             v-if="recentGain !== 0"
             class="text-sm font-semibold"
-            :class="recentGain > 0 ? 'text-green-600 dark:text-green-400' : 'text-gray-500 dark:text-gray-400'"
+            :class="recentGain > 0 ? 'text-green-600 dark:text-green-400' : 'text-muted-color'"
           >
             {{ recentGain > 0 ? '+' : '' }}{{ recentGain.toLocaleString() }} in the last 30 days
           </span>
         </div>
 
-        <CoverageJourneyChart :points="points" :granularity="growth!.granularity" mode="count" compact height="140px" />
+        <CoverageJourneyChart :points="points" :granularity="growth!.granularity" mode="count" compact height="140px" rgb="168, 85, 247" />
 
-        <div class="flex justify-between text-xs text-gray-400">
+        <div class="flex justify-between text-xs text-muted-color">
           <span>{{ startLabel }}</span>
           <span>Today</span>
         </div>

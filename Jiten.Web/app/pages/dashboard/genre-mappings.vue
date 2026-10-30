@@ -16,7 +16,7 @@
   import { getAllGenres, getGenreText } from '~/utils/genreMapper';
   import type { GenreMapping } from '~/types/types';
 
-  useHead({ title: 'Genre Mappings Management - Jiten' });
+  useHead({ title: 'Genre Mappings Management' });
   definePageMeta({ middleware: ['auth-admin'] });
 
   const { $api } = useNuxtApp();

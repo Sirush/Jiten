@@ -1795,6 +1795,7 @@ public class MediaDeckController(
         if (deck.ParentDeckId == null)
             mainDeckDto.DiscussionReplyCount = await ForumTopicStore.ReplyCountAsync(context, ForumSubject.Deck, deck.DeckId);
 
+        DeckDetailsDto? viewerDetails = null;
         if (currentUserService.IsAuthenticated)
         {
             var userId = currentUserService.UserId!;
@@ -1840,6 +1841,14 @@ public class MediaDeckController(
                 mainDeckDto.IsIgnored = mpref.IsIgnored;
             }
 
+            var detailsDeckId = deck.ParentDeckId ?? deck.DeckId;
+            var detailsPreference = detailsDeckId == deck.DeckId
+                ? mpref
+                : await userContext.UserDeckPreferences.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == userId && p.DeckId == detailsDeckId);
+            if (detailsPreference != null)
+                viewerDetails = DeckDetailsDto.From(detailsDeckId, detailsPreference,
+                                                    await userContext.UserPinnedDecks.AnyAsync(p => p.UserId == userId && p.DeckId == detailsDeckId));
+
             // Stored sentence metrics exist per title only, so the visible subdecks are read exactly from their own text.
             var subdeckSentences = sentenceStats != null && subdeckDtos.Count > 0
                                    && await jitenPlusService.GetTierAsync(userId) >= JitenPlusTier.Trial
@@ -1866,7 +1875,7 @@ public class MediaDeckController(
         }
 
         var parentDeckDto = parentDeck != null ? new DeckDto(parentDeck) : null;
-        var dto = new DeckDetailDto { ParentDeck = parentDeckDto, MainDeck = mainDeckDto, SubDecks = subdeckDtos };
+        var dto = new DeckDetailDto { ParentDeck = parentDeckDto, MainDeck = mainDeckDto, SubDecks = subdeckDtos, ViewerDetails = viewerDetails };
 
         return new PaginatedResponse<DeckDetailDto?>(dto, totalCount, pageSize, offset ?? 0);
     }

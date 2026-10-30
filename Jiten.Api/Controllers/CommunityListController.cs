@@ -37,6 +37,7 @@ public class CommunityListController(
     private const int MaxItemPageSize = 100;
     private const int PreviewCoverCount = 6;
     private const int DefaultFavouritedPageSize = 48;
+    private const int MaxProfileLists = 48;
     private const int MaxFilterIds = 50;
     private const string CoverageSort = "coverage";
 
@@ -148,7 +149,7 @@ public class CommunityListController(
         var items = await LoadCuratorOrderAsync(id);
         var itemDeckIds = items.Select(i => i.DeckId).ToList();
 
-        Dictionary<int, (DeckStatus Status, bool IsFavourite)>? statuses = null;
+        Dictionary<int, DisplayStatus>? statuses = null;
         UserCoverageChunkHelper.CoverageDictionaries? coverage = null;
         if (viewerId != null)
         {
@@ -309,6 +310,44 @@ public class CommunityListController(
 
         var dtos = await BuildSummariesAsync<CommunityListSummaryDto>(lists, userId);
         return Results.Ok(new PaginatedResponse<List<CommunityListSummaryDto>>(dtos, total, limit, offset));
+    }
+
+    [HttpGet("profile/{handle}")]
+    [AllowAnonymous]
+    [ProfileAccess]
+    [SwaggerOperation(Summary = "Get the public lists a profile wrote, and the ones it favourited when its owner shares them")]
+    public async Task<IResult> GetForProfile(string handle)
+    {
+        var access = ProfileAccessAttribute.Get(HttpContext);
+
+        var viewerId = currentUserService.UserId;
+        var written = await context.CommunityLists.AsNoTracking()
+                                   .Where(l => l.OwnerId == access.UserId && l.Status == CommunityListStatus.Public)
+                                   .OrderByDescending(l => l.PublishedAt)
+                                   .ThenByDescending(l => l.ListId)
+                                   .Take(MaxProfileLists)
+                                   .ToListAsync();
+
+        List<CommunityListSummaryDto>? favourited = null;
+        if (access.CanSee(ProfileSection.FavouriteLists))
+        {
+            var lists = await context.CommunityListFavourites.AsNoTracking()
+                                     .Where(f => f.UserId == access.UserId)
+                                     .Join(context.CommunityLists.Where(l => l.Status == CommunityListStatus.Public),
+                                           f => f.ListId, l => l.ListId, (f, l) => new { f.CreatedAt, List = l })
+                                     .OrderByDescending(x => x.CreatedAt)
+                                     .ThenByDescending(x => x.List.ListId)
+                                     .Take(MaxProfileLists)
+                                     .Select(x => x.List)
+                                     .ToListAsync();
+            favourited = await BuildSummariesAsync<CommunityListSummaryDto>(lists, viewerId);
+        }
+
+        return Results.Ok(new CommunityListProfileDto
+                          {
+                              Written = await BuildSummariesAsync<CommunityListSummaryDto>(written, viewerId),
+                              Favourited = favourited
+                          });
     }
 
     [HttpPost]
@@ -791,7 +830,7 @@ public class CommunityListController(
     /// <param name="coverage">The viewer's coverage when already loaded for the whole list; fetched for the page otherwise.</param>
     private async Task<PaginatedResponse<List<CommunityListItemDto>>> BuildItemPageAsync(
         List<RankedItem> arranged, int offset, int limit, string? viewerId,
-        Dictionary<int, (DeckStatus Status, bool IsFavourite)>? statuses, UserCoverageChunkHelper.CoverageDictionaries? coverage)
+        Dictionary<int, DisplayStatus>? statuses, UserCoverageChunkHelper.CoverageDictionaries? coverage)
     {
         var page = arranged.Skip(offset).Take(limit).ToList();
         var deckIds = page.Select(r => r.DeckId).ToList();

@@ -8,7 +8,7 @@
     middleware: ['auth'],
   });
 
-  useHead({ title: 'Word Sets - Settings - Jiten' });
+  useHead({ title: 'Word Sets - Settings' });
 
   const { wordSets, subscriptions, isLoading, fetchWordSets, fetchSubscriptions, subscribe, unsubscribe } = useWordSets();
   const toast = useToast();

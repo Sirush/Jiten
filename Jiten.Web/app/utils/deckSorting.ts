@@ -211,7 +211,7 @@ function isMissing(deck: Deck, key: string): boolean {
   }
 }
 
-export function sortDecks(decks: Deck[], key: string, order: SortOrder): Deck[] {
+export function sortDecks<T extends Deck>(decks: T[], key: string, order: SortOrder): T[] {
   const value = deckSortValues[key];
   if (!value) return decks;
 

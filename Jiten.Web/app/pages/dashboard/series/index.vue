@@ -26,7 +26,7 @@
   import { sameTitles, titlesDraft, titlesFromDraft } from '~/utils/groupTitles';
 
   definePageMeta({ middleware: ['auth-admin'] });
-  useHead({ title: 'Series and franchises - Admin Dashboard - Jiten' });
+  useHead({ title: 'Series and franchises - Admin Dashboard' });
 
   const route = useRoute();
   const router = useRouter();

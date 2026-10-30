@@ -10,7 +10,8 @@
   const props = defineProps<{
     deck?: DeckCard;
     studyDeck?: StudyDeckDto;
-    mediaList?: { apiBase: string; title: string; totalWords: number; hasExampleSentences: boolean };
+    /** `query` rides along on every request, such as the profile preview audience. */
+    mediaList?: { apiBase: string; title: string; totalWords: number; hasExampleSentences: boolean; query?: Record<string, string | undefined> };
     visible: boolean;
   }>();
 
@@ -20,6 +21,7 @@
   const isSmartStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.Smart);
   const isStaticStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.StaticWordList || isSmartStudyDeck.value);
   const isGlobalDynamicStudyDeck = computed(() => props.studyDeck?.deckType === StudyDeckType.GlobalDynamic);
+  const listQuery = computed(() => props.mediaList?.query ?? {});
   const apiBase = computed(() =>
     isMediaListMode.value
       ? props.mediaList!.apiBase
@@ -423,6 +425,7 @@
     try {
       const response = await $api<number>(`${apiBase.value}/vocabulary-count-frequency`, {
         query: {
+          ...listQuery.value,
           minFrequency: frequencyRange.value[0],
           maxFrequency: frequencyRange.value[1],
           frequencySource: frequencySource.value || undefined,
@@ -464,7 +467,7 @@
     occurrenceCountLoadingStartedAt = Date.now();
     isOccurrenceCountLoading.value = true;
     try {
-      const response = await $api<number>(`${apiBase.value}/vocabulary-count-occurrences`, { query });
+      const response = await $api<number>(`${apiBase.value}/vocabulary-count-occurrences`, { query: { ...listQuery.value, ...query } });
       if (reqId === occurrenceRequestId && typeof response === 'number') {
         occurrenceCount.value = response;
       }
@@ -607,6 +610,7 @@
       const url = `${apiBase.value}/vocabulary-count`;
       const response = await $api<number>(url, {
         method: 'POST',
+        query: listQuery.value,
         body: buildCountPayload(),
         headers: { 'Content-Type': 'application/json' },
       });
@@ -648,6 +652,7 @@
 
       const response = await $api<File>(url, {
         method: 'POST',
+        query: listQuery.value,
         body: payload,
         headers: { 'Content-Type': 'application/json' },
         responseType: 'blob',
@@ -766,6 +771,7 @@
 
           const response = await $api<{ applied: number; state: string }>(url, {
             method: 'POST',
+            query: listQuery.value,
             body: payload,
             headers: { 'Content-Type': 'application/json' },
           });

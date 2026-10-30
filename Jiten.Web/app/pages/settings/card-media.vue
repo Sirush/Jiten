@@ -1,6 +1,6 @@
 <script setup lang="ts">
   definePageMeta({ middleware: ['auth'] });
-  useHead({ title: 'Card media - Settings - Jiten' });
+  useHead({ title: 'Card media - Settings' });
 
   const { isFull } = useJitenPlus();
 </script>

@@ -16,19 +16,18 @@ public partial class UserController
     /// Same access rule as the profile's media list; the profile owner's favourites are private and never affect the response.
     /// </summary>
     [HttpGet("profile/{username}/shared-shelf")]
+    [ProfileAccess(ProfileSection.Library)]
     [SwaggerOperation(Summary = "Compare the viewer's media list with a public profile's")]
     public async Task<IResult> GetSharedShelf(string username)
     {
         var viewerId = userService.UserId;
         if (string.IsNullOrEmpty(viewerId)) return Results.Unauthorized();
 
-        var (targetId, _, allowed) = await ResolveMediaListAccessAsync(username);
-        if (targetId == null || !allowed)
-            return Results.NotFound(new { message = "Media list not found" });
-        if (targetId == viewerId)
+        var access = RequestedProfile;
+        if (access.IsOwner)
             return Results.BadRequest(new { message = "Open another member's profile to compare lists" });
 
-        var theirs = await MediaListStatusHelper.GetDisplayStatusesAsync(userContext, jitenContext, targetId);
+        var theirs = await profileAccess.GetVisibleDisplayStatusesAsync(access);
         var yours = await MediaListStatusHelper.GetDisplayStatusesAsync(userContext, jitenContext, viewerId);
         DeckStatus YourStatus(int deckId) => yours.GetValueOrDefault(deckId).Status;
 
@@ -51,11 +50,7 @@ public partial class UserController
                                   .ToList();
 
         var pageIds = sharedIds.Take(MaxSharedShelfItems).Concat(theirsOnlyIds.Take(MaxSharedShelfItems)).ToList();
-        var cards = await jitenContext.Decks
-                                      .AsNoTracking()
-                                      .Include(d => d.DeckDifficulty)
-                                      .Where(d => pageIds.Contains(d.DeckId))
-                                      .ToDictionaryAsync(d => d.DeckId, d => new DeckCardDto(d));
+        var cards = await LoadDeckCardsAsync(pageIds);
         coverage.ApplyTo(cards.Values);
 
         List<SharedShelfItemDto> Page(List<int> ids) =>

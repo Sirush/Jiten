@@ -1,6 +1,7 @@
 <script setup lang="ts">
   import { DisplayStyle, MediaType } from '~/types';
   import { coverUrl } from '~/utils/coverImage';
+  import { isMainEntry } from '~/utils/displayDeck';
   import { useApiFetchPaginated } from '~/composables/useApiFetch';
   import { useJitenStore } from '~/stores/jitenStore';
   import { useAuthStore } from '~/stores/authStore';
@@ -412,6 +413,12 @@
         :show-discussion-link="isTopLevel"
         @update:deck="updateMainDeck"
         @discussion="discussionSection?.jump()"
+      />
+      <DeckEntryStrip
+        v-if="authStore.isAuthenticated && isMainEntry(response.data.mainDeck)"
+        :key="response.data.mainDeck.deckId"
+        :deck="response.data.mainDeck"
+        :details="response.data.viewerDetails"
       />
 
       <DeckStudyOverview v-if="showSeoBlocks && isTopLevel" :deck="response.data.mainDeck" />

@@ -323,8 +323,8 @@ public class MediaListEntryTests(JitenWebApplicationFactory factory)
         var csv = await (await Send(HttpMethod.Get, "/api/user/media-list/export?format=csv")).Content.ReadAsStringAsync();
         var lines = csv.TrimStart('﻿').Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
-        lines[0].Trim().Should().EndWith("ExternalLinks,StartedOn,FinishedOn,TimesCompleted,CharactersRead");
-        lines[1].Trim().Should().EndWith(",,2024-05-12,1,");
+        lines[0].Trim().Should().EndWith("ExternalLinks,StartedOn,FinishedOn,TimesCompleted,CharactersRead,Score,Note,IsPrivate");
+        lines[1].Trim().Should().EndWith(",,2024-05-12,1,,,,False");
     }
 
     private async Task Age(int deckId, int days)
@@ -512,6 +512,31 @@ public class MediaListEntryTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task PastCompletedPass_KeepsTheUnlinkedUnitsAlreadyDoneOnTheSeriesPassInProgress()
+    {
+        var (series, volumes) = await SeedSeries(3);
+        await SetStatus(series, DeckStatus.Ongoing);
+        await SetUnits(series, 2);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            var unitEntries = await userDb.UserMediaListEntries.Where(r => r.UserId == TestUsers.UserA && volumes.Contains(r.DeckId)).ToListAsync();
+            unitEntries.Should().HaveCount(2);
+            unitEntries.ForEach(r => r.SeriesEntryId = null);
+            await userDb.SaveChangesAsync();
+        }
+
+        var response = await Send(HttpMethod.Post, $"/api/user/media-list/entries/{series}",
+                                  new { state = MediaListEntryState.Completed, finishedOn = "2010-04-03" });
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("summary").GetProperty("completedUnits").GetInt32().Should().Be(2);
+        body.GetProperty("summary").GetProperty("completedCount").GetInt32().Should().Be(1);
+        (await SetUnits(series, 1)).GetProperty("listEntry").GetProperty("completedUnits").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
     public async Task Units_LoweringRemovesBareCompletionsAndReopensOnesWithHistory()
     {
         var (series, volumes) = await SeedSeries(4);
@@ -672,7 +697,9 @@ public class MediaListEntryTests(JitenWebApplicationFactory factory)
         using var scope = factory.Services.CreateScope();
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         await userDb.Users.Where(u => u.Id == TestUsers.UserA)
-                    .ExecuteUpdateAsync(u => u.SetProperty(x => x.NormalizedUserName, TestUsers.UserA.ToUpperInvariant()));
+                    .ExecuteUpdateAsync(u => u.SetProperty(x => x.NormalizedUserName, TestUsers.UserA.ToUpperInvariant())
+                                             .SetProperty(x => x.DisplayName, TestUsers.UserA)
+                                             .SetProperty(x => x.NormalizedDisplayName, TestUsers.UserA.ToUpperInvariant()));
         userDb.UserProfiles.Add(new UserProfile { UserId = TestUsers.UserA, IsPublic = true, IsMediaListPublic = true });
         userDb.UserAccomplishments.Add(new UserAccomplishment
                                        {

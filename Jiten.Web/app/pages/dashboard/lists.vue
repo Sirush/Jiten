@@ -8,7 +8,7 @@
   import { apiErrorMessage } from '~/utils/apiErrorMessage';
   import { formatRelativeTime } from '~/utils/relativeTime';
 
-  useHead({ title: 'Lists - Jiten' });
+  useHead({ title: 'Lists' });
   definePageMeta({ middleware: ['auth-admin'] });
 
   interface AdminReport {

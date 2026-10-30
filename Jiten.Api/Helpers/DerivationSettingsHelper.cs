@@ -56,5 +56,9 @@ public static class DerivationSettingsHelper
     public static List<string> ToKeys(IEnumerable<DerivationCategory> categories)
         => categories.Select(DerivationCategories.GetKey).ToList();
 
+    /// <summary>Order-independent, so equal category sets always share a cache entry.</summary>
+    public static string ToCacheKey(IEnumerable<DerivationCategory> categories)
+        => string.Join(',', categories.Select(c => (int)c).Order());
+
     private static string CacheKey(string userId) => $"derivation-categories:{userId}";
 }

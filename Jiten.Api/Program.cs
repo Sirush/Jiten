@@ -547,6 +547,10 @@ builder.Services.AddSingleton<FranchiseResponseCache>();
 builder.Services.AddScoped<FranchiseSyncRunner>();
 builder.Services.AddScoped<SeriesService>();
 builder.Services.AddScoped<IProfileAccessService, ProfileAccessService>();
+builder.Services.AddSingleton<IProfileCacheService, ProfileCacheService>();
+builder.Services.AddSingleton<ProfileGenerationInterceptor>();
+builder.Services.ConfigureDbContext<UserDbContext>((sp, options) => options.AddInterceptors(sp.GetRequiredService<ProfileGenerationInterceptor>()),
+                                                   ServiceLifetime.Singleton);
 builder.Services.AddScoped<MediaGroupService>();
 builder.Services.AddScoped<MediaTitleSearchService>();
 builder.Services.AddScoped<MediaDuplicateService>();

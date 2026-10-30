@@ -427,8 +427,17 @@ public class AuthController : ControllerBase
         if (user == null) return NotFound("User not found.");
 
         var roles = await _userManager.GetRolesAsync(user);
+        var avatar = await _context.UserProfiles.AsNoTracking()
+                                   .Where(p => p.UserId == userId)
+                                   .Select(p => new { p.AvatarKanji, p.AvatarColour, p.AvatarStyle })
+                                   .FirstOrDefaultAsync();
 
-        return Ok(new { user.Id, user.UserName, user.Email, user.EmailConfirmed, Roles = roles });
+        return Ok(new
+                  {
+                      user.Id, user.UserName, user.DisplayName, user.Email, user.EmailConfirmed, Roles = roles,
+                      AvatarKanji = avatar?.AvatarKanji, AvatarColour = avatar?.AvatarColour,
+                      AvatarStyle = UserProfile.ResolveAvatarStyle(avatar?.AvatarStyle)
+                  });
     }
 
     [HttpPost("signin-google")]

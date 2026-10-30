@@ -1,15 +1,8 @@
 <script setup lang="ts">
   import type { ProfileVocabularyStats } from '~/types';
 
-  const props = defineProps<{
-    username: string;
-  }>();
-
-  const emit = defineEmits<{
-    loaded: [stats: ProfileVocabularyStats | null];
-  }>();
-
   const { $api } = useNuxtApp();
+  const { apiPath, viewAsQuery } = useProfileContext();
 
   const isLoading = ref(true);
   const stats = ref<ProfileVocabularyStats | null>(null);
@@ -17,19 +10,14 @@
   const fetchStats = async () => {
     isLoading.value = true;
     try {
-      stats.value = await $api<ProfileVocabularyStats>(`user/profile/${props.username}/vocabulary-stats`);
+      stats.value = await $api<ProfileVocabularyStats>(apiPath('vocabulary-stats'), { query: viewAsQuery.value });
     } catch {
       stats.value = null;
     } finally {
       isLoading.value = false;
-      emit('loaded', stats.value);
     }
   };
 
-  watch(
-    () => props.username,
-    () => fetchStats()
-  );
   onMounted(() => fetchStats());
 
   const knownWords = computed(() => {

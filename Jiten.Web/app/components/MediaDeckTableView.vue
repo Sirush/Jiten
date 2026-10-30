@@ -1,6 +1,7 @@
 <script setup lang="ts">
-  import { type Deck, DeckStatus, MediaType } from '~/types';
+  import { type MediaListDeck, DeckStatus, MediaType } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { formatScore } from '~/utils/formatScore';
   import { listEntryFacts } from '~/utils/mediaListEntry';
   import { isInProgressStatus } from '~/utils/deckStatusMapper';
   import Card from 'primevue/card';
@@ -12,7 +13,7 @@
   const localiseTitle = useLocaliseTitle();
 
   const props = defineProps<{
-    deck: Deck;
+    deck: MediaListDeck;
     // Set by list views for below-the-fold rows; lets the browser skip
     // layout/paint until the row nears the viewport.
     lazyRender?: boolean;
@@ -65,6 +66,7 @@
             </div>
             <div class="flex flex-wrap items-center gap-x-3 text-xs text-gray-500 dark:text-gray-400">
               <span>{{ getMediaTypeText(deck.mediaType) }}</span>
+              <span v-if="deck.score != null" class="font-semibold tabular-nums text-gray-700 dark:text-gray-200">Score {{ formatScore(deck.score) }}</span>
               <span v-if="deck.discussionReplyCount > 0" class="flex items-center gap-1" :title="discussionReplyLabel(deck.discussionReplyCount)">
                 <i class="pi pi-comments text-[10px]" aria-hidden="true" />
                 <span class="tabular-nums" aria-hidden="true">{{ deck.discussionReplyCount.toLocaleString() }}</span>

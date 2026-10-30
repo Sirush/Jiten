@@ -6,31 +6,37 @@
 
   const props = defineProps<{
     username: string;
-    vocabulary: ProfileVocabularyStats | null;
-    growth: KnowledgeGrowth | null;
-    accomplishment: UserAccomplishment | null;
-    heatmap: StudyHeatmapResponse | null;
   }>();
 
+  const { $api } = useNuxtApp();
   const toast = useToast();
   const isExporting = ref(false);
   const loadExportBitmap = createBitmapLoader();
 
-  const hasData = computed(() => Boolean(props.vocabulary || props.growth || props.accomplishment || props.heatmap));
+  /** Each part is optional on the card, so a section the profile hides or a failed request just leaves it out. */
+  async function loadCardData() {
+    const settle = <T,>(p: Promise<T>) => p.catch(() => null);
+    const [vocabulary, growth, accomplishments, heatmap] = await Promise.all([
+      settle($api<ProfileVocabularyStats>(profileApiPath(props.username, 'vocabulary-stats'))),
+      settle($api<KnowledgeGrowth>('srs/knowledge-growth')),
+      settle($api<UserAccomplishment[]>(profileApiPath(props.username, 'accomplishments'))),
+      settle($api<StudyHeatmapResponse>(profileApiPath(props.username, 'study-heatmap'))),
+    ]);
+    return { vocabulary, growth, accomplishment: accomplishments?.find((a) => a.mediaType === null) ?? null, heatmap };
+  }
 
   async function exportImage() {
-    if (!hasData.value) return;
-
     isExporting.value = true;
     try {
-      const [logo] = await Promise.all([loadExportBitmap('/favicon-96x96.png'), document.fonts.ready]);
+      const [logo, data] = await Promise.all([loadExportBitmap('/favicon-96x96.png'), loadCardData(), document.fonts.ready]);
+      if (!data.vocabulary && !data.growth && !data.accomplishment && !data.heatmap) {
+        toast.add({ severity: 'warn', summary: 'Nothing to put on the image yet', life: 3000 });
+        return;
+      }
 
       const canvas = drawProfileShareCard({
         username: props.username,
-        vocabulary: props.vocabulary,
-        growth: props.growth,
-        accomplishment: props.accomplishment,
-        heatmap: props.heatmap,
+        ...data,
         logo,
         palette: currentExportPalette(),
         isDark: document.documentElement.classList.contains('dark-mode'),
@@ -53,7 +59,6 @@
       size="small"
       outlined
       :loading="isExporting"
-      :disabled="!hasData"
       aria-label="Save your profile as an image"
       @click="exportImage"
     />

@@ -19,6 +19,11 @@ public static class ProfileTestSetup
 
         var user = await userDb.Users.FirstAsync(u => u.Id == userId);
         user.NormalizedUserName = (user.UserName ?? userId).ToUpperInvariant();
+        if (isPublic && user.DisplayName == null)
+        {
+            user.DisplayName = userId;
+            user.NormalizedDisplayName = userId.ToUpperInvariant();
+        }
 
         var profile = await userDb.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
         if (profile == null)

@@ -1,5 +1,6 @@
 import type { FranchiseSeries, FranchiseSetting, SeriesRef } from './series';
 import type { FranchiseLine, MediaGroupKind, MediaGroupTitles } from './mediaGroup';
+import type { AvatarStyle } from '~/utils/profileAppearance';
 import type {
   ComparisonOutcome,
   CommunityListStatus,
@@ -151,10 +152,26 @@ export interface Deck {
   originalFileName?: string | null;
 }
 
+/** A row of a media list (library); only that endpoint carries these fields. */
+export interface MediaListDeck extends Deck {
+  /** 1.0 to 10.0. */
+  score?: number | null;
+  /** Owner only. */
+  note?: string | null;
+  /** Owner only. */
+  isPrivate?: boolean | null;
+  /** Owner only. */
+  isPinned?: boolean | null;
+  /** Signed-in viewers other than the owner: their own status for the title. */
+  viewerStatus?: DeckStatus | null;
+}
+
 export interface DeckDetail {
   parentDeck: Deck | null;
   mainDeck: Deck;
   subDecks: Deck[];
+  /** The signed-in viewer's details for the main deck; null when they have none. */
+  viewerDetails?: DeckDetails | null;
 }
 
 export interface DeckCard {
@@ -919,11 +936,162 @@ export interface CurveDatum {
   coverage: number;
 }
 
-export interface UserProfile {
-  userId: string;
-  username: string;
-  isPublic: boolean;
-  isMediaListPublic: boolean;
+export type ProfileSectionKey = 'library' | 'scores' | 'pinned' | 'vocabulary' | 'studyActivity' | 'stats' | 'activity' | 'social' | 'favouriteLists' | 'milestones';
+export type ProfileViewAs = 'everyone';
+export type ProfileFieldKey = 'wordsKnown' | 'kanjiKnown' | 'characters' | 'memberSince' | 'links' | 'currentlyReading' | 'titlesFinished';
+export type ProfileVisibility = 'public' | 'friends' | 'private';
+export type AudienceLevel = 'everyone' | 'friends' | 'onlyMe';
+
+export interface ProfilePrivacy {
+  profile: ProfileVisibility;
+  sections: Record<ProfileSectionKey, AudienceLevel>;
+  hiddenFields: ProfileFieldKey[];
+  hideAdultTitles: boolean;
+}
+
+export interface ProfileHeader {
+  /** Null only on your own profile before a display name was chosen. */
+  displayName: string | null;
+  isOwner: boolean;
+  /** Set while the owner previews the profile as this audience; isOwner is false meanwhile. */
+  previewAs: ProfileViewAs | null;
+  isJitenPlus: boolean;
+  bio: string | null;
+  links: string[];
+  avatarKanji: string | null;
+  avatarColour: string | null;
+  avatarStyle: AvatarStyle;
+  /** KanjiVG paths of the avatar character for the stroke style; null when it has none. */
+  avatarStrokes: string[] | null;
+  headerColour: string | null;
+  memberSince: string | null;
+  sections: ProfileSectionKey[];
+  /** Public lists written, or favourited lists this viewer may see. */
+  hasLists: boolean;
+  privacy: ProfilePrivacy | null;
+}
+
+export interface ProfileDeck {
+  deck: DeckCard;
+  status: DeckStatus;
+  score: number | null;
+  listEntry: MediaListEntrySummary | null;
+}
+
+export interface ProfileGenreShare {
+  genre: Genre;
+  characters: number;
+  share: number;
+}
+
+export interface ProfileFavouriteWord {
+  wordId: number;
+  readingIndex: number;
+  text: string;
+  reading: string | null;
+  meaning: string;
+}
+
+export type MilestoneTier = 'ema' | 'zeni' | 'ichibu' | 'koban' | 'jade' | 'crystal' | 'lacquer' | 'shimenawa';
+
+export interface ProfileMilestone {
+  kind: 'characters' | 'titles' | 'words' | 'kanji' | 'reviews' | 'streak' | 'studyDays' | 'votes';
+  value: number;
+  /** Null before the first tier. */
+  tier: MilestoneTier | null;
+  threshold: number | null;
+  nextTier: MilestoneTier | null;
+  nextThreshold: number | null;
+}
+
+export interface ProfileOverview {
+  snapshot: { wordsKnown: number | null; kanjiKnown: number | null; characters: number | null; titlesFinished: number | null };
+  currentlyReading: ProfileDeck[] | null;
+  pinned: ProfileDeck[] | null;
+  genres: ProfileGenreShare[] | null;
+  favouriteWords: ProfileFavouriteWord[] | null;
+  milestones: ProfileMilestone[] | null;
+  /** The rolling study heatmap; null when study activity is hidden from this viewer. */
+  heatmap?: StudyHeatmapResponse | null;
+}
+
+export interface ProfileCount {
+  key: string;
+  count: number;
+  characters: number;
+}
+
+export interface ProfileLadderPoint {
+  deckId: number | null;
+  title: string | null;
+  romajiTitle: string | null;
+  englishTitle: string | null;
+  finishedOn: string;
+  difficulty: number;
+}
+
+export interface ProfileStats {
+  titlesFinished: number | null;
+  /** Finished titles missing from the difficulty-over-time chart for lack of a finish date. */
+  undatedFinished: number;
+  characters: number | null;
+  meanScore: number | null;
+  scoredCount: number;
+  ladder: ProfileLadderPoint[];
+  charactersByMonth: { month: string; characters: number }[];
+  mediaTypes: ProfileCount[];
+  genres: ProfileGenreShare[] | null;
+  difficulty: ProfileCount[];
+  coverageAtFinish: ProfileCount[];
+  scores: ProfileCount[];
+  lengths: ProfileCount[];
+  releaseYears: ProfileCount[];
+  /** Null when hidden from this viewer or not computed yet. */
+  readable: ProfileReadable | null;
+}
+
+export interface ProfileReadableType {
+  /** Null for the whole catalogue. */
+  mediaType: MediaType | null;
+  titles: number;
+  /** Titles at each of the levels or above. */
+  mature: number[];
+  withYoung: number[];
+}
+
+export interface ProfileReadable {
+  computedAt: string;
+  /** Coverage levels in percent, matching the mature and withYoung counts. */
+  levels: number[];
+  mediaTypes: ProfileReadableType[];
+}
+
+export interface ProfileColumn {
+  key: string;
+  label: string;
+  value: number;
+  tooltip: string;
+  /** CSS colour for a column whose colour carries meaning, such as a difficulty band. */
+  colour?: string;
+}
+
+export interface ProfileBar {
+  key: string;
+  label: string;
+  /** 0 to 1 of the longest bar. */
+  fraction: number;
+  value: string;
+  tooltip?: string;
+  /** Background class for a bar whose colour carries meaning, such as a genre's swatch. */
+  swatch?: string;
+}
+
+export interface DeckDetails {
+  deckId: number;
+  score: number | null;
+  note: string | null;
+  isPrivate: boolean;
+  isPinned: boolean;
 }
 
 export interface UserAccomplishment {
@@ -2710,6 +2878,12 @@ export interface DeckIPlusOneSentencesResponse {
   sentences: DeckIPlusOneSentence[];
   total: number;
   checked: number;
+}
+
+export interface CommunityListProfile {
+  written: CommunityListSummary[];
+  /** Null when the owner keeps the lists they favourited to themselves. */
+  favourited: CommunityListSummary[] | null;
 }
 
 export interface CommunityListSummary {
