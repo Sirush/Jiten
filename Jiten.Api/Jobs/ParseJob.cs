@@ -146,7 +146,8 @@ public class ParseJob(
             : [];
 
         // Insert the deck into the database
-        await JitenHelper.InsertDeck(contextFactory, deck, coverImage, false);
+        if (!await JitenHelper.InsertDeck(contextFactory, deck, coverImage, false))
+            throw new InvalidOperationException($"Inserting deck '{deck.OriginalTitle}' failed; the database error is logged just before this one.");
 
         if (requestId is > 0)
             await LinkFulfilledRequest(requestId.Value, deck.DeckId);

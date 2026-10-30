@@ -45,6 +45,7 @@
   const route = useRoute();
   const isStudyMode = computed(() => route.path === '/srs/study');
   const historyDeck = useHistoryDialogDeck();
+  const pinReplaceRequest = usePinReplaceRequest();
   const ratingRequest = useRatingRequest();
   const ratingDialogUsed = ref(false);
   watch(ratingRequest, (request) => {
@@ -82,10 +83,22 @@
       </div>
     </div>
 
-    <div :class="isStudyMode ? 'flex-grow flex flex-col' : ['container mx-auto pl-4 pr-4 flex-grow pb-2', route.meta.wide ? 'max-w-7xl' : 'max-w-6xl']">
+    <div
+      :class="
+        isStudyMode
+          ? 'flex-grow flex flex-col'
+          : route.meta.fullBleed
+            ? 'flex-grow pb-2'
+            : ['container mx-auto pl-4 pr-4 flex-grow pb-2', route.meta.wide ? 'max-w-7xl' : 'max-w-6xl']
+      "
+    >
       <!-- On the home page the banner renders inside HomeMember instead, below the study summary. -->
       <ClientOnly>
-        <LegalUpdateBanner v-if="!isStudyMode && route.path !== '/'" class="mt-2 mb-3" />
+        <LegalUpdateBanner
+          v-if="!isStudyMode && route.path !== '/'"
+          class="mt-2"
+          :class="route.meta.fullBleed ? 'container mx-auto mb-9 max-w-7xl px-4' : 'mb-3'"
+        />
       </ClientOnly>
       <NuxtPage />
     </div>
@@ -98,6 +111,7 @@
       <UpdateAvailablePrompt v-if="!isStudyMode" />
       <LazyCompletionRatingDialog v-if="ratingDialogUsed" />
       <LazyMediaListHistoryDialog v-if="historyDeck" :key="historyDeck.deckId" />
+      <LazyProfilePinReplaceDialog v-if="pinReplaceRequest" />
       <MediaListUndoToast />
     </ClientOnly>
   </div>

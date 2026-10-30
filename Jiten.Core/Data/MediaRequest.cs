@@ -2,6 +2,9 @@ namespace Jiten.Core.Data;
 
 public class MediaRequest
 {
+    /// <summary>Votes one boost counts for in a request's score.</summary>
+    public const int BoostWeight = 5;
+
     public int Id { get; set; }
     public required string Title { get; set; }
     public MediaRequestKind Kind { get; set; } = MediaRequestKind.New;

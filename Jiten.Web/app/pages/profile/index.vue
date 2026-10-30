@@ -13,8 +13,9 @@
     } catch {}
   }
 
-  if (auth.user?.userName) {
-    await navigateTo(`/profile/${auth.user.userName}`, { replace: true });
+  const handle = ownProfileHandle(auth.user);
+  if (handle) {
+    await navigateTo(profilePath(handle), { replace: true });
   }
 </script>
 

@@ -26,12 +26,23 @@ public static class InMemoryRedis
                 return Task.FromResult(value);
             });
 
+        dbMock.Setup(db => db.StringGetAsync(It.IsAny<RedisKey[]>(), It.IsAny<CommandFlags>()))
+            .Returns((RedisKey[] keys, CommandFlags _) =>
+                Task.FromResult(keys.Select(key => store.TryGetValue(key.ToString(), out var value) ? value : RedisValue.Null).ToArray()));
+
+        dbMock.Setup(db => db.StringIncrementAsync(It.IsAny<RedisKey>(), It.IsAny<long>(), It.IsAny<CommandFlags>()))
+            .Returns((RedisKey key, long by, CommandFlags _) =>
+                Task.FromResult((long)store.AddOrUpdate(key.ToString(), by, (_, current) => (long)current + by)));
+
         dbMock.Setup(db => db.KeyDeleteAsync(It.IsAny<RedisKey>(), It.IsAny<CommandFlags>()))
             .Returns((RedisKey key, CommandFlags _) =>
             {
                 var removed = store.TryRemove(key.ToString(), out RedisValue _);
                 return Task.FromResult(removed);
             });
+
+        dbMock.Setup(db => db.KeyDeleteAsync(It.IsAny<RedisKey[]>(), It.IsAny<CommandFlags>()))
+            .Returns((RedisKey[] keys, CommandFlags _) => Task.FromResult((long)keys.Count(k => store.TryRemove(k.ToString(), out RedisValue _))));
 
         var muxMock = new Mock<IConnectionMultiplexer>();
         muxMock.Setup(m => m.GetDatabase(It.IsAny<int>(), It.IsAny<object>()))

@@ -866,9 +866,7 @@ public class ComputationJob(
 
         if (completedDeckIds.Count == 0 && unfinishedByDeck.Count == 0)
         {
-            await userContext.UserAccomplishments
-                             .Where(ua => ua.UserId == userId)
-                             .ExecuteDeleteAsync();
+            await ClearAccomplishmentsAsync(userContext, userId);
             return;
         }
 
@@ -917,9 +915,7 @@ public class ComputationJob(
 
         if (completedDecks.Count == 0 && unfinished.Count == 0)
         {
-            await userContext.UserAccomplishments
-                             .Where(ua => ua.UserId == userId)
-                             .ExecuteDeleteAsync();
+            await ClearAccomplishmentsAsync(userContext, userId);
             return;
         }
 
@@ -972,6 +968,13 @@ public class ComputationJob(
                          .ExecuteDeleteAsync();
 
         await userContext.UserAccomplishments.AddRangeAsync(accomplishments);
+        await userContext.SaveChangesAsync();
+    }
+
+    /// <summary>Goes through SaveChanges rather than ExecuteDelete so the profile cache generation moves with it.</summary>
+    private static async Task ClearAccomplishmentsAsync(UserDbContext userContext, string userId)
+    {
+        userContext.UserAccomplishments.RemoveRange(await userContext.UserAccomplishments.Where(ua => ua.UserId == userId).ToListAsync());
         await userContext.SaveChangesAsync();
     }
 

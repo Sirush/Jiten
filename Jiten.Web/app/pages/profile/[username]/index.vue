@@ -1,375 +1,171 @@
 <script setup lang="ts">
+  import type { ProfileOverview } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
-  import { type UserProfile, type UserAccomplishment, type ProfileVocabularyStats, type StudyHeatmapResponse, type KnowledgeGrowth, MediaType } from '~/types';
-  import { useToast } from 'primevue/usetoast';
-  import { getCompletedDisplay, getMediaTypeText } from '~/utils/mediaTypeMapper';
+  import { formatCompact } from '~/utils/siteStats';
 
-  definePageMeta({
-    validate: (route) => {
-      const name = String(route.params.username);
-      return name.length >= 2 && name.length <= 30 && /^[A-Za-z0-9._@+-]+$/.test(name);
-    },
-  });
-
-  const route = useRoute();
+  const { isOwner, canSee, viewAs, viewAsQuery, apiPath, name } = useProfileContext();
   const auth = useAuthStore();
-  const toast = useToast();
-  const { $api } = useNuxtApp();
-
-  const targetUsername = computed(() => route.params.username as string);
-  const isOwnProfile = computed(() => auth.isAuthenticated && auth.user?.userName?.toLowerCase() === targetUsername.value.toLowerCase());
-
-  const isUpdatingVisibility = ref(false);
-  const isUpdatingMediaListVisibility = ref(false);
-  const selectedTab = ref<string>('global');
 
   const {
-    data: profile,
-    error: profileError,
-    status: profileStatus,
-  } = await useApiFetch<UserProfile>(() => `user/profile/${targetUsername.value}`, { watch: [targetUsername], deep: true });
+    data: overview,
+    status,
+    error,
+    refresh: refreshOverview,
+  } = await useApiFetch<ProfileOverview>(() => apiPath('overview'), { query: viewAsQuery.value });
 
-  const { data: accomplishmentsData } = await useApiFetch<UserAccomplishment[]>(() => `user/profile/${targetUsername.value}/accomplishments`, {
-    watch: [targetUsername],
+  const pinPickerOpen = ref(false);
+
+  const snapshot = computed(() => {
+    const s = overview.value?.snapshot;
+    if (!s) return [];
+    return [
+      { label: 'Words known', value: s.wordsKnown },
+      { label: 'Kanji known', value: s.kanjiKnown },
+      { label: 'Characters', value: s.characters },
+      { label: 'Titles finished', value: s.titlesFinished },
+    ]
+      .filter((x): x is { label: string; value: number } => x.value != null)
+      .map((x) => ({ label: x.label, value: formatCompact(x.value) }));
   });
-
-  const shareVocabulary = ref<ProfileVocabularyStats | null>(null);
-  const shareGrowth = ref<KnowledgeGrowth | null>(null);
-  const shareHeatmap = ref<StudyHeatmapResponse | null>(null);
-
-  watch(targetUsername, () => {
-    selectedTab.value = 'global';
-    shareVocabulary.value = null;
-    shareGrowth.value = null;
-    shareHeatmap.value = null;
-  });
-
-  const accomplishments = computed(() => accomplishmentsData.value ?? []);
-  const isLoading = computed(() => profileStatus.value === 'pending');
-  const profileNotFound = computed(() => {
-    if (!profileError.value) return false;
-    const err = profileError.value as any;
-    return err?.statusCode === 404;
-  });
-  const error = computed<string | null>(() => {
-    if (!profileError.value || profileNotFound.value) return null;
-    return 'Failed to load profile';
-  });
-
-  const globalAccomplishment = computed(() => accomplishments.value.find((a) => a.mediaType === null));
-
-  const mediaTypeAccomplishments = computed(() => accomplishments.value.filter((a) => a.mediaType !== null));
-
-  const availableTabs = computed(() => {
-    const mediaTabs = mediaTypeAccomplishments.value
-      .filter((acc) => acc.mediaType !== null)
-      .map((acc) => ({
-        label: getMediaTypeText(acc.mediaType!),
-        value: acc.mediaType!.toString(),
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label));
-
-    return [{ label: 'Global', value: 'global' }, ...mediaTabs];
-  });
-
-  const selectedAccomplishment = computed(() => {
-    if (selectedTab.value === 'global') {
-      return globalAccomplishment.value;
-    }
-    const mediaType = parseInt(selectedTab.value);
-    return accomplishments.value.find((a) => a.mediaType === mediaType);
-  });
-
-  const completedDisplay = computed(() => {
-    const acc = selectedAccomplishment.value;
-    if (!acc) return null;
-    return getCompletedDisplay(acc.mediaType, acc.completedUnitCount, acc.completedDeckCount);
-  });
-
-  const displayUsername = computed(() => profile.value?.username ?? targetUsername.value);
-
-  const profileIsPublic = computed({
-    get: () => profile.value?.isPublic ?? false,
-    set: (value: boolean) => {
-      if (profile.value) {
-        profile.value.isPublic = value;
-      }
-    },
-  });
-
-  const toggleVisibility = async () => {
-    if (!isOwnProfile.value || isUpdatingVisibility.value || !profile.value) return;
-
-    isUpdatingVisibility.value = true;
-    try {
-      const newIsPublic = profile.value.isPublic;
-      await $api('user/profile', {
-        method: 'PATCH',
-        body: { isPublic: newIsPublic },
-      });
-      toast.add({
-        severity: 'success',
-        summary: newIsPublic ? 'Your profile is now public and accessible to anyone with the link' : 'Your profile is now private and visible only to you',
-        life: 3000,
-      });
-      if (!newIsPublic && profile.value) profile.value.isMediaListPublic = false;
-    } catch (err) {
-      if (profile.value) {
-        profile.value.isPublic = !profile.value.isPublic;
-      }
-      toast.add({
-        severity: 'error',
-        summary: 'Failed to update profile visibility',
-        life: 5000,
-      });
-    } finally {
-      isUpdatingVisibility.value = false;
-    }
-  };
-
-  const profileMediaListIsPublic = computed({
-    get: () => profile.value?.isMediaListPublic ?? false,
-    set: (value: boolean) => {
-      if (profile.value) {
-        profile.value.isMediaListPublic = value;
-      }
-    },
-  });
-
-  const toggleMediaListVisibility = async () => {
-    if (!isOwnProfile.value || isUpdatingMediaListVisibility.value || !profile.value) return;
-
-    isUpdatingMediaListVisibility.value = true;
-    try {
-      const newIsPublic = profile.value.isMediaListPublic;
-      await $api('user/profile', {
-        method: 'PATCH',
-        body: { isMediaListPublic: newIsPublic },
-      });
-      toast.add({
-        severity: 'success',
-        summary: newIsPublic ? 'Your media list is now public' : 'Your media list is now private',
-        life: 3000,
-      });
-    } catch (err) {
-      if (profile.value) {
-        profile.value.isMediaListPublic = !profile.value.isMediaListPublic;
-      }
-      toast.add({
-        severity: 'error',
-        summary: 'Failed to update media list visibility',
-        life: 5000,
-      });
-    } finally {
-      isUpdatingMediaListVisibility.value = false;
-    }
-  };
-
-  const formatNumber = (num: number | undefined) => {
-    if (num === undefined) return '0';
-    return num.toLocaleString();
-  };
-
-  useHead(() => ({
-    title: `Profile - ${displayUsername.value}`,
-    meta: [{ name: 'description', content: `User profile for ${displayUsername.value}` }],
-  }));
 </script>
 
 <template>
-  <div class="container mx-auto p-4">
-    <div v-if="isLoading" class="flex justify-center items-center min-h-[50vh]">
-      <ProgressSpinner />
+  <ProfileTabGate>
+    <div v-if="status === 'pending' && !overview" class="flex flex-col gap-5 lg:flex-row lg:items-start" aria-busy="true">
+      <div class="flex flex-col gap-5 lg:min-w-0 lg:flex-[1_1_20rem]">
+        <Skeleton height="8.5rem" border-radius="0.75rem" />
+        <Skeleton height="9.5rem" border-radius="0.75rem" />
+        <Skeleton height="11rem" border-radius="0.75rem" />
+      </div>
+      <div class="flex flex-col gap-5 lg:min-w-0 lg:flex-[999_1_34rem]">
+        <Skeleton height="10.5rem" border-radius="0.75rem" />
+        <Skeleton height="15rem" border-radius="0.75rem" />
+        <Skeleton height="11rem" border-radius="0.75rem" />
+      </div>
     </div>
 
-    <div v-else-if="profileNotFound" class="text-center py-16">
-      <Card>
-        <template #content>
-          <div class="flex flex-col items-center gap-4">
-            <Icon name="material-symbols:person-off" size="4rem" class="text-gray-400" />
-            <h2 class="text-xl font-semibold">Profile not found</h2>
-            <p class="text-gray-500 dark:text-gray-400">This profile does not exist or is set to private.</p>
-            <NuxtLink to="/">
-              <Button label="Go Home" icon="pi pi-home" />
-            </NuxtLink>
-          </div>
-        </template>
-      </Card>
-    </div>
+    <Message v-else-if="error" severity="error" :closable="false">Couldn't load this profile's overview. Refresh the page to try again.</Message>
 
-    <div v-else-if="error" class="text-center py-8">
-      <Message severity="error">{{ error }}</Message>
-    </div>
+    <div v-else-if="overview" class="flex flex-col gap-5 lg:flex-row lg:items-start">
+      <div class="max-lg:contents lg:flex lg:min-w-0 lg:flex-[1_1_20rem] lg:flex-col lg:gap-5">
+        <Card v-if="snapshot.length" class="max-lg:order-1">
+          <template #title>
+            <h2 class="text-base font-semibold">Japanese</h2>
+          </template>
+          <template #content>
+            <dl class="grid grid-cols-2 gap-4">
+              <ProfileStatTile v-for="item in snapshot" :key="item.label" :label="item.label" :value="item.value" />
+            </dl>
+          </template>
+        </Card>
 
-    <div v-else-if="profile" class="flex flex-col gap-6">
-      <Card>
-        <template #content>
-          <div class="flex justify-between items-center flex-wrap gap-4">
-            <div>
-              <div class="flex items-center gap-3">
-                <h1 class="text-2xl font-bold">{{ displayUsername }}</h1>
-                <ProfileShareButton
-                  v-if="isOwnProfile"
-                  :username="displayUsername"
-                  :vocabulary="shareVocabulary"
-                  :growth="shareGrowth"
-                  :accomplishment="globalAccomplishment ?? null"
-                  :heatmap="shareHeatmap"
-                />
-              </div>
-              <p class="text-gray-500 dark:text-gray-400 text-sm">
-                <span v-if="profile.isPublic">Public profile</span>
-                <span v-else>Private profile</span>
-              </p>
+        <ProfileGenresCard v-if="overview.genres?.length" :genres="overview.genres" class="max-lg:order-5" />
+
+        <Card v-if="overview.favouriteWords?.length || (isOwner && overview.favouriteWords)" class="max-lg:order-6">
+          <template #title>
+            <div class="flex items-baseline justify-between gap-2">
+              <h2 class="text-base font-semibold">Favourite words</h2>
+              <NuxtLink v-if="isOwner" to="/settings/profile#favourite-words" class="text-sm !text-primary-600 hover:underline dark:!text-primary-400"
+                >Edit</NuxtLink
+              >
             </div>
-            <div v-if="isOwnProfile" class="flex flex-col gap-2">
-              <div class="flex items-center justify-end gap-3">
-                <label for="visibility-toggle" class="text-sm">Public profile</label>
-                <ToggleSwitch v-model="profileIsPublic" input-id="visibility-toggle" :disabled="isUpdatingVisibility" @change="toggleVisibility" />
-              </div>
-              <div v-if="profileIsPublic" class="flex items-center justify-end gap-3">
-                <label for="media-list-visibility-toggle" class="text-sm">Public media list</label>
-                <ToggleSwitch
-                  v-model="profileMediaListIsPublic"
-                  input-id="media-list-visibility-toggle"
-                  :disabled="isUpdatingMediaListVisibility"
-                  @change="toggleMediaListVisibility"
-                />
-              </div>
-            </div>
-          </div>
-        </template>
-      </Card>
+          </template>
+          <template #content>
+            <p v-if="!overview.favouriteWords?.length" class="text-sm text-muted-color">Pick up to five words to show here.</p>
+            <ul v-else class="flex flex-col">
+              <li
+                v-for="word in overview.favouriteWords"
+                :key="`${word.wordId}-${word.readingIndex}`"
+                class="border-t border-surface-200 first:border-t-0 dark:border-surface-700"
+              >
+                <NuxtLink :to="`/vocabulary/${word.wordId}/${word.readingIndex}`" class="flex items-baseline gap-2.5 py-2 !text-surface-900 !no-underline hover:!text-primary-600 dark:!text-surface-0 dark:hover:!text-primary-300">
+                  <ProfileFavouriteWord :word="word" meaning-end />
+                </NuxtLink>
+              </li>
+            </ul>
+          </template>
+        </Card>
 
-      <ProfileVocabularySummary :username="displayUsername" @loaded="shareVocabulary = $event" />
-
-      <!-- srs/knowledge-growth is scoped to the signed-in user, so it can only be shown on your own profile. -->
-      <ProfileGrowthSummary v-if="isOwnProfile" @loaded="shareGrowth = $event" />
-
-      <div v-if="accomplishments.length === 0" class="text-center py-8">
-        <Message severity="info">No accomplishments yet. Complete some media to see your stats!</Message>
+        <Card v-if="overview.milestones?.length" class="max-lg:order-7">
+          <template #title>
+            <h2 class="text-base font-semibold">Milestones</h2>
+          </template>
+          <template #content>
+            <ul class="grid grid-cols-3 gap-x-2 gap-y-4 sm:grid-cols-5 lg:grid-cols-3">
+              <li v-for="m in overview.milestones" :key="m.kind">
+                <ProfileMilestoneBadge :milestone="m" />
+              </li>
+            </ul>
+          </template>
+        </Card>
       </div>
 
-      <template v-else>
-        <Tabs v-model:value="selectedTab" :show-navigators="false">
-          <TabList class="flex-wrap">
-            <Tab v-for="tab in availableTabs" :key="tab.value" :value="tab.value">
-              {{ tab.label }}
-            </Tab>
-          </TabList>
-        </Tabs>
+      <div class="max-lg:contents lg:flex lg:min-w-0 lg:flex-[999_1_34rem] lg:flex-col lg:gap-5">
+        <Card v-if="overview.currentlyReading" class="max-lg:order-2">
+          <template #title>
+            <h2 class="text-base font-semibold">In progress</h2>
+          </template>
+          <template #content>
+            <p v-if="overview.currentlyReading.length === 0" class="text-sm text-muted-color">
+              {{ isOwner ? 'Set a title to Ongoing and it will show up here.' : `${name} isn't reading anything right now.` }}
+            </p>
+            <div v-else class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              <ProfileReadingRow v-for="item in overview.currentlyReading" :key="item.deck.deckId" :item="item" />
+            </div>
+          </template>
+        </Card>
 
-        <!-- Accomplishment Stats -->
-        <div v-if="selectedAccomplishment" class="grid grid-cols-2 md:grid-cols-3 gap-4">
-          <Card class="text-center">
-            <template #content>
-              <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
-                {{ formatNumber(completedDisplay?.value ?? selectedAccomplishment.completedDeckCount) }}
+        <Card v-if="overview.pinned && (overview.pinned.length || isOwner)" class="max-lg:order-3">
+          <template #title>
+            <div class="flex items-baseline justify-between gap-2">
+              <h2 class="text-base font-semibold">Pinned</h2>
+              <div v-if="isOwner" class="flex items-baseline gap-3 text-sm">
+                <button v-if="overview.pinned.length" type="button" class="!text-primary-600 hover:underline dark:!text-primary-400" @click="pinPickerOpen = true">Add</button>
+                <NuxtLink to="/settings/profile#pinned" class="!text-primary-600 hover:underline dark:!text-primary-400">Edit</NuxtLink>
               </div>
-              <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">{{ completedDisplay?.label ?? 'Completed' }}</div>
-              <div v-if="completedDisplay?.sub" class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 tabular-nums">{{ completedDisplay.sub }}</div>
-            </template>
-          </Card>
-
-          <Card class="text-center">
-            <template #content>
-              <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
-                {{ formatNumber(selectedAccomplishment.totalCharacterCount + (selectedAccomplishment.unfinishedCharacterCount ?? 0)) }}
-              </div>
-              <template v-if="selectedAccomplishment.unfinishedCharacterCount > 0">
-                <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Characters read</div>
-                <div class="text-xs text-gray-500 dark:text-gray-400 mt-0.5 tabular-nums">
-                  {{ formatNumber(selectedAccomplishment.totalCharacterCount) }} in completed titles
-                </div>
+            </div>
+          </template>
+          <template #content>
+            <div v-if="!overview.pinned.length" class="flex flex-col items-start gap-3">
+              <p class="text-sm text-muted-color">Pin up to {{ MAX_PROFILE_PINS }} titles from your library to show them here.</p>
+              <Button label="Add a title" icon="pi pi-plus" size="small" severity="secondary" @click="pinPickerOpen = true" />
+            </div>
+            <div v-else class="scrollbar-styled -mx-1 flex gap-3 overflow-x-auto px-1 pb-1 sm:mx-0 sm:grid sm:grid-cols-6 sm:gap-4 sm:overflow-visible sm:px-0 sm:pb-0">
+              <ProfileDeckTile
+                v-for="item in overview.pinned"
+                :key="item.deck.deckId"
+                :deck="item.deck"
+                :score="item.score"
+                class="w-32 shrink-0 sm:w-auto"
+              />
+              <template v-if="isOwner">
+                <button
+                  v-for="slot in MAX_PROFILE_PINS - overview.pinned.length"
+                  :key="`empty-${slot}`"
+                  type="button"
+                  class="flex aspect-[2/3] cursor-pointer flex-col items-center justify-center gap-1.5 self-start rounded-md border-2 border-dashed border-surface-300 text-xs text-muted-color transition-colors hover:border-primary-400 hover:text-primary-600 focus-visible:outline-2 focus-visible:outline-primary-500 max-sm:hidden dark:border-surface-600 dark:hover:border-primary-400 dark:hover:text-primary-300"
+                  @click="pinPickerOpen = true"
+                >
+                  <i class="pi pi-plus" aria-hidden="true" />
+                  Pin a title
+                </button>
               </template>
-              <div v-else class="text-sm text-gray-500 dark:text-gray-400 mt-1">Characters</div>
-            </template>
-          </Card>
+            </div>
+            <ProfilePinPicker v-if="isOwner" v-model:visible="pinPickerOpen" @changed="refreshOverview()" />
+          </template>
+        </Card>
 
-          <Card class="text-center">
-            <template #content>
-              <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
-                {{ formatNumber(selectedAccomplishment.totalWordCount) }}
-              </div>
-              <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Words</div>
-            </template>
-          </Card>
+        <Card v-if="canSee('studyActivity')" class="max-lg:order-4">
+          <template #title>
+            <h2 class="text-base font-semibold">Study activity</h2>
+          </template>
+          <template #content>
+            <StudyHeatmap :data="overview.heatmap" rolling />
+          </template>
+        </Card>
 
-          <Card class="text-center">
-            <template #content>
-              <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
-                {{ formatNumber(selectedAccomplishment.uniqueWordCount) }}
-              </div>
-              <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Unique Words</div>
-            </template>
-          </Card>
-
-          <Card class="text-center">
-            <template #content>
-              <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
-                {{ formatNumber(selectedAccomplishment.uniqueWordUsedOnceCount) }}
-              </div>
-              <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">1-Occurrence Words</div>
-            </template>
-          </Card>
-
-          <Card class="text-center">
-            <template #content>
-              <div class="text-[clamp(1rem,5.5vw,1.875rem)] font-bold tabular-nums text-purple-600 dark:text-purple-400">
-                {{ formatNumber(selectedAccomplishment.uniqueKanjiCount) }}
-              </div>
-              <div class="text-sm text-gray-500 dark:text-gray-400 mt-1">Unique Kanji</div>
-            </template>
-          </Card>
-        </div>
-
-        <div v-else class="text-center py-4">
-          <Message severity="info">No data for this category</Message>
-        </div>
-
-        <div v-if="isOwnProfile" class="flex justify-center gap-3 flex-wrap">
-          <NuxtLink :to="{ path: `/profile/${displayUsername}/vocabulary`, query: selectedTab !== 'global' ? { mediaType: selectedTab } : {} }">
-            <Button label="View Vocabulary" icon="pi pi-list" />
-          </NuxtLink>
-          <NuxtLink :to="`/profile/${displayUsername}/media`">
-            <Button label="View Media List" icon="pi pi-folder-open" />
-          </NuxtLink>
-        </div>
-        <div v-else-if="profile.isMediaListPublic" class="flex justify-center">
-          <NuxtLink :to="`/profile/${displayUsername}/media`">
-            <Button label="View Media List" icon="pi pi-folder-open" />
-          </NuxtLink>
-        </div>
-      </template>
-
-      <!-- Study Heatmap -->
-      <Card>
-        <template #title>
-          <div class="flex items-center gap-2">
-            <Icon name="material-symbols:calendar-month" />
-            Study Activity
-          </div>
-        </template>
-        <template #content>
-          <StudyHeatmap :username="displayUsername" @loaded="shareHeatmap = $event" />
-        </template>
-      </Card>
-
-      <!-- Kanji Grid -->
-      <Card>
-        <template #title>
-          <div class="flex items-center gap-2">
-            <Icon name="material-symbols:grid-view" />
-            Kanji Grid
-          </div>
-        </template>
-        <template #subtitle>
-          <span class="text-xs text-surface-400">Kanji are ordered according to their frequency</span>
-        </template>
-        <template #content>
-          <KanjiGrid :username="displayUsername" />
-        </template>
-      </Card>
+        <ProfileSharedShelf v-if="auth.isAuthenticated && !isOwner && !viewAs && canSee('library')" class="max-lg:order-8" />
+      </div>
     </div>
-  </div>
+  </ProfileTabGate>
 </template>

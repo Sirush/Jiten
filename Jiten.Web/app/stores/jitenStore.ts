@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia';
 import { type DifficultyDisplayStyle, DifficultyValueDisplayStyle, type SentenceFuriganaMode, ThemeMode, TitleLanguage } from '~/types';
-import type { KanjiScalePref } from '~/data/kanjiGroupings';
+import type { DisplayType as KanjiGridGrouping, KanjiScalePref } from '~/data/kanjiGroupings';
 import { DEFAULT_TTS_VOLUME } from '~/utils/ttsVolume';
 import type { CoverageScale } from '~/utils/coverageAxis';
 import { DEFAULT_WORD_STATE_COLOURS, type WordStateColourKey, type WordStateColours } from '~/utils/wordState';
@@ -255,6 +255,9 @@ export const useJitenStore = defineStore('jiten', () => {
   const franchiseCardSize = createLocalStorageState<FranchiseCardSize>('franchise-card-size', 'covers');
   const franchiseSeriesDensity = createLocalStorageState<FranchiseSeriesDensity>('franchise-series-density', 'detailed');
 
+  const kanjiGridGrouping = createLocalStorageState<KanjiGridGrouping>('kanji-grid-grouping', 'none');
+  const kanjiGridOnlyTracked = createLocalStorageState<boolean>('kanji-grid-only-tracked', false);
+
   // Drives the unread dot on the home page's "what's new" strip.
   const lastSeenUpdateId = createLocalStorageState<number>('last-seen-update-id', 0);
   const customDictionaryFontSize = createLocalStorageState<number>('custom-dictionary-font-size', DEFAULT_DICTIONARY_FONT_SIZE);
@@ -339,6 +342,8 @@ export const useJitenStore = defineStore('jiten', () => {
     franchiseLinkMode,
     franchiseCardSize,
     franchiseSeriesDensity,
+    kanjiGridGrouping,
+    kanjiGridOnlyTracked,
     lastSeenUpdateId,
     customDictionaryFontSize,
     coverageVersion,

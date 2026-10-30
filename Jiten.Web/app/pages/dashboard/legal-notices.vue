@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import { formatDateLong, formatDateShort } from '~/utils/dateFormat';
-  useHead({ title: 'Legal Notices - Jiten' });
+  useHead({ title: 'Legal Notices' });
   definePageMeta({ middleware: ['auth-admin'] });
 
   const { $api } = useNuxtApp();

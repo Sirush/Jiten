@@ -106,7 +106,7 @@ public class MediaDuplicateService(JitenDbContext context, MediaTitleSearchServi
                                         Title = r.Title,
                                         MediaType = r.MediaType,
                                         Status = r.Status,
-                                        UpvoteCount = r.UpvoteCount
+                                        UpvoteCount = r.UpvoteCount + r.BoostCount * MediaRequest.BoostWeight
                                     })
                                     .ToDictionaryAsync(r => r.Id);
 
@@ -168,7 +168,7 @@ public class MediaDuplicateService(JitenDbContext context, MediaTitleSearchServi
                                       .WhereActive(mediaType, fulfillableOnly)
                                       .Where(r => (r.ExternalUrl != null && r.ExternalUrl.ToLower().Contains(token))
                                                   || r.Links.Any(l => l.LinkType == key.LinkType && l.Url.ToLower().Contains(token)))
-                                      .OrderByDescending(r => r.UpvoteCount)
+                                      .OrderByDescending(r => r.UpvoteCount + r.BoostCount * MediaRequest.BoostWeight)
                                       .Select(r => new
                                       {
                                           r.Id,

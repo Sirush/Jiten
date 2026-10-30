@@ -10,8 +10,6 @@
     deck: Deck;
   }>();
 
-  const localiseTitle = useLocaliseTitle();
-
   // Gaussian width (in difficulty points) controlling how sharply difficulty mode favours
   // decks close to the source deck's difficulty. See plan: balanced weighting.
   const SIGMA = 0.75;
@@ -171,25 +169,13 @@
       class="flex flex-row flex-wrap gap-4 justify-center pt-4 transition-opacity"
       :class="{ 'pointer-events-none opacity-50': status === 'pending' }"
     >
-      <div v-for="item in displayed" :key="item.deck.deckId" class="flex w-34 flex-col items-center gap-1">
-        <div class="relative">
-          <span
-            class="absolute top-1 left-1 z-10 rounded bg-primary px-1.5 py-0.5 text-xs font-bold text-primary-contrast shadow"
-            :title="`${item.similarityPercent}% content match`"
-          >
-            {{ item.similarityPercent }}%
-          </span>
-          <MediaDeckCompactView :deck="item.deck" lazy-cover />
-        </div>
-        <NuxtLink
-          :to="`/decks/media/${item.deck.deckId}/detail`"
-          class="line-clamp-2 w-full text-center text-sm hover:underline"
-          :title="localiseTitle(item.deck)"
-          v-bind="japaneseTextAttrs(localiseTitle(item.deck))"
-        >
-          {{ localiseTitle(item.deck) }}
-        </NuxtLink>
-      </div>
+      <MediaDeckCoverTile
+        v-for="item in displayed"
+        :key="item.deck.deckId"
+        :deck="item.deck"
+        :badge="`${item.similarityPercent}%`"
+        :badge-title="`${item.similarityPercent}% content match`"
+      />
     </div>
     <div v-else-if="status === 'pending'" class="flex flex-row flex-wrap gap-4 justify-center pt-4">
       <Skeleton v-for="i in 7" :key="i" width="136px" height="192px" />

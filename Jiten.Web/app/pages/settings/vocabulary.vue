@@ -2,7 +2,7 @@
   import type { VocabularyOption } from '~/components/VocabularyOptionGrid.vue';
 
   definePageMeta({ middleware: ['auth'] });
-  useHead({ title: 'Vocabulary - Settings - Jiten' });
+  useHead({ title: 'Vocabulary - Settings' });
 
   const route = useRoute();
   const router = useRouter();

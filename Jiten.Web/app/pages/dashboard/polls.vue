@@ -12,7 +12,7 @@
   import type { AdminPoll } from '~/types';
   import { formatDateShort } from '~/utils/dateFormat';
 
-  useHead({ title: 'Polls - Jiten' });
+  useHead({ title: 'Polls' });
 
   definePageMeta({
     middleware: ['auth-admin'],

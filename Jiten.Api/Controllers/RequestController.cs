@@ -46,7 +46,6 @@ public partial class RequestController(
     private const int MonthlyBoostLimit = 5;
     private const string TurnaroundCacheKey = "requests:turnaround";
     private const int DuplicateHintLimit = 5;
-    private const int BoostWeight = 5;
     private const int MaxCommentLength = 500;
     private const int CommentRateLimitPerFiveMin = 5;
     private const int CommentRateLimitPerHour = 25;
@@ -123,7 +122,7 @@ public partial class RequestController(
             "recent" => query.OrderByDescending(r => r.CreatedAt),
             "completed" => query.OrderByDescending(r => r.CompletedAt).ThenByDescending(r => r.CreatedAt),
             // "top"/default: rank by effective score (raw votes + boosts weighted). Counts stay separate on the row.
-            _ => query.OrderByDescending(r => r.UpvoteCount + r.BoostCount * BoostWeight).ThenByDescending(r => r.CreatedAt),
+            _ => query.OrderByDescending(r => r.UpvoteCount + r.BoostCount * MediaRequest.BoostWeight).ThenByDescending(r => r.CreatedAt),
         };
 
         var requests = await query.Skip(offset).Take(limit).ToListAsync();
@@ -865,7 +864,7 @@ public partial class RequestController(
     }
 
     /// <summary>
-    /// Applies a permanent +<see cref="BoostWeight"/> votes boost to a request. Every Jiten+ user
+    /// Applies a permanent +<see cref="MediaRequest.BoostWeight"/> votes boost to a request. Every Jiten+ user
     /// gets <see cref="MonthlyBoostLimit"/> boosts per calendar month (UTC).
     /// </summary>
     [HttpPost("{id:int}/boost")]
@@ -1528,7 +1527,7 @@ public partial class RequestController(
                 .Where(r => r.Kind == MediaRequestKind.Update
                             && r.TargetDeckId == targetDeckId
                             && (r.Status == MediaRequestStatus.Open || r.Status == MediaRequestStatus.InProgress))
-                .OrderByDescending(r => r.UpvoteCount)
+                .OrderByDescending(r => r.UpvoteCount + r.BoostCount * MediaRequest.BoostWeight)
                 .Take(5)
                 .Select(r => new DuplicateCheckRequestDto
                 {
@@ -1536,7 +1535,7 @@ public partial class RequestController(
                     Title = r.Title,
                     MediaType = r.MediaType,
                     Status = r.Status,
-                    UpvoteCount = r.UpvoteCount
+                    UpvoteCount = r.UpvoteCount + r.BoostCount * MediaRequest.BoostWeight
                 })
                 .ToListAsync()
             : [];

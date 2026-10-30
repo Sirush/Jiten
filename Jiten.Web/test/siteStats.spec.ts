@@ -4,6 +4,7 @@ import {
   bandPosition,
   describeShare,
   floorToHundred,
+  formatApprox,
   formatCompact,
   formatMonth,
   heatStep,
@@ -27,6 +28,14 @@ describe('number formatting', () => {
     expect(formatCompact(2899)).toBe('2,899');
     expect(formatCompact(22_317_818)).toBe('22.3M');
     expect(formatCompact(2_610_573_012)).toBe('2.6B');
+  });
+
+  it('rounds approximate figures to two significant digits', () => {
+    expect(formatApprox(880_700)).toBe('880K');
+    expect(formatApprox(1_234_567)).toBe('1.2M');
+    expect(formatApprox(12_345)).toBe('12K');
+    expect(formatApprox(4_321)).toBe('4.3K');
+    expect(formatApprox(870)).toBe('870');
   });
 
   it('rounds and floors to the hundred', () => {

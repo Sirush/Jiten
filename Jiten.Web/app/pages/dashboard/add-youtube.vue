@@ -13,7 +13,7 @@
   import { formatDateTime } from '~/utils/dateFormat';
 
   useHead({
-    title: 'Add YouTube Source - Jiten',
+    title: 'Add YouTube Source',
   });
 
   definePageMeta({
@@ -199,8 +199,6 @@
       toast.add({ severity: 'warn', summary: 'Copy failed', detail: 'Select the command and copy it by hand.', life: 4000 });
     }
   };
-
-  const formatDateTime = (value: string) => formatDateTime(value);
 
   onMounted(async () => {
     await loadRegistrations();

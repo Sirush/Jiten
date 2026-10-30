@@ -138,6 +138,8 @@ public static class JapaneseTextHelper
             (>= 0x2A700 and <= 0x2B73F) or // Extension C
             (>= 0x2B740 and <= 0x2B81F) or // Extension D
             (>= 0x2B820 and <= 0x2CEAF) or // Extension E
+            (>= 0x2CEB0 and <= 0x2EE5F) or // Extensions F and I
+            (>= 0x30000 and <= 0x323AF) or // Extensions G and H
             (>= 0xF900 and <= 0xFAFF) or   // Compatibility Ideographs
             (>= 0x2F800 and <= 0x2FA1F);   // Compatibility Supplement
     }

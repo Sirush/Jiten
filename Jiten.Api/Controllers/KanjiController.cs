@@ -289,6 +289,30 @@ public class KanjiController(JitenDbContext context) : ControllerBase
                             .ToListAsync();
     }
 
+    private const int MaxStrokeCharacters = 40;
+
+    [HttpGet("strokes")]
+    [SwaggerOperation(Summary = "Get KanjiVG stroke paths for several characters",
+                      Description = "Returns a map from each character that has KanjiVG data to its stroke paths in writing order, on a 109x109 viewBox. Characters without data are left out. Stroke data come from KanjiVG (CC BY-SA 3.0).")]
+    [ProducesResponseType(typeof(Dictionary<string, List<string>>), StatusCodes.Status200OK)]
+    [ResponseCache(Duration = 3600, VaryByQueryKeys = ["characters"])]
+    public async Task<IResult> GetStrokes([FromQuery] string characters = "")
+    {
+        var requested = new List<string>();
+        var elements = System.Globalization.StringInfo.GetTextElementEnumerator(characters);
+        while (elements.MoveNext() && requested.Count <= MaxStrokeCharacters)
+            requested.Add(elements.GetTextElement());
+        if (requested.Count > MaxStrokeCharacters)
+            return Results.BadRequest(new { message = $"Ask for up to {MaxStrokeCharacters} characters." });
+
+        var distinct = requested.Distinct().ToList();
+        var strokes = await context.KanjiStrokes.AsNoTracking()
+                                   .Where(k => distinct.Contains(k.Character))
+                                   .Select(k => new { k.Character, k.Paths })
+                                   .ToDictionaryAsync(k => k.Character, k => k.Paths);
+        return Results.Ok(strokes);
+    }
+
     private const int UsedInPreviewCount = 30;
 
     private async Task<(List<KanjiComponentDto> Components, KanjiNestedRadicalDto? NestedRadical)> LoadComponents(string character)

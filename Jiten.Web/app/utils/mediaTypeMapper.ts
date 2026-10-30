@@ -116,7 +116,7 @@ export function getCompletedDisplay(mediaType: MediaType | null, completedUnitCo
   if (mediaType !== null && unitHeadlineTypes.has(mediaType) && units > 0) {
     return {
       value: units,
-      label: `${unitLabel(units, mediaType)} Completed`,
+      label: `${unitLabel(units, mediaType)} completed`,
       sub: units === completedDeckCount ? null : `${completedDeckCount.toLocaleString()} ${completedDeckCount === 1 ? 'work' : 'works'} completed`,
     };
   }
@@ -124,7 +124,7 @@ export function getCompletedDisplay(mediaType: MediaType | null, completedUnitCo
   return {
     value: completedDeckCount,
     label: 'Completed',
-    sub: mediaType !== MediaType.VisualNovel && units > completedDeckCount ? `${units.toLocaleString()} ${unitLabel(units, mediaType)}` : null,
+    sub: mediaType !== MediaType.VisualNovel && units > completedDeckCount ? `${units.toLocaleString()} ${unitLabel(units, mediaType).toLowerCase()}` : null,
   };
 }
 

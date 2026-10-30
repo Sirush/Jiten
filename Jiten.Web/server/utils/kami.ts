@@ -17,7 +17,7 @@ export function relayToKami(event: H3Event, body: string): void {
   const forwarded = String(headers['x-forwarded-for'] ?? '')
     .split(',')[0]
     ?.trim();
-  const ip = String(headers['cf-connecting-ip'] ?? '') || forwarded || event.node.req.socket?.remoteAddress || '';
+  const ip = forwarded || event.node.req.socket?.remoteAddress || '';
 
   const send = $fetch(`${config.kamiUrl.replace(/\/$/, '')}/ingest/web`, {
     method: 'POST',

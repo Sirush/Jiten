@@ -122,6 +122,8 @@ public partial class UserController
                                      currentStatus,
                                      isIgnored = pref?.IsIgnored ?? false,
                                      isFavourite = kv.Value.IsFavourite,
+                                     score = kv.Value.Score,
+                                     note = kv.Value.Note,
                                      currentFavourite = pref?.IsFavourite ?? false,
                                  };
                       })

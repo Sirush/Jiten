@@ -33,7 +33,7 @@
   import DifficultyDisplay from '~/components/DifficultyDisplay.vue';
 
   definePageMeta({ middleware: ['auth'] });
-  useHead({ title: 'Immersion Plans - Jiten' });
+  useHead({ title: 'Immersion Plans' });
 
   const { $api } = useNuxtApp();
   const toast = useToast();

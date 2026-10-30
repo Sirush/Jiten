@@ -2,6 +2,8 @@
  * Turns an Anki sentence field into a `**word**`-marked sentence that fits UserExampleSentence.Text.
  */
 
+import { foldKana } from '~/utils/kana';
+
 export const SENTENCE_MAX_LENGTH = 150;
 
 /** `**` on each side of the marked span. */
@@ -208,16 +210,6 @@ export function extractSentenceFromField(html: string): ExtractedSentence {
   }
 
   return { text, markedRanges };
-}
-
-/** Katakana to hiragana, length preserved so offsets stay valid against the original text. */
-export function foldKana(text: string): string {
-  let out = '';
-  for (const c of text) {
-    const code = c.codePointAt(0)!;
-    out += code >= 0x30a1 && code <= 0x30f6 ? String.fromCodePoint(code - 0x60) : c;
-  }
-  return out;
 }
 
 function findStem(haystack: string, form: string): [number, number] | null {

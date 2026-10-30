@@ -8,7 +8,7 @@
     middleware: ['auth'],
   });
 
-  useHead({ title: 'Settings - Jiten' });
+  useHead({ title: 'Settings' });
 
   const { vocabStatsLoading, totalWordsAmount, fetchKnownWordsAmount } = useVocabularyStats();
 
@@ -30,6 +30,7 @@
       <h2 id="settings-account" class="mb-2 text-xs font-semibold uppercase tracking-wider text-surface-500 dark:text-surface-400">Account</h2>
       <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <SettingsTile icon="pi pi-user" title="Account" to="/settings/account" description="Account details, email, password and sign-in methods." />
+        <SettingsTile icon="pi pi-id-card" title="Profile" to="/settings/profile" description="Avatar, banner, bio, pinned titles, favourite words and who sees what." />
         <SettingsTile
           icon="pi pi-palette"
           title="Display"

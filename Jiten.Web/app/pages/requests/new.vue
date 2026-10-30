@@ -10,7 +10,7 @@
     middleware: ['auth'],
   });
 
-  useHead({ title: 'New Request - Jiten' });
+  useHead({ title: 'New Request' });
 
   const { createRequest, checkDuplicates, fetchMyQuota, error: requestError } = useMediaRequests();
   const toast = useToast();

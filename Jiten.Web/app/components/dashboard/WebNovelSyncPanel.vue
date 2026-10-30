@@ -109,7 +109,7 @@
     }
   };
 
-  const formatDateTime = (value: string | null) => (value ? formatDateTime(value) : '—');
+  const formatOptionalDateTime = (value: string | null) => (value ? formatDateTime(value) : '—');
   const formatNumber = (value: number) => value.toLocaleString('en-US');
 
   onMounted(load);
@@ -168,11 +168,11 @@
         </div>
         <div>
           <div class="text-surface-500 dark:text-surface-400">Last synced</div>
-          <div class="font-medium">{{ formatDateTime(source.lastSyncedAt) }}</div>
+          <div class="font-medium">{{ formatOptionalDateTime(source.lastSyncedAt) }}</div>
         </div>
         <div>
           <div class="text-surface-500 dark:text-surface-400">Next check</div>
-          <div class="font-medium">{{ formatDateTime(source.nextCheckAt) }}</div>
+          <div class="font-medium">{{ formatOptionalDateTime(source.nextCheckAt) }}</div>
         </div>
       </div>
 

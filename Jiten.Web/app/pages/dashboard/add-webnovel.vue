@@ -11,7 +11,7 @@
   import { formatDateShort } from '~/utils/dateFormat';
 
   useHead({
-    title: 'Add Webnovel - Jiten',
+    title: 'Add Webnovel',
   });
 
   definePageMeta({

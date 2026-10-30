@@ -8,7 +8,7 @@
     middleware: ['auth'],
   });
 
-  useHead({ title: 'Subscription - Settings - Jiten' });
+  useHead({ title: 'Subscription - Settings' });
 
   const { $api } = useNuxtApp();
   const toast = useToast();

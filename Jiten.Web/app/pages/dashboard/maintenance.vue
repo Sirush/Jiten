@@ -5,7 +5,7 @@
   import ToggleSwitch from 'primevue/toggleswitch';
   import { useToast } from 'primevue/usetoast';
 
-  useHead({ title: 'Maintenance Banner - Jiten' });
+  useHead({ title: 'Maintenance Banner' });
 
   definePageMeta({
     middleware: ['auth-admin'],

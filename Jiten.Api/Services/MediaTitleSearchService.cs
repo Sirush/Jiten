@@ -30,7 +30,7 @@ public class MediaTitleSearchService(JitenDbContext context)
         return Math.Min(baseDistance + slack, Math.Max(baseDistance, (query.Length - 1) / 2));
     }
 
-    /// <summary>Primary decks ranked exact, then PGroonga on titles, then on space-stripped titles; edit distance only when those find nothing.</summary>
+    /// <summary>Primary decks ranked exact, non-alias title prefix, contiguous phrase, then PGroonga word matches on titles and space-stripped titles; edit distance only when those find nothing.</summary>
     public async Task<List<DeckSearchHit>> SearchPrimaryDecks(string query, int limit, int levenshteinSlack = 0, MediaType? mediaType = null)
     {
         var filter = new TitleFilter(query);
@@ -120,9 +120,11 @@ public class MediaTitleSearchService(JitenDbContext context)
         FormattableString sql = $$"""
                                   WITH exact_matches AS (
                                       SELECT DISTINCT dt."DeckId",
-                                             0 AS match_priority,
+                                             0 AS match_kind,
                                              100.0 AS score,
                                              dt."TitleType",
+                                             dt."Title",
+                                             dt."TitleNoSpaces",
                                              LENGTH(dt."Title") AS title_length
                                       FROM jiten."DeckTitles" dt
                                       WHERE LOWER(dt."Title") = LOWER({{filter.Original}})
@@ -131,9 +133,11 @@ public class MediaTitleSearchService(JitenDbContext context)
                                   ),
                                   fuzzy_title_matches AS (
                                       SELECT dt."DeckId",
-                                             1 AS match_priority,
+                                             1 AS match_kind,
                                              pgroonga_score(dt.tableoid, dt.ctid) AS score,
                                              dt."TitleType",
+                                             dt."Title",
+                                             dt."TitleNoSpaces",
                                              LENGTH(dt."Title") AS title_length
                                       FROM jiten."DeckTitles" dt
                                       WHERE (dt."Title" &@~ {{filter.Original}} OR ({{filter.HasRomajiVariant}} AND dt."Title" &@~ {{filter.Romaji}}))
@@ -141,9 +145,11 @@ public class MediaTitleSearchService(JitenDbContext context)
                                   ),
                                   fuzzy_nospace_matches AS (
                                       SELECT dt."DeckId",
-                                             2 AS match_priority,
+                                             2 AS match_kind,
                                              pgroonga_score(dt.tableoid, dt.ctid) AS score,
                                              dt."TitleType",
+                                             dt."Title",
+                                             dt."TitleNoSpaces",
                                              LENGTH(dt."TitleNoSpaces") AS title_length
                                       FROM jiten."DeckTitles" dt
                                       WHERE dt."TitleType" IN (1, 3)
@@ -158,6 +164,26 @@ public class MediaTitleSearchService(JitenDbContext context)
                                       UNION ALL
                                       SELECT * FROM fuzzy_nospace_matches
                                   ),
+                                  positioned AS (
+                                      SELECT m.*,
+                                             LEAST(
+                                                 NULLIF(strpos(LOWER(m."Title"), LOWER({{filter.Original}})), 0),
+                                                 NULLIF(strpos(LOWER(m."TitleNoSpaces"), LOWER({{filter.Original}})), 0),
+                                                 NULLIF(strpos(LOWER(m."Title"), LOWER({{filter.Romaji}})), 0),
+                                                 NULLIF(strpos(LOWER(m."TitleNoSpaces"), LOWER({{filter.Romaji}})), 0)
+                                             ) AS phrase_position
+                                      FROM all_matches m
+                                  ),
+                                  tiered AS (
+                                      SELECT p.*,
+                                             CASE
+                                                 WHEN p.match_kind = 0 THEN 0
+                                                 WHEN p.phrase_position = 1 AND p."TitleType" <> 3 THEN 1
+                                                 WHEN p.phrase_position IS NOT NULL THEN 2
+                                                 ELSE p.match_kind + 2
+                                             END AS match_priority
+                                      FROM positioned p
+                                  ),
                                   ranked AS (
                                       SELECT "DeckId",
                                              MIN(match_priority) AS best_match,
@@ -169,7 +195,7 @@ public class MediaTitleSearchService(JitenDbContext context)
                                              END) AS best_type,
                                              MAX(score) AS best_score,
                                              {{queryLength}}::float / NULLIF(MIN(title_length), 0)::float AS length_ratio
-                                      FROM all_matches
+                                      FROM tiered
                                       GROUP BY "DeckId"
                                   )
                                   SELECT r."DeckId", COUNT(*) OVER() AS "TotalCount"

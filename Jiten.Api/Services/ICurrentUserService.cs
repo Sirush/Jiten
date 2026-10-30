@@ -13,13 +13,15 @@ public interface ICurrentUserService
     ClaimsPrincipal? Principal { get; }
     Task<Dictionary<(int WordId, byte ReadingIndex), List<KnownState>>> GetKnownWordsState(IEnumerable<(int WordId, byte ReadingIndex)> keys);
     Task<List<KnownState>> GetKnownWordState(int wordId, byte readingIndex);
-    /// <summary>Card-less, set-less forms the given cards and set states make redundant, with the states GetKnownWordsState would give them.</summary>
-    Task<Dictionary<(int WordId, byte ReadingIndex), List<KnownState>>> ResolveRedundantStates(
+    /// <summary>Keys whose own card is an active leech under the user's threshold; Mastered and Blacklisted cards never count.</summary>
+    Task<HashSet<(int WordId, byte ReadingIndex)>> GetLeechKeys(IEnumerable<(int WordId, byte ReadingIndex)> keys);
+    /// <summary>Card-less, set-less forms the given cards and set states make redundant, with the tiers GetKnownWordsState implies.</summary>
+    Task<RedundantTiers> ResolveRedundantTiers(
         IReadOnlyDictionary<(int WordId, byte ReadingIndex), KnownCardSnapshot> cardsByKey,
-        Dictionary<(int, byte), WordSetStateType> setDerivedStates);
+        UserWordSets wordSets);
     /// <summary>Null when the form has its own card, when no enabled derivation reaches it, or when nothing in its family is known.</summary>
     Task<DerivationCover?> GetCoveringDerivation(int wordId, byte readingIndex);
-    Task<Dictionary<(int, byte), WordSetStateType>> GetWordSetDerivedStates();
+    Task<UserWordSets> GetWordSets();
     /// <summary>countAsNewlyLearned spaces the inserted cards out so the coverage journey dates them instead of treating the batch as prior knowledge.</summary>
     Task<VocabularyUpsertResult> AddKnownWords(IEnumerable<DeckWord> deckWords, bool overwriteExisting = true, bool countAsNewlyLearned = false);
     Task<VocabularyUpsertResult> BlacklistWords(IEnumerable<DeckWord> deckWords, bool overwriteExisting = true);

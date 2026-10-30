@@ -41,6 +41,28 @@ public static class UserCoverageChunkHelper
         }
     }
 
+    /// <summary>Occurrence-weighted coverage of any deck in basis points, mature and young apart; decks missing from the chunks read as 0.</summary>
+    public static async Task<Func<int, (int Mature, int Young)>> LoadAllBasisPointsAsync(UserDbContext userContext, string userId)
+    {
+        var chunks = await userContext.UserCoverageChunks
+            .AsNoTracking()
+            .Where(c => c.UserId == userId
+                        && (c.Metric == (short)UserCoverageMetric.MatureCoverage || c.Metric == (short)UserCoverageMetric.YoungCoverage))
+            .Select(c => new { c.Metric, c.ChunkIndex, c.Values })
+            .ToListAsync();
+        var chunkMap = chunks.ToDictionary(c => (c.Metric, c.ChunkIndex), c => c.Values);
+
+        int Read(UserCoverageMetric metric, int deckId)
+        {
+            var offset = deckId % COVERAGE_CHUNK_SIZE;
+            return chunkMap.TryGetValue(((short)metric, deckId / COVERAGE_CHUNK_SIZE), out var values) && offset < values.Length
+                ? Math.Max((short)0, values[offset])
+                : 0;
+        }
+
+        return deckId => (Read(UserCoverageMetric.MatureCoverage, deckId), Read(UserCoverageMetric.YoungCoverage, deckId));
+    }
+
     /// <param name="includeSentences">Pass true only for a Jiten+ viewer; the sentence metrics are never returned otherwise.</param>
     public static async Task<CoverageDictionaries> GetCoverage(UserDbContext userContext, string userId, IReadOnlyCollection<int> deckIds,
                                                                bool includeSentences = false)

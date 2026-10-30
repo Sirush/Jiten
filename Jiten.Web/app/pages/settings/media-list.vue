@@ -3,7 +3,7 @@
   import { useAuthStore } from '~/stores/authStore';
 
   definePageMeta({ middleware: ['auth'] });
-  useHead({ title: 'Media List - Settings - Jiten' });
+  useHead({ title: 'Media List - Settings' });
 
   const route = useRoute();
   const router = useRouter();
@@ -56,7 +56,10 @@
     }
   }
 
-  const mediaListLink = computed(() => (auth.user?.userName ? `/profile/${auth.user.userName}/media` : '/profile'));
+  const mediaListLink = computed(() => {
+    const handle = ownProfileHandle(auth.user);
+    return handle ? profilePath(handle, 'library') : '/profile';
+  });
 </script>
 
 <template>

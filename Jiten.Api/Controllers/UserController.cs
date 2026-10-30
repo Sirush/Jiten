@@ -45,6 +45,9 @@ public partial class UserController(
     IUserLimitsService userLimits,
     IStudySessionService sessionService,
     Jiten.Api.Services.SmartDeck.ISmartDeckDirtyService smartDeckDirty,
+    IProfileAccessService profileAccess,
+    IProfileCacheService profileCache,
+    IJitenPlusService jitenPlus,
     ILogger<UserController> logger) : ControllerBase
 {
     private const int MaxAnkiTxtBytes = 50 * 1024 * 1024;
@@ -1687,6 +1690,27 @@ public partial class UserController(
         if (request?.Cards == null || request.Cards.Count == 0)
             return Results.BadRequest("No cards provided.");
 
+        await userContext.Database.OpenConnectionAsync();
+        try
+        {
+            await LockAnkiImport(userId, HttpContext.RequestAborted);
+            try
+            {
+                return await ImportAnkiCardsWithRetry(request, userId);
+            }
+            finally
+            {
+                await UnlockAnkiImport(userId);
+            }
+        }
+        finally
+        {
+            await userContext.Database.CloseConnectionAsync();
+        }
+    }
+
+    private async Task<IResult> ImportAnkiCardsWithRetry(AnkiImportRequest request, string userId)
+    {
         for (var attempt = 0;; attempt++)
         {
             try
@@ -1702,12 +1726,25 @@ public partial class UserController(
                     return Results.Problem("Import failed: " + ex.Message);
                 }
 
-                logger.LogInformation("Anki import chunk collided with a concurrent chunk, retrying: UserId={UserId}, Attempt={Attempt}",
+                logger.LogInformation("Anki import collided with a concurrent card write, retrying: UserId={UserId}, Attempt={Attempt}",
                                       userId, attempt + 1);
             }
         }
     }
 
+    /// <summary>Serialises one user's parallel import chunks, which can touch the same card; session-scoped, so the connection must stay open until unlock.</summary>
+    private Task LockAnkiImport(string userId, CancellationToken ct) =>
+        userContext.Database.IsNpgsql()
+            ? userContext.Database.ExecuteSqlRawAsync("SELECT pg_advisory_lock({0}, hashtext({1}))", [AnkiImportLockClass, userId], ct)
+            : Task.CompletedTask;
+
+    private Task UnlockAnkiImport(string userId) =>
+        userContext.Database.IsNpgsql()
+            ? userContext.Database.ExecuteSqlRawAsync("SELECT pg_advisory_unlock({0}, hashtext({1}))", AnkiImportLockClass, userId)
+            : Task.CompletedTask;
+
+    /// <summary>Namespaces the import's advisory locks so the per-user key cannot collide with another feature's.</summary>
+    private const int AnkiImportLockClass = 0x414E4B;
     private const int MaxAnkiImportConflictRetries = 2;
     private const long MaxAnkiImportBodyBytes = 30_000_000;
 
@@ -2493,6 +2530,7 @@ public partial class UserController(
         await MediaListEntryHelper.RemoveReadsAsync(userContext, userId, [deckId]);
         userContext.UserDeckPreferences.Remove(preference);
         await userContext.SaveChangesAsync();
+        await UnpinAsync(userId, [deckId]);
         await smartDeckDirty.MarkDirty(userId);
         backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserAccomplishments(userId));
 
@@ -3108,28 +3146,17 @@ public partial class UserController(
     /// </summary>
     [HttpGet("user/{targetUserId}/accomplishments")]
     [AllowAnonymous]
+    [ProfileAccess(ProfileSection.Stats)]
     public async Task<IResult> GetUserAccomplishments(string targetUserId)
     {
-        var currentUserId = userService.UserId;
-        var isOwnProfile = currentUserId == targetUserId;
-
-        if (!isOwnProfile)
-        {
-            var profile = await userContext.UserProfiles
-                                           .AsNoTracking()
-                                           .FirstOrDefaultAsync(p => p.UserId == targetUserId);
-
-            if (profile == null || !profile.IsPublic)
-                return Results.Forbid();
-        }
-
+        var access = RequestedProfile;
         var accomplishments = await userContext.UserAccomplishments
                                                .AsNoTracking()
-                                               .Where(ua => ua.UserId == targetUserId)
+                                               .Where(ua => ua.UserId == access.UserId)
                                                .OrderBy(ua => ua.MediaType)
                                                .ToListAsync();
 
-        return Results.Ok(isOwnProfile ? accomplishments : HideEntryTotals(accomplishments));
+        return Results.Ok(access.IsOwner ? accomplishments : HideEntryTotals(accomplishments, access));
     }
 
     /// <summary>
@@ -3139,40 +3166,34 @@ public partial class UserController(
     [HttpGet("user/{targetUserId}/accomplishments/global")]
     [HttpGet("user/{targetUserId}/accomplishments/{mediaType}")]
     [AllowAnonymous]
+    [ProfileAccess(ProfileSection.Stats)]
     public async Task<IResult> GetUserAccomplishment(string targetUserId, Jiten.Core.Data.MediaType? mediaType = null)
     {
-        var currentUserId = userService.UserId;
-        var isOwnProfile = currentUserId == targetUserId;
-
-        if (!isOwnProfile)
-        {
-            var profile = await userContext.UserProfiles
-                                           .AsNoTracking()
-                                           .FirstOrDefaultAsync(p => p.UserId == targetUserId);
-
-            if (profile == null || !profile.IsPublic)
-                return Results.Forbid();
-        }
-
+        var access = RequestedProfile;
         var accomplishment = await userContext.UserAccomplishments
                                               .AsNoTracking()
-                                              .FirstOrDefaultAsync(ua => ua.UserId == targetUserId && ua.MediaType == mediaType);
+                                              .FirstOrDefaultAsync(ua => ua.UserId == access.UserId && ua.MediaType == mediaType);
 
         if (accomplishment == null)
             return Results.NotFound();
-        if (isOwnProfile)
+        if (access.IsOwner)
             return Results.Ok(accomplishment);
 
-        var visible = HideEntryTotals([accomplishment]);
+        var visible = HideEntryTotals([accomplishment], access);
         return visible.Count == 0 ? Results.NotFound() : Results.Ok(visible[0]);
     }
 
-    /// <summary>Counts typed on unfinished media list entries are private; other viewers see completed titles only. Expects untracked rows.</summary>
-    private static List<UserAccomplishment> HideEntryTotals(IEnumerable<UserAccomplishment> accomplishments)
+    /// <summary>Counts typed on unfinished media list entries are private; other viewers see completed titles only, without characters when the owner hides that field. Expects untracked rows.</summary>
+    private static List<UserAccomplishment> HideEntryTotals(IEnumerable<UserAccomplishment> accomplishments, ProfileContext access)
     {
+        var hideCharacters = !access.Shows(ProfileField.Characters);
         var visible = accomplishments.Where(a => a.CompletedUnitCount > 0).ToList();
         foreach (var accomplishment in visible)
+        {
             accomplishment.UnfinishedCharacterCount = 0;
+            if (hideCharacters)
+                accomplishment.TotalCharacterCount = 0;
+        }
         return visible;
     }
 
@@ -3196,6 +3217,7 @@ public partial class UserController(
     /// </summary>
     [HttpGet("user/{targetUserId}/accomplishments/vocabulary")]
     [AllowAnonymous]
+    [ProfileAccess(ProfileSection.Vocabulary)]
     public async Task<ActionResult<PaginatedResponse<AccomplishmentVocabularyDto>>> GetAccomplishmentVocabulary(
         string targetUserId,
         [FromQuery] MediaType? mediaType = null,
@@ -3204,47 +3226,9 @@ public partial class UserController(
         [FromQuery] string sortBy = "occurrences",
         [FromQuery] bool descending = true)
     {
-        var currentUserId = userService.UserId;
-        var isOwnProfile = currentUserId == targetUserId;
-
-        if (!isOwnProfile)
-        {
-            var profile = await userContext.UserProfiles
-                                           .AsNoTracking()
-                                           .FirstOrDefaultAsync(p => p.UserId == targetUserId);
-
-            if (profile == null || !profile.IsPublic)
-                return Forbid();
-        }
-
         pageSize = Math.Clamp(pageSize, 1, 100);
 
-        var userCompletedDeckIds = await MediaListEntryHelper.CompletedDeckIds(userContext, targetUserId).ToListAsync();
-
-        // Load completed decks with parent relationship
-        var allCompletedDecks = await jitenContext.Decks
-                                                  .AsNoTracking()
-                                                  .Where(d => userCompletedDeckIds.Contains(d.DeckId))
-                                                  .Select(d => new { d.DeckId, d.ParentDeckId, d.MediaType })
-                                                  .ToListAsync();
-
-        // Build effective deck set: include parents, and children only if their parent is NOT completed
-        var completedParentIds = allCompletedDecks
-                                 .Where(d => d.ParentDeckId == null)
-                                 .Select(d => d.DeckId)
-                                 .ToHashSet();
-
-        var effectiveDecks = allCompletedDecks
-                             .Where(d => d.ParentDeckId == null || !completedParentIds.Contains(d.ParentDeckId.Value))
-                             .ToList();
-
-        // Apply media type filter if provided
-        if (mediaType.HasValue)
-        {
-            effectiveDecks = effectiveDecks.Where(d => d.MediaType == mediaType.Value).ToList();
-        }
-
-        var completedDeckIds = effectiveDecks.Select(d => d.DeckId).ToList();
+        var completedDeckIds = await LoadVisibleCompletedDeckIdsAsync(RequestedProfile, mediaType);
 
         if (completedDeckIds.Count == 0)
         {
@@ -3354,142 +3338,29 @@ public partial class UserController(
         return Ok(new PaginatedResponse<AccomplishmentVocabularyDto>(dto, totalCount, pageSize, offset));
     }
 
+    /// <summary>Completed parents, plus completed children of unfinished parents, without the titles hidden from this viewer.</summary>
+    private async Task<List<int>> LoadVisibleCompletedDeckIdsAsync(ProfileContext access, MediaType? mediaType)
+    {
+        var userCompletedDeckIds = await MediaListEntryHelper.CompletedDeckIds(userContext, access.UserId).ToListAsync();
+        var allCompletedDecks = await jitenContext.Decks
+                                                  .AsNoTracking()
+                                                  .Where(d => userCompletedDeckIds.Contains(d.DeckId))
+                                                  .Select(d => new { d.DeckId, d.ParentDeckId, d.MediaType })
+                                                  .ToListAsync();
+
+        var completedParentIds = allCompletedDecks.Where(d => d.ParentDeckId == null).Select(d => d.DeckId).ToHashSet();
+        var effectiveDecks = allCompletedDecks
+                             .Where(d => d.ParentDeckId == null || !completedParentIds.Contains(d.ParentDeckId.Value))
+                             .Where(d => mediaType == null || d.MediaType == mediaType)
+                             .ToList();
+
+        var hidden = await profileAccess.GetHiddenDeckIdsAsync(access, effectiveDecks.Select(d => d.ParentDeckId ?? d.DeckId).Distinct().ToList());
+        return effectiveDecks.Where(d => !hidden.Contains(d.ParentDeckId ?? d.DeckId)).Select(d => d.DeckId).ToList();
+    }
+
     #endregion
 
     #region Profile
-
-    /// <summary>
-    /// Get current user's profile.
-    /// </summary>
-    [HttpGet("profile")]
-    public async Task<IResult> GetProfile()
-    {
-        var userId = userService.UserId;
-        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
-
-        var profile = await userContext.UserProfiles
-                                       .AsNoTracking()
-                                       .FirstOrDefaultAsync(p => p.UserId == userId);
-
-        if (profile == null)
-        {
-            // Return default profile
-            return Results.Ok(new UserProfile { UserId = userId, IsPublic = false });
-        }
-
-        return Results.Ok(profile);
-    }
-
-    /// <summary>
-    /// Update current user's profile.
-    /// </summary>
-    [HttpPatch("profile")]
-    public async Task<IResult> UpdateProfile([FromBody] UpdateProfileRequest request)
-    {
-        var userId = userService.UserId;
-        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
-
-        var profile = await userContext.UserProfiles
-                                       .FirstOrDefaultAsync(p => p.UserId == userId);
-
-        if (profile == null)
-        {
-            profile = new UserProfile { UserId = userId };
-            userContext.UserProfiles.Add(profile);
-        }
-
-        if (request.IsPublic.HasValue)
-            profile.IsPublic = request.IsPublic.Value;
-
-        if (request.IsMediaListPublic.HasValue)
-            profile.IsMediaListPublic = request.IsMediaListPublic.Value;
-
-        // The media list can only be public while the whole profile is public.
-        // Turning the profile private auto-deactivates the media list flag.
-        if (!profile.IsPublic)
-            profile.IsMediaListPublic = false;
-
-        await userContext.SaveChangesAsync();
-
-        return Results.Ok(profile);
-    }
-
-    /// <summary>
-    /// Get another user's profile by user ID (limited info if not public).
-    /// </summary>
-    [HttpGet("user/{targetUserId}/profile")]
-    [AllowAnonymous]
-    public async Task<IResult> GetUserProfile(string targetUserId)
-    {
-        // Check user exists
-        var user = await userContext.Users
-                                    .AsNoTracking()
-                                    .FirstOrDefaultAsync(u => u.Id == targetUserId);
-
-        if (user == null)
-            return Results.NotFound(new { message = "User not found" });
-
-        var currentUserId = userService.UserId;
-        var isOwnProfile = currentUserId == targetUserId;
-
-        var profile = await userContext.UserProfiles
-                                       .AsNoTracking()
-                                       .FirstOrDefaultAsync(p => p.UserId == targetUserId);
-
-        if (isOwnProfile)
-        {
-            return Results.Ok(new UserProfileResponse
-                              {
-                                  UserId = user.Id, Username = user.UserName ?? string.Empty,
-                                  IsPublic = profile?.IsPublic ?? false, IsMediaListPublic = profile?.IsMediaListPublic ?? false
-                              });
-        }
-
-        if (profile == null || !profile.IsPublic)
-        {
-            // Return minimal info for non-public profiles
-            return Results.Ok(new UserProfileResponse { UserId = user.Id, Username = user.UserName ?? string.Empty, IsPublic = false });
-        }
-
-        return Results.Ok(new UserProfileResponse
-                          {
-                              UserId = user.Id, Username = user.UserName ?? string.Empty,
-                              IsPublic = profile.IsPublic, IsMediaListPublic = profile.IsMediaListPublic
-                          });
-    }
-
-    /// <summary>
-    /// Get a user's profile by username (case-insensitive).
-    /// Returns 404 if user doesn't exist or profile is private (to prevent username enumeration).
-    /// </summary>
-    [HttpGet("profile/{username}")]
-    [AllowAnonymous]
-    public async Task<IResult> GetUserProfileByUsername(string username)
-    {
-        var user = await userContext.Users
-                                    .AsNoTracking()
-                                    .FirstOrDefaultAsync(u => u.NormalizedUserName == username.ToUpperInvariant());
-
-        if (user == null)
-            return Results.NotFound(new { message = "Profile not found" });
-
-        var currentUserId = userService.UserId;
-        var isOwnProfile = currentUserId == user.Id;
-
-        var profile = await userContext.UserProfiles
-                                       .AsNoTracking()
-                                       .FirstOrDefaultAsync(p => p.UserId == user.Id);
-
-        // Return 404 for private profiles (same as non-existent to prevent enumeration)
-        if (!isOwnProfile && (profile == null || !profile.IsPublic))
-            return Results.NotFound(new { message = "Profile not found" });
-
-        return Results.Ok(new UserProfileResponse
-                          {
-                              UserId = user.Id, Username = user.UserName ?? string.Empty,
-                              IsPublic = profile?.IsPublic ?? false, IsMediaListPublic = profile?.IsMediaListPublic ?? false
-                          });
-    }
 
     /// <summary>
     /// Get a user's tracked media list (decks with a status) by username, as DeckDtos so the frontend
@@ -3499,30 +3370,47 @@ public partial class UserController(
     /// </summary>
     [HttpGet("profile/{username}/media-list")]
     [AllowAnonymous]
+    [ProfileAccess(ProfileSection.Library)]
     public async Task<IResult> GetUserMediaListByUsername(string username, [FromServices] SeriesService seriesService)
     {
-        var (userId, _, allowed) = await ResolveMediaListAccessAsync(username);
-        if (userId == null || !allowed)
-            return Results.NotFound(new { message = "Media list not found" });
+        var access = RequestedProfile;
+        var entries = await BuildMediaListAsync(access);
 
-        var entries = await BuildMediaListAsync(userId);
-
-        // Dates and character counts stay private even on a public list.
-        var listEntries = userService.UserId == userId
-            ? await MediaListEntryHelper.BuildSummariesAsync(userContext, jitenContext, userId, entries.Select(e => e.Display.DeckId).ToList(),
+        var displayIds = entries.Select(e => e.Display.DeckId).ToList();
+        var listEntries = access.IsOwner
+            ? await MediaListEntryHelper.BuildSummariesAsync(userContext, jitenContext, access.UserId, displayIds,
                                                              entries.Where(e => e.Display.Children.Count > 0).Select(e => e.Display.DeckId).ToList())
             : new Dictionary<int, MediaListEntrySummary>();
+        var preferences = await profileAccess.GetPreferencesAsync(access);
+        var scores = await profileAccess.GetVisibleScoresAsync(access, displayIds);
+        var pinned = access.IsOwner
+            ? await userContext.UserPinnedDecks.AsNoTracking().Where(p => p.UserId == access.UserId).Select(p => p.DeckId).ToHashSetAsync()
+            : [];
+        var viewerId = userService.UserId;
+        var viewerStatuses = !access.IsOwner && !string.IsNullOrEmpty(viewerId)
+            ? await MediaListStatusHelper.GetDisplayStatusesAsync(userContext, jitenContext, viewerId)
+            : null;
+
         var dtos = entries
-                   .Select(e => new DeckDto(e.Display)
-                                {
-                                    Status = e.Status, IsFavourite = e.IsFavourite, ListEntry = listEntries.GetValueOrDefault(e.Display.DeckId)
-                                })
+                   .Select(e =>
+                   {
+                       var deckId = e.Display.DeckId;
+                       var preference = preferences.GetValueOrDefault(deckId);
+                       return new MediaListDeckDto(e.Display)
+                              {
+                                  Status = e.Status, IsFavourite = access.IsOwner && e.IsFavourite, ListEntry = listEntries.GetValueOrDefault(deckId),
+                                  Score = scores.TryGetValue(deckId, out var score) ? UserDeckPreference.ToDisplayScore(score) : null,
+                                  Note = access.IsOwner ? preference.Note : null,
+                                  IsPrivate = access.IsOwner ? preference.IsPrivate : null,
+                                  IsPinned = access.IsOwner ? pinned.Contains(deckId) : null,
+                                  ViewerStatus = viewerStatuses?.GetValueOrDefault(deckId).Status
+                              };
+                   })
                    .OrderBy(d => d.OriginalTitle)
                    .ToList();
         await seriesService.ApplyRefsAsync(dtos);
 
         // Populate the viewer's coverage so cards render the coverage border, exactly like the catalogue.
-        var viewerId = userService.UserId;
         if (!string.IsNullOrEmpty(viewerId) && dtos.Count > 0)
         {
             var coverage = await UserCoverageChunkHelper.GetCoverage(userContext, viewerId, dtos.Select(d => d.DeckId).ToList());
@@ -3538,13 +3426,17 @@ public partial class UserController(
     /// Shared by the download, count and learn endpoints so previews always match the result.
     /// </summary>
     private async Task<(List<(int WordId, byte ReadingIndex, int Occurrences)> Words, List<int> SentenceDeckIds, IResult? Error)>
-        ResolveMergedCategoryAsync(string userId, DeckStatus status, DeckDownloadRequest request)
+        ResolveMergedCategoryAsync(ProfileContext access, DeckStatus status, DeckDownloadRequest request)
     {
-        var entries = (await BuildMediaListAsync(userId)).Where(e => e.Status == status).ToList();
+        var ids = await GetCategoryDisplayDeckIdsAsync(access, status);
+        var displays = await jitenContext.Decks.AsNoTracking()
+                                         .Where(d => ids.Contains(d.DeckId))
+                                         .Select(d => new { d.DeckId, d.WordCount, ChildIds = d.Children.Select(c => c.DeckId).ToList() })
+                                         .ToListAsync();
 
         var merged = new Dictionary<(int WordId, byte ReadingIndex), int>();
         var sentenceDeckIds = new List<int>();
-        foreach (var (display, _, _) in entries)
+        foreach (var display in displays)
         {
             var (words, error) = await deckWordResolver.ResolveDeckWords(new DeckWordResolveRequest(
                 DeckWordSource.ForDeck(display.DeckId, display.WordCount), request.DownloadType, request.Order,
@@ -3565,9 +3457,7 @@ public partial class UserController(
                 merged[key] = merged.GetValueOrDefault(key) + w.Occurrences;
             }
 
-            sentenceDeckIds.AddRange(display.Children.Count != 0
-                                         ? display.Children.Select(c => c.DeckId)
-                                         : new[] { display.DeckId });
+            sentenceDeckIds.AddRange(display.ChildIds.Count != 0 ? display.ChildIds : [display.DeckId]);
         }
 
         var list = merged
@@ -3593,20 +3483,18 @@ public partial class UserController(
     [HttpPost("profile/{username}/media-list/{status:int}/download")]
     [AllowAnonymous]
     [EnableRateLimiting("download")]
+    [ProfileAccess(ProfileSection.Library)]
     public async Task<IResult> DownloadMediaList(string username, int status, [FromBody] DeckDownloadRequest request)
     {
-        var (userId, userName, allowed) = await ResolveMediaListAccessAsync(username);
-        if (userId == null || !allowed)
-            return Results.NotFound(new { message = "Media list not found" });
-
+        var access = RequestedProfile;
         var deckStatus = (DeckStatus)status;
-        var (deckWords, sentenceDeckIds, error) = await ResolveMergedCategoryAsync(userId, deckStatus, request);
+        var (deckWords, sentenceDeckIds, error) = await ResolveMergedCategoryAsync(access, deckStatus, request);
         if (error != null)
             return error;
         if (deckWords.Count == 0)
             return Results.NotFound(new { message = "No vocabulary to download." });
 
-        var title = $"{userName} - {deckStatus}";
+        var title = $"{access.DisplayName ?? "Jiten"} - {deckStatus}";
 
         if (request.Format == DeckFormat.Yomitan)
         {
@@ -3620,7 +3508,7 @@ public partial class UserController(
             return Results.BadRequest();
 
         logger.LogInformation("User downloaded combined media list: Owner={Owner}, Status={Status}, Words={Words}, Format={Format}",
-                              userId, deckStatus, deckWords.Count, request.Format);
+                              access.UserId, deckStatus, deckWords.Count, request.Format);
 
         return request.Format switch
         {
@@ -3636,13 +3524,10 @@ public partial class UserController(
     /// </summary>
     [HttpPost("profile/{username}/media-list/{status:int}/vocabulary-count")]
     [AllowAnonymous]
+    [ProfileAccess(ProfileSection.Library)]
     public async Task<IResult> CountMediaListVocabulary(string username, int status, [FromBody] DeckDownloadRequest request)
     {
-        var (userId, _, allowed) = await ResolveMediaListAccessAsync(username);
-        if (userId == null || !allowed)
-            return Results.NotFound(new { message = "Media list not found" });
-
-        var (deckWords, _, error) = await ResolveMergedCategoryAsync(userId, (DeckStatus)status, request);
+        var (deckWords, _, error) = await ResolveMergedCategoryAsync(RequestedProfile, (DeckStatus)status, request);
         if (error != null)
             return error;
 
@@ -3654,13 +3539,10 @@ public partial class UserController(
     /// </summary>
     [HttpGet("profile/{username}/media-list/{status:int}/vocabulary-count-frequency")]
     [AllowAnonymous]
+    [ProfileAccess(ProfileSection.Library)]
     public async Task<IResult> CountMediaListFrequency(string username, int status, int minFrequency, int maxFrequency)
     {
-        var (userId, _, allowed) = await ResolveMediaListAccessAsync(username);
-        if (userId == null || !allowed)
-            return Results.NotFound(new { message = "Media list not found" });
-
-        var deckIds = await GetCategoryDisplayDeckIdsAsync(userId, (DeckStatus)status);
+        var deckIds = await GetCategoryDisplayDeckIdsAsync(RequestedProfile, (DeckStatus)status);
         if (deckIds.Count == 0)
             return Results.Ok(0);
 
@@ -3681,13 +3563,10 @@ public partial class UserController(
     /// </summary>
     [HttpGet("profile/{username}/media-list/{status:int}/vocabulary-count-occurrences")]
     [AllowAnonymous]
+    [ProfileAccess(ProfileSection.Library)]
     public async Task<IResult> CountMediaListOccurrences(string username, int status, int? minOccurrences = null, int? maxOccurrences = null)
     {
-        var (userId, _, allowed) = await ResolveMediaListAccessAsync(username);
-        if (userId == null || !allowed)
-            return Results.NotFound(new { message = "Media list not found" });
-
-        var deckIds = await GetCategoryDisplayDeckIdsAsync(userId, (DeckStatus)status);
+        var deckIds = await GetCategoryDisplayDeckIdsAsync(RequestedProfile, (DeckStatus)status);
         if (deckIds.Count == 0)
             return Results.Ok(0);
 
@@ -3707,17 +3586,14 @@ public partial class UserController(
     [HttpPost("profile/{username}/media-list/{status:int}/learn")]
     [Authorize]
     [EnableRateLimiting("download")]
+    [ProfileAccess(ProfileSection.Library)]
     public async Task<IResult> LearnMediaList(string username, int status, [FromBody] DeckLearnRequest request)
     {
         var state = request.VocabularyState?.ToLowerInvariant();
         if (state is not ("mastered" or "blacklisted"))
             return Results.BadRequest("VocabularyState must be 'mastered' or 'blacklisted'.");
 
-        var (userId, _, allowed) = await ResolveMediaListAccessAsync(username);
-        if (userId == null || !allowed)
-            return Results.NotFound(new { message = "Media list not found" });
-
-        var (deckWords, _, error) = await ResolveMergedCategoryAsync(userId, (DeckStatus)status, request.ToDownloadRequest());
+        var (deckWords, _, error) = await ResolveMergedCategoryAsync(RequestedProfile, (DeckStatus)status, request.ToDownloadRequest());
         if (error != null)
             return error;
 
@@ -3736,45 +3612,24 @@ public partial class UserController(
     }
 
     /// <summary>
-    /// Resolves a username to its user id and whether the caller may view that user's media list.
-    /// Non-owners need both the profile and the media list to be public.
-    /// </summary>
-    private async Task<(string? UserId, string? UserName, bool Allowed)> ResolveMediaListAccessAsync(string username)
-    {
-        var user = await userContext.Users
-                                    .AsNoTracking()
-                                    .Where(u => u.NormalizedUserName == username.ToUpperInvariant())
-                                    .Select(u => new { u.Id, u.UserName })
-                                    .FirstOrDefaultAsync();
-
-        if (user == null)
-            return (null, null, false);
-
-        if (userService.UserId == user.Id)
-            return (user.Id, user.UserName, true);
-
-        var flags = await userContext.UserProfiles
-                                     .AsNoTracking()
-                                     .Where(p => p.UserId == user.Id)
-                                     .Select(p => new { p.IsPublic, p.IsMediaListPublic })
-                                     .FirstOrDefaultAsync();
-
-        return (user.Id, user.UserName, flags is { IsPublic: true, IsMediaListPublic: true });
-    }
-
-    /// <summary>
     /// Returns the display deck ids of a user's tracked decks in a single status category.
     /// </summary>
-    private async Task<List<int>> GetCategoryDisplayDeckIdsAsync(string userId, DeckStatus status) =>
-        (await BuildMediaListAsync(userId)).Where(e => e.Status == status).Select(e => e.Display.DeckId).ToList();
+    private async Task<List<int>> GetCategoryDisplayDeckIdsAsync(ProfileContext access, DeckStatus status) =>
+        (await profileAccess.GetVisibleDisplayStatusesAsync(access)).Where(kv => kv.Value.Status == status).Select(kv => kv.Key).ToList();
 
     /// <summary>
     /// Builds a user's media list: one entry per display deck (child decks collapsed to their parent series),
     /// with the most representative status and a favourite flag. Used by both the list and download endpoints.
     /// </summary>
-    private async Task<List<(Deck Display, DeckStatus Status, bool IsFavourite)>> BuildMediaListAsync(string userId)
+    private async Task<List<(Deck Display, DeckStatus Status, bool IsFavourite)>> BuildMediaListAsync(string userId) =>
+        await LoadMediaListDecksAsync(await MediaListStatusHelper.GetDisplayStatusesAsync(userContext, jitenContext, userId));
+
+    /// <summary>Leaves out the titles hidden from this viewer.</summary>
+    private async Task<List<(Deck Display, DeckStatus Status, bool IsFavourite)>> BuildMediaListAsync(ProfileContext access) =>
+        await LoadMediaListDecksAsync(await profileAccess.GetVisibleDisplayStatusesAsync(access));
+
+    private async Task<List<(Deck Display, DeckStatus Status, bool IsFavourite)>> LoadMediaListDecksAsync(Dictionary<int, DisplayStatus> agg)
     {
-        var agg = await MediaListStatusHelper.GetDisplayStatusesAsync(userContext, jitenContext, userId);
         if (agg.Count == 0)
             return new List<(Deck, DeckStatus, bool)>();
 
@@ -3802,35 +3657,17 @@ public partial class UserController(
     /// </summary>
     [HttpGet("profile/{username}/accomplishments")]
     [AllowAnonymous]
+    [ProfileAccess(ProfileSection.Stats)]
     public async Task<IResult> GetUserAccomplishmentsByUsername(string username)
     {
-        var user = await userContext.Users
-                                    .AsNoTracking()
-                                    .FirstOrDefaultAsync(u => u.NormalizedUserName == username.ToUpperInvariant());
-
-        if (user == null)
-            return Results.NotFound(new { message = "Profile not found" });
-
-        var currentUserId = userService.UserId;
-        var isOwnProfile = currentUserId == user.Id;
-
-        if (!isOwnProfile)
-        {
-            var profile = await userContext.UserProfiles
-                                           .AsNoTracking()
-                                           .FirstOrDefaultAsync(p => p.UserId == user.Id);
-
-            if (profile == null || !profile.IsPublic)
-                return Results.NotFound(new { message = "Profile not found" });
-        }
-
+        var access = RequestedProfile;
         var accomplishments = await userContext.UserAccomplishments
                                                .AsNoTracking()
-                                               .Where(ua => ua.UserId == user.Id)
+                                               .Where(ua => ua.UserId == access.UserId)
                                                .OrderBy(ua => ua.MediaType)
                                                .ToListAsync();
 
-        return Results.Ok(isOwnProfile ? accomplishments : HideEntryTotals(accomplishments));
+        return Results.Ok(access.IsOwner ? accomplishments : HideEntryTotals(accomplishments, access));
     }
 
     /// <summary>
@@ -3840,6 +3677,7 @@ public partial class UserController(
     /// </summary>
     [HttpGet("profile/{username}/accomplishments/vocabulary")]
     [AllowAnonymous]
+    [ProfileAccess(ProfileSection.Vocabulary)]
     public async Task<ActionResult<PaginatedResponse<AccomplishmentVocabularyDto>>> GetAccomplishmentVocabularyByUsername(
         string username,
         [FromQuery] Jiten.Core.Data.MediaType? mediaType = null,
@@ -3855,55 +3693,9 @@ public partial class UserController(
         [FromQuery] string? excludePos = null,
         [FromQuery] bool hideKanaOnly = false)
     {
-        var user = await userContext.Users
-                                    .AsNoTracking()
-                                    .FirstOrDefaultAsync(u => u.NormalizedUserName == username.ToUpperInvariant());
-
-        if (user == null)
-            return NotFound(new { message = "Profile not found" });
-
-        var targetUserId = user.Id;
-        var currentUserId = userService.UserId;
-        var isOwnProfile = currentUserId == targetUserId;
-
-        if (!isOwnProfile)
-        {
-            var profile = await userContext.UserProfiles
-                                           .AsNoTracking()
-                                           .FirstOrDefaultAsync(p => p.UserId == targetUserId);
-
-            if (profile == null || !profile.IsPublic)
-                return NotFound(new { message = "Profile not found" });
-        }
-
         pageSize = Math.Clamp(pageSize, 1, 100);
 
-        var userCompletedDeckIds = await MediaListEntryHelper.CompletedDeckIds(userContext, targetUserId).ToListAsync();
-
-        // Load completed decks with parent relationship
-        var allCompletedDecks = await jitenContext.Decks
-                                                  .AsNoTracking()
-                                                  .Where(d => userCompletedDeckIds.Contains(d.DeckId))
-                                                  .Select(d => new { d.DeckId, d.ParentDeckId, d.MediaType })
-                                                  .ToListAsync();
-
-        // Build effective deck set: include parents, and children only if their parent is NOT completed
-        var completedParentIds = allCompletedDecks
-                                 .Where(d => d.ParentDeckId == null)
-                                 .Select(d => d.DeckId)
-                                 .ToHashSet();
-
-        var effectiveDecks = allCompletedDecks
-                             .Where(d => d.ParentDeckId == null || !completedParentIds.Contains(d.ParentDeckId.Value))
-                             .ToList();
-
-        // Apply media type filter if provided
-        if (mediaType.HasValue)
-        {
-            effectiveDecks = effectiveDecks.Where(d => d.MediaType == mediaType.Value).ToList();
-        }
-
-        var completedDeckIds = effectiveDecks.Select(d => d.DeckId).ToList();
+        var completedDeckIds = await LoadVisibleCompletedDeckIdsAsync(RequestedProfile, mediaType);
 
         if (completedDeckIds.Count == 0)
         {
@@ -4053,32 +3845,18 @@ public partial class UserController(
 
     [HttpGet("profile/{username}/study-heatmap")]
     [AllowAnonymous]
+    [ProfileAccess(ProfileSection.StudyActivity)]
     [SwaggerOperation(Summary = "Get study activity heatmap and streak for a user profile")]
-    public async Task<IResult> GetStudyHeatmapByUsername(string username, [FromQuery] int? year = null)
+    public async Task<IResult> GetStudyHeatmapByUsername(string username, [FromQuery] int? year = null, [FromQuery] bool rolling = false) =>
+        Results.Ok((await BuildStudyActivityAsync(RequestedProfile.UserId, year, rolling)).Heatmap);
+
+    /// <summary><c>AllReviews</c> counts every day, not only the heatmap's range.</summary>
+    private sealed record StudyActivity(StudyHeatmapResponse Heatmap, long AllReviews);
+
+    private async Task<StudyActivity> BuildStudyActivityAsync(string userId, int? year, bool rolling)
     {
-        var user = await userContext.Users
-                                    .AsNoTracking()
-                                    .FirstOrDefaultAsync(u => u.NormalizedUserName == username.ToUpperInvariant());
-
-        if (user == null)
-            return Results.NotFound(new { message = "Profile not found" });
-
-        var targetUserId = user.Id;
-        var currentUserId = userService.UserId;
-        var isOwnProfile = currentUserId == targetUserId;
-
-        if (!isOwnProfile)
-        {
-            var profile = await userContext.UserProfiles
-                                           .AsNoTracking()
-                                           .FirstOrDefaultAsync(p => p.UserId == targetUserId);
-
-            if (profile is not { IsPublic: true })
-                return Results.NotFound(new { message = "Profile not found" });
-        }
-
         var fsrsSettingsJson = await userContext.UserFsrsSettings.AsNoTracking()
-                                               .Where(s => s.UserId == targetUserId)
+                                               .Where(s => s.UserId == userId)
                                                .Select(s => s.SettingsJson)
                                                .FirstOrDefaultAsync();
 
@@ -4101,63 +3879,44 @@ public partial class UserController(
         }
 
         var targetYear = year ?? DateTime.UtcNow.AddHours(offsetHours).Year;
+        var rollingStart = DateOnly.FromDateTime(DateTime.UtcNow.AddHours(offsetHours)).AddDays(-370);
+        bool InRange(DateOnly date) => rolling ? date >= rollingStart : date.Year == targetYear;
 
-        List<HeatmapDayDto> days;
-        List<DateTime> allReviewDates;
-
-        var rollup = await ReviewRollupHelper.TryLoadAsync(userContext, targetUserId);
-        if (rollup != null)
-        {
-            days = rollup
-                   .Where(d => d.LocalDate.Year == targetYear)
-                   .Select(d => new HeatmapDayDto
-                                {
-                                    Date = d.LocalDate,
-                                    ReviewCount = d.ReviewCount,
-                                    CorrectCount = d.CorrectCount
-                                })
-                   .ToList();
-
-            allReviewDates = rollup.Select(d => d.LocalDate.ToDateTime(TimeOnly.MinValue))
-                                   .OrderByDescending(d => d)
-                                   .ToList();
-        }
-        else
-        {
-            var tz = FsrsSettingsHelper.ResolveTimeZone(timezone);
-            var byDay = (await CardArchiveService.LoadAllReviewsAsync(userContext, targetUserId))
-                        .GroupBy(r => ReviewRollupHelper.LocalDateOf(r.ReviewUtc, tz))
-                        .ToList();
-
-            days = byDay
-                   .Where(g => g.Key.Year == targetYear)
-                   .OrderBy(g => g.Key)
-                   .Select(g => new HeatmapDayDto
-                   {
-                       Date = g.Key,
-                       ReviewCount = g.Count(),
-                       CorrectCount = g.Count(r => r.Rating != FsrsRating.Again)
-                   })
-                   .ToList();
-
-            allReviewDates = byDay
-                             .Select(g => g.Key.ToDateTime(TimeOnly.MinValue))
-                             .OrderByDescending(d => d)
-                             .ToList();
-        }
+        var allDays = await LoadStudyDaysAsync(userId, timezone);
+        var days = allDays.Where(d => InRange(d.Date)).ToList();
+        var allReviewDates = allDays.Where(d => d.ReviewCount > 0).Select(d => d.Date.ToDateTime(TimeOnly.MinValue)).OrderByDescending(d => d).ToList();
 
         var today = DateTime.UtcNow.AddHours(offsetHours).Date;
         var (currentStreak, longestStreak) = ComputeStreaks(allReviewDates, today);
 
-        return Results.Ok(new StudyHeatmapResponse
-        {
-            Year = targetYear,
-            Days = days,
-            CurrentStreak = currentStreak,
-            LongestStreak = longestStreak,
-            TotalReviewDays = allReviewDates.Count,
-            TotalReviews = days.Sum(d => d.ReviewCount)
-        });
+        return new StudyActivity(new StudyHeatmapResponse
+                                 {
+                                     Year = targetYear,
+                                     Days = days,
+                                     CurrentStreak = currentStreak,
+                                     LongestStreak = longestStreak,
+                                     TotalReviewDays = allReviewDates.Count,
+                                     TotalReviews = days.Sum(d => d.ReviewCount)
+                                 },
+                                 allDays.Sum(d => (long)d.ReviewCount));
+    }
+
+    /// <summary>Every day with reviews, from the review rollup or raw reviews when it has not been built.</summary>
+    private async Task<List<HeatmapDayDto>> LoadStudyDaysAsync(string userId, string? timezone)
+    {
+        var rollup = await ReviewRollupHelper.TryLoadAsync(userContext, userId);
+        if (rollup != null)
+            return rollup.Select(d => new HeatmapDayDto { Date = d.LocalDate, ReviewCount = d.ReviewCount, CorrectCount = d.CorrectCount }).ToList();
+
+        var tz = FsrsSettingsHelper.ResolveTimeZone(timezone);
+        return (await CardArchiveService.LoadAllReviewsAsync(userContext, userId))
+               .GroupBy(r => ReviewRollupHelper.LocalDateOf(r.ReviewUtc, tz))
+               .OrderBy(g => g.Key)
+               .Select(g => new HeatmapDayDto
+                            {
+                                Date = g.Key, ReviewCount = g.Count(), CorrectCount = g.Count(r => r.Rating != FsrsRating.Again)
+                            })
+               .ToList();
     }
 
     private static (int currentStreak, int longestStreak) ComputeStreaks(List<DateTime> sortedDatesDesc, DateTime today)
@@ -4218,53 +3977,13 @@ public partial class UserController(
     /// </summary>
     [HttpGet("profile/{username}/vocabulary-stats")]
     [AllowAnonymous]
+    [ProfileAccess(ProfileField.WordsKnown)]
     [SwaggerOperation(Summary = "Get aggregate vocabulary knowledge counts for a user profile")]
     public async Task<IResult> GetProfileVocabularyStats(string username)
     {
-        var user = await userContext.Users
-                                    .AsNoTracking()
-                                    .FirstOrDefaultAsync(u => u.NormalizedUserName == username.ToUpperInvariant());
-
-        if (user == null)
-            return Results.NotFound(new { message = "Profile not found" });
-
-        var targetUserId = user.Id;
-        var currentUserId = userService.UserId;
-        var isOwnProfile = currentUserId == targetUserId;
-
-        if (!isOwnProfile)
-        {
-            var profile = await userContext.UserProfiles
-                                           .AsNoTracking()
-                                           .FirstOrDefaultAsync(p => p.UserId == targetUserId);
-
-            if (profile is not { IsPublic: true })
-                return Results.NotFound(new { message = "Profile not found" });
-        }
-
-        // Counting loads every FSRS card for the user; this endpoint is anonymous and crawlable.
-        var redisDb = redis.GetDatabase();
-        var cacheKey = $"jiten:profile-vocab:{targetUserId}";
-
-        var cached = await redisDb.StringGetAsync(cacheKey);
-        if (!cached.IsNullOrEmpty)
-        {
-            var hit = JsonSerializer.Deserialize<ProfileVocabularyStatsDto>(cached!);
-            if (hit != null) return Results.Ok(hit);
-        }
-
-        var amounts = await ComputeKnownWordAmountAsync(targetUserId, includeDerivations: false);
-        var dto = new ProfileVocabularyStatsDto
-                  {
-                      Young = amounts.Young,
-                      Mature = amounts.Mature,
-                      Mastered = amounts.Mastered,
-                      WordSetMastered = amounts.WordSetMastered
-                  };
-
-        await redisDb.StringSetAsync(cacheKey, JsonSerializer.Serialize(dto), expiry: TimeSpan.FromMinutes(5));
-
-        return Results.Ok(dto);
+        var access = RequestedProfile;
+        var cache = await profileCache.ReadAsync(access, ProfileCacheKind.Vocabulary);
+        return Results.Ok(await GetVocabularyStatsAsync(cache, access.UserId));
     }
 
     #endregion
@@ -4277,57 +3996,26 @@ public partial class UserController(
     /// </summary>
     [HttpGet("profile/{username}/kanji-grid")]
     [AllowAnonymous]
+    [ProfileAccess(ProfileField.KanjiKnown)]
     public async Task<IResult> GetKanjiGridByUsername(
         string username,
         [FromQuery] bool onlySeen = false)
     {
-        var user = await userContext.Users
-                                    .AsNoTracking()
-                                    .FirstOrDefaultAsync(u => u.NormalizedUserName == username.ToUpperInvariant());
+        var access = RequestedProfile;
 
-        if (user == null)
-            return Results.NotFound(new { message = "Profile not found" });
-
-        var targetUserId = user.Id;
-        var currentUserId = userService.UserId;
-        var isOwnProfile = currentUserId == targetUserId;
-
-        if (!isOwnProfile)
+        var allKanji = await memoryCache.GetOrCreateAsync(AllKanjiCacheKey, async entry =>
         {
-            var profile = await userContext.UserProfiles
-                                           .AsNoTracking()
-                                           .FirstOrDefaultAsync(p => p.UserId == targetUserId);
-
-            if (profile is not { IsPublic: true })
-                return Results.NotFound(new { message = "Profile not found" });
-        }
-
-        // Get all kanji ordered by frequency
-        var redisDb = redis.GetDatabase();
-        const string cacheKey = "jiten:kanji-grid:all-kanji";
-
-        var cached = await redisDb.StringGetAsync(cacheKey);
-        List<CachedKanjiInfo>? allKanji;
-
-        if (!cached.IsNullOrEmpty)
-        {
-            allKanji = JsonSerializer.Deserialize<List<CachedKanjiInfo>>(cached!);
-        }
-        else
-        {
-            allKanji = await jitenContext.Kanjis
-                                         .AsNoTracking()
-                                         .OrderBy(k => k.FrequencyRank ?? int.MaxValue)
-                                         .Select(k => new CachedKanjiInfo(k.Character, k.FrequencyRank, k.JlptLevel, k.Grade, k.StrokeCount))
-                                         .ToListAsync();
-
-            var json = JsonSerializer.Serialize(allKanji);
-            await redisDb.StringSetAsync(cacheKey, json, expiry: TimeSpan.FromHours(1));
-        }
+            entry.AbsoluteExpirationRelativeToNow = TimeSpan.FromHours(1);
+            return await jitenContext.Kanjis
+                                     .AsNoTracking()
+                                     .OrderBy(k => k.FrequencyRank ?? int.MaxValue)
+                                     .Select(k => new CachedKanjiInfo(k.Character, k.FrequencyRank, k.JlptLevel, k.Grade, k.StrokeCount))
+                                     .ToListAsync();
+        });
 
         var userGrid = await userContext.UserKanjiGrids
                                         .AsNoTracking()
-                                        .FirstOrDefaultAsync(ukg => ukg.UserId == targetUserId);
+                                        .FirstOrDefaultAsync(ukg => ukg.UserId == access.UserId);
 
         var userScores = userGrid?.GetKanjiScoresOnce() ?? new Dictionary<string, KanjiScoreEntry>();
 
@@ -4366,6 +4054,9 @@ public partial class UserController(
                               SeenKanjiCount = userScores.Count, LastComputedAt = userGrid?.LastComputedAt
                           });
     }
+
+    /// <summary>In-process rather than Redis: the list is ~1.1 MB of JSON, which every request would otherwise pull and deserialise.</summary>
+    private const string AllKanjiCacheKey = "kanji-grid:all-kanji";
 
     private record CachedKanjiInfo(string Character, int? FrequencyRank, short? JlptLevel, short? Grade, short StrokeCount);
     private record ReadingFrequencyResult(int WordId, short ReadingIndex, int FrequencyRank);

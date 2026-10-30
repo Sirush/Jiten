@@ -334,8 +334,8 @@ public class CommunityListTests(JitenWebApplicationFactory factory)
         var listIds = new List<int>();
         for (var i = 0; i < FreeMaxLists + 2; i++)
             listIds.Add(await CreateList(TestUsers.UserA, $"List {i}"));
-        var decks = await SeedDecks(152);
-        (await PutItems(listIds[0], TestUsers.UserA, decks.Take(150))).StatusCode.Should().Be(HttpStatusCode.OK);
+        var decks = await SeedDecks(FreeMaxItems + 2);
+        (await PutItems(listIds[0], TestUsers.UserA, decks.Take(FreeMaxItems))).StatusCode.Should().Be(HttpStatusCode.OK);
         (await PutDetails(listIds[0], TestUsers.UserA, CommunityListStatus.Public)).StatusCode.Should().Be(HttpStatusCode.OK);
 
         await SetFull(TestUsers.UserA, false);
@@ -344,10 +344,10 @@ public class CommunityListTests(JitenWebApplicationFactory factory)
         (await PutDetails(listIds[1], TestUsers.UserA, CommunityListStatus.Draft, "Renamed")).StatusCode.Should().Be(HttpStatusCode.OK);
         (await Send(HttpMethod.Get, $"/api/lists/{listIds[0]}")).StatusCode.Should().Be(HttpStatusCode.OK);
 
-        (await PutItems(listIds[0], TestUsers.UserA, decks.Take(149))).StatusCode.Should().Be(HttpStatusCode.OK);
-        var swapped = decks.Take(148).Append(decks[151]).ToList();
+        (await PutItems(listIds[0], TestUsers.UserA, decks.Take(FreeMaxItems - 1))).StatusCode.Should().Be(HttpStatusCode.OK);
+        var swapped = decks.Take(FreeMaxItems - 2).Append(decks[FreeMaxItems + 1]).ToList();
         (await PutItems(listIds[0], TestUsers.UserA, swapped)).StatusCode.Should().Be(HttpStatusCode.OK);
-        (await ErrorCode(await PutItems(listIds[0], TestUsers.UserA, decks.Take(151)))).Should().Be("item_limit");
+        (await ErrorCode(await PutItems(listIds[0], TestUsers.UserA, decks.Take(FreeMaxItems + 1)))).Should().Be("item_limit");
 
         (await Send(HttpMethod.Delete, $"/api/lists/{listIds[2]}", TestUsers.UserA)).StatusCode.Should().Be(HttpStatusCode.NoContent);
     }
@@ -477,6 +477,105 @@ public class CommunityListTests(JitenWebApplicationFactory factory)
         items[0].GetProperty("note").ValueKind.Should().Be(JsonValueKind.Null);
     }
 
+    private Task<HttpResponseMessage> PostItems(int listId, string userId, IEnumerable<int> deckIds, int? position = null, string? note = null) =>
+        Send(HttpMethod.Post, $"/api/lists/{listId}/items", userId,
+             new { items = deckIds.Select(id => new { deckId = id, note }).ToList(), position });
+
+    private async Task<List<int>> OrderedDeckIds(int listId)
+    {
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+        var rows = await db.CommunityListItems.Where(i => i.ListId == listId).OrderBy(i => i.Position).Select(i => new { i.DeckId, i.Position }).ToListAsync();
+        rows.Select(r => r.Position).Should().Equal(Enumerable.Range(0, rows.Count));
+        (await db.CommunityLists.Where(l => l.ListId == listId).Select(l => l.ItemCount).FirstAsync()).Should().Be(rows.Count);
+        return rows.Select(r => r.DeckId).ToList();
+    }
+
+    [Fact]
+    public async Task AddItems_AppendsSkipsExistingAndInsertsAtPosition()
+    {
+        var decks = await SeedDecks(5);
+        var listId = await CreateList(TestUsers.UserA);
+        (await PutItems(listId, TestUsers.UserA, decks.Take(2))).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await PostItems(listId, TestUsers.UserA, [decks[1], decks[2], decks[3]]);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("added").GetInt32().Should().Be(2);
+        body.GetProperty("alreadyInList").GetInt32().Should().Be(1);
+        body.GetProperty("itemCount").GetInt32().Should().Be(4);
+
+        (await PostItems(listId, TestUsers.UserA, [decks[4]], position: 1, note: "  read second  ")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await OrderedDeckIds(listId)).Should().Equal(decks[0], decks[4], decks[1], decks[2], decks[3]);
+    }
+
+    [Fact]
+    public async Task AddItems_RejectsWholeBatchOverCapAndInvalidTitles()
+    {
+        var decks = await SeedDecks(FreeMaxItems + 1);
+        var child = (await SeedDecks(1, decks[0]))[0];
+        var listId = await CreateList(TestUsers.UserA);
+        (await PutItems(listId, TestUsers.UserA, decks.Take(FreeMaxItems - 1))).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await ErrorCode(await PostItems(listId, TestUsers.UserA, decks.Skip(FreeMaxItems - 1)))).Should().Be("item_limit");
+        (await ErrorCode(await PostItems(listId, TestUsers.UserA, [child]))).Should().Be("invalid_item");
+        (await ErrorCode(await PostItems(listId, TestUsers.UserA, []))).Should().Be("no_items");
+        (await OrderedDeckIds(listId)).Should().HaveCount(FreeMaxItems - 1);
+
+        (await PostItems(listId, TestUsers.UserA, [decks[0], decks[FreeMaxItems - 1]])).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task RemoveItem_CompactsAndReturnsWhatPutsItBack()
+    {
+        var decks = await SeedDecks(3);
+        var listId = await CreateList(TestUsers.UserA);
+        (await PutItems(listId, TestUsers.UserA, decks, id => id == decks[1] ? "middle" : null)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var response = await Send(HttpMethod.Delete, $"/api/lists/{listId}/items/{decks[1]}", TestUsers.UserA);
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var removed = await response.Content.ReadFromJsonAsync<JsonElement>();
+        removed.GetProperty("position").GetInt32().Should().Be(1);
+        removed.GetProperty("note").GetString().Should().Be("middle");
+        (await OrderedDeckIds(listId)).Should().Equal(decks[0], decks[2]);
+
+        (await Send(HttpMethod.Delete, $"/api/lists/{listId}/items/{decks[1]}", TestUsers.UserA)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+
+        (await PostItems(listId, TestUsers.UserA, [decks[1]], position: 1, note: "middle")).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await OrderedDeckIds(listId)).Should().Equal(decks);
+    }
+
+    [Fact]
+    public async Task ItemEdits_AreOwnerOnly()
+    {
+        var decks = await SeedDecks(2);
+        var listId = await CreatePublicList(TestUsers.UserA, "Mine", decks.Take(1));
+
+        (await PostItems(listId, TestUsers.UserB, [decks[1]])).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await Send(HttpMethod.Delete, $"/api/lists/{listId}/items/{decks[0]}", TestUsers.UserB)).StatusCode.Should().Be(HttpStatusCode.NotFound);
+        (await PostItems(listId, TestUsers.UserA, [decks[1]], note: null)).StatusCode.Should().Be(HttpStatusCode.OK);
+    }
+
+    [Fact]
+    public async Task Membership_CountsSelectedTitlesInEachOwnList()
+    {
+        var decks = await SeedDecks(3);
+        var full = await CreateList(TestUsers.UserA, "Full");
+        (await PutItems(full, TestUsers.UserA, decks)).StatusCode.Should().Be(HttpStatusCode.OK);
+        var partial = await CreateList(TestUsers.UserA, "Partial");
+        (await PutItems(partial, TestUsers.UserA, decks.Take(1))).StatusCode.Should().Be(HttpStatusCode.OK);
+        await CreatePublicList(TestUsers.UserB, "Someone else's", decks);
+
+        var response = await Send(HttpMethod.Post, "/api/lists/mine/membership", TestUsers.UserA, new { deckIds = decks.Take(2).ToList() });
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        var lists = body.GetProperty("lists").EnumerateArray().ToDictionary(l => l.GetProperty("listId").GetInt32(), l => l.GetProperty("contained").GetInt32());
+        lists.Should().BeEquivalentTo(new Dictionary<int, int> { [full] = 2, [partial] = 1 });
+        body.GetProperty("quota").GetProperty("maxItems").GetInt32().Should().Be(FreeMaxItems);
+
+        (await Send(HttpMethod.Post, "/api/lists/mine/membership", null, new { deckIds = decks })).StatusCode.Should().Be(HttpStatusCode.Unauthorized);
+    }
+
     [Fact]
     public async Task ItemPages_CoverEveryItemOnceInOrder()
     {
@@ -492,6 +591,37 @@ public class CommunityListTests(JitenWebApplicationFactory factory)
         }
 
         seen.Should().Equal(decks);
+    }
+
+    [Fact]
+    public async Task ItemSearch_MatchesAnyTitleIgnoringSpacesAndKeepsCuratorRanks()
+    {
+        var decks = await SeedDecks(4);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            var seeded = await db.Decks.Where(d => decks.Contains(d.DeckId)).ToDictionaryAsync(d => d.DeckId);
+            seeded[decks[1]].RomajiTitle = "Kimi no Na wa";
+            seeded[decks[2]].EnglishTitle = "Your Name Again";
+            db.DeckTitles.Add(new DeckTitle { DeckId = decks[3], Title = "Kiminonawa Alias", TitleType = DeckTitleType.Alias });
+            await db.SaveChangesAsync();
+        }
+
+        var listId = await CreatePublicList(TestUsers.UserA, "Searchable", decks);
+
+        var page = await (await Send(HttpMethod.Get, $"/api/lists/{listId}/items?q=KIMINO%20NAWA")).Content.ReadFromJsonAsync<JsonElement>();
+        page.GetProperty("totalItems").GetInt32().Should().Be(2);
+        var items = page.GetProperty("data").EnumerateArray().ToList();
+        items.Select(i => i.GetProperty("deck").GetProperty("deckId").GetInt32()).Should().Equal(decks[1], decks[3]);
+        items.Select(i => i.GetProperty("position").GetInt32()).Should().Equal(2, 4);
+
+        var detail = await (await Send(HttpMethod.Get, $"/api/lists/{listId}?q=your%20name")).Content.ReadFromJsonAsync<JsonElement>();
+        detail.GetProperty("itemCount").GetInt32().Should().Be(4);
+        detail.GetProperty("items").GetProperty("data").EnumerateArray().Select(i => i.GetProperty("deck").GetProperty("deckId").GetInt32())
+              .Should().Equal(decks[2]);
+
+        var none = await (await Send(HttpMethod.Get, $"/api/lists/{listId}/items?q=nothing")).Content.ReadFromJsonAsync<JsonElement>();
+        none.GetProperty("totalItems").GetInt32().Should().Be(0);
     }
 
     [Fact]

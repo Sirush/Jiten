@@ -32,6 +32,8 @@
       separatePrior?: boolean;
       // 'fit' zooms the axis to the plotted range, 'log' positions coverage by its shrinking remainder, 'full' is a fixed 0-100%; ignored in count mode.
       scale?: CoverageScale;
+      /** Series colour as "r, g, b". */
+      rgb?: string;
     }>(),
     {
       granularity: 'monthly',
@@ -43,15 +45,15 @@
       tooltip: true,
       separatePrior: true,
       scale: 'fit',
+      rgb: '210, 12, 163',
     }
   );
 
-  const MATURE = '#d20ca3';
-  const MATURE_FILL = 'rgba(210, 12, 163, 0.35)';
-  const COMBINED_FILL = 'rgba(210, 12, 163, 0.12)';
-  // A solid block on an axis that does not start at 0 reads as a quantity; a tint keeps it reading as a trend.
-  const MATURE_FILL_ZOOMED = 'rgba(210, 12, 163, 0.18)';
-  const COMBINED_FILL_ZOOMED = 'rgba(210, 12, 163, 0.12)';
+  const seriesColour = (alpha = 1) => `rgba(${props.rgb}, ${alpha})`;
+  const MATURE_FILL_ALPHA = 0.35;
+  /** A solid block on an axis that does not start at 0 reads as a quantity; a tint keeps it reading as a trend. */
+  const MATURE_FILL_ZOOMED_ALPHA = 0.18;
+  const COMBINED_FILL_ALPHA = 0.12;
   const AXIS = '#6b7280';
   const PRIOR_LABEL = 'Already knew';
   const GRID = 'rgba(107, 114, 128, 0.15)';
@@ -128,7 +130,7 @@
         label: 'Mature + young',
         data: plot(combinedValues.value),
         borderColor: 'transparent',
-        backgroundColor: zoomed.value ? COMBINED_FILL_ZOOMED : COMBINED_FILL,
+        backgroundColor: seriesColour(COMBINED_FILL_ALPHA),
         pointRadius: 0,
         pointHitRadius: 0,
         borderWidth: 0,
@@ -139,10 +141,10 @@
       {
         label: 'Mature',
         data: plot(matureValues.value),
-        borderColor: MATURE,
-        backgroundColor: zoomed.value ? MATURE_FILL_ZOOMED : MATURE_FILL,
-        pointBackgroundColor: MATURE,
-        pointBorderColor: MATURE,
+        borderColor: seriesColour(),
+        backgroundColor: seriesColour(zoomed.value ? MATURE_FILL_ZOOMED_ALPHA : MATURE_FILL_ALPHA),
+        pointBackgroundColor: seriesColour(),
+        pointBorderColor: seriesColour(),
         pointRadius: props.compact ? 0 : props.points.map((_, i) => (milestoneIndexByPoint.value.has(i) ? 5 : 0)),
         pointStyle: props.points.map((_, i) => (milestoneIndexByPoint.value.has(i) ? 'rectRot' : 'circle')),
         pointHoverRadius: props.compact ? 4 : 5,

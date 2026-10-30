@@ -6,7 +6,7 @@
     middleware: ['auth'],
   });
 
-  useHead({ title: 'Notifications - Jiten' });
+  useHead({ title: 'Notifications' });
 
   const { notifications, totalCount, isLoading, fetchNotifications, markAsRead, markAllAsRead, deleteNotification, unreadCount, fetchUnreadCount } =
     useNotifications();

@@ -1,4 +1,5 @@
-﻿using Jiten.Api.Dtos;
+﻿using System.Text.Json;
+using Jiten.Api.Dtos;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
@@ -545,6 +546,9 @@ public static class WordFormHelper
     public static long EncodeWordKey(int wordId, short readingIndex)
         => ((long)wordId << 8) | (byte)readingIndex;
 
+    public static (int WordId, byte ReadingIndex) DecodeWordKey(long key)
+        => ((int)(key >> 8), (byte)(key & 0xFF));
+
     public static async Task<HashSet<long>> GetKanaFormKeys(JitenDbContext context, IEnumerable<int> wordIds)
     {
         var distinctIds = wordIds.Distinct().ToList();
@@ -556,6 +560,22 @@ public static class WordFormHelper
             .ToListAsync();
         return kanaForms
             .Select(wf => EncodeWordKey(wf.WordId, wf.ReadingIndex))
+            .ToHashSet();
+    }
+
+    /// <summary>Null when the filter selects no part of speech, meaning every word passes.</summary>
+    public static async Task<HashSet<int>?> GetPosMatchedWordIds(JitenDbContext context, string? posFilter, IEnumerable<int> wordIds)
+    {
+        if (string.IsNullOrEmpty(posFilter)) return null;
+
+        var posTags = JsonSerializer.Deserialize<string[]>(posFilter);
+        if (posTags is not { Length: > 0 }) return null;
+
+        var wordIdList = wordIds.ToList();
+        return (await context.JMDictWords.AsNoTracking()
+                             .Where(w => wordIdList.Contains(w.WordId) && w.PartsOfSpeech.Any(p => posTags.Contains(p)))
+                             .Select(w => w.WordId)
+                             .ToListAsync())
             .ToHashSet();
     }
 

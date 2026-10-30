@@ -93,6 +93,7 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
                                                   progress
                                                   progressVolumes
                                                   repeat
+                                                  score(format: POINT_100)
                                                   completedAt { year month day }
                                                   startedAt { year month day }
                                                   media { id title { native romaji } }
@@ -184,10 +185,14 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
                     if (progress is <= 0)
                         progress = null;
 
+                    short? score = entry.TryGetProperty("score", out var scoreEl) && scoreEl.ValueKind == JsonValueKind.Number && scoreEl.GetDouble() > 0
+                                       ? (short)Math.Clamp(Math.Round(scoreEl.GetDouble()), UserDeckPreference.MinScore, UserDeckPreference.MaxScore)
+                                       : null;
+
                     entries.Add(new ExternalListEntry(id.ToString(), title ?? $"AniList #{id}",
                                                       $"https://anilist.co/{urlSegment}/{id}", status, mapped, finishedAt, progress,
                                                       startedOn, completedOn, RepeatsBeforeFromAnilist(repeat, status, mapped), startedPrecision,
-                                                      completedPrecision));
+                                                      completedPrecision, score));
                 }
             }
 
@@ -290,7 +295,7 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
             var requestBody = new
                               {
                                   user = uid,
-                                  fields = "id, voted, started, finished, labels{id,label}, vn{title, alttitle}",
+                                  fields = "id, voted, vote, started, finished, labels{id,label}, vn{title, alttitle}",
                                   results = VndbPageSize,
                                   page,
                               };
@@ -334,9 +339,13 @@ public class ExternalMediaListClient(IHttpClientFactory httpClientFactory, Exter
                 if (finishedAt == null && item.TryGetProperty("voted", out var voted) && voted.ValueKind == JsonValueKind.Number)
                     finishedAt = DateOnly.FromDateTime(DateTimeOffset.FromUnixTimeSeconds(voted.GetInt64()).UtcDateTime);
 
+                short? vote = item.TryGetProperty("vote", out var voteEl) && voteEl.ValueKind == JsonValueKind.Number
+                                  ? (short)Math.Clamp(voteEl.GetInt32(), UserDeckPreference.MinScore, UserDeckPreference.MaxScore)
+                                  : null;
+
                 entries.Add(new ExternalListEntry(vnId, title ?? $"VNDB {vnId}", $"https://vndb.org/{vnId}", label, mapped, finishedAt,
                                                   StartedOn: startedOn, CompletedOn: completedOn, StartedPrecision: startedPrecision,
-                                                  CompletedPrecision: completedPrecision));
+                                                  CompletedPrecision: completedPrecision, Score: vote));
             }
 
             var more = doc.RootElement.TryGetProperty("more", out var moreEl) && moreEl.ValueKind == JsonValueKind.True;

@@ -28,7 +28,7 @@ export default defineEventHandler((event) => {
       path,
       status: res.statusCode,
       ms: Math.round(duration),
-      ip: String(req.headers['cf-connecting-ip'] ?? '') || forwarded || req.socket?.remoteAddress || '',
+      ip: forwarded || req.socket?.remoteAddress || '',
       ua: String(req.headers['user-agent'] ?? '').slice(0, 200),
     });
   });

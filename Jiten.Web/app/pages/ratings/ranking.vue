@@ -8,7 +8,7 @@
     middleware: ['auth'],
   });
 
-  useHead({ title: 'Rank Difficulties - Jiten' });
+  useHead({ title: 'Rank Difficulties' });
 
   const { fetchRankings, moveRanking } = useDifficultyRankings();
   const jitenStore = useJitenStore();

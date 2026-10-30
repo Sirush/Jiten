@@ -200,6 +200,9 @@ bool IsTrustedIp(HttpContext ctx) => rateLimitTrustedIps.Count > 0 && rateLimitT
 bool IsFirstPartyBrowser(HttpContext ctx) =>
     !ctx.User.HasClaim("auth_scheme", "ApiKey") && ctx.Request.Headers.Origin.ToString() == "https://jiten.moe";
 
+builder.Services.AddSingleton(new DeckQuotaExemption(ctx => IsTrustedSsr(ctx) || IsTrustedIp(ctx)));
+builder.Services.AddScoped<DeckQuotaFilter>();
+
 // OpenTelemetry Configuration
 var otelConfig = builder.Configuration.GetSection("OpenTelemetry");
 var enableOtlpExporter = otelConfig.GetValue<bool>("EnableOtlpExporter");
@@ -508,6 +511,7 @@ builder.Services.AddSingleton<Jiten.Api.Services.Stripe.IStripeGateway, Jiten.Ap
 builder.Services.AddScoped<Jiten.Api.Services.Stripe.StripeService>();
 builder.Services.AddSingleton<IWordFormSiblingCache, WordFormSiblingCache>();
 builder.Services.AddSingleton<IDerivationLinkCache, DerivationLinkCache>();
+builder.Services.AddSingleton<IWordSetMemberCache, WordSetMemberCache>();
 builder.Services.AddSingleton<Jiten.Api.Services.SmartDeck.IWordReferenceCache, Jiten.Api.Services.SmartDeck.WordReferenceCache>();
 builder.Services.AddScoped<Jiten.Api.Services.SmartDeck.ISmartDeckBuilder, Jiten.Api.Services.SmartDeck.SmartDeckBuilder>();
 builder.Services.AddSingleton<Jiten.Api.Services.SmartDeck.ISmartDeckDirtyService, Jiten.Api.Services.SmartDeck.SmartDeckDirtyService>();
@@ -542,6 +546,11 @@ builder.Services.AddScoped<FranchiseSuggestionService>();
 builder.Services.AddSingleton<FranchiseResponseCache>();
 builder.Services.AddScoped<FranchiseSyncRunner>();
 builder.Services.AddScoped<SeriesService>();
+builder.Services.AddScoped<IProfileAccessService, ProfileAccessService>();
+builder.Services.AddSingleton<IProfileCacheService, ProfileCacheService>();
+builder.Services.AddSingleton<ProfileGenerationInterceptor>();
+builder.Services.ConfigureDbContext<UserDbContext>((sp, options) => options.AddInterceptors(sp.GetRequiredService<ProfileGenerationInterceptor>()),
+                                                   ServiceLifetime.Singleton);
 builder.Services.AddScoped<MediaGroupService>();
 builder.Services.AddScoped<MediaTitleSearchService>();
 builder.Services.AddScoped<MediaDuplicateService>();
@@ -954,7 +963,7 @@ builder.Services.AddCors(options =>
             })
             .AllowAnyHeader()
             .AllowAnyMethod()
-            .WithExposedHeaders("Retry-After")
+            .WithExposedHeaders("Retry-After", Jiten.Api.Controllers.StudyController.OverviewVersionHeader)
             // Chromium caps preflight caching at 2 hours; origin or header changes take up to this long to reach cached clients.
             .SetPreflightMaxAge(TimeSpan.FromHours(2));
     });

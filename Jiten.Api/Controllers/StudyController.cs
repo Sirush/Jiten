@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using System.Text.Json;
 using System.Linq.Expressions;
 using System.Text.RegularExpressions;
@@ -44,6 +45,7 @@ public partial class StudyController(
     IDeckImportService importService,
     IWordFormSiblingCache wordFormCache,
     IDerivationLinkCache derivationCache,
+    IWordSetMemberCache wordSetCache,
     IStudySessionService sessionService,
     IUserLimitsService userLimits,
     ICoverageJourneyService coverageJourneyService,
@@ -78,12 +80,17 @@ public partial class StudyController(
         return Results.Ok(new { version });
     }
 
+    /// <summary>Read before the decks are computed, so a client caching the response can only ever under-claim its freshness.</summary>
+    public const string OverviewVersionHeader = "X-Overview-Version";
+
     [HttpGet("study-decks")]
     [SwaggerOperation(Summary = "Get user's studied decks")]
     public async Task<IResult> GetStudyDecks()
     {
         var userId = currentUserService.UserId;
         if (userId == null) return Results.Unauthorized();
+
+        Response.Headers[OverviewVersionHeader] = (await sessionService.GetStudyOverviewVersion(userId)).ToString();
 
         var studyDecks = await userContext.UserStudyDecks
             .AsNoTracking()
@@ -139,24 +146,11 @@ public partial class StudyController(
             cardStateByKey[WordFormHelper.EncodeWordKey(c.WordId, c.ReadingIndex)] = (c.State, c.Due, c.LastReview);
         }
 
-        var wordSetStates = await currentUserService.GetWordSetDerivedStates();
-        var wordSetEncodedKeys = new Dictionary<long, WordSetStateType>();
-        foreach (var (key, setState) in wordSetStates)
-        {
-            if (cardStateMap.ContainsKey(key)) continue;
-            wordSetEncodedKeys[WordFormHelper.EncodeWordKey(key.Item1, key.Item2)] = setState;
-        }
+        var wordSets = await currentUserService.GetWordSets();
 
         var cardSnapshots = cardStateMap.ToDictionary(kv => kv.Key,
                                                       kv => new KnownCardSnapshot(kv.Value.State, kv.Value.Due, kv.Value.LastReview));
-        var redundantTiersByPair = new Dictionary<(int, byte), VocabularyTier>();
-        var redundantTiersByKey = new Dictionary<long, VocabularyTier>();
-        foreach (var (key, states) in await currentUserService.ResolveRedundantStates(cardSnapshots, wordSetStates))
-        {
-            var tier = VocabularyDisplayFilter.ResolveTier(states);
-            redundantTiersByPair[key] = tier;
-            redundantTiersByKey[WordFormHelper.EncodeWordKey(key.WordId, key.ReadingIndex)] = tier;
-        }
+        var redundantTiers = await currentUserService.ResolveRedundantTiers(cardSnapshots, wordSets);
 
         var settings = await LoadStudySettings(userId);
         var now = DateTime.UtcNow;
@@ -172,10 +166,7 @@ public partial class StudyController(
 
         if (studyDecks.Any(sd => sd.DeckType == StudyDeckType.GlobalDynamic))
         {
-            extraWordIds = wordSetStates.Keys.Select(k => k.Item1)
-                                        .Concat(redundantTiersByPair.Keys.Select(k => k.Item1))
-                                        .Distinct()
-                                        .ToList();
+            extraWordIds = redundantTiers.CardDriven.Keys.Select(k => WordFormHelper.DecodeWordKey(k).WordId).Distinct().ToList();
             var cardRankWordIds = cardStateMap.Keys.Select(k => k.Item1).Distinct().Union(extraWordIds).ToList();
             var precomputeGate = new SemaphoreSlim(MaxConcurrentDeckQueries);
 
@@ -246,7 +237,8 @@ public partial class StudyController(
 
         // Collect parallel tasks — each uses its own factory-created JitenDbContext
         var mediaDeckCountTasks = new List<(int StudyDeckId, Task<(int Count, HashSet<long> WordKeys)>)>();
-        var globalDynamicCountTasks = new List<(int StudyDeckId, UserStudyDeck Sd, Task<(int Count, bool WasTruncated)>)>();
+        var globalDynamicCountTasks = new List<(int StudyDeckId, UserStudyDeck Sd, Task<(int Count, bool WasTruncated)> CountTask,
+            Task<((int Mastered, int Blacklisted) Forms, IReadOnlyDictionary<VocabularyTier, int> Tiers)>? SetTask)>();
 
         var deckQueryGate = new SemaphoreSlim(MaxConcurrentDeckQueries);
 
@@ -279,18 +271,30 @@ public partial class StudyController(
             else if (sd.DeckType == StudyDeckType.GlobalDynamic)
             {
                 resolvedDecks.Add((sd, null));
-                globalDynamicCountTasks.Add((sd.UserStudyDeckId, sd,
-                    CountWithFactoryContext<(int, bool)>((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache, memoryCache)
-                        .CountGlobalDynamicWords(sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter, sd.ExcludeKana,
-                                 scope: FrequencyScope.From(sd)),
-                        deckQueryGate)));
+                var countTask = CountWithFactoryContext<(int, bool)>((ctx, uCtx, us) => new DeckWordResolver(ctx, uCtx, us, wordFormCache, memoryCache)
+                    .CountGlobalDynamicWords(sd.MinGlobalFrequency, sd.MaxGlobalFrequency, sd.PosFilter, sd.ExcludeKana,
+                             scope: FrequencyScope.From(sd)),
+                    deckQueryGate);
+                var setTask = wordSets.IsEmpty
+                    ? null
+                    : CountWithFactoryContext(async (ctx, uCtx, us) =>
+                    {
+                        var resolver = new DeckWordResolver(ctx, uCtx, us, wordFormCache, memoryCache);
+                        var scope = FrequencyScope.From(sd);
+                        var forms = await resolver.CountGlobalDynamicSetForms(sd.MinGlobalFrequency, sd.MaxGlobalFrequency,
+                                                                              sd.PosFilter, sd.ExcludeKana, scope, wordSets);
+                        var tiers = await resolver.CountGlobalDynamicTiers(sd.MinGlobalFrequency, sd.MaxGlobalFrequency,
+                                                                           sd.PosFilter, sd.ExcludeKana, scope, redundantTiers);
+                        return (forms, tiers);
+                    }, deckQueryGate);
+                globalDynamicCountTasks.Add((sd.UserStudyDeckId, sd, countTask, setTask));
             }
             else if (sd.DeckType.HasMaterialisedWords())
             {
                 resolvedDecks.Add((sd, null));
                 if (staticWordKeysByDeck != null && staticWordKeysByDeck.TryGetValue(sd.UserStudyDeckId, out var wordKeys))
                 {
-                    var stats = ComputeCardStatsFromWordKeys(wordKeys, cardStateByKey, dueCutoff, wordSetEncodedKeys, redundantTiersByKey);
+                    var stats = ComputeCardStatsFromWordKeys(wordKeys, cardStateByKey, dueCutoff, wordSets, redundantTiers);
                     countOnlyStats[sd.UserStudyDeckId] = (wordKeys.Count, Math.Max(0, wordKeys.Count - stats.Tracked),
                         stats.Learning, stats.Review, stats.Mastered, stats.Blacklisted, stats.Suspended, stats.Due, stats.Young, stats.Mature, false);
                 }
@@ -303,7 +307,8 @@ public partial class StudyController(
 
         // Await all parallel deck queries
         var allParallelTasks = mediaDeckCountTasks.Select(t => (Task)t.Item2)
-            .Concat(globalDynamicCountTasks.Select(t => (Task)t.Item3))
+            .Concat(globalDynamicCountTasks.Select(t => (Task)t.CountTask))
+            .Concat(globalDynamicCountTasks.Where(t => t.SetTask != null).Select(t => (Task)t.SetTask!))
             .ToList();
         if (allParallelTasks.Count > 0)
             await Task.WhenAll(allParallelTasks);
@@ -311,19 +316,29 @@ public partial class StudyController(
         foreach (var (studyDeckId, task) in mediaDeckCountTasks)
         {
             var (total, wordKeys) = task.Result;
-            var stats = ComputeCardStatsFromWordKeys(wordKeys, cardStateByKey, dueCutoff, wordSetEncodedKeys, redundantTiersByKey);
+            var stats = ComputeCardStatsFromWordKeys(wordKeys, cardStateByKey, dueCutoff, wordSets, redundantTiers);
             countOnlyStats[studyDeckId] = (total, Math.Max(0, total - stats.Tracked),
                 stats.Learning, stats.Review, stats.Mastered, stats.Blacklisted, stats.Suspended, stats.Due, stats.Young, stats.Mature, false);
         }
 
-        foreach (var (studyDeckId, sd, task) in globalDynamicCountTasks)
+        var sharedLayerShadows = new List<(long Key, VocabularyTier Tier)>();
+        if (globalDynamicCountTasks.Count > 0 && !wordSets.IsEmpty)
         {
-            var (total, wasTruncated) = task.Result;
+            foreach (var key in cardStateByKey.Keys)
+                if (wordSets.TryGetState(key, out var setState))
+                    sharedLayerShadows.Add((key, ToTier(setState)));
+            sharedLayerShadows.AddRange(redundantTiers.ShadowedSetDriven());
+        }
+
+        foreach (var (studyDeckId, sd, countTask, setTask) in globalDynamicCountTasks)
+        {
+            var (total, wasTruncated) = countTask.Result;
             var posMatchedWordIds = !string.IsNullOrEmpty(sd.PosFilter) && posFilterCache.TryGetValue(sd.PosFilter!, out var cached)
                 ? cached : null;
+            var (setForms, setDrivenTierCounts) = setTask?.Result ?? (default, FrozenDictionary<VocabularyTier, int>.Empty);
             var stats = ComputeGlobalDynamicCardStats(
                 sd, cardStateMap, cardFreqRanksByScope![FrequencyScope.From(sd)], kanaOnlyCardWords, posMatchedWordIds, dueCutoff,
-                wordSetStates, redundantTiersByPair);
+                setForms, setDrivenTierCounts, sharedLayerShadows, redundantTiers.CardDriven);
             countOnlyStats[studyDeckId] = (total, Math.Max(0, total - stats.Tracked),
                 stats.Learning, stats.Review, stats.Mastered, stats.Blacklisted, stats.Suspended, stats.Due, stats.Young, stats.Mature, wasTruncated);
         }
@@ -1901,25 +1916,18 @@ public partial class StudyController(
         foreach (var c in learnedSet)
             cardStateMap[(c.WordId, c.ReadingIndex)] = c.State;
 
-        var wordSetStates = await currentUserService.GetWordSetDerivedStates();
+        var wordSets = await wordSetCache.LoadForUserAsync(userContext, userId, withKanaRedundancy: true);
         var trackedKeys = new HashSet<long>();
-        var knownKeys = new List<(int WordId, byte ReadingIndex)>();
-
-        foreach (var ((wordId, ri), _) in cardStateMap)
-        {
+        foreach (var (wordId, ri) in cardStateMap.Keys)
             trackedKeys.Add(WordFormHelper.EncodeWordKey(wordId, ri));
-            knownKeys.Add((wordId, ri));
-        }
 
-        foreach (var ((wordId, ri), _) in wordSetStates)
+        WordFormHelper.ExpandKanaRedundancyKeys(wordFormCache, cardStateMap.Keys, trackedKeys);
+
+        var unlearned = wordPairs.Count(w =>
         {
-            trackedKeys.Add(WordFormHelper.EncodeWordKey(wordId, ri));
-            knownKeys.Add((wordId, ri));
-        }
-
-        WordFormHelper.ExpandKanaRedundancyKeys(wordFormCache, knownKeys, trackedKeys);
-
-        var unlearned = wordPairs.Count(w => !trackedKeys.Contains(WordFormHelper.EncodeWordKey(w.WordId, (byte)w.ReadingIndex)));
+            var key = WordFormHelper.EncodeWordKey(w.WordId, (byte)w.ReadingIndex);
+            return !trackedKeys.Contains(key) && !wordSets.Covers(key);
+        });
 
         return Results.Ok(new { total, unlearned });
     }
@@ -1970,6 +1978,7 @@ public partial class StudyController(
 
         // ── Phase 1: Build the known-key set that makes deck forms redundant ──
         HashSet<long>? existingKeys = newCardBudget > 0 ? new HashSet<long>() : null;
+        var setCoveredKeys = UserWordSets.Empty;
         var derivationCategories = DerivationSettingsHelper.Parse(settings.DerivationalRedundancyCategories);
         var derivationKnownKeys = new List<(int WordId, byte ReadingIndex)>();
 
@@ -1987,35 +1996,8 @@ public partial class StudyController(
                 derivationKnownKeys.Add((c.WordId, c.ReadingIndex));
             }
 
-            var wordSetStates = await userContext.UserWordSetStates
-                .AsNoTracking()
-                .Where(uwss => uwss.UserId == userId)
-                .Select(uwss => new { uwss.SetId, uwss.State })
-                .ToListAsync();
-
-            if (wordSetStates.Count > 0)
-            {
-                var allSetIds = wordSetStates.Select(s => s.SetId).ToList();
-
-                // A blacklisted base conducts onto its derivations, as runtime and coverage already have it.
-                var derivationSetIdSet = wordSetStates
-                    .Where(s => s.State is WordSetStateType.Mastered or WordSetStateType.Blacklisted)
-                    .Select(s => s.SetId)
-                    .ToHashSet();
-
-                var setMembers = await context.WordSetMembers
-                    .AsNoTracking()
-                    .Where(wsm => allSetIds.Contains(wsm.SetId))
-                    .Select(wsm => new { wsm.SetId, wsm.WordId, wsm.ReadingIndex })
-                    .ToListAsync();
-
-                foreach (var m in setMembers)
-                {
-                    existingKeys?.Add(WordFormHelper.EncodeWordKey(m.WordId, (byte)m.ReadingIndex));
-                    if (derivationSetIdSet.Contains(m.SetId))
-                        derivationKnownKeys.Add((m.WordId, (byte)m.ReadingIndex));
-                }
-            }
+            setCoveredKeys = await wordSetCache.LoadForUserAsync(userContext, userId, withKanaRedundancy: true,
+                                                                 derivationCategories: derivationCategories);
 
             if (existingKeys != null)
             {
@@ -2250,7 +2232,7 @@ public partial class StudyController(
                 foreach (var word in filtered)
                 {
                     var key = WordFormHelper.EncodeWordKey(word.WordId, word.ReadingIndex);
-                    if (existingKeys!.Contains(key)) continue;
+                    if (existingKeys!.Contains(key) || setCoveredKeys.Covers(key)) continue;
                     if (claimsOnScan)
                         existingKeys!.Add(key);
                     deckCandidates.Add((word.WordId, word.ReadingIndex));
@@ -2902,37 +2884,12 @@ public partial class StudyController(
             // Same known set as the selection path, or the count promises new cards the batch then filters out.
             var derivationKnownKeys = cards.Select(c => (c.WordId, c.ReadingIndex)).ToList();
 
-            var wordSets = await userContext.UserWordSetStates
-                .AsNoTracking()
-                .Where(uwss => uwss.UserId == userId)
-                .Select(uwss => new { uwss.SetId, uwss.State })
-                .ToListAsync();
-
-            if (wordSets.Count > 0)
-            {
-                var wordSetIds = wordSets.Select(s => s.SetId).ToList();
-                var derivationSetIds = wordSets
-                    .Where(s => s.State is WordSetStateType.Mastered or WordSetStateType.Blacklisted)
-                    .Select(s => s.SetId)
-                    .ToHashSet();
-
-                var setMembers = await context.WordSetMembers
-                    .AsNoTracking()
-                    .Where(wsm => wordSetIds.Contains(wsm.SetId))
-                    .Select(wsm => new { wsm.SetId, wsm.WordId, wsm.ReadingIndex })
-                    .ToListAsync();
-                foreach (var m in setMembers)
-                {
-                    existingKeys.Add(WordFormHelper.EncodeWordKey(m.WordId, (byte)m.ReadingIndex));
-                    if (derivationSetIds.Contains(m.SetId))
-                        derivationKnownKeys.Add((m.WordId, (byte)m.ReadingIndex));
-                }
-            }
+            var derivationCategories = DerivationSettingsHelper.Parse(settings.DerivationalRedundancyCategories);
+            var wordSets = await wordSetCache.LoadForUserAsync(userContext, userId, withKanaRedundancy: true,
+                                                               derivationCategories: derivationCategories);
 
             WordFormHelper.ExpandKanaRedundancyKeys(wordFormCache, derivationKnownKeys, existingKeys);
-            WordFormHelper.ExpandDerivationRedundancyKeys(derivationCache,
-                DerivationSettingsHelper.Parse(settings.DerivationalRedundancyCategories),
-                derivationKnownKeys, existingKeys);
+            WordFormHelper.ExpandDerivationRedundancyKeys(derivationCache, derivationCategories, derivationKnownKeys, existingKeys);
 
             var studyDecks = activeStudyDecks ?? await LoadActiveStudyDecks(userId);
             var candidateKeys = new HashSet<long>(studyDeckBaseKeys ?? await GetStudyDeckBaseKeys(studyDecks));
@@ -2942,6 +2899,8 @@ public partial class StudyController(
                                                                     FrequencyScope.From(sd)));
 
             candidateKeys.ExceptWith(existingKeys);
+            if (!wordSets.IsEmpty)
+                candidateKeys.RemoveWhere(wordSets.Covers);
             newCardsAvailable = Math.Min(candidateKeys.Count, newCardBudget);
         }
 
@@ -3042,34 +3001,11 @@ public partial class StudyController(
                 // Same known set as the selection path, or the count promises new cards the batch then filters out.
                 var derivationKnownKeys = userCards.Select(c => (c.WordId, c.ReadingIndex)).ToList();
 
-                var smWordSets = await userContext.UserWordSetStates
-                    .AsNoTracking()
-                    .Where(uwss => uwss.UserId == userId)
-                    .Select(uwss => new { uwss.SetId, uwss.State })
-                    .ToListAsync();
-                if (smWordSets.Count > 0)
-                {
-                    var smWordSetIds = smWordSets.Select(s => s.SetId).ToList();
-                    var derivationSetIds = smWordSets
-                        .Where(s => s.State is WordSetStateType.Mastered or WordSetStateType.Blacklisted)
-                        .Select(s => s.SetId)
-                        .ToHashSet();
+                var smDerivationCategories = DerivationSettingsHelper.Parse(settings.DerivationalRedundancyCategories);
+                var smWordSets = await wordSetCache.LoadForUserAsync(userContext, userId,
+                                                                     derivationCategories: smDerivationCategories);
 
-                    var setMembers = await context.WordSetMembers
-                        .AsNoTracking()
-                        .Where(wsm => smWordSetIds.Contains(wsm.SetId))
-                        .Select(wsm => new { wsm.SetId, wsm.WordId, wsm.ReadingIndex })
-                        .ToListAsync();
-                    foreach (var m in setMembers)
-                    {
-                        existingKeys.Add(WordFormHelper.EncodeWordKey(m.WordId, (byte)m.ReadingIndex));
-                        if (derivationSetIds.Contains(m.SetId))
-                            derivationKnownKeys.Add((m.WordId, (byte)m.ReadingIndex));
-                    }
-                }
-
-                WordFormHelper.ExpandDerivationRedundancyKeys(derivationCache,
-                    DerivationSettingsHelper.Parse(settings.DerivationalRedundancyCategories),
+                WordFormHelper.ExpandDerivationRedundancyKeys(derivationCache, smDerivationCategories,
                     derivationKnownKeys, existingKeys);
 
                 var mediaDecks = studyDecks
@@ -3092,6 +3028,8 @@ public partial class StudyController(
                                                                     FrequencyScope.From(sd)));
 
                 allCandidateKeys.ExceptWith(existingKeys);
+                if (!smWordSets.IsEmpty)
+                    allCandidateKeys.RemoveWhere(smWordSets.Covers);
                 count = Math.Min(allCandidateKeys.Count, budget);
                 break;
             }
@@ -4500,7 +4438,7 @@ public partial class StudyController(
             await using var ctx = await contextFactory.CreateDbContextAsync();
             await using var uCtx = await userContextFactory.CreateDbContextAsync();
             var userService = new CurrentUserService(httpContextAccessor, ctx, uCtx, wordFormCache, derivationCache,
-                                                     memoryCache);
+                                                     memoryCache, wordSetCache);
             return await query(ctx, uCtx, userService);
         }
         finally
@@ -4576,20 +4514,10 @@ public partial class StudyController(
         string? posFilter, Dictionary<(int, byte), (FsrsState, DateTime, DateTime?)> cardStateMap,
         IEnumerable<int>? additionalWordIds = null)
     {
-        if (string.IsNullOrEmpty(posFilter)) return null;
-
-        var posTags = JsonSerializer.Deserialize<string[]>(posFilter);
-        if (posTags is not { Length: > 0 }) return null;
-
         var wordIds = cardStateMap.Keys.Select(k => k.Item1).Distinct();
         if (additionalWordIds != null)
             wordIds = wordIds.Union(additionalWordIds);
-        var wordIdList = wordIds.ToList();
-        return (await jitenContext.JMDictWords.AsNoTracking()
-            .Where(w => wordIdList.Contains(w.WordId) && w.PartsOfSpeech.Any(p => posTags.Contains(p)))
-            .Select(w => w.WordId)
-            .ToListAsync())
-            .ToHashSet();
+        return await WordFormHelper.GetPosMatchedWordIds(jitenContext, posFilter, wordIds);
     }
 
     private static (int Tracked, int Learning, int Review, int Mastered, int Blacklisted, int Suspended, int Due, int Young, int Mature)
@@ -4630,8 +4558,10 @@ public partial class StudyController(
             HashSet<long>? kanaFormKeys,
             HashSet<int>? posMatchedWordIds,
             SrsDueWindow dueCutoff,
-            Dictionary<(int, byte), WordSetStateType>? wordSetStates = null,
-            Dictionary<(int, byte), VocabularyTier>? redundantTiers = null)
+            (int Mastered, int Blacklisted) setForms,
+            IReadOnlyDictionary<VocabularyTier, int> setDrivenTierCounts,
+            List<(long Key, VocabularyTier Tier)> sharedLayerShadows,
+            IReadOnlyDictionary<long, VocabularyTier> cardDrivenTiers)
     {
         bool MatchesFreqRange((int wordId, byte ri) key)
         {
@@ -4649,27 +4579,19 @@ public partial class StudyController(
 
         var stats = CountCardStats(filtered, dueCutoff);
 
-        if (wordSetStates != null)
-        {
-            foreach (var (key, setState) in wordSetStates)
-            {
-                if (cardStateMap.ContainsKey(key)) continue;
-                if (!MatchesFreqRange(key)) continue;
-                stats.Tracked++;
-                if (setState == WordSetStateType.Mastered) stats.Mastered++;
-                else stats.Blacklisted++;
-            }
-        }
+        CountTier(ref stats, VocabularyTier.Mastered, setForms.Mastered);
+        CountTier(ref stats, VocabularyTier.Blacklisted, setForms.Blacklisted);
 
-        if (redundantTiers != null)
-        {
-            foreach (var (key, tier) in redundantTiers)
-            {
-                if (wordSetStates != null && wordSetStates.ContainsKey(key)) continue;
-                if (!MatchesFreqRange(key)) continue;
-                CountRedundant(ref stats, tier);
-            }
-        }
+        foreach (var (tier, count) in setDrivenTierCounts)
+            CountTier(ref stats, tier, count);
+
+        foreach (var (key, tier) in sharedLayerShadows)
+            if (MatchesFreqRange(WordFormHelper.DecodeWordKey(key)))
+                CountTier(ref stats, tier, -1);
+
+        foreach (var (key, tier) in cardDrivenTiers)
+            if (MatchesFreqRange(WordFormHelper.DecodeWordKey(key)))
+                CountTier(ref stats, tier);
 
         return stats;
     }
@@ -4679,91 +4601,58 @@ public partial class StudyController(
             HashSet<long> wordKeys,
             Dictionary<long, (FsrsState State, DateTime Due, DateTime? LastReview)> cardStateByKey,
             SrsDueWindow dueCutoff,
-            Dictionary<long, WordSetStateType>? wordSetKeys = null,
-            Dictionary<long, VocabularyTier>? redundantTiers = null)
+            UserWordSets wordSets,
+            RedundantTiers redundantTiers)
     {
         var filtered = wordKeys.Count < cardStateByKey.Count
             ? wordKeys.Where(cardStateByKey.ContainsKey).Select(k => cardStateByKey[k])
             : cardStateByKey.Where(e => wordKeys.Contains(e.Key)).Select(e => e.Value);
 
         var stats = CountCardStats(filtered, dueCutoff);
-        if (wordSetKeys != null || redundantTiers != null)
-            EnrichStatsWithWordSetAndRedundant(ref stats, wordKeys, wordSetKeys, redundantTiers);
+        if (!wordSets.IsEmpty || redundantTiers.CardDriven.Count > 0)
+            EnrichStatsWithWordSetAndRedundant(ref stats, wordKeys, cardStateByKey, wordSets, redundantTiers);
         return stats;
     }
 
+    /// <summary>A card-less form takes its set state before any redundant tier; carded forms were already counted from the card.</summary>
     private static void EnrichStatsWithWordSetAndRedundant(
         ref (int Tracked, int Learning, int Review, int Mastered, int Blacklisted, int Suspended, int Due, int Young, int Mature) stats,
         HashSet<long> deckKeys,
-        Dictionary<long, WordSetStateType>? wordSetKeys,
-        Dictionary<long, VocabularyTier>? redundantTiers)
+        Dictionary<long, (FsrsState State, DateTime Due, DateTime? LastReview)> cardStateByKey,
+        UserWordSets wordSets,
+        RedundantTiers redundantTiers)
     {
-        if (wordSetKeys != null)
+        foreach (var key in deckKeys)
         {
-            foreach (var (key, setState) in wordSetKeys)
-            {
-                if (!deckKeys.Contains(key)) continue;
-                stats.Tracked++;
-                if (setState == WordSetStateType.Mastered) stats.Mastered++;
-                else stats.Blacklisted++;
-            }
-        }
+            if (cardStateByKey.ContainsKey(key)) continue;
 
-        if (redundantTiers != null)
-        {
-            foreach (var (key, tier) in redundantTiers)
+            if (wordSets.TryGetState(key, out var setState))
+                CountTier(ref stats, ToTier(setState));
+            else if (redundantTiers.TryGetTier(key, out var tier))
             {
-                if (!deckKeys.Contains(key)) continue;
-                if (wordSetKeys != null && wordSetKeys.ContainsKey(key)) continue;
-                CountRedundant(ref stats, tier);
+                CountTier(ref stats, tier);
             }
         }
     }
 
-    /// <summary>A redundant form takes its covering card's tier, the same collapse the vocabulary Display filter applies.</summary>
-    private static void CountRedundant(
+    /// <summary>A set or redundant form counts under its tier, the same collapse the vocabulary Display filter applies.</summary>
+    private static void CountTier(
         ref (int Tracked, int Learning, int Review, int Mastered, int Blacklisted, int Suspended, int Due, int Young, int Mature) stats,
-        VocabularyTier tier)
+        VocabularyTier tier, int count = 1)
     {
-        stats.Tracked++;
+        stats.Tracked += count;
         switch (tier)
         {
-            case VocabularyTier.Blacklisted: stats.Blacklisted++; break;
-            case VocabularyTier.Mastered: stats.Mastered++; break;
-            case VocabularyTier.Mature: stats.Review++; stats.Mature++; break;
-            case VocabularyTier.Young: stats.Review++; stats.Young++; break;
-            default: stats.Learning++; break;
+            case VocabularyTier.Blacklisted: stats.Blacklisted += count; break;
+            case VocabularyTier.Mastered: stats.Mastered += count; break;
+            case VocabularyTier.Mature: stats.Review += count; stats.Mature += count; break;
+            case VocabularyTier.Young: stats.Review += count; stats.Young += count; break;
+            default: stats.Learning += count; break;
         }
     }
 
-    private static void ApplyWordPairCardStats(
-        StudyDeckDto dto,
-        List<(int WordId, byte ReadingIndex)> wordPairs,
-        Dictionary<(int, byte), (FsrsState State, DateTime Due, DateTime? LastReview)> cardStateMap,
-        SrsDueWindow dueCutoff,
-        Dictionary<long, WordSetStateType>? wordSetKeys = null,
-        Dictionary<long, VocabularyTier>? redundantTiers = null)
-    {
-        var matched = wordPairs
-            .Where(w => cardStateMap.ContainsKey((w.WordId, w.ReadingIndex)))
-            .Select(w => cardStateMap[(w.WordId, w.ReadingIndex)]);
-
-        var stats = CountCardStats(matched, dueCutoff);
-        if (wordSetKeys != null || redundantTiers != null)
-        {
-            var encodedKeys = wordPairs.Select(w => WordFormHelper.EncodeWordKey(w.WordId, w.ReadingIndex)).ToHashSet();
-            EnrichStatsWithWordSetAndRedundant(ref stats, encodedKeys, wordSetKeys, redundantTiers);
-        }
-        dto.LearningCount = stats.Learning;
-        dto.ReviewCount = stats.Review;
-        dto.YoungCount = stats.Young;
-        dto.MatureCount = stats.Mature;
-        dto.MasteredCount = stats.Mastered;
-        dto.BlacklistedCount = stats.Blacklisted;
-        dto.SuspendedCount = stats.Suspended;
-        dto.DueReviewCount = stats.Due;
-        dto.UnseenCount = Math.Max(0, wordPairs.Count - stats.Tracked);
-    }
+    private static VocabularyTier ToTier(WordSetStateType state)
+        => state == WordSetStateType.Mastered ? VocabularyTier.Mastered : VocabularyTier.Blacklisted;
 
     private async Task<(UserStudyDeck? Deck, IResult? Error)> GetStaticDeckForUser(int id, string action)
     {

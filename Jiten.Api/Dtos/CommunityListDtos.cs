@@ -86,10 +86,49 @@ public class CommunityListQuotaDto
     public bool CanCreate { get; set; }
 }
 
+public class CommunityListProfileDto
+{
+    public List<CommunityListSummaryDto> Written { get; set; } = [];
+
+    /// <summary>Null when the owner keeps favourited lists from this viewer.</summary>
+    public List<CommunityListSummaryDto>? Favourited { get; set; }
+}
+
 public class CommunityListMineDto
 {
     public List<CommunityListSummaryDto> Lists { get; set; } = [];
     public required CommunityListQuotaDto Quota { get; set; }
+}
+
+public class CommunityListMembershipDto
+{
+    public int ListId { get; set; }
+    public required string Slug { get; set; }
+    public required string Name { get; set; }
+    public CommunityListStatus Status { get; set; }
+    public int ItemCount { get; set; }
+
+    /// <summary>How many of the asked titles the list already holds.</summary>
+    public int Contained { get; set; }
+}
+
+public class CommunityListMembershipResponse
+{
+    public List<CommunityListMembershipDto> Lists { get; set; } = [];
+    public required CommunityListQuotaDto Quota { get; set; }
+}
+
+public class CommunityListMembershipRequest
+{
+    public List<int> DeckIds { get; set; } = [];
+}
+
+public class AddCommunityListItemsRequest
+{
+    public List<CommunityListItemInput> Items { get; set; } = [];
+
+    /// <summary>Zero-based slot for the first new item; null or past the end appends.</summary>
+    public int? Position { get; set; }
 }
 
 public class CommunityListEditItemDto

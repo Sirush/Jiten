@@ -516,7 +516,7 @@ public class MediaListManagementTests(JitenWebApplicationFactory factory)
         var text = System.Text.Encoding.UTF8.GetString(bytes.Skip(3).ToArray());
         var lines = text.Split('\n', StringSplitOptions.RemoveEmptyEntries);
         lines[0].TrimEnd().Should().Be("DeckId,OriginalTitle,RomajiTitle,EnglishTitle,MediaType,Status,Progress,IsFavourite,JitenUrl,ExternalLinks," +
-                                       "StartedOn,FinishedOn,TimesCompleted,CharactersRead");
+                                       "StartedOn,FinishedOn,TimesCompleted,CharactersRead,Score,Note,IsPrivate");
         lines[1].Should().Contain("\"Show, with comma\"").And.Contain("Completed").And.Contain("True")
                 .And.Contain($"https://jiten.moe/decks/media/{deck}");
     }

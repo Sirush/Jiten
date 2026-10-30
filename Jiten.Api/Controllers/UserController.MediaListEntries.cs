@@ -330,6 +330,8 @@ public partial class UserController
         // A pass started now belongs to the series pass in progress; a past one added by hand is not placed in any.
         if (request.State == MediaListEntryState.InProgress && deck.ParentDeckId != null)
             entry.SeriesEntry = (await MediaListEntryHelper.SeriesPassesAsync(userContext, jitenContext, userId, [deckId])).GetValueOrDefault(deckId);
+        if (request.State == MediaListEntryState.Completed && preference?.CurrentEntry is { State: MediaListEntryState.InProgress } firstPass)
+            await ClaimUnitsForFirstPassAsync(userId, deckId, firstPass);
 
         if (preference == null)
         {
@@ -364,6 +366,27 @@ public partial class UserController
         }
 
         return Results.Ok(await BuildMediaListEntriesResponseAsync(userId, deckId, parent.ParentDeckId, parent.ParentStatus, parent.Item3));
+    }
+
+    /// <summary>A past completed pass turns the series pass in progress into a reread, which only counts units linked to it; units recorded so far all belong to that pass.</summary>
+    private async Task ClaimUnitsForFirstPassAsync(string userId, int seriesId, UserMediaListEntry currentPass)
+    {
+        if (await userContext.UserMediaListEntries.AnyAsync(r => r.UserId == userId && r.DeckId == seriesId &&
+                                                                 r.State == MediaListEntryState.Completed))
+            return;
+
+        var unitIds = await jitenContext.Decks.AsNoTracking()
+                                        .Where(d => d.ParentDeckId == seriesId)
+                                        .Select(d => d.DeckId)
+                                        .ToListAsync();
+        if (unitIds.Count == 0)
+            return;
+
+        var unlinked = await userContext.UserMediaListEntries
+                                        .Where(r => r.UserId == userId && unitIds.Contains(r.DeckId) && r.SeriesEntryId == null)
+                                        .ToListAsync();
+        foreach (var unitEntry in unlinked)
+            unitEntry.SeriesEntry = currentPass;
     }
 
     [HttpPut("media-list/entries/{deckId:int}/{entryId:long}")]

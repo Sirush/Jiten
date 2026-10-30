@@ -34,33 +34,10 @@ public class UserMediaListTests(JitenWebApplicationFactory factory)
         return deck.DeckId;
     }
 
-    // Test users are seeded with UserName = guid but no NormalizedUserName; the endpoint resolves by
-    // NormalizedUserName, so set it here along with both privacy flags (written directly so we can also
-    // exercise the access guard against an invariant-violating row).
-    private async Task ConfigureProfile(string userId, bool isPublic, bool isMediaListPublic)
-    {
-        using var scope = factory.Services.CreateScope();
-        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
-
-        var user = await userDb.Users.FirstAsync(u => u.Id == userId);
-        user.NormalizedUserName = (user.UserName ?? userId).ToUpperInvariant();
-
-        var profile = await userDb.UserProfiles.FirstOrDefaultAsync(p => p.UserId == userId);
-        if (profile == null)
-        {
-            profile = new UserProfile { UserId = userId };
-            userDb.UserProfiles.Add(profile);
-        }
-        profile.IsPublic = isPublic;
-        profile.IsMediaListPublic = isMediaListPublic;
-
-        await userDb.SaveChangesAsync();
-    }
-
     [Fact]
     public async Task OwnProfile_ReturnsMediaList_EvenWhenPrivate()
     {
-        await ConfigureProfile(TestUsers.UserA, isPublic: false, isMediaListPublic: false);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: false, isMediaListPublic: false);
         await SeedDeckWithStatus("Ongoing Show", DeckStatus.Ongoing);
         await SeedDeckWithStatus("Done Show", DeckStatus.Completed);
 
@@ -76,7 +53,7 @@ public class UserMediaListTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task PublicMediaList_VisibleToOtherUsers()
     {
-        await ConfigureProfile(TestUsers.UserA, isPublic: true, isMediaListPublic: true);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true, isMediaListPublic: true);
         await SeedDeckWithStatus("Done Show", DeckStatus.Completed);
 
         var request = new HttpRequestMessage(HttpMethod.Get, $"/api/user/profile/{TestUsers.UserA}/media-list")
@@ -91,9 +68,33 @@ public class UserMediaListTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task PublicMediaList_HidesFavouritesFromOtherUsers()
+    {
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true, isMediaListPublic: true);
+        var deckId = await SeedDeckWithStatus("Loved Show", DeckStatus.Completed);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            var pref = await userDb.UserDeckPreferences.FirstAsync(p => p.UserId == TestUsers.UserA && p.DeckId == deckId);
+            pref.IsFavourite = true;
+            await userDb.SaveChangesAsync();
+        }
+
+        async Task<bool> FavouriteAs(string viewer)
+        {
+            var request = new HttpRequestMessage(HttpMethod.Get, $"/api/user/profile/{TestUsers.UserA}/media-list").WithUser(viewer);
+            var items = await (await _client.SendAsync(request)).Content.ReadFromJsonAsync<List<JsonElement>>();
+            return items![0].GetProperty("isFavourite").GetBoolean();
+        }
+
+        (await FavouriteAs(TestUsers.UserB)).Should().BeFalse();
+        (await FavouriteAs(TestUsers.UserA)).Should().BeTrue();
+    }
+
+    [Fact]
     public async Task MediaListFlagOff_NotVisibleToOtherUsers()
     {
-        await ConfigureProfile(TestUsers.UserA, isPublic: true, isMediaListPublic: false);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true, isMediaListPublic: false);
         await SeedDeckWithStatus("Secret Show", DeckStatus.Completed);
 
         var request = new HttpRequestMessage(HttpMethod.Get, $"/api/user/profile/{TestUsers.UserA}/media-list")
@@ -107,7 +108,7 @@ public class UserMediaListTests(JitenWebApplicationFactory factory)
     public async Task PrivateProfile_NotVisibleEvenIfMediaListFlagSet()
     {
         // Invariant-violating row: media list flagged public but profile private. Access must still be denied.
-        await ConfigureProfile(TestUsers.UserA, isPublic: false, isMediaListPublic: true);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: false, isMediaListPublic: true);
         await SeedDeckWithStatus("Secret Show", DeckStatus.Completed);
 
         var request = new HttpRequestMessage(HttpMethod.Get, $"/api/user/profile/{TestUsers.UserA}/media-list")
@@ -120,7 +121,7 @@ public class UserMediaListTests(JitenWebApplicationFactory factory)
     [Fact]
     public async Task ChildDecks_CollapseToParentSeries()
     {
-        await ConfigureProfile(TestUsers.UserA, isPublic: false, isMediaListPublic: false);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: false, isMediaListPublic: false);
 
         int parentId;
         using (var scope = factory.Services.CreateScope())
@@ -156,41 +157,32 @@ public class UserMediaListTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task UpdateProfile_MediaListPublicRequiresPublicProfile()
+    public async Task UpdateProfile_PrivateProfileMakesTheLibraryPrivate()
     {
-        // Make both public.
-        var patch1 = new HttpRequestMessage(HttpMethod.Patch, "/api/user/profile")
-            .WithUser(TestUsers.UserA)
-            .WithJsonContent(new { isPublic = true, isMediaListPublic = true });
-        (await _client.SendAsync(patch1)).StatusCode.Should().Be(HttpStatusCode.OK);
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
 
-        var get1 = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/user/profile").WithUser(TestUsers.UserA));
-        var body1 = await get1.Content.ReadFromJsonAsync<JsonElement>();
-        body1.GetProperty("isPublic").GetBoolean().Should().BeTrue();
-        body1.GetProperty("isMediaListPublic").GetBoolean().Should().BeTrue();
+        async Task<JsonElement> Patch(object privacy)
+        {
+            var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Patch, "/api/user/profile")
+                                                   .WithUser(TestUsers.UserA)
+                                                   .WithJsonContent(new { privacy }));
+            response.StatusCode.Should().Be(HttpStatusCode.OK);
+            return await response.Content.ReadFromJsonAsync<JsonElement>();
+        }
 
-        // Turning the profile private auto-deactivates the media list flag.
-        var patch2 = new HttpRequestMessage(HttpMethod.Patch, "/api/user/profile")
-            .WithUser(TestUsers.UserA)
-            .WithJsonContent(new { isPublic = false });
-        (await _client.SendAsync(patch2)).StatusCode.Should().Be(HttpStatusCode.OK);
+        var open = await Patch(new { profile = "public", sections = new Dictionary<string, string> { ["library"] = "everyone" }, hiddenFields = Array.Empty<string>(), hideAdultTitles = true });
+        open.GetProperty("sections").EnumerateArray().Select(s => s.GetString()).Should().Contain("library");
+        (await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, $"/api/user/profile/{TestUsers.UserA}/media-list").WithUser(TestUsers.UserB)))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
 
-        var get2 = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/user/profile").WithUser(TestUsers.UserA));
-        var body2 = await get2.Content.ReadFromJsonAsync<JsonElement>();
-        body2.GetProperty("isPublic").GetBoolean().Should().BeFalse();
-        body2.GetProperty("isMediaListPublic").GetBoolean().Should().BeFalse();
-    }
+        await Patch(new { profile = "private", sections = new Dictionary<string, string> { ["library"] = "everyone" }, hiddenFields = Array.Empty<string>(), hideAdultTitles = true });
+        (await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, $"/api/user/profile/{TestUsers.UserA}/media-list").WithUser(TestUsers.UserB)))
+            .StatusCode.Should().Be(HttpStatusCode.NotFound);
 
-    [Fact]
-    public async Task SettingMediaListPublicWhileProfilePrivate_StaysFalse()
-    {
-        var patch = new HttpRequestMessage(HttpMethod.Patch, "/api/user/profile")
-            .WithUser(TestUsers.UserA)
-            .WithJsonContent(new { isMediaListPublic = true });
-        (await _client.SendAsync(patch)).StatusCode.Should().Be(HttpStatusCode.OK);
-
-        var get = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/user/profile").WithUser(TestUsers.UserA));
-        var body = await get.Content.ReadFromJsonAsync<JsonElement>();
-        body.GetProperty("isMediaListPublic").GetBoolean().Should().BeFalse();
+        using var scope = factory.Services.CreateScope();
+        var profile = await scope.ServiceProvider.GetRequiredService<UserDbContext>().UserProfiles.AsNoTracking()
+                                 .FirstAsync(p => p.UserId == TestUsers.UserA);
+        profile.IsPublic.Should().BeFalse();
+        profile.IsMediaListPublic.Should().BeFalse();
     }
 }

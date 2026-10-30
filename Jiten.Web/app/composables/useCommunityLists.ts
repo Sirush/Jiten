@@ -3,6 +3,7 @@ import type {
   CommunityListEdit,
   CommunityListFacets,
   CommunityListItem,
+  CommunityListMembership,
   CommunityListQuota,
   CommunityListSummary,
   PaginatedResponse,
@@ -64,6 +65,9 @@ export function communityListPath(list: { listId: number; slug: string }): strin
   return list.slug ? `/lists/${list.listId}/${list.slug}` : `/lists/${list.listId}`;
 }
 
+/** Titles picked before their list existed; the new-list page adds them once the list is created. */
+export const usePendingListAdd = () => useState<number[]>('community-list-pending-add', () => []);
+
 export function useCommunityLists() {
   const { $api } = useNuxtApp();
 
@@ -77,8 +81,10 @@ export function useCommunityLists() {
 
   return {
     facets: (query: CommunityListFilterQuery) => $api<CommunityListFacets>('lists/facets', { query: filterQuery(query) }),
-    items: (listId: number, offset: number, sort?: CommunityListItemSort, limit = COMMUNITY_LIST_ITEM_PAGE_SIZE) =>
-      $api<PaginatedResponse<CommunityListItem[]>>(`lists/${listId}/items`, { query: { offset, limit, sort: sort === 'coverage' ? sort : undefined } }),
+    items: (listId: number, offset: number, sort?: CommunityListItemSort, q?: string, limit = COMMUNITY_LIST_ITEM_PAGE_SIZE) =>
+      $api<PaginatedResponse<CommunityListItem[]>>(`lists/${listId}/items`, {
+        query: { offset, limit, sort: sort === 'coverage' ? sort : undefined, q: q?.trim() || undefined },
+      }),
     mine: () => $api<{ lists: CommunityListSummary[]; quota: CommunityListQuota }>('lists/mine'),
     quota: () => $api<CommunityListQuota>('lists/quota'),
     favourited: (offset: number) => $api<PaginatedResponse<CommunityListSummary[]>>('lists/favourited', { query: { offset } }),
@@ -88,6 +94,12 @@ export function useCommunityLists() {
       $api<{ slug: string; status: CommunityListStatus }>(`lists/${listId}`, { method: 'PUT', body: details }),
     replaceItems: (listId: number, items: { deckId: number; note: string | null }[]) =>
       $api<{ itemCount: number }>(`lists/${listId}/items`, { method: 'PUT', body: { items } }),
+    membership: (deckIds: number[]) =>
+      $api<{ lists: CommunityListMembership[]; quota: CommunityListQuota }>('lists/mine/membership', { method: 'POST', body: { deckIds } }),
+    addItems: (listId: number, items: { deckId: number; note: string | null }[], position?: number) =>
+      $api<{ added: number; alreadyInList: number; itemCount: number }>(`lists/${listId}/items`, { method: 'POST', body: { items, position } }),
+    removeItem: (listId: number, deckId: number) =>
+      $api<{ position: number; note: string | null; itemCount: number }>(`lists/${listId}/items/${deckId}`, { method: 'DELETE' }),
     remove: (listId: number) => $api(`lists/${listId}`, { method: 'DELETE' }),
     favourite: (listId: number) => $api<{ favourited: boolean; favouriteCount: number }>(`lists/${listId}/favourite`, { method: 'POST' }),
     unfavourite: (listId: number) => $api<{ favourited: boolean; favouriteCount: number }>(`lists/${listId}/favourite`, { method: 'DELETE' }),

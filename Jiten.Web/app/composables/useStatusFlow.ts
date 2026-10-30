@@ -2,8 +2,9 @@ import { type Deck, type MediaListEntrySummary, DeckStatus, MediaListEntryState 
 import type { SetStatusOptions } from '~/composables/useMediaListSync';
 import { useConfirm } from 'primevue/useconfirm';
 import { closingPassStart, dropQuestion, restartQuestion } from '~/utils/mediaListEntry';
+import { isMainEntry } from '~/utils/displayDeck';
 
-export type StatusStep = 'list' | 'finished' | 'stopped' | 'reread' | 'resume' | 'unfinish' | 'progress';
+export type StatusStep = 'list' | 'finished' | 'stopped' | 'reread' | 'resume' | 'unfinish' | 'progress' | 'score';
 
 export interface StatusFlowOptions {
   close: () => void;
@@ -19,6 +20,7 @@ export function useStatusFlow(deck: () => Deck, { close, isOpen, home = 'list' }
   const step = ref<StatusStep>(home);
   const undoCompletion = ref(false);
   const startStatus = ref<DeckStatus.Ongoing | DeckStatus.Paused>(DeckStatus.Ongoing);
+  const scoreAfterCompletion = ref(false);
   const requestsInFlight = ref(0);
   const busy = computed(() => requestsInFlight.value > 0);
 
@@ -37,7 +39,27 @@ export function useStatusFlow(deck: () => Deck, { close, isOpen, home = 'list' }
     step.value = next;
   }
 
-  const reset = () => goTo(home);
+  /** A completion asked for a score keeps the popover open, so its follow-up prompts wait until the score step is left. */
+  let pendingCompletion: { target: Deck; date: string | null; response: ReturnType<typeof send> } | null = null;
+
+  function flushCompletion() {
+    const pending = pendingCompletion;
+    if (!pending) return;
+    pendingCompletion = null;
+    void pending.response.then((response) => followUpCompletion(pending.target, response, pending.date));
+  }
+
+  onScopeDispose(flushCompletion);
+
+  function reset() {
+    flushCompletion();
+    goTo(home);
+  }
+
+  function openScore() {
+    scoreAfterCompletion.value = false;
+    goTo('score');
+  }
 
   function questionFor(status: DeckStatus, current: DeckStatus, entry: MediaListEntrySummary | null | undefined): StatusStep | null {
     switch (status) {
@@ -90,6 +112,12 @@ export function useStatusFlow(deck: () => Deck, { close, isOpen, home = 'list' }
   async function finish(date: string | null) {
     if (busy.value) return;
     const target = deck();
+    if (isMainEntry(target)) {
+      pendingCompletion = { target, date, response: send(target, DeckStatus.Completed, { date }) };
+      scoreAfterCompletion.value = true;
+      goTo('score');
+      return;
+    }
     close();
     const response = await send(target, DeckStatus.Completed, { date });
     await followUpCompletion(target, response, date);
@@ -129,5 +157,20 @@ export function useStatusFlow(deck: () => Deck, { close, isOpen, home = 'list' }
     void send(target, DeckStatus.Dropped);
   }
 
-  return { step: readonly(step), home, busy, passStart, goTo, reset, choose, finish, stop, start, answer, close };
+  return {
+    step: readonly(step),
+    home,
+    busy,
+    passStart,
+    scoreAfterCompletion: readonly(scoreAfterCompletion),
+    goTo,
+    reset,
+    openScore,
+    choose,
+    finish,
+    stop,
+    start,
+    answer,
+    close,
+  };
 }

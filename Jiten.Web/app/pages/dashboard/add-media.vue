@@ -21,7 +21,7 @@
   import CoverImageField from '~/components/dashboard/CoverImageField.vue';
 
   useHead({
-    title: 'Add Media - Admin Dashboard - Jiten',
+    title: 'Add Media - Admin Dashboard',
   });
 
   definePageMeta({

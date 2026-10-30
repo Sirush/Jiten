@@ -3,7 +3,7 @@
   import Button from 'primevue/button';
 
   useHead({
-    title: 'Dashboard - Jiten',
+    title: 'Dashboard',
   });
 
   definePageMeta({

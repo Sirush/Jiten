@@ -284,3 +284,25 @@ public class PopularityCountsDto
     public int Favourites { get; set; }
     public int StudyDecks { get; set; }
 }
+
+public class MediaListDeckDto : DeckDto
+{
+    public MediaListDeckDto(Deck deck) : base(deck)
+    {
+    }
+
+    /// <summary>1.0 to 10.0, null when unscored or the owner hides scores from this viewer.</summary>
+    public decimal? Score { get; set; }
+
+    /// <summary>Owner only.</summary>
+    public string? Note { get; set; }
+
+    /// <summary>Owner only.</summary>
+    public bool? IsPrivate { get; set; }
+
+    /// <summary>Owner only.</summary>
+    public bool? IsPinned { get; set; }
+
+    /// <summary>Signed-in viewers other than the owner: their own status for the title.</summary>
+    public DeckStatus? ViewerStatus { get; set; }
+}

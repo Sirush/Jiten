@@ -15,6 +15,9 @@ public static class DeckStatusExtensions
     /// <summary>A pass is under way, whether the user is reading it now or has paused it.</summary>
     public static bool IsInProgress(this DeckStatus status) => status is DeckStatus.Ongoing or DeckStatus.Paused;
 
+    /// <summary>Planning and Dropped never count as having read a title.</summary>
+    public static bool HasStarted(this DeckStatus status) => status.IsInProgress() || status == DeckStatus.Completed;
+
     /// <summary>Which status wins when one title gets several, from merged import lists or from a series' volumes.</summary>
     public static int Rank(this DeckStatus status) => status switch
     {

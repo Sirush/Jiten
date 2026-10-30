@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  useHead({ title: 'Dictionaries - Settings - Jiten' });
+  useHead({ title: 'Dictionaries - Settings' });
 </script>
 
 <template>

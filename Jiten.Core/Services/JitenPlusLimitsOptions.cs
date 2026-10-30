@@ -48,5 +48,5 @@ public sealed class JitenPlusLimitsOptions
     public FullTierLimit CommunityLists { get; set; } = new() { Free = 10, Full = 100 };
 
     /// <summary>Titles in a single community list.</summary>
-    public FullTierLimit CommunityListItems { get; set; } = new() { Free = 100, Full = 1000 };
+    public FullTierLimit CommunityListItems { get; set; } = new() { Free = 200, Full = 2500 };
 }

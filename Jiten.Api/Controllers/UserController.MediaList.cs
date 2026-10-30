@@ -1,3 +1,4 @@
+using System.Globalization;
 using Hangfire;
 using System.Text;
 using System.Text.Json;
@@ -139,6 +140,7 @@ public partial class UserController
                                            },
                                      currentCompletions = CompletionDays(passesByDeck.GetValueOrDefault(kv.Key)),
                                      repeatCount = kv.Value.RepeatCount,
+                                     score = kv.Value.Score,
                                      progress = kv.Value.Progress,
                                      subdeckCount = units.TryGetValue(deck.DeckId, out var unitCount) ? unitCount.Total : (int?)null,
                                      completedUnits = unitCount.Completed,
@@ -226,6 +228,17 @@ public partial class UserController
 
             preference.IsFavourite = true;
             favourited++;
+        }
+
+        foreach (var entry in valid)
+        {
+            if (!outcome.Preferences.TryGetValue(entry.DeckId, out var preference))
+                continue;
+
+            if (entry.Score is >= UserDeckPreference.MinScore and <= UserDeckPreference.MaxScore && preference.Score == null)
+                preference.Score = entry.Score;
+            if (UserDeckPreference.NormaliseNote(entry.Note) is { } note && preference.Note == null)
+                preference.Note = note;
         }
 
         foreach (var (children, overwrite) in new[] { (subdecks.Keep, false), (subdecks.Overwrite, true) })
@@ -707,9 +720,10 @@ public partial class UserController
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
-        var operations = (request.Status.HasValue ? 1 : 0) + (request.IsFavourite.HasValue ? 1 : 0) + (request.Remove ? 1 : 0);
+        var operations = (request.Status.HasValue ? 1 : 0) + (request.IsFavourite.HasValue ? 1 : 0) + (request.IsPrivate.HasValue ? 1 : 0)
+                         + (request.Remove ? 1 : 0);
         if (operations != 1)
-            return Results.BadRequest(new { message = "Provide exactly one operation: status, isFavourite or remove." });
+            return Results.BadRequest(new { message = "Provide exactly one operation: status, isFavourite, isPrivate or remove." });
 
         var deckIds = request.DeckIds.Where(id => id > 0).Distinct().ToList();
         if (deckIds.Count == 0)
@@ -732,6 +746,10 @@ public partial class UserController
             affected = outcome.Added + outcome.Updated;
             skipped = outcome.Unchanged + outcome.SkippedIgnored + outcome.SkippedFull;
             totalsChanged = outcome.TotalsChanged;
+        }
+        else if (request.IsPrivate is { } isPrivate)
+        {
+            (affected, skipped) = await BulkSetPrivateAsync(userId, deckIds, isPrivate);
         }
         else
         {
@@ -809,6 +827,19 @@ public partial class UserController
         return Results.Ok(new { affected, skipped, listEntries });
     }
 
+    /// <summary>Privacy lives on the main entry, so volumes resolve to their parent; pins stay, and visitors' reads leave private titles out.</summary>
+    private async Task<(int Affected, int Skipped)> BulkSetPrivateAsync(string userId, List<int> deckIds, bool isPrivate)
+    {
+        var displayIds = (await ToDisplayDeckIdsAsync(deckIds)).Distinct().ToList();
+        var changed = (await LoadPreferencesForUpdateAsync(userId, displayIds, addMissing: isPrivate)).Values
+                                                                                                     .Where(p => p.IsPrivate != isPrivate)
+                                                                                                     .ToList();
+        foreach (var preference in changed)
+            preference.IsPrivate = isPrivate;
+
+        return (changed.Count, deckIds.Count - changed.Count);
+    }
+
     /// <summary>
     /// Returns the caller's tracked media list as title/cover/status rows only, for pickers that need
     /// to list the decks without the cost of full deck DTOs and coverage.
@@ -820,18 +851,28 @@ public partial class UserController
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
-        var entries = (await BuildMediaListAsync(userId))
-                      .OrderBy(e => e.Display.OriginalTitle)
-                      .Select(e => new
+        var preferences = await MediaListStatusHelper.LoadPreferenceRowsAsync(userContext, userId, withNotes: false);
+        var statuses = await MediaListStatusHelper.FoldDisplayStatusesAsync(jitenContext, preferences);
+        var privateIds = preferences.Where(p => p.IsPrivate).Select(p => p.DeckId).ToHashSet();
+        var displayIds = statuses.Keys.ToList();
+        var decks = await jitenContext.Decks
+                                      .AsNoTracking()
+                                      .Where(d => displayIds.Contains(d.DeckId))
+                                      .Select(d => new { d.DeckId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle, d.MediaType, d.CoverName })
+                                      .ToListAsync();
+        var entries = decks
+                      .OrderBy(d => d.OriginalTitle)
+                      .Select(d => new
                                    {
-                                       deckId = e.Display.DeckId,
-                                       originalTitle = e.Display.OriginalTitle,
-                                       romajiTitle = e.Display.RomajiTitle,
-                                       englishTitle = e.Display.EnglishTitle,
-                                       mediaType = e.Display.MediaType,
-                                       coverName = e.Display.CoverName,
-                                       status = e.Status,
-                                       isFavourite = e.IsFavourite,
+                                       deckId = d.DeckId,
+                                       originalTitle = d.OriginalTitle,
+                                       romajiTitle = d.RomajiTitle,
+                                       englishTitle = d.EnglishTitle,
+                                       mediaType = d.MediaType,
+                                       coverName = d.CoverName,
+                                       status = statuses[d.DeckId].Status,
+                                       isFavourite = statuses[d.DeckId].IsFavourite,
+                                       isPrivate = privateIds.Contains(d.DeckId),
                                    })
                       .ToList();
 
@@ -868,6 +909,12 @@ public partial class UserController
                                                 .AsNoTracking()
                                                 .Where(p => p.UserId == userId && childIds.Contains(p.DeckId) && p.Status != DeckStatus.None)
                                                 .ToDictionaryAsync(p => p.DeckId, p => p.Status);
+        var displayIds = list.Select(e => e.Display.DeckId).ToList();
+        var details = await userContext.UserDeckPreferences
+                                       .AsNoTracking()
+                                       .Where(p => p.UserId == userId && displayIds.Contains(p.DeckId))
+                                       .Select(p => new { p.DeckId, p.Score, p.Note, p.IsPrivate })
+                                       .ToDictionaryAsync(p => p.DeckId);
         var currentEntryIds = (await userContext.UserDeckPreferences
                                                .AsNoTracking()
                                                .Where(p => p.UserId == userId && exportedIds.Contains(p.DeckId) && p.CurrentEntryId != null)
@@ -900,6 +947,7 @@ public partial class UserController
                           var deckEntries = entriesByDeck.GetValueOrDefault(e.Display.DeckId) ?? [];
                           var listEntry = deckEntries.Count > 0 ? MediaListEntryHelper.Summarise(deckEntries, currentEntryIds) : null;
                           var seriesPositions = Positions(e.Display.DeckId);
+                          var detail = details.GetValueOrDefault(e.Display.DeckId);
                           return new
                                  {
                                      deckId = e.Display.DeckId,
@@ -910,6 +958,9 @@ public partial class UserController
                                      status = e.Status.ToString(),
                                      progress = completedUnits > 0 ? completedUnits : (int?)null,
                                      isFavourite = e.IsFavourite,
+                                     score = UserDeckPreference.ToDisplayScore(detail?.Score),
+                                     note = detail?.Note,
+                                     isPrivate = detail?.IsPrivate ?? false,
                                      jitenUrl = $"https://jiten.moe/decks/media/{e.Display.DeckId}",
                                      externalLinks = e.Display.Links.Select(l => l.Url).ToList(),
                                      startedOn = listEntry?.StartedOn,
@@ -937,7 +988,7 @@ public partial class UserController
 
         var sb = new StringBuilder();
         sb.AppendLine("DeckId,OriginalTitle,RomajiTitle,EnglishTitle,MediaType,Status,Progress,IsFavourite,JitenUrl,ExternalLinks," +
-                      "StartedOn,FinishedOn,TimesCompleted,CharactersRead");
+                      "StartedOn,FinishedOn,TimesCompleted,CharactersRead,Score,Note,IsPrivate");
         foreach (var e in entries)
         {
             sb.AppendLine(string.Join(',',
@@ -954,7 +1005,10 @@ public partial class UserController
                                       e.startedOn?.ToString("yyyy-MM-dd") ?? string.Empty,
                                       e.finishedOn?.ToString("yyyy-MM-dd") ?? string.Empty,
                                       e.timesCompleted.ToString(),
-                                      e.charactersRead?.ToString() ?? string.Empty));
+                                      e.charactersRead?.ToString() ?? string.Empty,
+                                      e.score?.ToString("0.0", CultureInfo.InvariantCulture) ?? string.Empty,
+                                      CsvField(e.note),
+                                      e.isPrivate.ToString()));
         }
 
         var bytes = Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();

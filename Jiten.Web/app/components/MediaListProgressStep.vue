@@ -10,7 +10,6 @@
     formatReadDate,
     isoToDate,
     isoToday,
-    mediaWords,
     progressFieldLabel,
     unitProgressLabel,
     unitWord,
@@ -46,7 +45,6 @@
   const maxDate = entryMaxDate();
 
   const entry = computed(() => props.deck.listEntry ?? null);
-  const words = computed(() => mediaWords(props.deck.mediaType));
   const tracksUnits = computed(() => canTrackUnits(props.deck) && !!entry.value?.unitCount);
   const unitCount = computed(() => entry.value?.unitCount ?? 0);
   const units = computed(() => unitWord(props.deck.mediaType).toLowerCase());
@@ -212,7 +210,7 @@
 
     <div class="flex items-center justify-between gap-3 pt-1 border-t border-gray-200 dark:border-gray-700">
       <button type="button" class="flex items-center gap-1.5 pt-2" :class="linkClass" @click="emit('openHistory')">
-        <i class="pi pi-history text-[10px]" aria-hidden="true" />{{ words.historyTitle }}
+        <i class="pi pi-book text-[10px]" aria-hidden="true" />Your log
       </button>
       <Button label="Done" size="small" class="mt-2" @click="emit('done')" />
     </div>

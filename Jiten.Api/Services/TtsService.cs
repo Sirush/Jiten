@@ -126,7 +126,8 @@ public class TtsService(
         var storageText = pitchPosition.HasValue ? $"{text}|p{pitchPosition.Value}" : text;
         if (fixInteriorHa) storageText += "|h"; // distinct cache key: audio differs though the text string does not
         var key = $"{voice}:w:{storageText}";
-        return await _inflight.GetOrAdd(key, _ => GenerateAsync(key, text, storageText, pitchPosition, TtsType.Word, voice, rateLimitKey, ct, bypassGenerationLimit, fixInteriorHa));
+        return await _inflight.GetOrAdd(key, _ => GenerateAsync(key, text, storageText, pitchPosition, TtsType.Word, voice, rateLimitKey, CancellationToken.None, bypassGenerationLimit, fixInteriorHa))
+                              .WaitAsync(ct);
     }
 
     public async Task<byte[]> GetSentenceAudioAsync(long sentenceId, string voice, string rateLimitKey, CancellationToken ct)
@@ -167,10 +168,11 @@ public class TtsService(
         return await SynthesizeSentenceText(text, voice, rateLimitKey, ct);
     }
 
+    /// <summary>The shared generation ignores the caller's token: an aborted listener would otherwise discard finished work and cancel every request joined to it.</summary>
     private Task<byte[]> SynthesizeSentenceText(string text, string voice, string rateLimitKey, CancellationToken ct)
     {
         var key = $"{voice}:s:{text}";
-        return _inflight.GetOrAdd(key, _ => GenerateSentenceAsync(key, text, voice, rateLimitKey, ct));
+        return _inflight.GetOrAdd(key, _ => GenerateSentenceAsync(key, text, voice, rateLimitKey, CancellationToken.None)).WaitAsync(ct);
     }
 
     private async Task<string> GetSentenceWithReadings(string text)
@@ -492,14 +494,14 @@ public class TtsService(
         queryDict["accent_phrases"] = await resp.Content.ReadFromJsonAsync<JsonElement>(ct);
     }
 
-    private static readonly Regex RubyPattern = new(@"[\u4E00-\u9FFF\uFF10-\uFF5A々]+\[([\u3040-\u309F\u30A0-\u30FF]+)\]", RegexOptions.Compiled);
+    private static readonly Regex RubyPattern = new(@"(?:[\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uFF10-\uFF5A々]|[\uD840-\uD8BF][\uDC00-\uDFFF])+\[([\u3040-\u309F\u30A0-\u30FF]+)\]", RegexOptions.Compiled);
 
     // Replaces each kanji block with its furigana reading, leaving the literal kana around it
     // (okurigana, particles) untouched. The reading is emitted as hiragana so OpenJTalk keeps its
     // correct long-vowel handling (どう→"dō"); katakana ドウ would be read "do-u" with the moras
     // split apart. The sole exception is a single-mora は/へ/を reading (e.g. 葉→は), which OpenJTalk
     // would otherwise voice as a topic/direction/object particle — that one is promoted to katakana.
-    private static string RubyToTtsKana(string rubyText) =>
+    internal static string RubyToTtsKana(string rubyText) =>
         RubyPattern.Replace(rubyText, m =>
         {
             var reading = m.Groups[1].Value;

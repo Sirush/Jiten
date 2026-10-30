@@ -2,15 +2,18 @@
   import type { StudyHeatmapResponse } from '~/types';
   import { MONTHS_SHORT, formatWeekdayDayMonth } from '~/utils/dateFormat';
 
-  const props = defineProps<{
-    username: string;
-  }>();
-
-  const emit = defineEmits<{
-    loaded: [data: StudyHeatmapResponse | null];
-  }>();
+  const props = withDefaults(
+    defineProps<{
+      /** The last twelve months up to today instead of a calendar year with year navigation. */
+      rolling?: boolean;
+      /** Already loaded with the page, so no request is made; null when the profile hides study data. */
+      data?: StudyHeatmapResponse | null;
+    }>(),
+    { rolling: false, data: undefined }
+  );
 
   const { $api } = useNuxtApp();
+  const { apiPath, viewAsQuery } = useProfileContext();
 
   const isLoading = ref(false);
   const error = ref<string | null>(null);
@@ -20,27 +23,59 @@
   const tooltip = ref({ visible: false, text: '', x: 0, y: 0 });
 
   const CELL_SIZE = 11;
+  /** Largest cell the rolling view grows to when filling a wide card, in px. */
+  const MAX_CELL_SIZE = 16;
   const CELL_GAP = 2;
-  const CELL_STEP = CELL_SIZE + CELL_GAP;
   const LABEL_WIDTH = 28;
+  const cellSize = ref(CELL_SIZE);
+  const cellStep = computed(() => cellSize.value + CELL_GAP);
+
+  const NOT_AVAILABLE = 'Study data not available';
 
   const fetchHeatmap = async () => {
     isLoading.value = true;
     error.value = null;
     try {
-      heatmapData.value = await $api<StudyHeatmapResponse>(`user/profile/${props.username}/study-heatmap`, { query: { year: selectedYear.value } });
+      heatmapData.value = await $api<StudyHeatmapResponse>(apiPath('study-heatmap'), {
+        query: { ...viewAsQuery.value, ...(props.rolling ? { rolling: true } : { year: selectedYear.value }) },
+      });
     } catch (err: unknown) {
       const fetchError = err as { response?: { status?: number } };
-      error.value = fetchError?.response?.status === 404 ? 'Study data not available' : 'Failed to load study heatmap';
+      error.value = fetchError?.response?.status === 404 ? NOT_AVAILABLE : 'Failed to load study heatmap';
       heatmapData.value = null;
     } finally {
       isLoading.value = false;
-      emit('loaded', heatmapData.value);
     }
   };
 
+  function showData(data: StudyHeatmapResponse | null) {
+    heatmapData.value = data;
+    error.value = data ? null : NOT_AVAILABLE;
+  }
+
   watch(selectedYear, () => fetchHeatmap());
-  onMounted(() => fetchHeatmap());
+  watch(
+    () => props.data,
+    (data) => {
+      if (data !== undefined) showData(data);
+    }
+  );
+
+  const gridScroller = ref<HTMLElement | null>(null);
+  let resizeObserver: ResizeObserver | undefined;
+  watch(gridScroller, (el) => {
+    resizeObserver?.disconnect();
+    if (!el || !props.rolling) return;
+    resizeObserver = new ResizeObserver(([entry]) => {
+      const fit = ((entry?.contentRect.width ?? 0) - LABEL_WIDTH - 1) / Math.max(1, weeks.value.length) - CELL_GAP;
+      cellSize.value = Math.min(MAX_CELL_SIZE, Math.max(CELL_SIZE, fit));
+      el.scrollLeft = el.scrollWidth;
+    });
+    resizeObserver.observe(el);
+  });
+  onBeforeUnmount(() => resizeObserver?.disconnect());
+  /** Applied on mount rather than during SSR: the grid is laid out from the browser's today and locale. */
+  onMounted(() => (props.data === undefined ? fetchHeatmap() : showData(props.data)));
 
   interface DayCell {
     date: Date;
@@ -58,37 +93,41 @@
     return map;
   });
 
-  const weeks = computed(() => {
-    const year = selectedYear.value;
-    const dec31 = new Date(year, 11, 31);
-
-    const jan1 = new Date(year, 0, 1);
-    const startDay = jan1.getDay();
-    const mondayOffset = startDay === 0 ? -6 : 1 - startDay;
-    const start = new Date(year, 0, 1 + mondayOffset);
+  function buildWeeks(start: Date, end: Date, inRange: (day: Date) => boolean): DayCell[][] {
+    const current = new Date(start);
+    const startDay = current.getDay();
+    current.setDate(current.getDate() + (startDay === 0 ? -6 : 1 - startDay));
 
     const result: DayCell[][] = [];
-    const current = new Date(start);
-
-    while (current <= dec31 || result.length === 0) {
+    while (current <= end) {
       const week: DayCell[] = [];
       for (let d = 0; d < 7; d++) {
         const dateStr = formatDate(current);
         const data = reviewMap.value.get(dateStr);
-        const isInYear = current.getFullYear() === year;
+        const shown = inRange(current);
         week.push({
           date: new Date(current),
           dateStr,
-          count: isInYear ? (data?.reviewCount ?? 0) : -1,
-          correct: isInYear ? (data?.correctCount ?? 0) : -1,
+          count: shown ? (data?.reviewCount ?? 0) : -1,
+          correct: shown ? (data?.correctCount ?? 0) : -1,
         });
         current.setDate(current.getDate() + 1);
       }
       result.push(week);
-      if (current.getFullYear() > year && current.getDay() === 1) break;
     }
-
     return result;
+  }
+
+  const weeks = computed(() => {
+    if (props.rolling) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const start = new Date(today);
+      start.setDate(start.getDate() - 364);
+      return buildWeeks(start, today, (day) => day <= today);
+    }
+    const year = selectedYear.value;
+    return buildWeeks(new Date(year, 0, 1), new Date(year, 11, 31), (day) => day.getFullYear() === year);
   });
 
   const monthLabels = computed(() => {
@@ -105,6 +144,7 @@
         break;
       }
     }
+    if (labels.length > 1 && labels[1]!.col - labels[0]!.col < 3) labels.shift();
     return labels;
   });
 
@@ -128,7 +168,7 @@
     return [quantile(0.25), quantile(0.5), quantile(0.75)];
   });
 
-  const gridWidth = computed(() => LABEL_WIDTH + weeks.value.length * CELL_STEP);
+  const gridWidth = computed(() => LABEL_WIDTH + weeks.value.length * cellStep.value);
 
   function getIntensityClass(count: number): string {
     if (count <= 0) return 'bg-gray-100 dark:bg-gray-800';
@@ -173,8 +213,9 @@
 
 <template>
   <div>
-    <div v-if="isLoading" class="flex justify-center py-8">
-      <ProgressSpinner style="width: 2rem; height: 2rem" />
+    <div v-if="!heatmapData && !error" aria-busy="true">
+      <Skeleton width="70%" height="1.75rem" class="mb-5" />
+      <Skeleton :height="rolling ? '8.5rem' : '7.5rem'" />
     </div>
 
     <div v-else-if="error" class="text-center py-4">
@@ -192,7 +233,7 @@
       </NuxtLink>
     </div>
 
-    <div v-else-if="heatmapData">
+    <div v-else-if="heatmapData" class="transition-opacity duration-200" :class="isLoading && 'opacity-60 delay-200'">
       <!-- Streak and summary stats -->
       <div class="flex flex-wrap items-center gap-x-6 gap-y-2 mb-5">
         <div class="flex items-center gap-2">
@@ -208,16 +249,16 @@
         </div>
         <div>
           <span class="text-sm text-gray-500 dark:text-gray-400">Days studied:</span>
-          <span class="font-semibold tabular-nums ml-1">{{ heatmapData.totalReviewDays }}</span>
+          <span class="font-semibold tabular-nums ml-1">{{ heatmapData.totalReviewDays.toLocaleString() }}</span>
         </div>
         <div>
-          <span class="text-sm text-gray-500 dark:text-gray-400">Reviews this year:</span>
+          <span class="text-sm text-gray-500 dark:text-gray-400">{{ rolling ? 'Reviews in the last 12 months:' : 'Reviews this year:' }}</span>
           <span class="font-semibold tabular-nums ml-1">{{ heatmapData.totalReviews.toLocaleString() }}</span>
         </div>
       </div>
 
       <!-- Year selector -->
-      <div class="flex items-center gap-2 mb-3">
+      <div v-if="!rolling" class="flex items-center gap-2 mb-3">
         <button class="p-1 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors" @click="selectedYear--">
           <Icon name="material-symbols:chevron-left" size="1.25rem" />
         </button>
@@ -232,7 +273,7 @@
       </div>
 
       <!-- Heatmap grid -->
-      <div class="overflow-x-auto">
+      <div ref="gridScroller" class="scrollbar-styled overflow-x-auto pb-1">
         <div class="relative" :style="{ width: `${gridWidth}px` }">
           <!-- Month labels row -->
           <div class="h-4 relative" :style="{ marginLeft: `${LABEL_WIDTH}px` }">
@@ -240,7 +281,7 @@
               v-for="label in monthLabels"
               :key="label.text + label.col"
               class="absolute text-[10px] text-gray-400 leading-none"
-              :style="{ left: `${label.col * CELL_STEP}px` }"
+              :style="{ left: `${label.col * cellStep}px` }"
             >
               {{ label.text }}
             </span>
@@ -255,7 +296,7 @@
               <template v-for="(week, wi) in weeks" :key="wi">
                 <div
                   class="rounded-sm cursor-default"
-                  :style="{ width: `${CELL_SIZE}px`, height: `${CELL_SIZE}px` }"
+                  :style="{ width: `${cellSize}px`, height: `${cellSize}px` }"
                   :class="week[dayIndex - 1].count === -1 ? 'bg-transparent' : getIntensityClass(week[dayIndex - 1].count)"
                   @mouseenter="showTooltip($event, week[dayIndex - 1])"
                   @mouseleave="hideTooltip"
