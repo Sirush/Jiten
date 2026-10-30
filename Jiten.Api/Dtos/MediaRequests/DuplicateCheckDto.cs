@@ -27,6 +27,7 @@ public class DuplicateCheckRequestDto
     public required string Title { get; set; }
     public MediaType MediaType { get; set; }
     public MediaRequestStatus Status { get; set; }
+    /// <summary>Upvotes plus weighted boosts, the score the request list shows.</summary>
     public int UpvoteCount { get; set; }
     public bool IsExactMatch { get; set; }
 }
