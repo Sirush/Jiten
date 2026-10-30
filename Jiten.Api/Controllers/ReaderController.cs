@@ -50,7 +50,7 @@ public class ReaderController(
     /// <returns>List of parsed and unparsed segments preserving original order.</returns>
     [HttpPost("parse")]
     [SwaggerOperation(Summary = "Parse text into words",
-                      Description = "Parses the provided text and returns parsed words and any gaps as separate items, preserving order.")]
+                      Description = "Parses the provided text and returns parsed words and any gaps as separate items, preserving order. A vocabulary entry carries isLeech: true when the user's card for it is an active leech under their leech threshold; the field is omitted otherwise.")]
     // [ProducesResponseType(typeof(List<DeckWordDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status429TooManyRequests)]
@@ -81,6 +81,7 @@ public class ReaderController(
 
         var distinctKeys = parsedParagraphs.SelectMany(p => p.Select(dw => (dw.WordId, dw.ReadingIndex))).Distinct().ToList();
         var knownStates = await currentUserService.GetKnownWordsState(distinctKeys);
+        var leechKeys = await currentUserService.GetLeechKeys(distinctKeys);
         var deckMembershipMap = await deckMembership.GetDeckMembership(distinctKeys);
 
         for (var i = 0; i < parsedParagraphs.Count; i++)
@@ -121,6 +122,7 @@ public class ReaderController(
                                          FrequencyRankSource = rdrFormFreq.Source,
                                          IsFrequencyFallback = rdrFormFreq.IsFallback ? true : null,
                                          KnownState = knownState ?? [KnownState.New],
+                                         IsLeech = leechKeys.Contains((word.WordId, word.ReadingIndex)) ? true : null,
                                          PitchAccents = jmdictWord.PitchAccents ?? new(),
                                          StudyDeckIds = studyDeckIds ?? new(),
                                      };
@@ -138,11 +140,12 @@ public class ReaderController(
 
     [HttpPost("lookup-vocabulary")]
     [SwaggerOperation(Summary = "Lookup vocabulary known states",
-                      Description = "Returns the known state for each word/reading combination for the authenticated user.")]
+                      Description = "Returns the known state for each word/reading combination for the authenticated user. result, decks and leeches are in request order; leeches[i] is true when the user's card for that word is an active leech under their leech threshold.")]
     public async Task<IResult> LookupVocabulary(LookupVocabularyRequest request)
     {
         var keys = request.Words.Select(w => (w[0], (byte)w[1])).ToList();
         var knownStates = await currentUserService.GetKnownWordsState(keys);
+        var leechKeys = await currentUserService.GetLeechKeys(keys);
         var deckMembershipMap = await deckMembership.GetDeckMembership(keys);
 
         var result = request.Words.Select(w =>
@@ -157,6 +160,8 @@ public class ReaderController(
                                                  : new List<int>()
                                         ).ToList();
 
-        return Results.Ok(new { result = result, decks = decks });
+        var leeches = keys.Select(leechKeys.Contains).ToList();
+
+        return Results.Ok(new { result = result, decks = decks, leeches = leeches });
     }
 }

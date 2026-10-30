@@ -397,6 +397,56 @@ public class CurrentUserService(
         return result.TryGetValue(key, out var states) ? states : [KnownState.New];
     }
 
+    public async Task<HashSet<(int WordId, byte ReadingIndex)>> GetLeechKeys(IEnumerable<(int WordId, byte ReadingIndex)> keys)
+    {
+        if (!IsAuthenticated)
+            return [];
+
+        var keysSet = keys.ToHashSet();
+        if (keysSet.Count == 0)
+            return [];
+
+        var settings = await FsrsSettingsHelper.LoadAsync(userContext, UserId!);
+        var threshold = FsrsSettingsHelper.GetStudySettings(settings).LeechThreshold;
+        if (threshold <= 0)
+            return [];
+
+        var wordIds = keysSet.Select(k => k.WordId).Distinct().ToList();
+        var candidates = await userContext.FsrsCards
+                                          .AsNoTracking()
+                                          .Where(c => c.UserId == UserId && wordIds.Contains(c.WordId) && c.Lapses >= threshold
+                                                      && c.State != FsrsState.Mastered && c.State != FsrsState.Blacklisted)
+                                          .Select(c => new
+                                                       {
+                                                           c.WordId, c.ReadingIndex, c.State, c.Stability, c.Difficulty, c.StabilityFast,
+                                                           c.LastReview, c.Due, c.Lapses
+                                                       })
+                                          .ToListAsync();
+
+        var leeches = new HashSet<(int WordId, byte ReadingIndex)>();
+        if (candidates.Count == 0)
+            return leeches;
+
+        var scheduler = FsrsSettingsHelper.CreateScheduler(settings, enableFuzzing: false);
+        foreach (var c in candidates)
+        {
+            var key = (c.WordId, c.ReadingIndex);
+            if (!keysSet.Contains(key))
+                continue;
+
+            var memory = new FsrsCard
+                         {
+                             State = c.State, Stability = c.Stability, Difficulty = c.Difficulty, StabilityFast = c.StabilityFast,
+                             LastReview = c.LastReview, Due = c.Due
+                         };
+            double? stabilityDays = c.Stability != null ? scheduler.GetStabilityDays(memory) : null;
+            if (LeechHelper.IsLeech(c.Lapses, stabilityDays, threshold))
+                leeches.Add(key);
+        }
+
+        return leeches;
+    }
+
     public Task<VocabularyUpsertResult> AddKnownWords(IEnumerable<DeckWord> deckWords, bool overwriteExisting = true,
                                                       bool countAsNewlyLearned = false) =>
         UpsertCardsWithState(deckWords, FsrsState.Mastered, overwriteExisting, countAsNewlyLearned);

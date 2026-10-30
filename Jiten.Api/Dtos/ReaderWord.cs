@@ -24,4 +24,8 @@ public class ReaderWord
     /// <summary>Set only when a media-type default had no rank for the form and the global one stood in.</summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public bool? IsFrequencyFallback { get; set; }
+
+    /// <summary>Set only when the word's own card is an active leech under the user's leech threshold.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public bool? IsLeech { get; set; }
 }

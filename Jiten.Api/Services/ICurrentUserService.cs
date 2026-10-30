@@ -13,6 +13,8 @@ public interface ICurrentUserService
     ClaimsPrincipal? Principal { get; }
     Task<Dictionary<(int WordId, byte ReadingIndex), List<KnownState>>> GetKnownWordsState(IEnumerable<(int WordId, byte ReadingIndex)> keys);
     Task<List<KnownState>> GetKnownWordState(int wordId, byte readingIndex);
+    /// <summary>Keys whose own card is an active leech under the user's threshold; Mastered and Blacklisted cards never count.</summary>
+    Task<HashSet<(int WordId, byte ReadingIndex)>> GetLeechKeys(IEnumerable<(int WordId, byte ReadingIndex)> keys);
     /// <summary>Card-less, set-less forms the given cards and set states make redundant, with the tiers GetKnownWordsState implies.</summary>
     Task<RedundantTiers> ResolveRedundantTiers(
         IReadOnlyDictionary<(int WordId, byte ReadingIndex), KnownCardSnapshot> cardsByKey,
