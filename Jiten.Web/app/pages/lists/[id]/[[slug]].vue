@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { debounce } from 'perfect-debounce';
   import { useConfirm } from 'primevue/useconfirm';
   import { useToast } from 'primevue/usetoast';
   import { CommunityListStatus, DeckStatus } from '~/types';
@@ -40,12 +41,14 @@
 
   const listId = Number(route.params.id);
   const itemSort = ref<CommunityListItemSort>(route.query.sort === 'coverage' ? 'coverage' : 'curator');
+  const searchQuery = ref(typeof route.query.q === 'string' ? route.query.q : '');
+  const appliedSearch = ref(searchQuery.value.trim());
   const {
     data: list,
     error,
     ready,
   } = useApiFetch<CommunityListDetail>(`lists/${listId}`, {
-    query: { sort: itemSort.value === 'coverage' ? 'coverage' : undefined },
+    query: { sort: itemSort.value === 'coverage' ? 'coverage' : undefined, q: appliedSearch.value || undefined },
   });
   await ready;
 
@@ -67,19 +70,34 @@
   const showViewerData = computed(() => authStore.isAuthenticated && !!list.value?.coverage);
   const isPublic = computed(() => list.value?.status == null || list.value.status === CommunityListStatus.Public);
 
+  let latestLoad = 0;
   async function loadPage(newOffset: number) {
+    const load = ++latestLoad;
     itemsLoading.value = true;
     try {
-      const page = await lists.items(listId, newOffset, itemSort.value);
+      const page = await lists.items(listId, newOffset, itemSort.value, appliedSearch.value);
+      if (load !== latestLoad) return;
       items.value = page.data;
       totalItems.value = page.totalItems;
       offset.value = newOffset;
     } catch (e) {
+      if (load !== latestLoad) return;
       toast.add({ severity: 'error', summary: apiErrorMessage(e, 'Could not load these titles'), life: 5000 });
     } finally {
-      itemsLoading.value = false;
+      if (load === latestLoad) itemsLoading.value = false;
     }
   }
+
+  watch(
+    searchQuery,
+    debounce((value: string) => {
+      const search = value.trim();
+      if (search === appliedSearch.value) return;
+      appliedSearch.value = search;
+      router.replace({ query: { ...route.query, q: search || undefined, page: undefined } });
+      loadPage(0);
+    }, 300)
+  );
 
   const SORT_OPTIONS: { value: CommunityListItemSort; label: string; shortLabel: string }[] = [
     { value: 'curator', label: 'List order', shortLabel: 'List order' },
@@ -108,7 +126,7 @@
     });
     return `linear-gradient(to right, ${stops.join(', ')})`;
   });
-  const canSortByCoverage = computed(() => showViewerData.value && hasCoverage.value && totalItems.value > 1);
+  const canSortByCoverage = computed(() => showViewerData.value && hasCoverage.value && (list.value?.itemCount ?? 0) > 1);
 
   const currentPage = computed(() => Math.floor(offset.value / COMMUNITY_LIST_ITEM_PAGE_SIZE) + 1);
   const totalPages = computed(() => Math.max(1, Math.ceil(totalItems.value / COMMUNITY_LIST_ITEM_PAGE_SIZE)));
@@ -213,18 +231,25 @@
   function anchoredPosition(hash: string) {
     const match = /^#item-(\d+)$/.exec(hash);
     const position = match ? Number(match[1]) : NaN;
-    return position >= 1 && position <= totalItems.value ? position : null;
+    return position >= 1 && position <= (list.value?.itemCount ?? 0) ? position : null;
   }
 
-  /** Item anchors use curator ranks, so a linked item off the loaded page brings up its page in curator order. */
+  /** Item anchors use curator ranks, so a linked item off the loaded page brings up its unfiltered page in curator order. */
   async function revealAnchoredItem(hash: string) {
     const position = anchoredPosition(hash);
     if (position == null) return;
     if (!items.value.some((i) => i.position === position)) {
       const pageOffset = Math.floor((position - 1) / COMMUNITY_LIST_ITEM_PAGE_SIZE) * COMMUNITY_LIST_ITEM_PAGE_SIZE;
       itemSort.value = 'curator';
+      searchQuery.value = '';
+      appliedSearch.value = '';
       router.replace({
-        query: { ...route.query, sort: undefined, page: pageOffset > 0 ? String(pageOffset / COMMUNITY_LIST_ITEM_PAGE_SIZE + 1) : undefined },
+        query: {
+          ...route.query,
+          sort: undefined,
+          q: undefined,
+          page: pageOffset > 0 ? String(pageOffset / COMMUNITY_LIST_ITEM_PAGE_SIZE + 1) : undefined,
+        },
         hash,
       });
       await loadPage(pageOffset);
@@ -485,11 +510,23 @@
     </section>
 
     <div class="flex flex-wrap items-center gap-x-3 gap-y-2 px-1 text-sm text-muted-color">
+      <SearchInput
+        v-if="list.itemCount > 1"
+        v-model="searchQuery"
+        placeholder="Search titles..."
+        aria-label="Search titles in this list"
+        search-icon-class="pi pi-search"
+        clear-icon-class="pi pi-times"
+        size="small"
+        class="w-full sm:w-64"
+      />
       <span v-if="totalItems > 0">
         {{
           totalItems > COMMUNITY_LIST_ITEM_PAGE_SIZE
             ? `Showing ${offset + 1} to ${Math.min(offset + COMMUNITY_LIST_ITEM_PAGE_SIZE, totalItems)} of ${totalItems}`
-            : `${totalItems} ${totalItems === 1 ? 'title' : 'titles'}`
+            : appliedSearch
+              ? `${totalItems} of ${list.itemCount} titles`
+              : `${totalItems} ${totalItems === 1 ? 'title' : 'titles'}`
         }}
       </span>
       <div class="ml-auto flex shrink-0 items-center gap-2">
@@ -520,8 +557,14 @@
     </div>
 
     <div v-if="totalItems === 0" class="rounded-lg border border-dashed border-surface-300 px-4 py-10 text-center text-muted-color dark:border-surface-600">
-      <p class="m-0">This list has no titles yet.</p>
-      <Button v-if="list.canEdit" label="Add titles" icon="pi pi-plus" text class="mt-2" @click="navigateTo(`/lists/${list.listId}/edit`)" />
+      <template v-if="list.itemCount === 0">
+        <p class="m-0">This list has no titles yet.</p>
+        <Button v-if="list.canEdit" label="Add titles" icon="pi pi-plus" text class="mt-2" @click="navigateTo(`/lists/${list.listId}/edit`)" />
+      </template>
+      <template v-else>
+        <p class="m-0">No title in this list matches "{{ appliedSearch }}".</p>
+        <Button label="Clear search" text class="mt-2" @click="searchQuery = ''" />
+      </template>
     </div>
 
     <ol

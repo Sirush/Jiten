@@ -594,6 +594,37 @@ public class CommunityListTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task ItemSearch_MatchesAnyTitleIgnoringSpacesAndKeepsCuratorRanks()
+    {
+        var decks = await SeedDecks(4);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            var seeded = await db.Decks.Where(d => decks.Contains(d.DeckId)).ToDictionaryAsync(d => d.DeckId);
+            seeded[decks[1]].RomajiTitle = "Kimi no Na wa";
+            seeded[decks[2]].EnglishTitle = "Your Name Again";
+            db.DeckTitles.Add(new DeckTitle { DeckId = decks[3], Title = "Kiminonawa Alias", TitleType = DeckTitleType.Alias });
+            await db.SaveChangesAsync();
+        }
+
+        var listId = await CreatePublicList(TestUsers.UserA, "Searchable", decks);
+
+        var page = await (await Send(HttpMethod.Get, $"/api/lists/{listId}/items?q=KIMINO%20NAWA")).Content.ReadFromJsonAsync<JsonElement>();
+        page.GetProperty("totalItems").GetInt32().Should().Be(2);
+        var items = page.GetProperty("data").EnumerateArray().ToList();
+        items.Select(i => i.GetProperty("deck").GetProperty("deckId").GetInt32()).Should().Equal(decks[1], decks[3]);
+        items.Select(i => i.GetProperty("position").GetInt32()).Should().Equal(2, 4);
+
+        var detail = await (await Send(HttpMethod.Get, $"/api/lists/{listId}?q=your%20name")).Content.ReadFromJsonAsync<JsonElement>();
+        detail.GetProperty("itemCount").GetInt32().Should().Be(4);
+        detail.GetProperty("items").GetProperty("data").EnumerateArray().Select(i => i.GetProperty("deck").GetProperty("deckId").GetInt32())
+              .Should().Equal(decks[2]);
+
+        var none = await (await Send(HttpMethod.Get, $"/api/lists/{listId}/items?q=nothing")).Content.ReadFromJsonAsync<JsonElement>();
+        none.GetProperty("totalItems").GetInt32().Should().Be(0);
+    }
+
+    [Fact]
     public async Task Detail_CarriesViewerStatusesOnlyWhenLoggedIn()
     {
         var decks = await SeedDecks(4);

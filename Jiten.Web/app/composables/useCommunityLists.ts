@@ -81,8 +81,10 @@ export function useCommunityLists() {
 
   return {
     facets: (query: CommunityListFilterQuery) => $api<CommunityListFacets>('lists/facets', { query: filterQuery(query) }),
-    items: (listId: number, offset: number, sort?: CommunityListItemSort, limit = COMMUNITY_LIST_ITEM_PAGE_SIZE) =>
-      $api<PaginatedResponse<CommunityListItem[]>>(`lists/${listId}/items`, { query: { offset, limit, sort: sort === 'coverage' ? sort : undefined } }),
+    items: (listId: number, offset: number, sort?: CommunityListItemSort, q?: string, limit = COMMUNITY_LIST_ITEM_PAGE_SIZE) =>
+      $api<PaginatedResponse<CommunityListItem[]>>(`lists/${listId}/items`, {
+        query: { offset, limit, sort: sort === 'coverage' ? sort : undefined, q: q?.trim() || undefined },
+      }),
     mine: () => $api<{ lists: CommunityListSummary[]; quota: CommunityListQuota }>('lists/mine'),
     quota: () => $api<CommunityListQuota>('lists/quota'),
     favourited: (offset: number) => $api<PaginatedResponse<CommunityListSummary[]>>('lists/favourited', { query: { offset } }),

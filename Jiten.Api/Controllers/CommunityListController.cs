@@ -39,6 +39,7 @@ public class CommunityListController(
     private const int DefaultFavouritedPageSize = 48;
     private const int MaxProfileLists = 48;
     private const int MaxFilterIds = 50;
+    private const int MaxItemSearchLength = 200;
 
     /// <summary>Above the Full item cap so a whole selected library tab fits in one check.</summary>
     private const int MaxMembershipDecks = 5000;
@@ -139,7 +140,7 @@ public class CommunityListController(
     [HttpGet("{id:int}")]
     [AllowAnonymous]
     [SwaggerOperation(Summary = "Get a community list with its first page of items")]
-    public async Task<IResult> Get(int id, [FromQuery] int limit = DefaultItemPageSize, [FromQuery] string? sort = null)
+    public async Task<IResult> Get(int id, [FromQuery] int limit = DefaultItemPageSize, [FromQuery] string? sort = null, [FromQuery] string? q = null)
     {
         var list = await LoadVisibleAsync(id);
         if (list == null)
@@ -167,16 +168,18 @@ public class CommunityListController(
         }
 
         dto.ItemCount = items.Count;
-        dto.Items = await BuildItemPageAsync(Arrange(items, sort, coverage?.MatureCoverage), 0, Math.Clamp(limit, 1, MaxItemPageSize), viewerId,
-                                             statuses, coverage);
+        dto.Items = await BuildItemPageAsync(await ArrangeMatchingAsync(id, items, sort, q, coverage?.MatureCoverage), 0, Math.Clamp(limit, 1, MaxItemPageSize),
+                                             viewerId, statuses, coverage);
 
         return Results.Ok(dto);
     }
 
     [HttpGet("{id:int}/items")]
     [AllowAnonymous]
-    [SwaggerOperation(Summary = "Get a page of a community list's items", Description = "Curator order by default; sort=coverage puts the viewer's best-covered titles first.")]
-    public async Task<IResult> GetItems(int id, [FromQuery] int offset = 0, [FromQuery] int limit = DefaultItemPageSize, [FromQuery] string? sort = null)
+    [SwaggerOperation(Summary = "Get a page of a community list's items",
+                      Description = "Curator order by default; sort=coverage puts the viewer's best-covered titles first. q keeps only titles whose name or alias contains it; positions stay the curator's.")]
+    public async Task<IResult> GetItems(int id, [FromQuery] int offset = 0, [FromQuery] int limit = DefaultItemPageSize, [FromQuery] string? sort = null,
+                                        [FromQuery] string? q = null)
     {
         var list = await LoadVisibleAsync(id);
         if (list == null)
@@ -189,8 +192,8 @@ public class CommunityListController(
             ? await GetViewerCoverageAsync(viewerId, items.Select(i => i.DeckId).ToList())
             : null;
 
-        return Results.Ok(await BuildItemPageAsync(Arrange(items, sort, coverage?.MatureCoverage), Math.Max(0, offset), Math.Clamp(limit, 1, MaxItemPageSize),
-                                                   viewerId, statuses, coverage));
+        return Results.Ok(await BuildItemPageAsync(await ArrangeMatchingAsync(id, items, sort, q, coverage?.MatureCoverage), Math.Max(0, offset),
+                                                   Math.Clamp(limit, 1, MaxItemPageSize), viewerId, statuses, coverage));
     }
 
     [HttpGet("{id:int}/edit")]
@@ -903,6 +906,37 @@ public class CommunityListController(
                .ThenBy(i => i.DeckId)
                .Select(i => new ListItemRow(i.DeckId, i.Note))
                .ToListAsync();
+
+    /// <summary>Filters after ranking so a match keeps its curator position.</summary>
+    private async Task<List<RankedItem>> ArrangeMatchingAsync(int listId, List<ListItemRow> curatorOrder, string? sort, string? q,
+                                                              Dictionary<int, float>? coverage)
+    {
+        var arranged = Arrange(curatorOrder, sort, coverage);
+        if (string.IsNullOrWhiteSpace(q))
+            return arranged;
+
+        var matching = await MatchingItemDeckIdsAsync(listId, q);
+        return arranged.Where(r => matching.Contains(r.DeckId)).ToList();
+    }
+
+    /// <summary>Case-insensitive substring match with spaces ignored on both sides, so "kimi no na wa" and "kiminonawa" find the same titles.</summary>
+    private async Task<HashSet<int>> MatchingItemDeckIdsAsync(int listId, string q)
+    {
+        var needle = q.Replace(" ", "").ToLower();
+        if (needle.Length == 0 || needle.Length > MaxItemSearchLength)
+            return [];
+
+        var listDeckIds = context.CommunityListItems.Where(i => i.ListId == listId).Select(i => i.DeckId);
+        var matches = await context.Decks.AsNoTracking()
+                                   .Where(d => listDeckIds.Contains(d.DeckId))
+                                   .Where(d => d.OriginalTitle.Replace(" ", "").ToLower().Contains(needle)
+                                               || (d.RomajiTitle != null && d.RomajiTitle.Replace(" ", "").ToLower().Contains(needle))
+                                               || (d.EnglishTitle != null && d.EnglishTitle.Replace(" ", "").ToLower().Contains(needle))
+                                               || d.Titles.Any(t => t.Title.Replace(" ", "").ToLower().Contains(needle)))
+                                   .Select(d => d.DeckId)
+                                   .ToListAsync();
+        return matches.ToHashSet();
+    }
 
     /// <summary>Ties in coverage keep curator order.</summary>
     private static List<RankedItem> Arrange(List<ListItemRow> curatorOrder, string? sort, Dictionary<int, float>? coverage)
