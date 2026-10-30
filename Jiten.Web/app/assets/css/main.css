@@ -139,7 +139,8 @@
 :root.reduce-motion *::after {
   animation-duration: 0.01ms !important;
   animation-iteration-count: 1 !important;
-  transition-duration: 0.01ms !important;
+  /* Exactly 0s: any non-zero duration turns every style change into a transition, so overlays measure stale widths. */
+  transition-duration: 0s !important;
   scroll-behavior: auto !important;
 }
 
