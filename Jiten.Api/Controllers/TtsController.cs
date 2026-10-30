@@ -35,6 +35,10 @@ public class TtsController(ITtsService ttsService, IConfiguration configuration)
         {
             return Results.StatusCode(503);
         }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return Results.StatusCode(StatusCodes.Status499ClientClosedRequest);
+        }
         catch (TaskCanceledException)
         {
             return Results.StatusCode(504);
@@ -61,6 +65,10 @@ public class TtsController(ITtsService ttsService, IConfiguration configuration)
         catch (HttpRequestException)
         {
             return Results.StatusCode(503);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return Results.StatusCode(StatusCodes.Status499ClientClosedRequest);
         }
         catch (TaskCanceledException)
         {
@@ -91,6 +99,10 @@ public class TtsController(ITtsService ttsService, IConfiguration configuration)
         catch (HttpRequestException)
         {
             return Results.StatusCode(503);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            return Results.StatusCode(StatusCodes.Status499ClientClosedRequest);
         }
         catch (TaskCanceledException)
         {

@@ -126,7 +126,8 @@ public class TtsService(
         var storageText = pitchPosition.HasValue ? $"{text}|p{pitchPosition.Value}" : text;
         if (fixInteriorHa) storageText += "|h"; // distinct cache key: audio differs though the text string does not
         var key = $"{voice}:w:{storageText}";
-        return await _inflight.GetOrAdd(key, _ => GenerateAsync(key, text, storageText, pitchPosition, TtsType.Word, voice, rateLimitKey, ct, bypassGenerationLimit, fixInteriorHa));
+        return await _inflight.GetOrAdd(key, _ => GenerateAsync(key, text, storageText, pitchPosition, TtsType.Word, voice, rateLimitKey, CancellationToken.None, bypassGenerationLimit, fixInteriorHa))
+                              .WaitAsync(ct);
     }
 
     public async Task<byte[]> GetSentenceAudioAsync(long sentenceId, string voice, string rateLimitKey, CancellationToken ct)
@@ -167,10 +168,11 @@ public class TtsService(
         return await SynthesizeSentenceText(text, voice, rateLimitKey, ct);
     }
 
+    /// <summary>The shared generation ignores the caller's token: an aborted listener would otherwise discard finished work and cancel every request joined to it.</summary>
     private Task<byte[]> SynthesizeSentenceText(string text, string voice, string rateLimitKey, CancellationToken ct)
     {
         var key = $"{voice}:s:{text}";
-        return _inflight.GetOrAdd(key, _ => GenerateSentenceAsync(key, text, voice, rateLimitKey, ct));
+        return _inflight.GetOrAdd(key, _ => GenerateSentenceAsync(key, text, voice, rateLimitKey, CancellationToken.None)).WaitAsync(ct);
     }
 
     private async Task<string> GetSentenceWithReadings(string text)
