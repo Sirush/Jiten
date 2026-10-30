@@ -45,6 +45,7 @@ public class SentenceTokenService(JitenDbContext context, ICurrentUserService cu
         IEnumerable<(long SentenceId, string Text, byte[]? Tokens)> sentences)
     {
         var decoded = sentences.Where(s => s.Tokens != null)
+                               .DistinctBy(s => s.SentenceId)
                                .Select(s => (s.SentenceId, s.Text, Tokens: ExampleSentenceTokens.Decode(s.Tokens!)))
                                .ToList();
         if (decoded.Count == 0) return [];
@@ -58,7 +59,7 @@ public class SentenceTokenService(JitenDbContext context, ICurrentUserService cu
     public async Task<Dictionary<long, SentenceAnnotations>> BuildFuriganaDtosAsync(
         IEnumerable<(long SentenceId, string Text, byte[]? Tokens)> sentences)
     {
-        var list = sentences.ToList();
+        var list = sentences.DistinctBy(s => s.SentenceId).ToList();
         var groups = await BuildFuriganaAsync(list);
         if (groups.Count == 0) return [];
 

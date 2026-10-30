@@ -342,6 +342,26 @@ public class IPlusOneCardExampleTests(JitenWebApplicationFactory factory)
         page.SearchedBandMax.Should().Be(0, "a page filled by the readable pick leaves the band walk at its start");
     }
 
+    [Fact]
+    public async Task TwoFormsSharingTheirOnlySentence_BothGetIt()
+    {
+        using (var scope = factory.Services.CreateScope())
+        {
+            var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            await jitenDb.ExampleSentences.Where(s => s.SentenceId != _unknownId).ExecuteDeleteAsync();
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Post, "/api/srs/card-examples")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new { pairs = new[] { new { wordId = Target, readingIndex = 0 }, new { wordId = UnknownWord, readingIndex = 0 } } });
+        var response = await _client.SendAsync(request);
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var payload = await response.Content.ReadFromJsonAsync<CardExamplesPayload>();
+        payload!.Examples[$"{Target}-0"].SentenceId.Should().Be(_unknownId);
+        payload.Examples[$"{UnknownWord}-0"].SentenceId.Should().Be(_unknownId);
+    }
+
     private class ExtraPayload
     {
         public float SearchedBandMax { get; set; }
