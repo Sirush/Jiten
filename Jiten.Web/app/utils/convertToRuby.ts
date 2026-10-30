@@ -2,7 +2,7 @@ import type { KnownState } from '~/types';
 import type { HeadwordFuriganaMode } from '~/utils/displayProfile';
 import { isKnownForFurigana } from '~/utils/wordState';
 
-const RUBY_MARKUP = /([一-鿿０-ｚ々ヵヶ]+)\[([぀-ゟ゠-ヿ]+)]/g;
+const RUBY_MARKUP = /([㐀-䶿一-鿿豈-﫿\u{20000}-\u{3FFFF}０-ｚ々ヵヶ]+)\[([぀-ゟ゠-ヿ]+)\]/gu;
 
 /** With `revealOnHover`, a hidden reading is still rendered but stays invisible until its word is hovered. */
 export function convertToRubyWithFurigana(text: string, displayFurigana: boolean, revealOnHover = false): string {

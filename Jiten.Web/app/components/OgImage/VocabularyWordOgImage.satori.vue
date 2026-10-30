@@ -10,7 +10,7 @@
   }>();
 
   function extractReading(text: string): string {
-    return text.replace(/([\u4E00-\u9FFF\uFF10-\uFF5A々]+)\[([\u3040-\u309F\u30A0-\u30FF]+)]/g, (_m, _k, f) => f);
+    return text.replace(/([\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\u{20000}-\u{3FFFF}\uFF10-\uFF5A々]+)\[([\u3040-\u309F\u30A0-\u30FF]+)\]/gu, (_m, _k, f) => f);
   }
 
   const wordText = computed(() => (props.text ? stripRuby(props.text) : ''));

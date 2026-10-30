@@ -14,6 +14,15 @@ namespace Jiten.Api.Services;
 
 public class DeckDownloadService(JitenDbContext context) : IDeckDownloadService
 {
+    private const string AnkiKanji = @"(?:[㐀-䶿一-鿿豈-﫿]|[\uD840-\uD8BF][\uDC00-\uDFFF])";
+    private const string AnkiRubyLookahead = $@"(?=(?:{AnkiKanji})*\[.*?\])";
+
+    /// <summary>Anki binds a reading to the text after the last space, so each ruby kanji run needs a leading space.</summary>
+    private static readonly Regex AnkiRubyRunStart =
+        new($@"(?<!\])(?<!{AnkiKanji}{AnkiRubyLookahead})({AnkiKanji}){AnkiRubyLookahead}", RegexOptions.Compiled);
+
+    internal static string ToAnkiFurigana(string rubyText) => AnkiRubyRunStart.Replace(rubyText, " $1");
+
     public async Task<byte[]?> GenerateDownload(DeckDownloadRequest request, List<long> wordIds,
         string deckTitle, List<(int WordId, byte ReadingIndex, int Occurrences)> deckWords,
         List<int>? sentenceDeckIds)
@@ -78,11 +87,7 @@ public class DeckDownloadService(JitenDbContext context) : IDeckDownloadService
                     if (request.ExcludeKana && WanaKana.IsKana(expression))
                         continue;
 
-                    string kanjiPatternPart = @"\p{IsCJKUnifiedIdeographs}";
-                    string lookaheadPattern = $@"(?=(?:{kanjiPatternPart})*\[.*?\])";
-                    string precedingKanjiLookbehind = $@"\p{{IsCJKUnifiedIdeographs}}{lookaheadPattern}";
-                    string pattern = $"(?<!\\])(?<!{precedingKanjiLookbehind})({kanjiPatternPart}){lookaheadPattern}";
-                    string expressionFurigana = Regex.Replace(ankiForm.RubyText, pattern, " $1");
+                    string expressionFurigana = ToAnkiFurigana(ankiForm.RubyText);
                     string expressionReading = string.Join("", ankiForm.RubyText
                                                                        .Where(c => WanaKana.IsKana(c.ToString()))
                                                                        .Select(c => c.ToString()));

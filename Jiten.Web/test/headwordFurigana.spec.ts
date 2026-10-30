@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { KnownState } from '../app/types';
 import { convertToRubyWithFurigana, headwordFuriganaVisible } from '../app/utils/convertToRuby';
+import { stripRubyMarkup } from '../app/utils/stripRubyMarkup';
 import { isKnownForFurigana, wordStateColourKey } from '../app/utils/wordState';
 
 describe('headwordFuriganaVisible', () => {
@@ -28,6 +29,16 @@ describe('convertToRubyWithFurigana', () => {
 
   it('drops the reading of an iteration mark when hidden', () => {
     expect(convertToRubyWithFurigana('死[し] 屍[し] 累々[るいるい]', false)).toBe('<ruby lang="ja">死</ruby> <ruby lang="ja">屍</ruby> <ruby lang="ja">累々</ruby>');
+  });
+
+  it('keeps supplementary-plane kanji inside the ruby base', () => {
+    expect(convertToRubyWithFurigana('\u{30EDE}\u{30EDE}麺[ビャンビャンめん]', true)).toBe('<ruby lang="ja">\u{30EDE}\u{30EDE}麺<rp>(</rp><rt>ビャンビャンめん</rt><rp>)</rp></ruby>');
+  });
+});
+
+describe('stripRubyMarkup', () => {
+  it('reads supplementary-plane kanji runs as their reading', () => {
+    expect(stripRubyMarkup('\u{30EDE}\u{30EDE}麺[ビャンビャンめん]')).toBe('ビャンビャンめん');
   });
 });
 
