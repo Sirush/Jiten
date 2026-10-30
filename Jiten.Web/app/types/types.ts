@@ -2937,6 +2937,16 @@ export interface CommunityListQuota {
   canCreate: boolean;
 }
 
+export interface CommunityListMembership {
+  listId: number;
+  slug: string;
+  name: string;
+  status: CommunityListStatus;
+  itemCount: number;
+  /** How many of the asked titles the list already holds. */
+  contained: number;
+}
+
 export interface CommunityListEditItem {
   deckId: number;
   note: string | null;

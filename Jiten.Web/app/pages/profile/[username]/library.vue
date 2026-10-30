@@ -13,6 +13,7 @@
   import { formatReadDate } from '~/utils/mediaListEntry';
   import type { EntryDialogField } from '~/composables/useMediaListSync';
   import { normaliseTitleQuery, titleMatches } from '~/utils/titleSearch';
+  import { displayDeckId, isMainEntry } from '~/utils/displayDeck';
 
   const route = useRoute();
   const router = useRouter();
@@ -509,6 +510,7 @@
         icon: 'pi pi-thumbtack',
         action: () => toggleProfilePin(deck),
       });
+    actions.push({ label: 'Add to community list', icon: 'pi pi-list', action: () => openListPicker([deck]) });
     actions.push({ label: 'Remove from list', icon: 'pi pi-trash', severity: 'danger', action: () => confirmRemoveDeck(deck) });
 
     return actions;
@@ -535,8 +537,25 @@
     { label: 'Favourite', icon: 'pi pi-star', severity: 'secondary', run: () => bulkFavourite(true) },
     { label: 'Unfavourite', icon: 'pi pi-star-fill', severity: 'secondary', run: () => bulkFavourite(false) },
     { label: 'Profile visibility', icon: 'pi pi-eye-slash', severity: 'secondary', run: (e: Event) => visibilityMenu.value?.toggle(e) },
+    { label: 'Add to community list', icon: 'pi pi-list', severity: 'secondary', run: () => openListPicker(selectedDecks()) },
     { label: 'Remove', icon: 'pi pi-trash', severity: 'danger', run: () => bulkRemove() },
   ]);
+
+  const listPickerVisible = ref(false);
+  const listPickerDeckIds = ref<number[]>([]);
+  const listPickerTitle = ref<string | null>(null);
+
+  const selectedDecks = () => {
+    const ids = new Set(selected.value);
+    return (decks.value ?? []).filter((d) => ids.has(d.deckId));
+  };
+
+  /** Community lists hold series, so a volume is added as its series. */
+  function openListPicker(picked: MediaListDeck[]) {
+    listPickerDeckIds.value = [...new Set(picked.map(displayDeckId))];
+    listPickerTitle.value = picked.length === 1 && isMainEntry(picked[0]!) ? localiseTitle(picked[0]!) : null;
+    listPickerVisible.value = true;
+  }
 
   const downloadVisible = ref(false);
   const downloadMediaList = ref<{
@@ -958,6 +977,7 @@
       </Transition>
       <Menu ref="statusMenu" :model="statusMenuItems" popup />
       <Menu ref="visibilityMenu" :model="visibilityMenuItems" popup />
+      <CommunityListAddDialog v-if="isOwnProfile" v-model:visible="listPickerVisible" :deck-ids="listPickerDeckIds" :title="listPickerTitle" />
 
       <MediaDeckDownloadDialog
         v-if="downloadMediaList"

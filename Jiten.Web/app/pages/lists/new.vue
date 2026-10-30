@@ -1,7 +1,8 @@
 <script setup lang="ts">
   import type { AccountInfo, CommunityListQuota } from '~/types/types';
-  import { COMMUNITY_LIST_FORBIDDEN_CONTENT, COMMUNITY_LIST_MAX_DESCRIPTION, COMMUNITY_LIST_MAX_NAME } from '~/composables/useCommunityLists';
+  import { COMMUNITY_LIST_FORBIDDEN_CONTENT, COMMUNITY_LIST_MAX_DESCRIPTION, COMMUNITY_LIST_MAX_NAME, usePendingListAdd } from '~/composables/useCommunityLists';
   import { apiErrorMessage } from '~/utils/apiErrorMessage';
+  import { useToast } from 'primevue/usetoast';
 
   definePageMeta({ middleware: ['auth'] });
   useSeoMeta({ title: 'New list', robots: 'noindex, nofollow' });
@@ -19,6 +20,13 @@
   const rulesOpen = ref(false);
   const creating = ref(false);
   const createError = ref<string | null>(null);
+  const toast = useToast();
+
+  const pendingAdd = usePendingListAdd();
+  const pendingCount = pendingAdd.value.length;
+  onBeforeUnmount(() => {
+    pendingAdd.value = [];
+  });
 
   onMounted(async () => {
     try {
@@ -50,6 +58,16 @@
     creating.value = true;
     try {
       const result = await lists.create(name.value.trim(), description.value.trim() || null);
+      if (pendingAdd.value.length) {
+        try {
+          await lists.addItems(
+            result.listId,
+            pendingAdd.value.map((deckId) => ({ deckId, note: null }))
+          );
+        } catch (e) {
+          toast.add({ severity: 'error', summary: apiErrorMessage(e, "The list was created, but the titles you picked couldn't be added"), life: 6000 });
+        }
+      }
       await navigateTo(`/lists/${result.listId}/edit`);
     } catch (e) {
       createError.value = apiErrorMessage(e, 'Could not create the list. Try again.');
@@ -103,6 +121,9 @@
       @submit.prevent="create"
     >
       <h1 class="m-0 text-xl font-bold">New list</h1>
+      <p v-if="pendingCount" class="m-0 text-sm text-muted-color">
+        {{ pendingCount === 1 ? 'The title you picked will be added to this list.' : `The ${pendingCount} titles you picked will be added to this list.` }}
+      </p>
       <div class="flex flex-col gap-1.5">
         <div class="flex justify-between">
           <label for="newListName" class="text-sm font-semibold">Name</label>
@@ -126,7 +147,7 @@
       <small v-if="createError" class="text-red-600 dark:text-red-400" role="alert">{{ createError }}</small>
       <div class="flex flex-wrap items-center justify-between gap-3">
         <span class="text-sm text-muted-color">Your list will be created as a draft that you can publish later.</span>
-        <Button type="submit" label="Create and add titles" icon="pi pi-arrow-right" icon-pos="right" :loading="creating" />
+        <Button type="submit" :label="pendingCount ? 'Create list' : 'Create and add titles'" icon="pi pi-arrow-right" icon-pos="right" :loading="creating" />
       </div>
     </form>
 

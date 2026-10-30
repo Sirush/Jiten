@@ -18,7 +18,7 @@
   import { DEFAULT_MEDIA_CARD_SECTION_LAYOUT, type MediaCardSectionId } from '~/utils/mediaCardSections';
   import { getDifficultyName } from '~/utils/difficultyColours';
   import { entryProgressLabel, listEntryFacts } from '~/utils/mediaListEntry';
-  import { isMainEntry } from '~/utils/displayDeck';
+  import { displayDeckId, isMainEntry } from '~/utils/displayDeck';
 
   const props = defineProps<{
     deck: MediaListDeck;
@@ -57,6 +57,7 @@
   const showDownloadDialog = ref(false);
   const showStudyDeckDialog = ref(false);
   const showIssueDialog = ref(false);
+  const showListDialog = ref(false);
   const isDescriptionExpanded = ref(false);
   const showIgnoreOverlay = ref(false);
   const historyDeck = useHistoryDialogDeck();
@@ -275,6 +276,13 @@
       icon: 'pi pi-refresh',
       disabled: isRefreshingCoverage.value,
       command: () => handleRefreshCoverage(),
+    },
+    {
+      label: 'Add to community list',
+      icon: 'pi pi-list',
+      command: () => {
+        showListDialog.value = true;
+      },
     },
     {
       label: 'Edit',
@@ -974,6 +982,12 @@
     />
     <LazySrsAddDeckDialog v-if="showStudyDeckDialog" :visible="showStudyDeckDialog" :preselected-deck="deck" @update:visible="showStudyDeckDialog = $event" />
     <LazyReportIssueDialog v-if="showIssueDialog" :visible="showIssueDialog" :deck="deck" @update:visible="showIssueDialog = $event" />
+    <LazyCommunityListAddDialog
+      v-if="showListDialog"
+      v-model:visible="showListDialog"
+      :deck-ids="[displayDeckId(deck)]"
+      :title="isMainEntry(deck) ? localiseTitle(deck) : undefined"
+    />
 
     <TieredMenu v-if="authStore.isAuthenticated && menuActivated" ref="menu" :model="menuItems" popup :pt="{ root: { class: 'min-w-52' } }">
       <template #item="{ item, props: itemProps }">

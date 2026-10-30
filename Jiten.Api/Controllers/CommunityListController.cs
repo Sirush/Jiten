@@ -39,6 +39,9 @@ public class CommunityListController(
     private const int DefaultFavouritedPageSize = 48;
     private const int MaxProfileLists = 48;
     private const int MaxFilterIds = 50;
+
+    /// <summary>Above the Full item cap so a whole selected library tab fits in one check.</summary>
+    private const int MaxMembershipDecks = 5000;
     private const string CoverageSort = "coverage";
 
     /// <summary>Advisory lock namespace for per-owner list creation; distinct from every other two-key lock class.</summary>
@@ -460,21 +463,9 @@ public class CommunityListController(
         if (ownerId == null || !CanManage(ownerId))
             return Results.NotFound();
 
-        var inputs = request.Items;
-        var deckIds = inputs.Select(i => i.DeckId).ToList();
-        if (deckIds.Distinct().Count() != deckIds.Count)
-            return Error("duplicate_item", "A title can only appear once in a list.");
-
-        var notes = inputs.Select(i => UserTextSanitizer.Clean(i.Note, multiline: false)).ToList();
-        if (notes.Any(n => n is { Length: > CommunityListItem.MaxNoteLength }))
-            return Error("note_too_long", $"Notes can be up to {CommunityListItem.MaxNoteLength} characters.");
-
-        if (deckIds.Count > 0)
-        {
-            var validCount = await context.Decks.CountAsync(d => deckIds.Contains(d.DeckId) && d.ParentDeckId == null);
-            if (validCount != deckIds.Count)
-                return Error("invalid_item", "Only existing top-level media can be added to a list.");
-        }
+        var (deckIds, notes, invalid) = await ValidateItemsAsync(request.Items);
+        if (invalid != null)
+            return invalid;
 
         await using var transaction = await context.Database.BeginTransactionAsync();
         await LockListAsync(id);
@@ -497,6 +488,127 @@ public class CommunityListController(
         await transaction.CommitAsync();
 
         return Results.Ok(new { itemCount = list.ItemCount });
+    }
+
+    [HttpPost("mine/membership")]
+    [SwaggerOperation(Summary = "Get the caller's community lists with how many of the given titles each one holds")]
+    public async Task<IResult> GetMembership([FromBody] CommunityListMembershipRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (string.IsNullOrEmpty(userId))
+            return Results.Unauthorized();
+
+        var deckIds = request.DeckIds.Distinct().ToList();
+        if (deckIds.Count > MaxMembershipDecks)
+            return Error("too_many_titles", $"Check up to {MaxMembershipDecks} titles at a time.");
+
+        var lists = await context.CommunityLists.AsNoTracking()
+                                 .Where(l => l.OwnerId == userId)
+                                 .OrderByDescending(l => l.UpdatedAt)
+                                 .ThenByDescending(l => l.ListId)
+                                 .Select(l => new CommunityListMembershipDto
+                                 {
+                                     ListId = l.ListId,
+                                     Slug = l.Slug,
+                                     Name = l.Name,
+                                     Status = l.Status,
+                                     ItemCount = l.ItemCount,
+                                     Contained = l.Items.Count(i => deckIds.Contains(i.DeckId))
+                                 })
+                                 .ToListAsync();
+
+        return Results.Ok(new CommunityListMembershipResponse { Lists = lists, Quota = await GetQuotaAsync(userId) });
+    }
+
+    [HttpPost("{id:int}/items")]
+    [SwaggerOperation(Summary = "Add titles to a community list", Description = "Titles already on the list are skipped. Rejected whole when the new titles don't fit under the owner's item cap.")]
+    public async Task<IResult> AddItems(int id, [FromBody] AddCommunityListItemsRequest request)
+    {
+        var userId = currentUserService.UserId;
+        if (string.IsNullOrEmpty(userId))
+            return Results.Unauthorized();
+
+        var ownerId = await context.CommunityLists.Where(l => l.ListId == id).Select(l => l.OwnerId).FirstOrDefaultAsync();
+        if (ownerId == null || !CanManage(ownerId))
+            return Results.NotFound();
+
+        if (request.Items.Count == 0)
+            return Error("no_items", "Pick at least one title to add.");
+
+        var (deckIds, notes, invalid) = await ValidateItemsAsync(request.Items);
+        if (invalid != null)
+            return invalid;
+
+        await using var transaction = await context.Database.BeginTransactionAsync();
+        await LockListAsync(id);
+
+        var list = await context.CommunityLists.FirstOrDefaultAsync(l => l.ListId == id);
+        if (list == null)
+            return Results.NotFound();
+
+        var existing = (await context.CommunityListItems.Where(i => i.ListId == id).Select(i => i.DeckId).ToListAsync()).ToHashSet();
+        var fresh = deckIds.Select((deckId, i) => (DeckId: deckId, Note: notes[i])).Where(x => !existing.Contains(x.DeckId)).ToList();
+
+        if (fresh.Count > 0)
+        {
+            var maxItems = (await userLimits.GetLimitsAsync(list.OwnerId)).CommunityListItems;
+            var room = Math.Max(0, maxItems - existing.Count);
+            if (fresh.Count > room)
+                return Error("item_limit", room == 0
+                                               ? $"This list is full. Lists can hold up to {maxItems} titles on your plan."
+                                               : $"This list only has room for {room} more {(room == 1 ? "title" : "titles")} on your plan.");
+
+            var position = Math.Clamp(request.Position ?? existing.Count, 0, existing.Count);
+            if (position < existing.Count)
+                await context.CommunityListItems.Where(i => i.ListId == id && i.Position >= position)
+                             .ExecuteUpdateAsync(s => s.SetProperty(i => i.Position, i => i.Position + fresh.Count));
+
+            for (var i = 0; i < fresh.Count; i++)
+                context.CommunityListItems.Add(new CommunityListItem { ListId = id, DeckId = fresh[i].DeckId, Position = position + i, Note = fresh[i].Note });
+
+            list.ItemCount = existing.Count + fresh.Count;
+            list.UpdatedAt = DateTime.UtcNow;
+            await context.SaveChangesAsync();
+        }
+
+        await transaction.CommitAsync();
+
+        return Results.Ok(new { added = fresh.Count, alreadyInList = deckIds.Count - fresh.Count, itemCount = list.ItemCount });
+    }
+
+    [HttpDelete("{id:int}/items/{deckId:int}")]
+    [SwaggerOperation(Summary = "Remove one title from a community list", Description = "Returns the removed item's position and note so the caller can put it back.")]
+    public async Task<IResult> RemoveItem(int id, int deckId)
+    {
+        var userId = currentUserService.UserId;
+        if (string.IsNullOrEmpty(userId))
+            return Results.Unauthorized();
+
+        var ownerId = await context.CommunityLists.Where(l => l.ListId == id).Select(l => l.OwnerId).FirstOrDefaultAsync();
+        if (ownerId == null || !CanManage(ownerId))
+            return Results.NotFound();
+
+        await using var transaction = await context.Database.BeginTransactionAsync();
+        await LockListAsync(id);
+
+        var list = await context.CommunityLists.FirstOrDefaultAsync(l => l.ListId == id);
+        var item = await context.CommunityListItems.FirstOrDefaultAsync(i => i.ListId == id && i.DeckId == deckId);
+        if (list == null || item == null)
+            return Results.NotFound();
+
+        var index = await context.CommunityListItems.CountAsync(i => i.ListId == id && i.Position < item.Position);
+        var remaining = await context.CommunityListItems.CountAsync(i => i.ListId == id) - 1;
+
+        context.CommunityListItems.Remove(item);
+        list.ItemCount = remaining;
+        list.UpdatedAt = DateTime.UtcNow;
+        await context.SaveChangesAsync();
+
+        await context.CommunityListItems.Where(i => i.ListId == id && i.Position > item.Position)
+                     .ExecuteUpdateAsync(s => s.SetProperty(i => i.Position, i => i.Position - 1));
+        await transaction.CommitAsync();
+
+        return Results.Ok(new { position = index, note = item.Note, itemCount = remaining });
     }
 
     [HttpDelete("{id:int}")]
@@ -897,6 +1009,26 @@ public class CommunityListController(
         long quadratic = rng.Next(1, int.MaxValue);
         return query.OrderBy(l => ((long)l.ListId * linear % prime + (long)l.ListId * l.ListId % prime * quadratic % prime) % prime)
                     .ThenBy(l => l.ListId);
+    }
+
+    private async Task<(List<int> DeckIds, List<string?> Notes, IResult? Error)> ValidateItemsAsync(List<CommunityListItemInput> inputs)
+    {
+        var deckIds = inputs.Select(i => i.DeckId).ToList();
+        if (deckIds.Distinct().Count() != deckIds.Count)
+            return (deckIds, [], Error("duplicate_item", "A title can only appear once in a list."));
+
+        var notes = inputs.Select(i => UserTextSanitizer.Clean(i.Note, multiline: false)).ToList();
+        if (notes.Any(n => n is { Length: > CommunityListItem.MaxNoteLength }))
+            return (deckIds, notes, Error("note_too_long", $"Notes can be up to {CommunityListItem.MaxNoteLength} characters."));
+
+        if (deckIds.Count > 0)
+        {
+            var validCount = await context.Decks.CountAsync(d => deckIds.Contains(d.DeckId) && d.ParentDeckId == null);
+            if (validCount != deckIds.Count)
+                return (deckIds, notes, Error("invalid_item", "Only existing top-level media can be added to a list."));
+        }
+
+        return (deckIds, notes, null);
     }
 
     private static IResult? ValidateText(string name, string? description)
