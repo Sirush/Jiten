@@ -22,7 +22,9 @@ public record MediaListEntrySummary(
 /// <summary>One completion of a volume or episode, in the order the entries were created.</summary>
 public record VolumeCompletion(int DeckId, int VolumeCharacters, int? CharactersRead, long? SeriesEntryId);
 
-public record SeriesTally(IReadOnlyDictionary<long, long> PassCharacters, long StandaloneCharacters, IReadOnlyList<int> StandaloneDeckIds);
+/// <param name="PassOf">The pass each completion was read on, in the order given; null for a read of its own.</param>
+public record SeriesTally(IReadOnlyDictionary<long, long> PassCharacters, long StandaloneCharacters, IReadOnlyList<int> StandaloneDeckIds,
+                         IReadOnlyList<long?> PassOf);
 
 public static class MediaListEntryHelper
 {
@@ -432,36 +434,40 @@ public static class MediaListEntryHelper
     {
         var passCharacters = completedPassIds.Distinct().ToDictionary(id => id, _ => (long)seriesCharacters);
         var covered = new HashSet<(long Pass, int DeckId)>();
-        var unlinked = new List<VolumeCompletion>();
-        var standalone = new List<VolumeCompletion>();
+        var passOf = new long?[completions.Count];
+        var unlinked = new List<int>();
 
         static long Difference(VolumeCompletion c) => (c.CharactersRead ?? c.VolumeCharacters) - (long)c.VolumeCharacters;
 
-        foreach (var completion in completions)
+        for (var i = 0; i < completions.Count; i++)
         {
+            var completion = completions[i];
             if (completion.SeriesEntryId is { } link && passCharacters.ContainsKey(link) && covered.Add((link, completion.DeckId)))
-                passCharacters[link] += Difference(completion);
-            else if (completion.SeriesEntryId == null)
-                unlinked.Add(completion);
-            else
-                standalone.Add(completion);
-        }
-
-        foreach (var completion in unlinked)
-        {
-            var pass = completedPassIds.Select(id => (long?)id).FirstOrDefault(id => !covered.Contains((id!.Value, completion.DeckId)));
-            if (pass is { } p)
             {
-                covered.Add((p, completion.DeckId));
-                passCharacters[p] += Difference(completion);
+                passCharacters[link] += Difference(completion);
+                passOf[i] = link;
             }
-            else
-                standalone.Add(completion);
+            else if (completion.SeriesEntryId == null)
+                unlinked.Add(i);
         }
 
+        foreach (var i in unlinked)
+        {
+            var completion = completions[i];
+            var pass = completedPassIds.Select(id => (long?)id).FirstOrDefault(id => !covered.Contains((id!.Value, completion.DeckId)));
+            if (pass is not { } p)
+                continue;
+
+            covered.Add((p, completion.DeckId));
+            passCharacters[p] += Difference(completion);
+            passOf[i] = p;
+        }
+
+        var standalone = completions.Where((_, i) => passOf[i] == null).ToList();
         return new SeriesTally(passCharacters.ToDictionary(kv => kv.Key, kv => Math.Max(kv.Value, 0)),
                                standalone.Sum(c => (long)(c.CharactersRead ?? c.VolumeCharacters)),
-                               standalone.Select(c => c.DeckId).ToList());
+                               standalone.Select(c => c.DeckId).ToList(),
+                               passOf);
     }
 
     public static MediaListEntrySummary Summarise(IReadOnlyCollection<UserMediaListEntry> entries, IReadOnlySet<long> currentIds)

@@ -1,7 +1,7 @@
 <script setup lang="ts">
   import type { ProfileBar } from '~/types';
 
-  defineProps<{ title: string; bars: ProfileBar[] }>();
+  defineProps<{ title: string; bars: ProfileBar[]; caption?: string }>();
 
   const headingId = useId();
 </script>
@@ -29,5 +29,6 @@
         </Tooltip>
       </li>
     </ul>
+    <p v-if="caption" class="text-xs text-muted-color">{{ caption }}</p>
   </section>
 </template>
