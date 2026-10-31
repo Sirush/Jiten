@@ -270,6 +270,13 @@ public partial class UserController
         return Results.Ok(stats);
     }
 
+    [HttpGet("profile/{handle}/stats/ladder")]
+    [AllowAnonymous]
+    [ProfileAccess(ProfileSection.Stats)]
+    [SwaggerOperation(Summary = "Get the difficulty of a profile's finished titles over time, with titles of the given media types shown as their volumes")]
+    public async Task<IResult> GetProfileLadder(string handle, [FromQuery] List<MediaType>? split = null) =>
+        Results.Ok(await ComputeLadderAsync(RequestedProfile, split?.ToHashSet() ?? []));
+
     [HttpGet("profile/pinned")]
     [SwaggerOperation(Summary = "List the titles pinned to the signed-in user's profile, in order")]
     public async Task<IResult> GetPinnedDecks()
@@ -707,6 +714,59 @@ public partial class UserController
         await jitenContext.DifficultyVotes.LongCountAsync(v => v.UserId == userId && v.IsValid && v.Source == DifficultyVoteSource.Manual)
         + await jitenContext.DifficultyRatings.LongCountAsync(r => r.UserId == userId);
 
+    /// <summary>A split title shows as its dated volumes, or as one dot when none has a date; a partly read series appears only when split.</summary>
+    private async Task<ProfileLadderDto> ComputeLadderAsync(ProfileContext access, IReadOnlySet<MediaType> split)
+    {
+        var ledger = await ReadingTally.LoadAsync(jitenContext, userContext, access.UserId);
+        var finishedIds = ledger.FinishedTitleIds.ToHashSet();
+        var volumes = ledger.AllCompletedDecks.Where(d => d.ParentDeckId != null).ToList();
+        var hidden = await profileAccess.GetHiddenDeckIdsAsync(access, finishedIds.Union(volumes.Select(v => v.ParentDeckId!.Value)).ToList());
+        var volumesByTitle = volumes.Where(v => !hidden.Contains(v.ParentDeckId!.Value))
+                                    .GroupBy(v => v.ParentDeckId!.Value)
+                                    .ToDictionary(g => g.Key, g => g.Select(v => v.DeckId).ToList());
+        var titleIds = finishedIds.Where(id => !hidden.Contains(id)).Union(volumesByTitle.Keys).ToList();
+        var cards = await CardDecks(titleIds.Concat(volumesByTitle.Values.SelectMany(ids => ids)).ToList()).ToDictionaryAsync(d => d.DeckId);
+
+        DateOnly? LastFinish(int deckId) => ledger.CompletedEntriesByDeck.GetValueOrDefault(deckId)?.Max(e => e.FinishedOn);
+
+        var showTitles = access.CanSee(ProfileSection.Library);
+        ProfileLadderPointDto Point(Deck title, Deck dot, DateOnly finishedOn) => new()
+        {
+            DeckId = showTitles ? dot.DeckId : null, Title = showTitles ? title.OriginalTitle : null,
+            RomajiTitle = showTitles ? title.RomajiTitle : null, EnglishTitle = showTitles ? title.EnglishTitle : null,
+            IsVolume = dot != title, VolumeTitle = showTitles && dot != title ? dot.OriginalTitle : null,
+            FinishedOn = finishedOn, Difficulty = DifficultyMapper.GetAdjustedDifficulty(dot)
+        };
+
+        var dto = new ProfileLadderDto
+                  {
+                      VolumeTypes = volumesByTitle.Keys.Where(cards.ContainsKey).Select(id => cards[id].MediaType).Distinct().Order().ToList()
+                  };
+        foreach (var titleId in titleIds.Where(cards.ContainsKey))
+        {
+            var title = cards[titleId];
+            var volumeIds = volumesByTitle.GetValueOrDefault(titleId) ?? [];
+            var volumeFinishes = volumeIds.Where(cards.ContainsKey).Select(id => (Volume: cards[id], FinishedOn: LastFinish(id))).ToList();
+            if (split.Contains(title.MediaType) && volumeFinishes.Any(v => v.FinishedOn != null))
+            {
+                dto.Points.AddRange(volumeFinishes.Where(v => v.FinishedOn != null).Select(v => Point(title, v.Volume, v.FinishedOn!.Value)));
+                dto.UndatedVolumes += volumeFinishes.Count(v => v.FinishedOn == null);
+                continue;
+            }
+
+            if (!finishedIds.Contains(titleId))
+                continue;
+
+            if (volumeIds.Select(LastFinish).Append(LastFinish(titleId)).Max() is { } finishedOn)
+                dto.Points.Add(Point(title, title, finishedOn));
+            else
+                dto.UndatedTitles++;
+        }
+
+        dto.Points = dto.Points.OrderBy(p => p.FinishedOn).ToList();
+        return dto;
+    }
+
     /// <summary>Leaves <see cref="ProfileStatsDto.Readable"/> out, since that is cached per user rather than per viewer.</summary>
     private async Task<ProfileStatsDto> ComputeProfileStatsAsync(ProfileContext access)
     {
@@ -737,24 +797,12 @@ public partial class UserController
                       Characters = access.Shows(ProfileField.Characters) ? lifetime.CharactersRead : null
                   };
 
-        var lastFinish = visibleEntries.GroupBy(e => entryDecks[e.DeckId].DisplayId).ToDictionary(g => g.Key, g => g.Max(e => e.FinishedOn));
         var showTitles = access.CanSee(ProfileSection.Library);
-        dto.UndatedFinished = decks.Count(d => !lastFinish.ContainsKey(d.DeckId));
-        dto.Ladder = decks.Where(d => lastFinish.ContainsKey(d.DeckId))
-                          .Select(d => new ProfileLadderPointDto
-                                       {
-                                           DeckId = showTitles ? d.DeckId : null, Title = showTitles ? d.OriginalTitle : null,
-                                           RomajiTitle = showTitles ? d.RomajiTitle : null, EnglishTitle = showTitles ? d.EnglishTitle : null,
-                                           FinishedOn = lastFinish[d.DeckId], Difficulty = DifficultyMapper.GetAdjustedDifficulty(d)
-                                       })
-                          .OrderBy(p => p.FinishedOn)
-                          .ToList();
-
         dto.CharactersByMonth = credits.Where(c => c.FinishedOn != null && !hidden.Contains(c.TitleId))
-                                            .GroupBy(c => c.FinishedOn!.Value.ToString("yyyy-MM", CultureInfo.InvariantCulture))
-                                            .Select(g => new ProfileMonthDto { Month = g.Key, Characters = g.Sum(c => c.Characters) })
-                                            .OrderBy(m => m.Month)
-                                            .ToList();
+                                       .GroupBy(c => c.FinishedOn!.Value.ToString("yyyy-MM", CultureInfo.InvariantCulture))
+                                       .Select(g => new ProfileMonthDto { Month = g.Key, Characters = g.Sum(c => c.Characters) })
+                                       .OrderBy(m => m.Month)
+                                       .ToList();
 
         var finishedByType = ledger.CompletedDecks.Where(d => d.ParentDeckId == null).GroupBy(d => d.MediaType).ToDictionary(g => g.Key, g => g.Count());
         var charactersByType = credits.Select(c => (c.MediaType, c.Characters))

@@ -28,6 +28,20 @@
   /** Finish dates are bare days, so they are placed and labelled in UTC to keep a dot and its label on the same day everywhere. */
   const time = (p: ProfileLadderPoint) => new Date(`${p.finishedOn}T00:00:00Z`).getTime();
 
+  const pointColour = (p: ProfileLadderPoint) => chartColour(Math.min(p.difficulty, TOP - 0.01));
+  const seriesName = (p: ProfileLadderPoint) =>
+    p.title ? localiseTitle({ originalTitle: p.title, romajiTitle: p.romajiTitle, englishTitle: p.englishTitle }) : '';
+  const finishedLabel = (p: ProfileLadderPoint) => formatDateShort(time(p), { utc: true });
+
+  /** Set by the title callback, which Chart.js runs before the labels of the same tooltip. */
+  let hovered: ProfileLadderPoint[] = [];
+
+  /** The value every hovered dot has in common, so the tooltip states it once in its title; null when they differ. */
+  function shared(points: ProfileLadderPoint[], value: (p: ProfileLadderPoint) => string): string | null {
+    const first = points[0] ? value(points[0]) : '';
+    return points.every((p) => value(p) === first) ? first : null;
+  }
+
   const range = computed(() => {
     const times = props.points.map(time);
     if (!times.length) return { min: 0, max: DAY };
@@ -74,7 +88,7 @@
     datasets: [
       {
         data: positions.value,
-        pointBackgroundColor: props.points.map((p) => chartColour(Math.min(p.difficulty, TOP - 0.01))),
+        pointBackgroundColor: props.points.map(pointColour),
         pointBorderColor: 'rgba(255,255,255,0.9)',
         pointBorderWidth: 1.5,
         pointRadius: 5,
@@ -92,15 +106,30 @@
     plugins: {
       legend: { display: false },
       tooltip: {
-        displayColors: false,
+        padding: 10,
+        bodySpacing: 4,
+        titleMarginBottom: 6,
+        boxPadding: 4,
+        usePointStyle: true,
+        itemSort: (a, b) => (props.points[a.dataIndex]!.volumeTitle ?? '').localeCompare(props.points[b.dataIndex]!.volumeTitle ?? '', undefined, { numeric: true }),
         callbacks: {
           title: (items) => {
-            const p = props.points[items[0]!.dataIndex]!;
-            return p.title ? localiseTitle({ originalTitle: p.title, romajiTitle: p.romajiTitle, englishTitle: p.englishTitle }) : '';
+            hovered = items.map((item) => props.points[item.dataIndex]!);
+            const series = shared(hovered, seriesName);
+            const finished = shared(hovered, finishedLabel);
+            return [series, finished && `Finished ${finished}`].filter((line): line is string => !!line);
           },
           label: (item) => {
             const p = props.points[item.dataIndex]!;
-            return [`Finished ${formatDateShort(time(p), { utc: true })}`, `${bandName(p.difficulty)} (${p.difficulty.toFixed(1)})`];
+            const name = [shared(hovered, seriesName) ? null : seriesName(p), p.volumeTitle].filter(Boolean).join(', ');
+            const difficulty = `${bandName(p.difficulty)} (${p.difficulty.toFixed(1)})`;
+            const detail = shared(hovered, finishedLabel) ? difficulty : `${difficulty}, finished ${finishedLabel(p)}`;
+            return name ? `${name}: ${detail}` : detail;
+          },
+          labelPointStyle: () => ({ pointStyle: 'circle', rotation: 0 }),
+          labelColor: (item) => {
+            const colour = pointColour(props.points[item.dataIndex]!);
+            return { backgroundColor: colour, borderColor: colour };
           },
         },
       },
@@ -145,7 +174,11 @@
 </script>
 
 <template>
-  <div class="h-64" role="img" :aria-label="`Difficulty of ${points.length} finished titles over time`">
+  <div
+    class="h-64"
+    role="img"
+    :aria-label="`Difficulty of ${points.length} finished ${points.some((p) => p.isVolume) ? 'titles and volumes' : 'titles'} over time`"
+  >
     <Scatter :data="chartData" :options="options" />
   </div>
 </template>

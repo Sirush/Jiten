@@ -109,14 +109,10 @@ public class ProfileStatsDto
     /// <summary>Lifetime finished titles, private and adult ones included, matching the overview; null when the owner hides the field.</summary>
     public int? TitlesFinished { get; set; }
 
-    /// <summary>Finished titles left off the difficulty-over-time chart because no finish date is recorded.</summary>
-    public int UndatedFinished { get; set; }
-
-    /// <summary>Lifetime finished characters, rereads included, matching the overview; null when the owner hides the field.</summary>
+    /// <summary>Lifetime characters read, rereads included and reading in progress for the owner, matching the overview; null when the owner hides the field.</summary>
     public long? Characters { get; set; }
     public decimal? MeanScore { get; set; }
     public int ScoredCount { get; set; }
-    public List<ProfileLadderPointDto> Ladder { get; set; } = [];
     public List<ProfileMonthDto> CharactersByMonth { get; set; } = [];
     public List<ProfileCountDto> MediaTypes { get; set; } = [];
     public List<ProfileGenreShareDto>? Genres { get; set; }
@@ -156,14 +152,31 @@ public class ProfileReadableTypeDto
     public List<int> WithYoung { get; set; } = [];
 }
 
+public class ProfileLadderDto
+{
+    public List<ProfileLadderPointDto> Points { get; set; } = [];
+
+    /// <summary>Finished titles left off the chart because no finish date is recorded.</summary>
+    public int UndatedTitles { get; set; }
+
+    /// <summary>Completed volumes of split titles left off the chart because no finish date is recorded.</summary>
+    public int UndatedVolumes { get; set; }
+
+    /// <summary>Media types with a completed volume or episode, the ones a viewer can split.</summary>
+    public List<MediaType> VolumeTypes { get; set; } = [];
+}
+
 public class ProfileLadderPointDto
 {
-    /// <summary>Null, like the titles, when the Library section is hidden from this viewer.</summary>
+    /// <summary>The title's, or the volume's on a volume dot; null, like the titles, when the Library section is hidden from this viewer.</summary>
     public int? DeckId { get; set; }
 
+    /// <summary>The series title on a volume dot.</summary>
     public string? Title { get; set; }
     public string? RomajiTitle { get; set; }
     public string? EnglishTitle { get; set; }
+    public bool IsVolume { get; set; }
+    public string? VolumeTitle { get; set; }
     public DateOnly FinishedOn { get; set; }
     public float Difficulty { get; set; }
 }
