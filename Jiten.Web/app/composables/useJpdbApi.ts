@@ -41,6 +41,7 @@ export interface JpdbImportSummary {
     replaced: boolean;
     unmatchedWords: { wordId: number; spelling: string }[];
   }[];
+  failure?: { step: string; message: string };
 }
 
 export const useJpdbApi = () => {
@@ -186,7 +187,7 @@ export const useJpdbApi = () => {
             vocabularyPairs.push({
               id1: vocabItem[0],
               id2: vocabItem[1],
-              occurrences: typeof occurrences[index] === 'number' ? occurrences[index] : undefined,
+              occurrences: Number.isFinite(occurrences[index]) ? Math.max(1, Math.round(occurrences[index])) : undefined,
             });
           }
         });

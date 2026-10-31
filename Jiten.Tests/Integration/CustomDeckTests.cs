@@ -693,6 +693,43 @@ public class CustomDeckTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task JpdbImport_JpdbOnlyVidBeyondIntRangeIsUnmatchedNotRejected()
+    {
+        await SeedJmDictWords(10, 10);
+
+        var req = new HttpRequestMessage(HttpMethod.Post, "/api/srs/study-decks/import/jpdb")
+            .WithUser(TestUsers.UserA)
+            .WithJsonContent(new
+            {
+                decks = new[]
+                {
+                    new
+                    {
+                        jpdbDeckId = 1L, name = "Mining",
+                        words = new[]
+                        {
+                            new { wordId = 10L, spelling = "word10", occurrences = 3_000_000_000L },
+                            new { wordId = 5_000_000_000L, spelling = "jpdbonly", occurrences = 1L }
+                        }
+                    }
+                }
+            });
+        var res = await _client.SendAsync(req);
+        res.StatusCode.Should().Be(HttpStatusCode.OK, await res.Content.ReadAsStringAsync());
+
+        var deck = JsonSerializer.Deserialize<JsonElement>(await res.Content.ReadAsStringAsync()).GetProperty("decks")[0];
+        deck.GetProperty("matched").GetInt32().Should().Be(1);
+        deck.GetProperty("unmatched").GetInt32().Should().Be(1);
+        deck.GetProperty("unmatchedWords")[0].GetProperty("wordId").GetInt64().Should().Be(5_000_000_000L);
+
+        using var verifyScope = factory.Services.CreateScope();
+        var userDb = verifyScope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var word = await userDb.UserStudyDeckWords.SingleAsync();
+        word.WordId.Should().Be(10);
+        word.Occurrences.Should().Be(int.MaxValue);
+    }
+
+    [Fact]
     public async Task JpdbImport_ReplacesSameNamedListInsteadOfDuplicating()
     {
         await SeedJmDictWords(10, 13);

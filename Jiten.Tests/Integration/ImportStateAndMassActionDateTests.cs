@@ -67,6 +67,27 @@ public class ImportStateAndMassActionDateTests(JitenWebApplicationFactory factor
         suspended.LastReview.Should().BeNull("a suspended card with a LastReview derives as Young and inflates coverage");
     }
 
+    [Fact]
+    public async Task ImportFromIds_JpdbOnlyVidBeyondIntRange_IsReportedAsUnmatched()
+    {
+        var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/user/vocabulary/import-from-ids")
+                                               .WithUser(TestUsers.UserA)
+                                               .WithJsonContent(new
+                                               {
+                                                   cards = new[]
+                                                   {
+                                                       new { wordId = 910L, spelling = "猫", state = "known" },
+                                                       new { wordId = 5_000_000_000L, spelling = "jpdbonly", state = "known" }
+                                                   }
+                                               }));
+        response.StatusCode.Should().Be(HttpStatusCode.OK, await response.Content.ReadAsStringAsync());
+
+        var body = JsonSerializer.Deserialize<JsonElement>(await response.Content.ReadAsStringAsync());
+        body.GetProperty("unmatched").GetInt32().Should().Be(1);
+        body.GetProperty("unmatchedWords")[0].GetProperty("wordId").GetInt64().Should().Be(5_000_000_000L);
+        (await Card(910)).State.Should().Be(FsrsState.Mastered);
+    }
+
     private async Task SeedCreatedAt(int wordId, DateTime createdAtUtc)
     {
         using var scope = factory.Services.CreateScope();

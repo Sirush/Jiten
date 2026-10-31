@@ -58,6 +58,21 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 {
     options.JsonSerializerOptions.NumberHandling =
         JsonNumberHandling.AllowNamedFloatingPointLiterals;
+}).ConfigureApiBehaviorOptions(options =>
+{
+    var defaultFactory = options.InvalidModelStateResponseFactory;
+    options.InvalidModelStateResponseFactory = context =>
+    {
+        var errors = context.ModelState
+                            .Where(e => e.Value?.Errors.Count > 0)
+                            .Take(5)
+                            .Select(e => $"{e.Key}: {e.Value!.Errors[0].ErrorMessage}");
+        context.HttpContext.RequestServices.GetRequiredService<ILoggerFactory>()
+               .CreateLogger("Jiten.Api.ModelValidation")
+               .LogWarning("Request rejected by model validation: {Path} {Errors}",
+                           context.HttpContext.Request.Path.Value, string.Join(" | ", errors));
+        return defaultFactory(context);
+    };
 });
 
 builder.Services.AddEndpointsApiExplorer();

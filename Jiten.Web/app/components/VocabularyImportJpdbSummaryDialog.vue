@@ -26,8 +26,18 @@
 </script>
 
 <template>
-  <Dialog v-model:visible="visible" modal header="JPDB import complete" class="w-[95vw] sm:w-[90vw] md:w-[40rem]">
+  <Dialog
+    v-model:visible="visible"
+    modal
+    :header="summary?.failure ? 'JPDB import stopped' : 'JPDB import complete'"
+    class="w-[95vw] sm:w-[90vw] md:w-[40rem]"
+  >
     <div v-if="summary" class="flex flex-col gap-5">
+      <Message v-if="summary.failure" severity="error" :closable="false">
+        <span class="font-medium">{{ summary.failure.step }} failed:</span> {{ summary.failure.message }}
+        <span v-if="summary.reviews || summary.knownWords || summary.wordLists"> The steps listed below were imported.</span>
+      </Message>
+
       <section v-if="summary.reviews">
         <h4 class="font-medium mb-1">Review history</h4>
         <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-sm">
@@ -92,7 +102,7 @@
         </ul>
       </section>
 
-      <p class="text-sm text-gray-600 dark:text-gray-400">Your coverage is being recalculated, this can take a few minutes.</p>
+      <p v-if="summary.reviews || summary.knownWords || summary.wordLists" class="text-sm text-gray-600 dark:text-gray-400">Your coverage is being recalculated, this can take a few minutes.</p>
     </div>
     <template #footer>
       <Button label="Close" @click="visible = false" />

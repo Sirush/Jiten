@@ -336,7 +336,7 @@ public partial class UserController(
         var blacklistedIds = (request.BlacklistedWordIds ?? []).Where(id => id > 0).Distinct().ToList();
         var suspendedIds = (request.SuspendedWordIds ?? []).Where(id => id > 0).Distinct().ToList();
         var cards = (request.Cards ?? [])
-                    .Where(c => c.WordId is > 0 and <= int.MaxValue && ParseImportState(c.State) != null)
+                    .Where(c => c.WordId > 0 && ParseImportState(c.State) != null)
                     .ToList();
 
         var allIds = knownIds.Union(blacklistedIds).Union(suspendedIds).Union(cards.Select(c => c.WordId)).ToList();
@@ -360,7 +360,7 @@ public partial class UserController(
             .GroupBy(wff => wff.WordId)
             .ToDictionary(g => g.Key, g => g.OrderBy(wff => wff.ReadingIndex).ToList());
 
-        var cardWordIds = cards.Select(c => (int)c.WordId).Distinct().ToList();
+        var cardWordIds = cards.Where(c => c.WordId <= int.MaxValue).Select(c => (int)c.WordId).Distinct().ToList();
         var formsByWord = cardWordIds.Count == 0
             ? new Dictionary<int, List<JmDictWordForm>>()
             : (await jitenContext.WordForms
@@ -397,12 +397,13 @@ public partial class UserController(
         var unmatchedWords = new List<ImportSkippedWord>();
         foreach (var card in cards)
         {
-            var wordId = (int)card.WordId;
-            if (!jmdictWordIdSet.Contains(wordId))
+            if (card.WordId > int.MaxValue || !jmdictWordIdSet.Contains((int)card.WordId))
             {
-                unmatchedWords.Add(new ImportSkippedWord(wordId, card.Spelling, ImportSkipReason.NotInDictionary));
+                unmatchedWords.Add(new ImportSkippedWord(card.WordId, card.Spelling, ImportSkipReason.NotInDictionary));
                 continue;
             }
+
+            var wordId = (int)card.WordId;
 
             var readingIndex = formsByWord.TryGetValue(wordId, out var forms) && forms.Any(f => f.Text == card.Spelling)
                 ? ResolveReadingIndex(forms, card.Spelling)
