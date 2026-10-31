@@ -859,6 +859,14 @@ public class CommunityListController(
                                           .Where(u => ownerIds.Contains(u.Id))
                                           .Select(u => new { u.Id, u.DisplayName })
                                           .ToDictionaryAsync(u => u.Id, u => u.DisplayName);
+        var ownerProfiles = await userContext.UserProfiles.AsNoTracking()
+                                             .Where(p => ownerIds.Contains(p.UserId))
+                                             .Select(p => new { p.UserId, p.PrivacyJson, p.IsPublic, p.IsMediaListPublic })
+                                             .ToListAsync();
+        var publicProfileOwners = ownerProfiles
+                                  .Where(p => ProfilePrivacy.Parse(p.PrivacyJson, p.IsPublic, p.IsMediaListPublic).IsVisibleTo(ProfileViewer.Everyone))
+                                  .Select(p => p.UserId)
+                                  .ToHashSet();
 
         var favourited = viewerId == null
             ? new HashSet<int>()
@@ -881,6 +889,7 @@ public class CommunityListController(
             dto.Name = l.Name;
             dto.Description = l.Description;
             dto.OwnerDisplayName = ownerNames.GetValueOrDefault(l.OwnerId);
+            dto.CanOpenOwnerProfile = dto.OwnerDisplayName != null && (isOwner || publicProfileOwners.Contains(l.OwnerId));
             dto.Genres = genresByList[l.ListId].OrderBy(g => g).ToList();
             dto.Tags = tagsByList[l.ListId].OrderBy(t => t.Name).Select(t => new TagDto { TagId = t.TagId, Name = t.Name }).ToList();
             dto.FavouriteCount = l.FavouriteCount;

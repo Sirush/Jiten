@@ -10,6 +10,10 @@ public class CommunityListSummaryDto
     public string Name { get; set; } = "";
     public string? Description { get; set; }
     public string? OwnerDisplayName { get; set; }
+
+    /// <summary>True when the owner's profile is public, or the viewer is the owner; friends-only profiles stay unlinked.</summary>
+    public bool CanOpenOwnerProfile { get; set; }
+
     public List<Genre> Genres { get; set; } = [];
     public List<TagDto> Tags { get; set; } = [];
     public int FavouriteCount { get; set; }

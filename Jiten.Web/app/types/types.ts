@@ -2892,6 +2892,7 @@ export interface CommunityListSummary {
   name: string;
   description: string | null;
   ownerDisplayName: string | null;
+  canOpenOwnerProfile: boolean;
   genres: Genre[];
   tags: Tag[];
   favouriteCount: number;

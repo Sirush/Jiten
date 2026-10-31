@@ -38,7 +38,7 @@
 <template>
   <section aria-label="Profile header" class="-mt-6">
     <div :style="{ background: banner }">
-      <div class="container mx-auto flex max-w-7xl items-end gap-4 px-4 pt-6 sm:gap-5 sm:pt-10">
+      <div class="container mx-auto flex max-w-6xl items-end gap-4 px-4 pt-6 sm:gap-5 sm:pt-10">
         <ProfileAvatar
           :name="header.displayName"
           :kanji="header.avatarKanji"
@@ -89,7 +89,7 @@
     </div>
 
     <div class="border-b border-surface-200 bg-surface-0 dark:border-surface-700 dark:bg-surface-900">
-      <div class="container mx-auto max-w-7xl px-4">
+      <div class="container mx-auto max-w-6xl px-4">
         <div class="flex min-h-11 flex-wrap items-center gap-x-2 max-sm:pt-1 sm:min-h-14 sm:pl-[124px]">
           <div v-if="header.isOwner" class="flex w-full items-center justify-end gap-2 py-1.5 sm:order-2 sm:w-auto">
             <Button

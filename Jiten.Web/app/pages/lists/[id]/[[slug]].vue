@@ -21,6 +21,7 @@
   import { isMissingResource } from '~/utils/missingResource';
   import { formatDateLong } from '~/utils/dateFormat';
   import { formatRelativeTime } from '~/utils/relativeTime';
+  import { profilePath } from '~/utils/profileAppearance';
 
   definePageMeta({
     validate: (route) => /^\d+$/.test(String(route.params.id)),
@@ -351,7 +352,14 @@
         <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-color">
           <span v-if="list.ownerDisplayName" class="flex items-center gap-1.5" :aria-label="`By ${list.ownerDisplayName}`">
             <i class="pi pi-user text-xs" aria-hidden="true" />
-            <span class="font-semibold text-surface-800 dark:text-surface-100">{{ list.ownerDisplayName }}</span>
+            <NuxtLink
+              v-if="list.canOpenOwnerProfile"
+              :to="profilePath(list.ownerDisplayName)"
+              class="font-semibold text-surface-800! no-underline! hover:underline! dark:text-surface-100!"
+            >
+              {{ list.ownerDisplayName }}
+            </NuxtLink>
+            <span v-else class="font-semibold text-surface-800 dark:text-surface-100">{{ list.ownerDisplayName }}</span>
           </span>
           <span class="flex items-center gap-1.5">
             <i class="pi pi-book text-xs" aria-hidden="true" />
