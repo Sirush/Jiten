@@ -33,6 +33,20 @@
   const root = ref<HTMLElement>();
   onMounted(() => root.value?.focus({ preventScroll: true }));
 
+  const MAX_WEEK_ROWS = 6;
+  const calendar = ref<{ $el: HTMLElement }>();
+  const calendarMinHeight = ref<string>();
+
+  /** Reserves six week rows: the popover re-aligns on every resize, so a month with fewer rows could flip it above or below its trigger. */
+  watch(picking, async (on) => {
+    if (!on) return;
+    await nextTick();
+    const panel = calendar.value?.$el.querySelector<HTMLElement>('.p-datepicker-panel');
+    const rows = panel?.querySelectorAll<HTMLElement>('.p-datepicker-day-view tbody tr');
+    if (!panel || !rows?.length) return;
+    calendarMinHeight.value = `${panel.offsetHeight + (MAX_WEEK_ROWS - rows.length) * rows[0]!.offsetHeight}px`;
+  });
+
   const optionClass =
     'flex items-center gap-1 px-3 py-1.5 rounded text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:bg-gray-100 dark:focus-visible:bg-gray-700 transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-default';
 </script>
@@ -60,6 +74,15 @@
       <button type="button" :class="optionClass" :disabled="disabled" @click="emit('choose', null)">I'm not sure</button>
     </template>
 
-    <DatePicker v-else v-model="picked" inline :max-date="maxDate" :min-date="minDate" class="w-full" />
+    <DatePicker
+      v-else
+      ref="calendar"
+      v-model="picked"
+      inline
+      :max-date="maxDate"
+      :min-date="minDate"
+      class="w-full"
+      :pt="{ panel: { style: { minHeight: calendarMinHeight } } }"
+    />
   </div>
 </template>
