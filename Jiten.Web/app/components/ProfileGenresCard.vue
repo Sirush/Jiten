@@ -4,7 +4,22 @@
 
   const props = defineProps<{ genres: ProfileGenreShare[] }>();
 
-  const rows = computed(() => genreRows(props.genres));
+  const rows = computed(() => {
+    const top = genreRows(props.genres);
+    const otherShare = 1 - props.genres.reduce((sum, g) => sum + g.share, 0);
+    if (otherShare < 0.005) return top;
+    return [
+      ...top,
+      {
+        key: 'other',
+        label: 'Other',
+        swatch: 'bg-surface-400 dark:bg-surface-500',
+        share: otherShare,
+        percent: Math.round(otherShare * 100),
+        tooltip: 'All other genres combined',
+      },
+    ];
+  });
 </script>
 
 <template>
