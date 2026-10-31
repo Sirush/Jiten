@@ -66,6 +66,8 @@
   }));
   const spinning = ref(false);
   const ascending = ref(false);
+  /** Only a flipping coin shows its thickness; a full clipped slice stack stops Chrome repainting the rest of the page. */
+  const edgeLayers = computed(() => (spinning.value ? EDGE_LAYERS : EDGE_LAYERS.slice(0, 1)));
 
   /** The top rank never flips; its rare roll plays the ascension instead. */
   function playRare() {
@@ -131,7 +133,7 @@
           />
         </svg>
         <div class="coin" :class="{ 'coin-spin': spinning }" @animationend.self="spinning = false">
-          <span v-for="z in EDGE_LAYERS" :key="z" class="coin-edge" :style="{ transform: `translateZ(${z}px)` }" />
+          <span v-for="z in edgeLayers" :key="z" class="coin-edge" :style="{ '--edge-z': `${z}px` }" />
           <div
             v-for="side in spinning ? ['back', 'front'] : ['front']"
             :key="side"
@@ -275,9 +277,8 @@
     background: var(--m-base);
   }
 
-  /** Rests tilted back so the coin's real edge shows below the face; the tilt is what gives it depth when it spins. */
   .medal {
-    --coin-rest: rotateX(16deg);
+    --coin-tilt: rotateX(16deg);
     --coin-rim: conic-gradient(from 210deg, var(--m-light), var(--m-base), var(--m-dark), var(--m-base), var(--m-light), var(--m-base), var(--m-dark), var(--m-base), var(--m-light));
     position: relative;
     width: var(--medal-w, 4rem);
@@ -302,17 +303,18 @@
     transform: scaleX(0.9);
   }
 
+  /** An idle coin fakes its tilt and edge in 2D: 3D transforms on every resting medal stop Chrome repainting the page, so real depth starts on hover, focus or a flip. */
   .coin {
     position: relative;
     height: 100%;
     width: 100%;
     transform-style: preserve-3d;
-    transform: var(--coin-rest);
+    transform: scaleY(0.975);
     transition: transform 200ms ease;
   }
 
   .medal-card:is(:hover, :focus-visible) .coin {
-    transform: translateY(-3px) var(--coin-rest);
+    transform: translateY(-3px) var(--coin-tilt);
   }
 
   .coin-edge {
@@ -321,6 +323,13 @@
     border-radius: var(--coin-radius, 50%);
     clip-path: var(--coin-clip, none);
     background: color-mix(in srgb, var(--m-base), var(--m-dark) 45%);
+    transform: translateY(1.3px);
+    transition: transform 200ms ease;
+  }
+
+  .medal-card:is(:hover, :focus-visible) .coin-edge,
+  .coin-spin .coin-edge {
+    transform: translateZ(var(--edge-z));
   }
 
   .coin-side {
@@ -329,12 +338,27 @@
     border-radius: var(--coin-radius, 50%);
     clip-path: var(--coin-clip, none);
     padding: 5px;
-    backface-visibility: hidden;
     background: var(--coin-rim);
   }
 
+  .coin-spin .coin-side {
+    backface-visibility: hidden;
+  }
+
   .coin-front {
+    transition: transform 200ms ease;
+  }
+
+  .medal-card:is(:hover, :focus-visible) .coin-front,
+  .coin-spin .coin-front {
     transform: translateZ(var(--coin-half));
+  }
+
+  /** Flip slices mount at full depth, so an easing face would sit behind them and show as flat edge colour. */
+  .coin-spin .coin-front,
+  .coin-spin .coin-edge,
+  .coin-spin .ema-cord {
+    transition: none;
   }
 
   .coin-back {
@@ -440,6 +464,11 @@
     border: 2px solid #c0392b;
     border-bottom: 0;
     border-radius: 8px 8px 0 0;
+    transition: transform 200ms ease;
+  }
+
+  .medal-card:is(:hover, :focus-visible) .ema-cord,
+  .coin-spin .ema-cord {
     transform: translateZ(calc(var(--coin-half) + 0.5px));
   }
 
@@ -722,7 +751,7 @@
 
   /** The top rank stays grounded: no lift or flip, only its own blessing of light. */
   .medal-card:is(:hover, :focus-visible) .medal-shimenawa .coin {
-    transform: var(--coin-rest);
+    transform: var(--coin-tilt);
   }
 
   .medal-card:is(:hover, :focus-visible) .medal-shimenawa::after {
@@ -809,10 +838,10 @@
 
   @keyframes coin-spin {
     from {
-      transform: translateY(-3px) var(--coin-rest) rotateY(0deg);
+      transform: translateY(-3px) var(--coin-tilt) rotateY(0deg);
     }
     to {
-      transform: translateY(-3px) var(--coin-rest) rotateY(360deg);
+      transform: translateY(-3px) var(--coin-tilt) rotateY(360deg);
     }
   }
 
@@ -919,12 +948,15 @@
 
   @media (prefers-reduced-motion: reduce) {
     .coin,
+    .coin-edge,
+    .coin-front,
+    .ema-cord,
     .medal::after {
       transition: none;
     }
 
     .medal-card:is(:hover, :focus-visible) .coin {
-      transform: var(--coin-rest);
+      transform: var(--coin-tilt);
     }
 
     .medal-card:is(:hover, :focus-visible) .medal-shine::after,
