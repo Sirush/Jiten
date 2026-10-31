@@ -133,7 +133,7 @@
       key: i.key,
       label: getMediaTypeText(Number(i.key)),
       fraction: i.characters / max,
-      value: `${i.count} ${i.count === 1 ? 'title' : 'titles'}`,
+      value: i.count === 0 ? 'In progress' : `${i.count} ${i.count === 1 ? 'title' : 'titles'}`,
       tooltip: `About ${formatApprox(i.characters)} characters`,
     }));
   });
@@ -166,8 +166,8 @@
     if (stats.value?.characters != null)
       tiles.push({
         label: 'Characters',
-        value: a.totalCharacterCount.toLocaleString('en-US'),
-        sub: inProgress > 0 ? `Plus ${inProgress.toLocaleString('en-US')} in titles in progress` : undefined,
+        value: (a.totalCharacterCount + inProgress).toLocaleString('en-US'),
+        sub: inProgress > 0 ? `Including ${inProgress.toLocaleString('en-US')} in titles in progress` : undefined,
       });
     tiles.push(
       { label: 'Words', value: a.totalWordCount.toLocaleString('en-US') },
@@ -178,7 +178,7 @@
     return tiles;
   });
 
-  const isEmpty = computed(() => !!stats.value && stats.value.mediaTypes.length === 0);
+  const isEmpty = computed(() => !!stats.value && stats.value.lengths.length === 0);
 
   /** Three across on wide screens, or two by two when scores make it four, so no chart sits alone in a row. */
   const columnChartCount = computed(() => 2 + (stats.value?.coverageAtFinish.length ? 1 : 0) + (stats.value?.scores.length ? 1 : 0));
@@ -269,7 +269,7 @@
           </Card>
           <Card v-if="genreBars.length">
             <template #content>
-              <ProfileBarList title="Genres, by characters" :bars="genreBars" />
+              <ProfileBarList title="Genres, by characters" :bars="genreBars" caption="Share of characters read in titles with this genre" />
             </template>
           </Card>
         </div>
@@ -301,24 +301,7 @@
           </Card>
         </div>
 
-        <Card v-if="stats.ladder.length >= 2 || stats.undatedFinished > 0">
-          <template #title>
-            <h2 class="text-base font-semibold">Difficulty of finished titles over time</h2>
-          </template>
-          <template #subtitle>
-            <span class="text-xs">
-              Each dot is a title, placed on the day it was finished.{{ stats.ladder.some((p) => p.deckId != null) ? ' Select one to open it.' : '' }}
-            </span>
-          </template>
-          <template #content>
-            <ProfileLadderChart v-if="stats.ladder.length >= 2" :points="stats.ladder" />
-            <p v-if="stats.undatedFinished > 0" class="mt-2 text-sm text-muted-color">
-              {{ stats.undatedFinished }} finished {{ stats.undatedFinished === 1 ? 'title has' : 'titles have' }} no finish date, so
-              {{ stats.undatedFinished === 1 ? "it isn't" : "they aren't" }} shown.
-              <NuxtLink v-if="isOwner" to="/settings/media-list" class="!text-primary-600 dark:!text-primary-400">Import dates from AniList or VNDB</NuxtLink>
-            </p>
-          </template>
-        </Card>
+        <ProfileLadderCard />
 
         <Card v-if="yearColumns.length">
           <template #content>

@@ -644,7 +644,7 @@
                   :key="g.key"
                   type="button"
                   :aria-current="selectedTab === g.key ? 'true' : undefined"
-                  class="flex shrink-0 items-center justify-between gap-3 rounded-md px-3 py-2 text-sm transition-colors max-lg:border"
+                  class="flex shrink-0 cursor-pointer items-center justify-between gap-3 rounded-md px-3 py-2 text-sm transition-colors max-lg:border"
                   :class="
                     selectedTab === g.key
                       ? 'bg-primary-50 font-semibold text-primary-700 max-lg:border-primary-300 dark:bg-primary-900/30 dark:text-primary-200 max-lg:dark:border-primary-700'

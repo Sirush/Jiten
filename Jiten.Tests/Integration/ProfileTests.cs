@@ -20,13 +20,14 @@ public class ProfileTests(JitenWebApplicationFactory factory)
     public Task InitializeAsync() => factory.ResetDatabaseAsync();
     public Task DisposeAsync() => Task.CompletedTask;
 
-    private async Task<int> SeedDeck(string title, int? parentDeckId = null, bool adult = false)
+    private async Task<int> SeedDeck(string title, int? parentDeckId = null, bool adult = false, int characters = 1000,
+                                     MediaType mediaType = MediaType.Novel)
     {
         using var scope = factory.Services.CreateScope();
         var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
         var deck = new Deck
                    {
-                       OriginalTitle = title, MediaType = MediaType.Novel, UniqueWordCount = 100, CharacterCount = 1000, ParentDeckId = parentDeckId
+                       OriginalTitle = title, MediaType = mediaType, UniqueWordCount = 100, CharacterCount = characters, ParentDeckId = parentDeckId
                    };
         jitenDb.Decks.Add(deck);
         await jitenDb.SaveChangesAsync();
@@ -559,6 +560,96 @@ public class ProfileTests(JitenWebApplicationFactory factory)
         own.GetProperty("milestones").EnumerateArray().Select(m => m.GetProperty("kind").GetString()).Should().Contain("titles");
     }
 
+    private async Task<long> AddEntry(int deckId, MediaListEntryState state, DateOnly? finishedOn, int? charactersRead = null, long? seriesEntryId = null)
+    {
+        using var scope = factory.Services.CreateScope();
+        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+        var entry = new UserMediaListEntry
+                    {
+                        UserId = TestUsers.UserA, DeckId = deckId, State = state, FinishedOn = finishedOn, CharactersRead = charactersRead,
+                        SeriesEntryId = seriesEntryId, CreatedAt = DateTime.UtcNow, UpdatedAt = DateTime.UtcNow
+                    };
+        userDb.UserMediaListEntries.Add(entry);
+        await userDb.SaveChangesAsync();
+        return entry.Id;
+    }
+
+    [Fact]
+    public async Task StatsCountFinishedTitlesOnce_AndReadingByPass()
+    {
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
+        await SetPrivacy(TestUsers.UserA, """{"profile":"public","sections":{"stats":"everyone"}}""");
+
+        var series = await SeedDeck("Series", characters: 3000);
+        var volume1 = await SeedDeck("Volume 1", parentDeckId: series);
+        var volume2 = await SeedDeck("Volume 2", parentDeckId: series);
+        await SetStatus(TestUsers.UserA, series, DeckStatus.Completed);
+        var pass = await AddEntry(series, MediaListEntryState.Completed, new DateOnly(2026, 3, 20));
+        await AddEntry(volume1, MediaListEntryState.Completed, new DateOnly(2026, 1, 10), seriesEntryId: pass);
+        await AddEntry(volume2, MediaListEntryState.Completed, new DateOnly(2026, 2, 10), seriesEntryId: pass);
+
+        var reread = await SeedDeck("Read twice");
+        await SetStatus(TestUsers.UserA, reread, DeckStatus.Completed);
+        await AddEntry(reread, MediaListEntryState.Completed, new DateOnly(2026, 1, 5), charactersRead: 600);
+        await AddEntry(reread, MediaListEntryState.Completed, new DateOnly(2026, 4, 1));
+
+        var partSeries = await SeedDeck("Part-read series", characters: 2000);
+        var partVolume = await SeedDeck("Part-read volume", parentDeckId: partSeries);
+        await SetStatus(TestUsers.UserA, partVolume, DeckStatus.Completed);
+        await AddEntry(partVolume, MediaListEntryState.Completed, new DateOnly(2026, 4, 2));
+
+        var reading = await SeedDeck("Reading");
+        await SetStatus(TestUsers.UserA, reading, DeckStatus.Ongoing);
+        await AddEntry(reading, MediaListEntryState.InProgress, null, charactersRead: 250);
+
+        var own = await (await Get($"/api/user/profile/{TestUsers.UserA}/stats", TestUsers.UserA)).Content.ReadFromJsonAsync<JsonElement>();
+        own.GetProperty("difficulty").EnumerateArray().Sum(d => d.GetProperty("count").GetInt32()).Should().Be(2);
+        own.GetProperty("lengths").EnumerateArray().Sum(d => d.GetProperty("count").GetInt32()).Should().Be(2);
+        own.GetProperty("charactersByMonth").EnumerateArray()
+           .ToDictionary(m => m.GetProperty("month").GetString()!, m => m.GetProperty("characters").GetInt64())
+           .Should().Equal(new Dictionary<string, long> { ["2026-01"] = 1600, ["2026-02"] = 1000, ["2026-03"] = 1000, ["2026-04"] = 2000 });
+        var ownTypes = own.GetProperty("mediaTypes")[0];
+        ownTypes.GetProperty("count").GetInt32().Should().Be(2);
+        ownTypes.GetProperty("characters").GetInt64().Should().Be(5850);
+
+        var others = await (await Get($"/api/user/profile/{TestUsers.UserA}/stats", TestUsers.UserB)).Content.ReadFromJsonAsync<JsonElement>();
+        others.GetProperty("mediaTypes")[0].GetProperty("characters").GetInt64().Should().Be(5600);
+    }
+
+    [Fact]
+    public async Task LadderShowsSplitTypesAsTheirDatedVolumes()
+    {
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
+        await SetPrivacy(TestUsers.UserA, """{"profile":"public","sections":{"stats":"everyone"}}""");
+
+        var series = await SeedDeck("Series", characters: 3000);
+        var volumes = new[] { await SeedDeck("Volume 1", series), await SeedDeck("Volume 2", series), await SeedDeck("Volume 3", series) };
+        await SetStatus(TestUsers.UserA, series, DeckStatus.Completed);
+        await AddEntry(series, MediaListEntryState.Completed, new DateOnly(2026, 3, 1));
+        await AddEntry(volumes[0], MediaListEntryState.Completed, new DateOnly(2026, 1, 1));
+        await AddEntry(volumes[1], MediaListEntryState.Completed, new DateOnly(2026, 2, 1));
+        await AddEntry(volumes[2], MediaListEntryState.Completed, null);
+
+        var partSeries = await SeedDeck("Part-read series");
+        await AddEntry(await SeedDeck("Part-read volume", partSeries), MediaListEntryState.Completed, new DateOnly(2026, 4, 1));
+
+        var manga = await SeedDeck("Manga", mediaType: MediaType.Manga);
+        await SetStatus(TestUsers.UserA, manga, DeckStatus.Completed);
+        await AddEntry(await SeedDeck("Manga volume", manga, mediaType: MediaType.Manga), MediaListEntryState.Completed, new DateOnly(2026, 5, 1));
+
+        var whole = await (await Get($"/api/user/profile/{TestUsers.UserA}/stats/ladder", TestUsers.UserA)).Content.ReadFromJsonAsync<JsonElement>();
+        whole.GetProperty("points").EnumerateArray().Select(p => p.GetProperty("title").GetString()).Should().Equal("Series", "Manga");
+        whole.GetProperty("points")[0].GetProperty("finishedOn").GetString().Should().Be("2026-03-01");
+        whole.GetProperty("volumeTypes").EnumerateArray().Select(t => t.GetInt32()).Should().Equal((int)MediaType.Novel, (int)MediaType.Manga);
+
+        var split = await (await Get($"/api/user/profile/{TestUsers.UserA}/stats/ladder?split={(int)MediaType.Novel}", TestUsers.UserA))
+                          .Content.ReadFromJsonAsync<JsonElement>();
+        split.GetProperty("points").EnumerateArray().Select(p => p.GetProperty("volumeTitle").GetString() ?? p.GetProperty("title").GetString())
+             .Should().Equal("Volume 1", "Volume 2", "Part-read volume", "Manga");
+        split.GetProperty("undatedVolumes").GetInt32().Should().Be(1);
+        split.GetProperty("undatedTitles").GetInt32().Should().Be(0);
+    }
+
     [Fact]
     public async Task CharactersMatchAcrossSectionsAndKeepProgressPrivate()
     {
@@ -575,12 +666,12 @@ public class ProfileTests(JitenWebApplicationFactory factory)
             await userDb.SaveChangesAsync();
         }
 
-        foreach (var viewer in new[] { TestUsers.UserA, TestUsers.UserB })
+        foreach (var (viewer, characters) in new[] { (TestUsers.UserA, 125_000L), (TestUsers.UserB, 120_000L) })
         {
             var overview = await (await Get($"/api/user/profile/{TestUsers.UserA}/overview", viewer)).Content.ReadFromJsonAsync<JsonElement>();
-            overview.GetProperty("snapshot").GetProperty("characters").GetInt64().Should().Be(120_000);
+            overview.GetProperty("snapshot").GetProperty("characters").GetInt64().Should().Be(characters);
             var stats = await (await Get($"/api/user/profile/{TestUsers.UserA}/stats", viewer)).Content.ReadFromJsonAsync<JsonElement>();
-            stats.GetProperty("characters").GetInt64().Should().Be(120_000);
+            stats.GetProperty("characters").GetInt64().Should().Be(characters);
         }
 
         var othersTotals = await (await Get($"/api/user/profile/{TestUsers.UserA}/accomplishments", TestUsers.UserB)).Content.ReadFromJsonAsync<JsonElement>();
@@ -640,14 +731,14 @@ public class ProfileTests(JitenWebApplicationFactory factory)
             await SetStatus(TestUsers.UserA, deck, DeckStatus.Completed);
         await Send(HttpMethod.Post, $"/api/user/profile/pinned/{decks[0]}", TestUsers.UserA);
 
-        var others = await (await Get($"/api/user/profile/{TestUsers.UserA}/stats", TestUsers.UserB)).Content.ReadAsStringAsync();
+        var others = await (await Get($"/api/user/profile/{TestUsers.UserA}/stats/ladder", TestUsers.UserB)).Content.ReadAsStringAsync();
         others.Should().NotContain("First Finish").And.NotContain("Second Finish");
-        var ladder = JsonDocument.Parse(others).RootElement.GetProperty("ladder");
+        var ladder = JsonDocument.Parse(others).RootElement.GetProperty("points");
         ladder.GetArrayLength().Should().Be(2);
         ladder[0].GetProperty("deckId").ValueKind.Should().Be(JsonValueKind.Null);
 
-        var own = await (await Get($"/api/user/profile/{TestUsers.UserA}/stats", TestUsers.UserA)).Content.ReadFromJsonAsync<JsonElement>();
-        own.GetProperty("ladder")[0].GetProperty("title").GetString().Should().Be("First Finish");
+        var own = await (await Get($"/api/user/profile/{TestUsers.UserA}/stats/ladder", TestUsers.UserA)).Content.ReadFromJsonAsync<JsonElement>();
+        own.GetProperty("points")[0].GetProperty("title").GetString().Should().Be("First Finish");
 
         var overview = await (await Get($"/api/user/profile/{TestUsers.UserA}/overview", TestUsers.UserB)).Content.ReadFromJsonAsync<JsonElement>();
         overview.GetProperty("pinned")[0].GetProperty("status").GetInt32().Should().Be((int)DeckStatus.None);

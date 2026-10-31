@@ -1,6 +1,14 @@
 const LINK_ICON = 'material-symbols:link';
 
-const PLATFORMS: { hosts: string[]; name: string; icon?: string }[] = [
+/** Greasy Fork and Sleazy Fork path segments read `<id>-<slug>`, and the slug is the script or user name. */
+const ID_SLUG = /^\d+-(.+)$/;
+
+const slugName = (segments: string[]) => {
+  const slug = segments.map((s) => ID_SLUG.exec(s)?.[1]).filter(Boolean).at(-1);
+  return slug?.replace(/-/g, ' ');
+};
+
+const PLATFORMS: { hosts: string[]; name: string; icon?: string; account?: (segments: string[]) => string | undefined }[] = [
   { hosts: ['x.com', 'twitter.com'], name: 'X', icon: 'mdi:twitter' },
   { hosts: ['bsky.app'], name: 'Bluesky', icon: 'mdi:butterfly' },
   { hosts: ['youtube.com', 'youtu.be'], name: 'YouTube', icon: 'mdi:youtube' },
@@ -25,13 +33,15 @@ const PLATFORMS: { hosts: string[]; name: string; icon?: string }[] = [
   { hosts: ['pixiv.net'], name: 'pixiv' },
   { hosts: ['nicovideo.jp'], name: 'niconico' },
   { hosts: ['bilibili.com'], name: 'bilibili' },
+  { hosts: ['greasyfork.org'], name: 'Greasy Fork', icon: 'mdi:script-text-outline', account: slugName },
+  { hosts: ['sleazyfork.org'], name: 'Sleazy Fork', icon: 'mdi:script-text-outline', account: slugName },
 ];
 
 export interface ProfileLinkDisplay {
   icon: string;
   /** Null for sites outside the known platforms. */
   platform: string | null;
-  /** The account part of a platform link, or host and path for any other site; always derived from the URL, so a label can't disguise where it leads. */
+  /** The account part of a platform link, or host and last path segment for any other site; always derived from the URL, so a label can't disguise where it leads. */
   label: string;
 }
 
@@ -52,10 +62,13 @@ export function describeProfileLink(url: string): ProfileLinkDisplay {
   }
 
   const host = parsed.hostname.replace(/^www\./, '');
-  const path = decode(parsed.pathname.replace(/\/$/, ''));
+  const segments = parsed.pathname.split('/').filter(Boolean).map(decode);
   const platform = PLATFORMS.find((p) => p.hosts.some((h) => host === h || host.endsWith(`.${h}`)));
-  if (!platform) return { icon: LINK_ICON, platform: null, label: `${host}${path}` };
+  if (!platform) {
+    const path = segments.length > 1 ? `/…/${segments.at(-1)}` : segments.map((s) => `/${s}`).join('');
+    return { icon: LINK_ICON, platform: null, label: `${host}${path}` };
+  }
 
-  const account = path.split('/').filter(Boolean).at(-1);
+  const account = platform.account?.(segments) ?? segments.at(-1);
   return { icon: platform.icon ?? LINK_ICON, platform: platform.name, label: account ?? '' };
 }

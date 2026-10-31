@@ -85,12 +85,14 @@
     if (Math.random() < SPIN_CHANCE) playRare();
   }
 
-  const tooltip = computed(() => {
+  const tooltipLines = computed(() => {
     const { nextThreshold, value } = props.milestone;
-    const reached = tierName.value ? `${tierName.value} tier. ` : 'Not reached yet. ';
-    if (!nextName.value || nextThreshold == null) return `${reached}The highest tier, ${valueLabel.value}.`;
-    return `${reached}${nextName.value} at ${amount(nextThreshold)}, ${amount(nextThreshold - value)} to go.`;
+    const heading = tierName.value ? `${tierName.value} tier` : 'Not reached yet';
+    if (!nextName.value || nextThreshold == null) return [heading, 'The highest tier', valueLabel.value];
+    return [heading, `${tierName.value ? 'Next' : 'First'}: ${nextName.value} at ${amount(nextThreshold)}`, `${amount(nextThreshold - value)} to go`];
   });
+  const tooltip = computed(() => [`**${tooltipLines.value[0]}**`, ...tooltipLines.value.slice(1)].join('\n'));
+  const tooltipText = computed(() => `${tooltipLines.value.join('. ')}.`);
 </script>
 
 <template>
@@ -208,7 +210,7 @@
       <div v-if="nextName" class="h-1 w-full max-w-16 overflow-hidden rounded-full bg-gray-200 dark:bg-gray-700" aria-hidden="true">
         <div class="medal-bar h-full rounded-full" :class="tier ? `medal-${tier}` : 'bg-gray-400'" :style="{ width: `${progress}%` }" />
       </div>
-      <span class="sr-only">{{ tooltip }}</span>
+      <span class="sr-only">{{ tooltipText }}</span>
     </div>
   </Tooltip>
 </template>

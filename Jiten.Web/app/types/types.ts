@@ -1022,22 +1022,31 @@ export interface ProfileCount {
 }
 
 export interface ProfileLadderPoint {
+  /** The volume's own id on a volume dot. */
   deckId: number | null;
+  /** The series title on a volume dot. */
   title: string | null;
   romajiTitle: string | null;
   englishTitle: string | null;
+  isVolume: boolean;
+  volumeTitle: string | null;
   finishedOn: string;
   difficulty: number;
 }
 
+export interface ProfileLadder {
+  points: ProfileLadderPoint[];
+  undatedTitles: number;
+  undatedVolumes: number;
+  /** Media types with a completed volume or episode, the ones the chart can split. */
+  volumeTypes: MediaType[];
+}
+
 export interface ProfileStats {
   titlesFinished: number | null;
-  /** Finished titles missing from the difficulty-over-time chart for lack of a finish date. */
-  undatedFinished: number;
   characters: number | null;
   meanScore: number | null;
   scoredCount: number;
-  ladder: ProfileLadderPoint[];
   charactersByMonth: { month: string; characters: number }[];
   mediaTypes: ProfileCount[];
   genres: ProfileGenreShare[] | null;
@@ -2892,6 +2901,7 @@ export interface CommunityListSummary {
   name: string;
   description: string | null;
   ownerDisplayName: string | null;
+  canOpenOwnerProfile: boolean;
   genres: Genre[];
   tags: Tag[];
   favouriteCount: number;

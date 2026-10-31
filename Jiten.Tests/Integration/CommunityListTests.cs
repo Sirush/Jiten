@@ -920,4 +920,21 @@ public class CommunityListTests(JitenWebApplicationFactory factory)
         list.GetProperty("previewCoverNames").GetArrayLength().Should().Be(5);
         list.GetProperty("status").ValueKind.Should().Be(JsonValueKind.Null);
     }
+
+    [Fact]
+    public async Task Summary_LinksOwnerProfileOnlyWhenPublicOrOwn()
+    {
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
+        await factory.ConfigureProfileAsync(TestUsers.UserB, isPublic: false);
+        var publicOwnerList = await CreatePublicList(TestUsers.UserA, "Public owner");
+        var privateOwnerList = await CreatePublicList(TestUsers.UserB, "Private owner");
+
+        async Task<Dictionary<int, bool>> Linked(string? viewer) =>
+            (await (await Send(HttpMethod.Get, "/api/lists?sort=top", viewer)).Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("data").EnumerateArray()
+            .ToDictionary(l => l.GetProperty("listId").GetInt32(), l => l.GetProperty("canOpenOwnerProfile").GetBoolean());
+
+        (await Linked(null)).Should().Equal(new Dictionary<int, bool> { [publicOwnerList] = true, [privateOwnerList] = false });
+        (await Linked(TestUsers.UserB))[privateOwnerList].Should().BeTrue();
+    }
 }

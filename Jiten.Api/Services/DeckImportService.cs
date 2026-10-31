@@ -65,11 +65,12 @@ public class JpdbDeckImportItem
     public List<JpdbWordRef> Words { get; set; } = new();
 }
 
+/// <summary>Ids and counts are long: JPDB-only vocabulary has vids beyond int range, and an int field would fail binding for the whole request.</summary>
 public class JpdbWordRef
 {
-    public int WordId { get; set; }
+    public long WordId { get; set; }
     public string Spelling { get; set; } = "";
-    public int Occurrences { get; set; } = 1;
+    public long Occurrences { get; set; } = 1;
 }
 
 public class JpdbDeckImportDeckResult
@@ -337,7 +338,11 @@ public partial class DeckImportService(
                            .ToList();
         if (items.Count == 0) return new([], "No decks to import.");
 
-        var wordIds = items.SelectMany(d => d.Words).Select(w => w.WordId).Distinct().ToList();
+        var wordIds = items.SelectMany(d => d.Words)
+                           .Where(w => w.WordId is > 0 and <= int.MaxValue)
+                           .Select(w => (int)w.WordId)
+                           .Distinct()
+                           .ToList();
         Dictionary<int, List<JmDictWordForm>> formsByWord;
         await using (var jitenContext = await contextFactory.CreateDbContextAsync())
         {
@@ -356,14 +361,15 @@ public partial class DeckImportService(
             var unmatched = new List<JpdbWordRef>();
             foreach (var w in item.Words)
             {
-                if (!formsByWord.TryGetValue(w.WordId, out var forms))
+                if (w.WordId is <= 0 or > int.MaxValue || !formsByWord.TryGetValue((int)w.WordId, out var forms))
                 {
                     unmatched.Add(w);
                     continue;
                 }
 
+                var wordId = (int)w.WordId;
                 var readingIndex = (short)(forms.FirstOrDefault(f => f.Text == w.Spelling)?.ReadingIndex ?? 0);
-                if (seen.Add((w.WordId, readingIndex))) words.Add((w.WordId, readingIndex, Math.Max(1, w.Occurrences)));
+                if (seen.Add((wordId, readingIndex))) words.Add((wordId, readingIndex, (int)Math.Clamp(w.Occurrences, 1, int.MaxValue)));
             }
 
             resolved.Add((item, words, unmatched));

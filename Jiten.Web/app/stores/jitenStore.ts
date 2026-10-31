@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia';
-import { type DifficultyDisplayStyle, DifficultyValueDisplayStyle, type SentenceFuriganaMode, ThemeMode, TitleLanguage } from '~/types';
+import { type DifficultyDisplayStyle, DifficultyValueDisplayStyle, MediaType, type SentenceFuriganaMode, ThemeMode, TitleLanguage } from '~/types';
 import type { DisplayType as KanjiGridGrouping, KanjiScalePref } from '~/data/kanjiGroupings';
 import { DEFAULT_TTS_VOLUME } from '~/utils/ttsVolume';
 import type { CoverageScale } from '~/utils/coverageAxis';
@@ -251,6 +251,8 @@ export const useJitenStore = defineStore('jiten', () => {
 
   const coverageJourneyScale = createLocalStorageState<CoverageScale>('coverage-journey-scale', 'fit');
 
+  const profileLadderSplitTypes = createCookieState<MediaType[]>('profile-ladder-split', [MediaType.Novel, MediaType.NonFiction]);
+
   const franchiseLinkMode = createLocalStorageState<FranchiseLinkMode>('franchise-link-mode', 'all');
   const franchiseCardSize = createLocalStorageState<FranchiseCardSize>('franchise-card-size', 'covers');
   const franchiseSeriesDensity = createLocalStorageState<FranchiseSeriesDensity>('franchise-series-density', 'detailed');
@@ -339,6 +341,7 @@ export const useJitenStore = defineStore('jiten', () => {
     hideSentenceStats,
     separatePriorKnowledge,
     coverageJourneyScale,
+    profileLadderSplitTypes,
     franchiseLinkMode,
     franchiseCardSize,
     franchiseSeriesDensity,

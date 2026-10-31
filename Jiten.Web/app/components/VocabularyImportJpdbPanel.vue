@@ -6,7 +6,6 @@
   const emit = defineEmits<{ changed: [] }>();
 
   const { $api } = useNuxtApp();
-  const toast = useToast();
   const { JpdbApiClient } = useJpdbApi();
   const srsStore = useSrsStore();
   const confirm = useConfirm();
@@ -194,25 +193,30 @@
   async function importFromJpdb() {
     if (!canImport.value) return;
     const result: JpdbImportSummary = {};
+    let step = '';
 
     try {
       isLoading.value = true;
 
-      if (importReviews.value) result.reviews = await importReviewsFile();
-      if (importKnownWords.value) result.knownWords = await importViaApi();
-      if (importDecks.value) result.wordLists = await importDecksAsWordLists();
-
-      emit('changed');
-      summary.value = result;
-      showSummary.value = true;
+      if (importReviews.value) {
+        step = 'Review history';
+        result.reviews = await importReviewsFile();
+      }
+      if (importKnownWords.value) {
+        step = 'Known words';
+        result.knownWords = await importViaApi();
+      }
+      if (importDecks.value) {
+        step = 'Word lists';
+        result.wordLists = await importDecksAsWordLists();
+      }
     } catch (error) {
       console.error('Error importing from JPDB:', error);
-      const errorMessage = apiErrorMessage(
-        error,
-        error instanceof Error ? error.message : 'Failed to import from JPDB. Please check your input and try again.'
-      );
-      toast.add({ severity: 'error', summary: 'Error', detail: errorMessage, life: 6000 });
+      result.failure = { step, message: apiErrorMessage(error, 'Something went wrong. Try again in a few minutes.') };
     } finally {
+      if (result.reviews || result.knownWords || result.wordLists) emit('changed');
+      summary.value = result;
+      showSummary.value = true;
       isLoading.value = false;
       jpdbProgress.value = '';
     }

@@ -97,7 +97,7 @@
         <LegalUpdateBanner
           v-if="!isStudyMode && route.path !== '/'"
           class="mt-2"
-          :class="route.meta.fullBleed ? 'container mx-auto mb-9 max-w-7xl px-4' : 'mb-3'"
+          :class="route.meta.fullBleed ? 'container mx-auto mb-9 max-w-6xl px-4' : 'mb-3'"
         />
       </ClientOnly>
       <NuxtPage />

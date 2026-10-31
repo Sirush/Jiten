@@ -26,6 +26,7 @@
   );
 
   const links = computed(() => props.header.links.map((url) => ({ url, ...describeProfileLink(url) })));
+  const hasDetails = computed(() => !!props.header.bio || !!props.header.memberSince || props.header.links.length > 0);
 
   const pendingLink = ref<string | null>(null);
 
@@ -38,7 +39,9 @@
 <template>
   <section aria-label="Profile header" class="-mt-6">
     <div :style="{ background: banner }">
-      <div class="container mx-auto flex max-w-7xl items-end gap-4 px-4 pt-6 sm:gap-5 sm:pt-10">
+      <div
+        class="container mx-auto grid max-w-6xl grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-3 px-4 pb-4 pt-6 sm:grid-rows-[1fr_auto] sm:gap-x-5 sm:gap-y-0 sm:pb-0 sm:pt-10"
+      >
         <ProfileAvatar
           :name="header.displayName"
           :kanji="header.avatarKanji"
@@ -47,14 +50,14 @@
           :strokes="header.avatarStrokes"
           :size="120"
           framed
-          class="relative z-10 -mb-8 shadow-md max-sm:!h-20 max-sm:!w-20 max-sm:!text-[42px] sm:-mb-12"
+          class="relative z-10 shadow-md max-sm:!h-20 max-sm:!w-20 max-sm:!text-[42px] sm:row-span-2 sm:-mb-12 sm:self-end"
         />
-        <div class="min-w-0 flex-1 pb-3">
-          <div class="flex flex-wrap items-baseline gap-x-2.5 gap-y-1">
-            <h1 class="text-xl font-bold leading-none text-white sm:text-3xl" v-bind="japaneseTextAttrs(name)">{{ name }}</h1>
-            <JitenPlusSupporterMark v-if="header.isJitenPlus" class="text-[0.95rem] sm:text-lg" />
-          </div>
-          <p v-if="header.bio" class="mt-1.5 line-clamp-3 max-w-2xl whitespace-pre-line text-sm text-white/90" v-bind="japaneseTextAttrs(header.bio)">
+        <div class="flex min-w-0 flex-wrap items-baseline gap-x-2.5 gap-y-1 sm:self-end" :class="{ 'sm:pb-3': !hasDetails }">
+          <h1 class="text-xl font-bold leading-none text-white sm:text-3xl" v-bind="japaneseTextAttrs(name)">{{ name }}</h1>
+          <JitenPlusSupporterMark v-if="header.isJitenPlus" class="text-[0.95rem] sm:text-lg" />
+        </div>
+        <div v-if="hasDetails" class="col-span-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:pb-3">
+          <p v-if="header.bio" class="max-w-2xl whitespace-pre-line text-sm text-white/90 sm:mt-1.5" v-bind="japaneseTextAttrs(header.bio)">
             {{ header.bio }}
           </p>
           <div v-if="header.memberSince || header.links.length" class="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/80">
@@ -89,7 +92,7 @@
     </div>
 
     <div class="border-b border-surface-200 bg-surface-0 dark:border-surface-700 dark:bg-surface-900">
-      <div class="container mx-auto max-w-7xl px-4">
+      <div class="container mx-auto max-w-6xl px-4">
         <div class="flex min-h-11 flex-wrap items-center gap-x-2 max-sm:pt-1 sm:min-h-14 sm:pl-[124px]">
           <div v-if="header.isOwner" class="flex w-full items-center justify-end gap-2 py-1.5 sm:order-2 sm:w-auto">
             <Button
@@ -117,7 +120,6 @@
             </span>
             <Button label="Exit preview" severity="secondary" outlined size="small" @click="emit('viewAs', null)" />
           </div>
-          <div v-else class="h-8 w-full sm:hidden" aria-hidden="true" />
           <nav aria-label="Profile sections" class="no-scrollbar flex min-w-0 flex-1 overflow-x-auto max-sm:-mx-1 max-sm:basis-full sm:order-1">
             <NuxtLink
               v-for="tab in tabs"
