@@ -6,6 +6,8 @@ using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.CommunityLists;
+using Jiten.Core.Data.FSRS;
+using Jiten.Core.Data.JMDict;
 using Jiten.Parser.Tests.Integration.Infrastructure;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -498,6 +500,42 @@ public class ProfileTests(JitenWebApplicationFactory factory)
         milestones["titles"].GetProperty("nextThreshold").GetInt64().Should().Be(25);
         milestones["characters"].GetProperty("tier").GetString().Should().Be("zeni");
         milestones["characters"].GetProperty("nextThreshold").GetInt64().Should().Be(250_000);
+    }
+
+    [Fact]
+    public async Task WordsKnownCountsMasteredSetWordsOnce()
+    {
+        const int setId = 9810;
+        int[] words = [9_810_001, 9_810_002, 9_810_003];
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            if (!await jitenDb.WordSets.AnyAsync(s => s.SetId == setId))
+            {
+                jitenDb.JMDictWords.AddRange(words.Select(w => new JmDictWord { WordId = w, PartsOfSpeech = ["noun"] }));
+                jitenDb.WordSets.Add(new WordSet { SetId = setId, Slug = "profile-words-known-set", Name = "Profile words known set", WordCount = 2 });
+                jitenDb.WordSetMembers.AddRange(new WordSetMember { SetId = setId, WordId = words[0], ReadingIndex = 0, Position = 0 },
+                                                new WordSetMember { SetId = setId, WordId = words[1], ReadingIndex = 0, Position = 1 });
+                await jitenDb.SaveChangesAsync();
+            }
+
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            await userDb.FsrsCards.Where(c => c.UserId == TestUsers.UserA).ExecuteDeleteAsync();
+            await userDb.UserWordSetStates.Where(s => s.UserId == TestUsers.UserA).ExecuteDeleteAsync();
+            userDb.UserWordSetStates.Add(new UserWordSetState { UserId = TestUsers.UserA, SetId = setId, State = WordSetStateType.Mastered });
+            userDb.FsrsCards.AddRange(new FsrsCard(TestUsers.UserA, words[1], 0, state: FsrsState.Review, due: DateTime.UtcNow.AddDays(40),
+                                                   lastReview: DateTime.UtcNow),
+                                      new FsrsCard(TestUsers.UserA, words[2], 0, state: FsrsState.Review, due: DateTime.UtcNow.AddDays(40),
+                                                   lastReview: DateTime.UtcNow));
+            await userDb.SaveChangesAsync();
+        }
+
+        var overview = await (await Get($"/api/user/profile/{TestUsers.UserA}/overview", TestUsers.UserB)).Content.ReadFromJsonAsync<JsonElement>();
+
+        overview.GetProperty("snapshot").GetProperty("wordsKnown").GetInt32().Should().Be(3);
+        overview.GetProperty("milestones").EnumerateArray().Single(m => m.GetProperty("kind").GetString() == "words")
+                .GetProperty("value").GetInt64().Should().Be(3);
     }
 
     [Fact]

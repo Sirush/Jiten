@@ -20,16 +20,18 @@
 
   onMounted(() => fetchStats());
 
-  const knownWords = computed(() => {
+  const cardWords = computed(() => {
     if (!stats.value) return 0;
     return stats.value.young + stats.value.mature + stats.value.mastered;
   });
 
-  const hasData = computed(() => knownWords.value > 0 || (stats.value?.wordSetMastered ?? 0) > 0);
+  const knownWords = computed(() => cardWords.value + (stats.value?.wordSetMastered ?? 0));
+
+  const hasData = computed(() => knownWords.value > 0);
 
   const segments = computed(() => {
     const s = stats.value;
-    if (!s || knownWords.value === 0) return [];
+    if (!s || cardWords.value === 0) return [];
     return [
       { key: 'young', label: 'Young', count: s.young, dot: 'bg-yellow-500 dark:bg-yellow-300', bar: 'bg-yellow-500 dark:bg-yellow-300' },
       { key: 'mature', label: 'Mature', count: s.mature, dot: 'bg-green-500 dark:bg-green-400', bar: 'bg-green-500 dark:bg-green-400' },
@@ -39,7 +41,7 @@
 
   const formatNumber = (num: number) => num.toLocaleString();
 
-  const percent = (count: number) => (count / knownWords.value) * 100;
+  const percent = (count: number) => (count / cardWords.value) * 100;
 </script>
 
 <template>
@@ -84,7 +86,7 @@
         </div>
 
         <p v-if="stats && stats.wordSetMastered > 0" class="text-xs text-gray-500 dark:text-gray-400">
-          + {{ formatNumber(stats.wordSetMastered) }} mastered from word sets
+          Includes {{ formatNumber(stats.wordSetMastered) }} mastered from word sets
         </p>
       </div>
     </template>

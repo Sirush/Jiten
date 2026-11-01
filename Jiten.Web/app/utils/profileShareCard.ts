@@ -67,8 +67,12 @@ export interface ProfileShareCardOptions {
 
 const num = (n: number) => n.toLocaleString();
 
-function knownWordTotal(v: ProfileVocabularyStats) {
+function cardWordTotal(v: ProfileVocabularyStats) {
   return v.young + v.mature + v.mastered;
+}
+
+function knownWordTotal(v: ProfileVocabularyStats) {
+  return cardWordTotal(v) + v.wordSetMastered;
 }
 
 function heatmapWeeks(heatmap: StudyHeatmapResponse): number[][] {
@@ -235,7 +239,7 @@ export function drawProfileShareCard(options: ProfileShareCardOptions): HTMLCanv
     ctx.clip();
     let barX = innerX;
     for (const segment of segments) {
-      const segW = Math.max(3, (segment.count / known) * innerW);
+      const segW = Math.max(3, (segment.count / cardWordTotal(vocab)) * innerW);
       ctx.fillStyle = segment.color;
       ctx.fillRect(barX, barY, segW, barH);
       barX += segW;
@@ -265,7 +269,7 @@ export function drawProfileShareCard(options: ProfileShareCardOptions): HTMLCanv
       ctx.font = `500 11px ${FONT}`;
       ctx.fillStyle = pal.foot;
       ctx.textAlign = 'right';
-      ctx.fillText(`+ ${num(vocab.wordSetMastered)} mastered from word sets`, PAD + INNER - 20, legendY);
+      ctx.fillText(`Includes ${num(vocab.wordSetMastered)} mastered from word sets`, PAD + INNER - 20, legendY);
       ctx.textAlign = 'left';
     }
 
