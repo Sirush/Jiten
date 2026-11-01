@@ -28,13 +28,13 @@
 
   const amount = (n: number) => (props.milestone.kind === 'streak' || props.milestone.kind === 'studyDays' ? n.toLocaleString('en-US') : formatCompact(n));
 
-  const KINDS: Record<ProfileMilestone['kind'], { glyph?: string; icon?: string; label: (n: number) => string }> = {
+  const KINDS: Record<ProfileMilestone['kind'], { glyph: string; label: (n: number) => string }> = {
     characters: { glyph: '字', label: (n) => `${amount(n)} characters` },
     titles: { glyph: '本', label: (n) => `${amount(n)} ${n === 1 ? 'title finished' : 'titles finished'}` },
     words: { glyph: '語', label: (n) => `${amount(n)} words known` },
     kanji: { glyph: '漢', label: (n) => `${amount(n)} kanji known` },
     reviews: { glyph: '習', label: (n) => `${amount(n)} ${n === 1 ? 'review' : 'reviews'}` },
-    streak: { icon: 'material-symbols:local-fire-department', label: (n) => `${n}-day longest streak` },
+    streak: { glyph: '連', label: (n) => `${n}-day longest streak` },
     studyDays: { glyph: '日', label: (n) => `${amount(n)} ${n === 1 ? 'day' : 'days'} studied` },
     votes: { glyph: '比', label: (n) => `${amount(n)} difficulty ${n === 1 ? 'vote' : 'votes'}` },
   };
@@ -170,8 +170,7 @@
               <span v-if="tier === 'koban'" class="koban-stamp" />
               <span v-if="tier === 'jade'" class="magatama-hole" />
               <span class="medal-glyph-slot">
-                <Icon v-if="kind.icon" :name="kind.icon" size="1.5rem" class="medal-glyph" />
-                <span v-else lang="ja" class="medal-glyph ja-general text-2xl font-bold leading-none">{{ kind.glyph }}</span>
+                <span lang="ja" class="medal-glyph ja-general text-2xl font-bold leading-none">{{ kind.glyph }}</span>
               </span>
               <span v-if="tier === 'koban'" class="koban-stamp" />
             </div>
@@ -202,8 +201,7 @@
         class="flex h-16 w-16 items-center justify-center rounded-full border-[3px] border-dashed border-gray-300 text-2xl font-bold text-gray-400 dark:border-gray-600 dark:text-gray-500"
         aria-hidden="true"
       >
-        <Icon v-if="kind.icon" :name="kind.icon" size="1.5rem" />
-        <span v-else lang="ja" class="ja-general leading-none">{{ kind.glyph }}</span>
+        <span lang="ja" class="ja-general leading-none">{{ kind.glyph }}</span>
       </div>
       </div>
       <span class="line-clamp-2 min-h-[2lh] text-xs leading-snug">{{ valueLabel }}</span>
@@ -387,7 +385,7 @@
     display: flex;
   }
 
-  /** Engraved glyph: a light lip under the stroke; drop-shadow rather than text-shadow so the streak SVG matches. */
+  /** Engraved glyph: a light lip under the stroke. */
   .medal-glyph {
     position: relative;
     filter: drop-shadow(0 1px 0 rgb(255 255 255 / 0.55));

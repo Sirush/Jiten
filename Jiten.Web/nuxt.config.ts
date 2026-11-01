@@ -2,7 +2,6 @@
 
 import tailwindcss from '@tailwindcss/vite';
 import path from 'node:path';
-import * as fs from 'node:fs';
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-14',
@@ -215,8 +214,8 @@ export default defineNuxtConfig({
     process.env.NODE_ENV === 'development'
       ? {
           https: {
-            key: fs.readFileSync(path.resolve(__dirname, 'localhost-key.pem')).toString(),
-            cert: fs.readFileSync(path.resolve(__dirname, 'localhost.pem')).toString(),
+            key: path.resolve(__dirname, 'localhost-key.pem'),
+            cert: path.resolve(__dirname, 'localhost.pem'),
           },
         }
       : {},

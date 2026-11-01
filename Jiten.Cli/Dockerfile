@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.403-noble AS build
 WORKDIR /src
 COPY ["Jiten.Core/Jiten.Core.csproj", "Jiten.Core/"]
 COPY ["Jiten.Cli/Jiten.Cli.csproj", "Jiten.Cli/"]
@@ -16,7 +16,7 @@ COPY . .
 RUN dotnet build "Jiten.Cli/Jiten.Cli.csproj" -c Release -o /app/build
 RUN dotnet publish "Jiten.Cli/Jiten.Cli.csproj" -c Release -o /app/publish
 
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.14-noble AS final
 RUN apt-get update && apt-get install -y --no-install-recommends libgomp1 && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/publish .

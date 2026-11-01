@@ -53,7 +53,7 @@ public abstract class RedisPendingDeckSet(IConnectionMultiplexer redis, ILogger 
             var members = await membersTask;
             var result = new List<int>(members.Length);
             foreach (var m in members)
-                if (int.TryParse(m, out var id))
+                if (int.TryParse((string?)m, out var id))
                     result.Add(id);
             return result;
         }

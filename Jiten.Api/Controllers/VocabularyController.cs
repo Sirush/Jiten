@@ -590,7 +590,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
             var cachedJson = await redisDb.StringGetAsync(cacheKey);
             if (cachedJson.HasValue)
             {
-                var cachedDto = JsonSerializer.Deserialize<DictionarySearchResultDto>(cachedJson!);
+                var cachedDto = JsonSerializer.Deserialize<DictionarySearchResultDto>((string)cachedJson!);
                 if (cachedDto != null)
                 {
                     await ApplyScopedRanks(cachedDto);

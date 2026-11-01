@@ -168,7 +168,7 @@ public partial class UserController
         if (access.Shows(ProfileField.WordsKnown))
         {
             var vocab = await GetVocabularyStatsAsync(cache, userId);
-            dto.Snapshot.WordsKnown = vocab.Young + vocab.Mature + vocab.Mastered;
+            dto.Snapshot.WordsKnown = vocab.Young + vocab.Mature + vocab.Mastered + vocab.WordSetMastered;
         }
         if (access.Shows(ProfileField.KanjiKnown))
             dto.Snapshot.KanjiKnown = await cache.GetOrSetAsync(ProfileCacheKind.KanjiCount, () => CountKnownKanjiAsync(userId));

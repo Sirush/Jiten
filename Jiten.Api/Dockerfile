@@ -1,4 +1,4 @@
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
+FROM mcr.microsoft.com/dotnet/sdk:10.0.403-noble AS build
 WORKDIR /src
 COPY ["Jiten.Core/Jiten.Core.csproj", "Jiten.Core/"]
 COPY ["Jiten.Api/Jiten.Api.csproj", "Jiten.Api/"]
@@ -15,7 +15,7 @@ COPY . .
 RUN dotnet build "Jiten.Api/Jiten.Api.csproj" -c Release -o /app/build
 RUN dotnet publish "Jiten.Api/Jiten.Api.csproj" -c Release -o /app/publish
 
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS final
+FROM mcr.microsoft.com/dotnet/aspnet:10.0.14-noble AS final
 RUN apt-get update && apt-get install -y --no-install-recommends curl libgomp1 && rm -rf /var/lib/apt/lists/*
 RUN curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o /usr/local/bin/yt-dlp     && chmod +x /usr/local/bin/yt-dlp
 WORKDIR /app
