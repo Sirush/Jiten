@@ -117,9 +117,12 @@ export function useClientApkg() {
 
     onProgress?.({ phase: 'loading', current: 0, total: 1 });
 
-    const initSqlJs = (await import('sql.js')).default;
+    const [{ default: initSqlJs }, { default: sqlWasmUrl }] = await Promise.all([
+      import('sql.js'),
+      import('sql.js/dist/sql-wasm-browser.wasm?url'),
+    ]);
     const SQL = await initSqlJs({
-      locateFile: (file: string) => `/${file}`,
+      locateFile: () => sqlWasmUrl,
     });
 
     const dbBuffer = await collectionFile.async('uint8array');

@@ -301,7 +301,7 @@ public class SmartDeckBuilder(
         try
         {
             var value = await redis.GetDatabase().StringGetAsync(SmartDeckCacheKeys.LastRebuilt(userId));
-            return value.HasValue && long.TryParse(value, out var ticks) ? new DateTime(ticks, DateTimeKind.Utc) : null;
+            return value.HasValue && long.TryParse((string?)value, out var ticks) ? new DateTime(ticks, DateTimeKind.Utc) : null;
         }
         catch (Exception ex)
         {

@@ -230,7 +230,7 @@ public class WatchController(
             var cached = await db.StringGetAsync(key);
             if (cached.HasValue)
             {
-                var hit = JsonSerializer.Deserialize<SubtitleTokens>(cached!);
+                var hit = JsonSerializer.Deserialize<SubtitleTokens>((string)cached!);
                 if (hit != null && hit.Lines.Count == cues.Count)
                     return hit;
             }

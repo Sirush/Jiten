@@ -549,7 +549,7 @@ public partial class StudyController
         try
         {
             var value = await redis.GetDatabase().StringGetAsync(cacheKey);
-            return value.HasValue ? JsonSerializer.Deserialize<T>(value!) : null;
+            return value.HasValue ? JsonSerializer.Deserialize<T>((string)value!) : null;
         }
         catch (Exception ex)
         {
