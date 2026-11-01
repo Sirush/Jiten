@@ -30,7 +30,8 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             excludeMatureMasteredBlacklisted, excludeAllTrackedWords,
             targetPercentage, minOccurrences, maxOccurrences, posFilter, startFromKnown, bandSource, orderSource) = request;
 
-        var deckWordsQuery = QuerySource(source);
+        var unfilteredQuery = QuerySource(source);
+        var deckWordsQuery = unfilteredQuery;
 
         if (!string.IsNullOrEmpty(posFilter))
         {
@@ -74,7 +75,8 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 if (targetPercentage is null or < 1 or > 100)
                     return (null, Results.BadRequest("Target percentage must be between 1 and 100"));
 
-                var coverageRows = await deckWordsQuery.ToListAsync();
+                var coverageRows = await unfilteredQuery.ToListAsync();
+                var eligibleWordIds = await LoadPosEligibleWordIds(unfilteredQuery, posFilter);
                 var coverageRanks = await LoadTieBreakRanks(coverageRows.Select(dw => dw.WordId));
 
                 var allDeckWordsForCoverage = coverageRows
@@ -100,7 +102,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 double targetCoverage = targetPercentage.Value;
 
                 var resultWords = CollectCoverageWords(
-                    allDeckWordsForCoverage, knownKeysSet, totalOccurrences, targetCoverage, startFromKnown);
+                    allDeckWordsForCoverage, knownKeysSet, totalOccurrences, targetCoverage, startFromKnown, eligibleWordIds);
 
                 if (order == DeckOrder.Chronological)
                 {
@@ -950,17 +952,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             return (0, []);
 
         var deckWordsQuery = QuerySource(source);
-
-        if (!string.IsNullOrEmpty(posFilter))
-        {
-            var posTags = JsonSerializer.Deserialize<string[]>(posFilter);
-            if (posTags is { Length: > 0 })
-            {
-                var wordIdsWithPos = context.JMDictWords.AsNoTracking()
-                    .Where(w => w.PartsOfSpeech.Any(p => posTags.Contains(p)));
-                deckWordsQuery = deckWordsQuery.Where(dw => wordIdsWithPos.Any(w => w.WordId == dw.WordId));
-            }
-        }
+        var eligibleWordIds = await LoadPosEligibleWordIds(deckWordsQuery, posFilter);
 
         var allDeckWordsUnordered = await deckWordsQuery
             .Select(dw => new { dw.WordId, dw.ReadingIndex, dw.Occurrences })
@@ -992,7 +984,8 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
                 .ToHashSet();
         }
 
-        var resultKeys = CollectCoverageKeys(keysWithOccurrences, knownKeysSet, totalOccurrences, targetPercentage, startFromKnown);
+        var resultKeys = CollectCoverageKeys(keysWithOccurrences, knownKeysSet, totalOccurrences, targetPercentage, startFromKnown,
+                                             eligibleWordIds);
 
         if (excludeKana)
         {
@@ -1107,13 +1100,14 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
 
     private static List<DeckWord> CollectCoverageWords(
         List<DeckWord> allWords, HashSet<long> knownKeysSet,
-        int totalOccurrences, double targetPercentage, bool startFromKnown)
+        int totalOccurrences, double targetPercentage, bool startFromKnown, HashSet<int>? eligibleWordIds)
     {
         var keysWithOccurrences = allWords
             .Select(dw => (Key: WordFormHelper.EncodeWordKey(dw.WordId, dw.ReadingIndex), dw.Occurrences))
             .ToList();
 
-        var selectedKeys = CollectCoverageKeys(keysWithOccurrences, knownKeysSet, totalOccurrences, (float)targetPercentage, startFromKnown);
+        var selectedKeys = CollectCoverageKeys(keysWithOccurrences, knownKeysSet, totalOccurrences, (float)targetPercentage, startFromKnown,
+                                               eligibleWordIds);
 
         var result = new List<DeckWord>(selectedKeys.Count);
         for (int i = 0; i < allWords.Count && result.Count < selectedKeys.Count; i++)
@@ -1125,30 +1119,35 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
         return result;
     }
 
+    /// <summary>Coverage is measured against the whole deck; <paramref name="eligibleWordIds"/> (null = all) only limits which words may be picked.</summary>
     private static HashSet<long> CollectCoverageKeys(
         List<(long Key, int Occurrences)> items, HashSet<long>? knownKeysSet,
-        int totalOccurrences, float targetPercentage, bool startFromKnown)
+        int totalOccurrences, float targetPercentage, bool startFromKnown, HashSet<int>? eligibleWordIds = null)
     {
         var result = new HashSet<long>();
+        bool IsEligible(long key) => eligibleWordIds == null || eligibleWordIds.Contains((int)(key >> 8));
+        bool Reached(int cumulative) => (double)cumulative / totalOccurrences * 100 >= targetPercentage;
 
         if (startFromKnown && knownKeysSet != null)
         {
-            int knownOccurrences = 0;
+            int cumulative = 0;
             foreach (var (key, occ) in items)
             {
                 if (knownKeysSet.Contains(key))
-                    knownOccurrences += occ;
+                    cumulative += occ;
             }
 
-            int cumulative = knownOccurrences;
+            if (Reached(cumulative))
+                return result;
+
             foreach (var (key, occ) in items)
             {
-                if (knownKeysSet.Contains(key))
+                if (knownKeysSet.Contains(key) || !IsEligible(key))
                     continue;
 
                 result.Add(key);
                 cumulative += occ;
-                if ((double)cumulative / totalOccurrences * 100 >= targetPercentage)
+                if (Reached(cumulative))
                     break;
             }
         }
@@ -1158,13 +1157,33 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             foreach (var (key, occ) in items)
             {
                 cumulative += occ;
-                if (knownKeysSet == null || !knownKeysSet.Contains(key))
+                if ((knownKeysSet == null || !knownKeysSet.Contains(key)) && IsEligible(key))
                     result.Add(key);
-                if ((double)cumulative / totalOccurrences * 100 >= targetPercentage)
+                if (Reached(cumulative))
                     break;
             }
         }
 
         return result;
+    }
+
+    /// <summary>Null when the filter selects no tags.</summary>
+    private async Task<HashSet<int>?> LoadPosEligibleWordIds(IQueryable<DeckWord> deckWordsQuery, string? posFilter)
+    {
+        if (string.IsNullOrEmpty(posFilter))
+            return null;
+
+        var posTags = JsonSerializer.Deserialize<string[]>(posFilter);
+        if (posTags is not { Length: > 0 })
+            return null;
+
+        var wordIdsWithPos = context.JMDictWords.AsNoTracking()
+            .Where(w => w.PartsOfSpeech.Any(p => posTags.Contains(p)));
+        var ids = await deckWordsQuery
+            .Where(dw => wordIdsWithPos.Any(w => w.WordId == dw.WordId))
+            .Select(dw => dw.WordId)
+            .Distinct()
+            .ToListAsync();
+        return ids.ToHashSet();
     }
 }
