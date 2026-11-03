@@ -47,7 +47,9 @@ public class ProfileVocabularyStatsTests(JitenWebApplicationFactory factory)
         await userDb.SaveChangesAsync();
     }
 
-    private async Task SeedMasteredWordSet(string userId)
+    private Task SeedMasteredWordSet(string userId) => SeedWordSet(userId, WordSetStateType.Mastered, (900, 0), (901, 0));
+
+    private async Task SeedWordSet(string userId, WordSetStateType state, params (int WordId, short ReadingIndex)[] members)
     {
         using var scope = factory.Services.CreateScope();
         var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
@@ -57,17 +59,78 @@ public class ProfileVocabularyStatsTests(JitenWebApplicationFactory factory)
         await jitenDb.WordSetMembers.ExecuteDeleteAsync();
         await jitenDb.WordSets.ExecuteDeleteAsync();
 
-        var set = new WordSet { Slug = "test-set", Name = "Test Set", WordCount = 2 };
+        var set = new WordSet { Slug = "test-set", Name = "Test Set", WordCount = members.Length };
         jitenDb.WordSets.Add(set);
         await jitenDb.SaveChangesAsync();
 
-        jitenDb.WordSetMembers.AddRange(
-            new WordSetMember { SetId = set.SetId, WordId = 900, ReadingIndex = 0, Position = 0 },
-            new WordSetMember { SetId = set.SetId, WordId = 901, ReadingIndex = 0, Position = 1 });
+        jitenDb.WordSetMembers.AddRange(members.Select((m, i) =>
+            new WordSetMember { SetId = set.SetId, WordId = m.WordId, ReadingIndex = m.ReadingIndex, Position = i }));
         await jitenDb.SaveChangesAsync();
 
-        userDb.UserWordSetStates.Add(new UserWordSetState { UserId = userId, SetId = set.SetId, State = WordSetStateType.Mastered });
+        userDb.UserWordSetStates.Add(new UserWordSetState { UserId = userId, SetId = set.SetId, State = state });
         await userDb.SaveChangesAsync();
+    }
+
+    private async Task<JsonElement> GetOwnAmounts()
+    {
+        var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/user/vocabulary/known-ids/amount").WithUser(TestUsers.UserA));
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        return await response.Content.ReadFromJsonAsync<JsonElement>();
+    }
+
+    [Fact]
+    public async Task BlacklistedCardWithMasteredSetSibling_CountsAsWordSetMastered()
+    {
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
+        await SeedCards(TestUsers.UserA);
+        await AddCards(new FsrsCard(TestUsers.UserA, 700, 0, state: FsrsState.Blacklisted));
+        await SeedWordSet(TestUsers.UserA, WordSetStateType.Mastered, (700, 1));
+
+        var body = await GetOwnAmounts();
+
+        body.GetProperty("wordSetMastered").GetInt32().Should().Be(1, "a mastered form outranks a blacklisted sibling");
+        body.GetProperty("blacklisted").GetInt32().Should().Be(1, "only word 400 stays blacklisted");
+    }
+
+    [Fact]
+    public async Task UnreviewedCardWithMasteredSetSibling_CountsAsWordSetMastered()
+    {
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
+        await SeedCards(TestUsers.UserA);
+        await AddCards(new FsrsCard(TestUsers.UserA, 701, 0, state: FsrsState.New));
+        await SeedWordSet(TestUsers.UserA, WordSetStateType.Mastered, (701, 1));
+
+        var body = await GetOwnAmounts();
+
+        body.GetProperty("wordSetMastered").GetInt32().Should().Be(1);
+        body.GetProperty("young").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task UnreviewedCardWithBlacklistedSetSibling_CountsAsWordSetBlacklisted()
+    {
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
+        await SeedCards(TestUsers.UserA);
+        await AddCards(new FsrsCard(TestUsers.UserA, 702, 0, state: FsrsState.New));
+        await SeedWordSet(TestUsers.UserA, WordSetStateType.Blacklisted, (702, 1));
+
+        var body = await GetOwnAmounts();
+
+        body.GetProperty("wordSetBlacklisted").GetInt32().Should().Be(1);
+        body.GetProperty("wordSetBlacklistedForm").GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task CardOnSameFormOutranksWordSet()
+    {
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
+        await SeedCards(TestUsers.UserA);
+        await AddCards(new FsrsCard(TestUsers.UserA, 703, 0, state: FsrsState.New));
+        await SeedWordSet(TestUsers.UserA, WordSetStateType.Mastered, (703, 0));
+
+        var body = await GetOwnAmounts();
+
+        body.GetProperty("wordSetMastered").GetInt32().Should().Be(0, "the form's own unreviewed card decides it");
     }
 
     [Fact]

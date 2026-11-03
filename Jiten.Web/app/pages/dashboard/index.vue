@@ -129,6 +129,17 @@
       </Card>
 
       <Card class="shadow-md">
+        <template #title>Metadata Edits</template>
+        <template #content>
+          <p class="mb-4">Trust thresholds, auto-apply rules, reviewers and contributors</p>
+          <div class="flex flex-wrap justify-center gap-2">
+            <Button label="Settings" class="p-button-primary" @click="navigateTo('/dashboard/metadata-edits/settings')" />
+            <Button label="Review queue" severity="secondary" @click="navigateTo('/review')" />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
         <template #title>Request Activity</template>
         <template #content>
           <p class="mb-4">Monitor request activity and user contributions</p>

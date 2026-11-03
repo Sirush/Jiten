@@ -27,24 +27,23 @@ export interface DeckMetadataDraft {
   relationships: PerspectiveRelationship[];
 }
 
-const genreKey = (genres: Genre[]) => [...genres].sort((a, b) => a - b).join(',');
-const tagKey = (tags: DeckMetadataDraftTag[]) =>
+type EdgeLike = { sourceDeckId: number; targetDeckId: number; relationshipType: number };
+
+export const edgeId = (e: EdgeLike) => `${e.sourceDeckId}>${e.targetDeckId}:${e.relationshipType}`;
+export const genreKey = (genres: number[]) => [...genres].sort((a, b) => a - b).join(',');
+export const tagKey = (tags: { tagId: number; percentage: number }[]) =>
   [...tags]
     .sort((a, b) => a.tagId - b.tagId)
     .map((t) => `${t.tagId}:${t.percentage}`)
     .join(',');
-const linkKey = (links: DeckMetadataDraftLink[]) =>
+export const linkKey = (links: { linkType: number; url: string }[]) =>
   [...links]
     .map((l) => `${l.linkType}|${l.url.trim()}`)
     .sort()
     .join(',');
-const savableEdges = (deckId: number, relationships: PerspectiveRelationship[]) =>
-  relationships.map((r) => toCanonicalEdge(deckId, r)).filter((e) => !isLegacyGroupRelationship(e.relationshipType));
-const edgeKey = (deckId: number, relationships: PerspectiveRelationship[]) =>
-  savableEdges(deckId, relationships)
-    .map((e) => `${e.sourceDeckId}>${e.targetDeckId}:${e.relationshipType}`)
-    .sort()
-    .join(',');
+export const savableEdges = <T extends EdgeLike>(edges: T[]) => edges.filter((e) => !isLegacyGroupRelationship(e.relationshipType as DeckRelationshipType));
+export const edgeKey = (edges: EdgeLike[]) => savableEdges(edges).map(edgeId).sort().join(',');
+const canonicalEdges = (deckId: number, relationships: PerspectiveRelationship[]) => relationships.map((r) => toCanonicalEdge(deckId, r));
 
 /**
  * Builds the narrowest patch that expresses the edit. Unchanged fields are omitted so a title-only
@@ -63,7 +62,8 @@ export function buildDeckMetadataPatch(deckId: number, original: DeckMetadataDra
   if (genreKey(draft.genres) !== genreKey(original.genres)) patch.genres = [...draft.genres];
   if (tagKey(draft.tags) !== tagKey(original.tags)) patch.tags = draft.tags.map((t) => ({ tagId: t.tagId, percentage: t.percentage }));
   if (linkKey(draft.links) !== linkKey(original.links)) patch.links = draft.links.map((l) => ({ linkType: l.linkType, url: l.url.trim() }));
-  if (edgeKey(deckId, draft.relationships) !== edgeKey(deckId, original.relationships)) patch.relationships = savableEdges(deckId, draft.relationships);
+  const draftEdges = canonicalEdges(deckId, draft.relationships);
+  if (edgeKey(draftEdges) !== edgeKey(canonicalEdges(deckId, original.relationships))) patch.relationships = savableEdges(draftEdges);
 
   return patch;
 }

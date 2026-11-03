@@ -3,6 +3,7 @@ using System.Text;
 using System.Threading;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
+using Jiten.Core.Data.MetadataEdits;
 using Jiten.Core.Services;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
@@ -388,10 +389,7 @@ public static class JitenHelper
     private static (List<DeckWord> deckWords, List<ExampleSentence> exampleSentences) UpdateDeckMetadata(JitenDbContext context, Deck existingDeck, Deck deck)
     {
         existingDeck.LastUpdate = DateTime.UtcNow;
-        existingDeck.MediaType = deck.MediaType;
-        existingDeck.OriginalTitle = deck.OriginalTitle;
-        existingDeck.RomajiTitle = deck.RomajiTitle;
-        existingDeck.EnglishTitle = deck.EnglishTitle;
+        ApplyImportedIdentity(existingDeck, deck);
         existingDeck.CharacterCount = deck.CharacterCount;
         existingDeck.WordCount = deck.WordCount;
         existingDeck.UniqueWordCount = deck.UniqueWordCount;
@@ -409,6 +407,20 @@ public static class JitenHelper
         existingDeck.RawText = deck.RawText;
 
         return (deck.DeckWords?.ToList() ?? [], deck.ExampleSentences?.ToList() ?? []);
+    }
+
+    /// <summary>Copies the import's media type and titles, except fields a person corrected (<see cref="Deck.MetadataLocks"/>).</summary>
+    internal static void ApplyImportedIdentity(Deck existingDeck, Deck imported)
+    {
+        var locks = existingDeck.MetadataLocks;
+        if (!locks.HasFlag(MetadataField.MediaType))
+            existingDeck.MediaType = imported.MediaType;
+        if (!locks.HasFlag(MetadataField.OriginalTitle))
+            existingDeck.OriginalTitle = imported.OriginalTitle;
+        if (!locks.HasFlag(MetadataField.RomajiTitle))
+            existingDeck.RomajiTitle = imported.RomajiTitle;
+        if (!locks.HasFlag(MetadataField.EnglishTitle))
+            existingDeck.EnglishTitle = imported.EnglishTitle;
     }
 
     /// <summary>Stores the parser's sentence profiles and refreshes the top-level sample; a failure here never fails the deck write.</summary>

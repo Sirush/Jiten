@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace Jiten.Core.Data.Providers;
 
 /// <summary>Which catalogue a URL points into, for hosts that serve several under one domain.</summary>
@@ -17,7 +19,7 @@ public readonly record struct ExternalUrlRef(LinkType LinkType, string Id, Exter
 /// <param name="Token">The id as it appears inside the URL text, so stored URLs can be narrowed with a substring match first.</param>
 public readonly record struct ExternalEntityKey(LinkType LinkType, ExternalUrlKind Kind, string Token);
 
-public static class ExternalUrlParser
+public static partial class ExternalUrlParser
 {
     public static bool TryGetEntityKey(string? input, out ExternalEntityKey key)
     {
@@ -103,6 +105,35 @@ public static class ExternalUrlParser
             return TryGoogleBooks(uri, segments, out result);
 
         return false;
+    }
+
+    private static readonly (LinkType Type, string[] Domains)[] HostedDomains =
+    [
+        (LinkType.Vndb, ["vndb.org"]),
+        (LinkType.Tmdb, ["themoviedb.org"]),
+        (LinkType.Anilist, ["anilist.co"]),
+        (LinkType.Mal, ["myanimelist.net"]),
+        (LinkType.Imdb, ["imdb.com"]),
+        (LinkType.Igdb, ["igdb.com"]),
+        (LinkType.Syosetsu, ["syosetu.com"]),
+        (LinkType.Bookmeter, ["bookmeter.com"]),
+        (LinkType.Amazon, ["amzn.to", "amzn.asia"]),
+        (LinkType.YouTube, ["youtube.com", "youtu.be", "youtube-nocookie.com"])
+    ];
+
+    [GeneratedRegex(@"(^|\.)amazon\.[a-z]{2,3}(\.[a-z]{2})?$")]
+    private static partial Regex AmazonHost();
+
+    /// <summary>Which site a link points to, by host; must agree with detectLinkTypeFromUrl in the web app's linkTypeMapper.ts.</summary>
+    public static LinkType DetectLinkType(Uri uri)
+    {
+        var host = uri.Host.ToLowerInvariant();
+        foreach (var (type, domains) in HostedDomains)
+            if (domains.Any(d => HostMatches(host, d)))
+                return type;
+        if (AmazonHost().IsMatch(host))
+            return LinkType.Amazon;
+        return IsGoogleBooksHost(host, uri.AbsolutePath) ? LinkType.GoogleBooks : LinkType.Web;
     }
 
     private static bool HostMatches(string host, string domain) =>

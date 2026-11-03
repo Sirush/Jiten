@@ -1,5 +1,6 @@
 <script setup lang="ts">
-  import { NotificationType } from '~/types';
+  import type { NotificationType } from '~/types';
+  import { getNotificationIcon, getNotificationIconClass } from '~/utils/notificationType';
   import type { NotificationDto } from '~/types/types';
 
   const { unreadCount, notifications, fetchNotifications, fetchUnreadCount, markAsRead, markAllAsRead } = useNotifications();
@@ -47,40 +48,6 @@
       n.isRead = true;
       n.readAt = new Date().toISOString();
     });
-  }
-
-  function getNotificationIcon(type: NotificationType): string {
-    switch (type) {
-      case NotificationType.RequestCompleted:
-        return 'pi pi-check-circle';
-      case NotificationType.RequestStatusChanged:
-        return 'pi pi-info-circle';
-      case NotificationType.RequestFileUploaded:
-        return 'pi pi-upload';
-      case NotificationType.SiteUpdate:
-        return 'pi pi-megaphone';
-      case NotificationType.CommunityListMilestone:
-        return 'pi pi-heart';
-      default:
-        return 'pi pi-bell';
-    }
-  }
-
-  function getNotificationIconClass(type: NotificationType): string {
-    switch (type) {
-      case NotificationType.RequestCompleted:
-        return 'text-green-500';
-      case NotificationType.RequestStatusChanged:
-        return 'text-blue-500';
-      case NotificationType.RequestFileUploaded:
-        return 'text-orange-500';
-      case NotificationType.SiteUpdate:
-        return 'text-purple-500';
-      case NotificationType.CommunityListMilestone:
-        return 'text-pink-500';
-      default:
-        return 'text-muted-color';
-    }
   }
 
   function formatTimeAgo(dateString: string): string {

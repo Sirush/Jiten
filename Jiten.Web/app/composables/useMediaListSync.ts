@@ -1,5 +1,6 @@
 import { type Deck, type MediaListDeck, type MediaListEntriesResponse, type MediaListEntrySummary, type MediaListSnapshot, DeckStatus } from '~/types';
 import { useToast } from 'primevue/usetoast';
+import type { ToastServiceMethods } from 'primevue/toastservice';
 import { apiErrorMessage } from '~/utils/apiErrorMessage';
 import { getDeckStatusText } from '~/utils/deckStatusMapper';
 import { isoToday } from '~/utils/mediaListEntry';
@@ -58,6 +59,13 @@ export interface UndoDetail {
 
 export const UNDO_TOAST_GROUP = 'media-list-undo';
 export const UNDO_VISIBLE_MS = 8000;
+
+/** Only the latest change can be undone, so a new toast replaces the one showing; without `run` it shows no Undo button. */
+export function showUndoToast(toast: ToastServiceMethods, summary: string, run?: () => Promise<unknown>) {
+  const detail: UndoDetail | undefined = run ? { run } : undefined;
+  toast.removeGroup(UNDO_TOAST_GROUP);
+  toast.add({ group: UNDO_TOAST_GROUP, severity: 'secondary', summary, detail, life: UNDO_VISIBLE_MS });
+}
 
 type Listener = (change: MediaListChange) => void;
 const listeners = new Set<Listener>();
@@ -189,12 +197,9 @@ export function useMediaListApi() {
     });
   }
 
-  /** Only the latest change can be undone, so a new offer replaces the one showing. */
   function offerUndo(summary: string, previous: MediaListSnapshot[] | null | undefined) {
     if (!previous?.length) return;
-    const detail: UndoDetail = { run: () => restore(previous) };
-    toast.removeGroup(UNDO_TOAST_GROUP);
-    toast.add({ group: UNDO_TOAST_GROUP, severity: 'secondary', summary, detail, life: UNDO_VISIBLE_MS });
+    showUndoToast(toast, summary, () => restore(previous));
   }
 
   return { postDeckStatus, refreshSeries, publishEntries, offerUndo };

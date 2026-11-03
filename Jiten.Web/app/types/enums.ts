@@ -241,6 +241,9 @@ export enum NotificationType {
   General = 10,
   SiteUpdate = 11,
   CommunityListMilestone = 12,
+  MetadataEditApproved = 30,
+  MetadataEditRejected = 31,
+  MetadataEditReverted = 32,
 }
 
 export enum RequestAction {

@@ -2020,13 +2020,11 @@ public class SrsController(
             .ToListAsync();
         var cardDict = cards.ToDictionary(c => (c.WordId, c.ReadingIndex));
 
-        var threshold = TimeSpan.FromDays(21);
-
         string Categorize((int WordId, byte ReadingIndex) p)
         {
             if (!cardDict.TryGetValue(p, out var c) || c.State == FsrsState.New)
                 return "new";
-            if (c.State == FsrsState.Review && c.LastReview != null && c.Due - c.LastReview.Value >= threshold)
+            if (c.State == FsrsState.Review && KnownWordRules.IsMatureInterval(c.Due, c.LastReview))
                 return "mature";
             return "learning";
         }
@@ -2072,7 +2070,6 @@ public class SrsController(
     private async Task<(HashSet<(int WordId, byte ReadingIndex)> Known, HashSet<(int WordId, byte ReadingIndex)> Blocked)>
         LoadKnownAndBlockedSets(string userId)
     {
-        var threshold = TimeSpan.FromDays(21);
         var raw = await userContext.FsrsCards
             .Where(c => c.UserId == userId
                         && (c.State == FsrsState.Mastered
@@ -2096,7 +2093,7 @@ public class SrsController(
             {
                 blocked.Add(pair);
             }
-            else if (c.LastReview != null && c.Due - c.LastReview.Value >= threshold)
+            else if (KnownWordRules.IsMatureInterval(c.Due, c.LastReview))
             {
                 known.Add(pair);
             }

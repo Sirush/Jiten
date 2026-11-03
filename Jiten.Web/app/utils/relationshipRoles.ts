@@ -107,6 +107,11 @@ export function getRelationshipRoleLabel(type: DeckRelationshipType): string {
   return relationshipTypeLabels[type] ?? 'Unknown';
 }
 
+export function relationshipPreviewText(role: RelationshipRoleOption, target: string, deckTitle: string): string {
+  if (role.label === 'Alternative') return `${target} will be an alternative version of ${deckTitle}.`;
+  return `${target} will be the ${role.label.toLowerCase()} of ${deckTitle}.`;
+}
+
 /** Mirrors DeckRelationship.GetInverse on the backend. */
 export function getInverseRelationshipType(type: DeckRelationshipType): DeckRelationshipType {
   switch (type) {

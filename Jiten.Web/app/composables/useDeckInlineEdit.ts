@@ -1,7 +1,7 @@
 import type { Deck, DeckMetadataPatchResult, Genre, LinkType, Tag } from '~/types';
 import { buildDeckMetadataPatch, isDeckMetadataPatchEmpty, relationshipExists, type DeckMetadataDraft } from '~/utils/deckMetadataPatch';
 import { fromRole, type PerspectiveRelationship, type RelationshipRoleOption } from '~/utils/relationshipRoles';
-import { DEFAULT_TAG_PERCENTAGE } from '~/utils/tags';
+import { DEFAULT_TAG_PERCENTAGE, clampTagPercentage } from '~/utils/tags';
 
 export interface DraftRelationship extends PerspectiveRelationship {
   targetTitle: string;
@@ -91,7 +91,7 @@ export function useDeckInlineEdit(getDeck: () => Deck) {
 
   function setTagPercentage(tagId: number, percentage: number) {
     const tag = draft.value.tags.find((t) => t.tagId === tagId);
-    if (tag) tag.percentage = Math.min(100, Math.max(0, Math.round(percentage)));
+    if (tag) tag.percentage = clampTagPercentage(percentage);
   }
 
   /** Returns an error message, or null when the link was added. */

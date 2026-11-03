@@ -20,7 +20,7 @@ namespace Jiten.Core.Migrations
 #pragma warning disable 612, 618
             modelBuilder
                 .HasDefaultSchema("jiten")
-                .HasAnnotation("ProductVersion", "9.0.2")
+                .HasAnnotation("ProductVersion", "10.0.14")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.HasPostgresExtension(modelBuilder, "fuzzystrmatch");
@@ -333,6 +333,9 @@ namespace Jiten.Core.Migrations
                         .HasColumnType("integer");
 
                     b.Property<int?>("MedianChildRuntimeSeconds")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("MetadataLocks")
                         .HasColumnType("integer");
 
                     b.Property<string>("OriginalFileName")
@@ -775,6 +778,9 @@ namespace Jiten.Core.Migrations
 
                     b.Property<int>("TagId")
                         .HasColumnType("integer");
+
+                    b.Property<bool>("IsManual")
+                        .HasColumnType("boolean");
 
                     b.Property<byte>("Percentage")
                         .HasColumnType("smallint");
@@ -2273,6 +2279,233 @@ namespace Jiten.Core.Migrations
                     b.ToTable("MediaRequestUpvotes", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.MetadataEdits.DeckMetadataExclusion", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Kind")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Value")
+                        .IsRequired()
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("DeckId", "Kind", "Value")
+                        .IsUnique()
+                        .HasDatabaseName("IX_DeckMetadataExclusions_Deck_Kind_Value");
+
+                    b.ToTable("DeckMetadataExclusions", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MetadataEdits.MetadataContributor", b =>
+                {
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<bool>("AdminTrusted")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("BannedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("BlockClearedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("UserId");
+
+                    b.ToTable("MetadataContributors", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MetadataEdits.MetadataEdit", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<int>("Actor")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime?>("AppliedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ChangesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EditNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("Fields")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int?>("Provider")
+                        .HasColumnType("integer");
+
+                    b.Property<long?>("RevertsEditId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("ReviewNote")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime?>("ReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReviewedByUserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<string>("SourcesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("SubmissionId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("UserId")
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubmissionId")
+                        .HasDatabaseName("IX_MetadataEdits_SubmissionId");
+
+                    b.HasIndex("DeckId", "CreatedAt")
+                        .HasDatabaseName("IX_MetadataEdits_DeckId_CreatedAt");
+
+                    b.HasIndex("Status", "CreatedAt")
+                        .HasDatabaseName("IX_MetadataEdits_Status_CreatedAt");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .HasDatabaseName("IX_MetadataEdits_UserId_CreatedAt");
+
+                    b.ToTable("MetadataEdits", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MetadataEdits.MetadataEditCheck", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Fields")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("IpAddress")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<long>("MetadataEditId")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("Note")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<int?>("Reason")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SourceUrl")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(450)
+                        .HasColumnType("character varying(450)");
+
+                    b.Property<int>("Verdict")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("MetadataEditId", "UserId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_MetadataEditChecks_Edit_User");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .HasDatabaseName("IX_MetadataEditChecks_UserId_CreatedAt");
+
+                    b.ToTable("MetadataEditChecks", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MetadataEdits.MetadataEditSettings", b =>
+                {
+                    b.Property<int>("Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EstablishedAutoApplyMaxTier")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EstablishedCountedEdits")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EstablishedMinAccountDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("EstablishedNoRevertDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TrustedAutoApplyMaxTier")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TrustedCountedEdits")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TrustedNoRevertDays")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.ToTable("MetadataEditSettings", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.Notification", b =>
                 {
                     b.Property<int>("Id")
@@ -3662,6 +3895,37 @@ namespace Jiten.Core.Migrations
                     b.Navigation("MediaRequest");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.MetadataEdits.DeckMetadataExclusion", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", null)
+                        .WithMany()
+                        .HasForeignKey("DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MetadataEdits.MetadataEdit", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", "Deck")
+                        .WithMany()
+                        .HasForeignKey("DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Deck");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MetadataEdits.MetadataEditCheck", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.MetadataEdits.MetadataEdit", "Edit")
+                        .WithMany("Checks")
+                        .HasForeignKey("MetadataEditId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Edit");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.PollOption", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Poll", "Poll")
@@ -3854,6 +4118,11 @@ namespace Jiten.Core.Migrations
                     b.Navigation("AdminComments");
 
                     b.Navigation("Upload");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.MetadataEdits.MetadataEdit", b =>
+                {
+                    b.Navigation("Checks");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.Poll", b =>

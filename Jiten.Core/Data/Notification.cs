@@ -21,5 +21,8 @@ public enum NotificationType
     RequestAdminComment = 4,
     General = 10,
     SiteUpdate = 11,
-    CommunityListMilestone = 12
+    CommunityListMilestone = 12,
+    MetadataEditApproved = 30,
+    MetadataEditRejected = 31,
+    MetadataEditReverted = 32
 }

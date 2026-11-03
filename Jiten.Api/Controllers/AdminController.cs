@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using System.Security.Claims;
 using Hangfire;
 using ImageMagick;
 using Jiten.Api.Dtos;
@@ -338,7 +339,8 @@ public partial class AdminController(
     [Consumes("multipart/form-data")]
     [RequestSizeLimit(254857600)]
     public async Task<IActionResult> UpdateMediaDeck([FromForm] UpdateMediaRequest model, [FromServices] FranchiseSyncRunner franchiseSync,
-                                                     [FromServices] SubdeckListSeeder subdeckListSeeder)
+                                                     [FromServices] SubdeckListSeeder subdeckListSeeder,
+                                                     [FromServices] Jiten.Api.Services.MetadataEdits.MetadataEditService metadataEdits)
     {
         if (!ModelState.IsValid)
         {
@@ -362,6 +364,8 @@ public partial class AdminController(
         if (deck == null)
             return NotFound(new { Message = $"No deck found with ID {model.DeckId}." });
 
+        var metadataBefore = (await deckMetadata.LoadSnapshotAsync(deck.DeckId))!;
+
         if (model.RequestId is > 0)
         {
             var mediaRequest = await dbContext.MediaRequests.FirstOrDefaultAsync(r => r.Id == model.RequestId);
@@ -377,12 +381,9 @@ public partial class AdminController(
                 mediaRequest.Status = MediaRequestStatus.InProgress;
         }
 
-        // Update basic properties
-        deck.MediaType = model.MediaType;
-        deck.ReleaseDate = model.ReleaseDate;
         deck.DifficultyOverride = model.DifficultyOverride;
 
-        var metadataError = await deckMetadata.ApplyAsync(deck, BuildMetadataPatch(deck.DeckId, model));
+        var metadataError = await deckMetadata.ApplyAsync(deck, BuildMetadataPatch(deck.DeckId, model), userId: User.FindFirstValue(ClaimTypes.NameIdentifier));
         if (metadataError != null)
             return BadRequest(new { Message = metadataError });
 
@@ -445,46 +446,6 @@ public partial class AdminController(
 
         // An empty deck's first text is parsed straight away; there are no stats to preserve by waiting for an explicit reparse
         var reparse = model.Reparse || (deckWasEmpty && parentFile is { Length: > 0 });
-
-        // Update aliases
-        if (model.Aliases.Any())
-        {
-            var newAliases = model.Aliases.Where(a => !string.IsNullOrEmpty(a)).ToHashSet();
-
-            // Remove aliases that are no longer present
-            var aliasesToRemove = deck.Titles.Where(t => t.TitleType == DeckTitleType.Alias && !newAliases.Contains(t.Title));
-            dbContext.RemoveRange(aliasesToRemove);
-
-            // Add new aliases
-            foreach (var alias in model.Aliases)
-            {
-                var trimmed = alias.Trim();
-                if (string.IsNullOrEmpty(trimmed)) continue;
-
-                var existingAlias = deck.Titles.FirstOrDefault(l => l.Title == trimmed);
-                if (existingAlias == null)
-                {
-                    deck.Titles.Add(new DeckTitle { DeckId = deck.DeckId, Title = trimmed, TitleType = DeckTitleType.Alias });
-                }
-            }
-        }
-
-        // Update dictionary entries (character names etc.)
-        {
-            var newSurfaces = model.DictionaryEntries
-                .Select(s => s.Trim())
-                .Where(s => !string.IsNullOrEmpty(s))
-                .ToHashSet();
-
-            var entriesToRemove = deck.DictionaryEntries.Where(e => !newSurfaces.Contains(e.Surface));
-            dbContext.RemoveRange(entriesToRemove);
-
-            foreach (var surface in newSurfaces)
-            {
-                if (deck.DictionaryEntries.All(e => e.Surface != surface))
-                    deck.DictionaryEntries.Add(new DeckDictionaryEntry { DeckId = deck.DeckId, Surface = surface, EntryType = DeckDictionaryEntryType.Name });
-            }
-        }
 
         // Update subdecks if provided
         var newChildDecks = new List<Deck>();
@@ -581,6 +542,7 @@ public partial class AdminController(
             await subdeckListSeeder.SeedFromParentAsync(deck.DeckId, parentTextHeir.DeckId);
         if (relationshipsChanged)
             await franchiseSync.RunAsync();
+        await metadataEdits.LogDirectEditAsync(deck.DeckId, metadataBefore, User.FindFirstValue(ClaimTypes.NameIdentifier));
 
         if (removedSubdeckIds.Count > 0)
         {

@@ -4,9 +4,15 @@
   import type { Deck, DeckMetadataPatchResult, MediaSuggestion, Tag } from '~/types';
   import { LinkType } from '~/types';
   import { getAllGenres, getGenreText } from '~/utils/genreMapper';
-  import { getLinkLabel, getLinkTypeText } from '~/utils/linkTypeMapper';
-  import { getRelationshipRoleLabel, isLegacyGroupRelationship, relationshipRoleOptions, type RelationshipRoleOption } from '~/utils/relationshipRoles';
-  import { DEFAULT_TAG_PERCENTAGE, NOT_ORIGINALLY_JP_FALLBACK_NAME, NOT_ORIGINALLY_JP_TAG_ID } from '~/utils/tags';
+  import { getLinkLabel, getLinkTypeText, resolveLinkType } from '~/utils/linkTypeMapper';
+  import {
+    getRelationshipRoleLabel,
+    isLegacyGroupRelationship,
+    relationshipPreviewText,
+    relationshipRoleOptions,
+    type RelationshipRoleOption,
+  } from '~/utils/relationshipRoles';
+  import { DEFAULT_TAG_PERCENTAGE, NOT_ORIGINALLY_JP_FALLBACK_NAME, NOT_ORIGINALLY_JP_TAG_ID, searchTags } from '~/utils/tags';
 
   const props = defineProps<{ deck: Deck }>();
 
@@ -50,11 +56,7 @@
   const genreOptions = getAllGenres();
 
   const tagSearchQuery = ref('');
-  const filteredTags = computed(() => {
-    const query = tagSearchQuery.value.trim().toLowerCase();
-    if (!query) return tagVocabulary.value;
-    return tagVocabulary.value.filter((t) => t.name.toLowerCase().includes(query));
-  });
+  const filteredTags = computed(() => searchTags(tagVocabulary.value, tagSearchQuery.value));
 
   const relationTargetId = ref<number | null>(null);
   const relationTargetTitle = ref('');
@@ -69,13 +71,16 @@
     .filter((value): value is LinkType => typeof value === 'number')
     .map((value) => ({ value, label: getLinkTypeText(value) }));
 
+  /** Switches the type only for a recognised site, so a half-typed URL never resets a deliberate choice to Website. */
+  function detectLinkType(value: string | undefined) {
+    linkType.value = resolveLinkType(value, linkType.value) ?? linkType.value;
+  }
+
   const relationshipPreview = computed(() => {
     const role = relationRole.value;
     const target = relationTargetTitle.value || (relationTargetId.value ? `#${relationTargetId.value}` : '');
     if (!role || !target) return '';
-    const thisTitle = draft.value.originalTitle || 'this deck';
-    if (role.label === 'Alternative') return `${target} will be an alternative version of ${thisTitle}.`;
-    return `${target} will be the ${role.label.toLowerCase()} of ${thisTitle}.`;
+    return relationshipPreviewText(role, target, draft.value.originalTitle || 'this deck');
   });
 
   const warn = (detail: string) => toast.add({ severity: 'warn', summary: 'Validation', detail, life: 3000 });
@@ -392,7 +397,7 @@
     <Dialog v-model:visible="showLinkDialog" modal :header="linkEditIndex === null ? 'Add link' : 'Edit link'" class="w-full" style="max-width: 32rem">
       <div class="flex flex-col gap-3">
         <Select v-model="linkType" :options="linkTypeOptions" option-label="label" option-value="value" class="w-full" />
-        <InputText v-model="linkUrl" placeholder="https://..." autofocus @keydown.enter.prevent="commitLink" />
+        <InputText v-model="linkUrl" placeholder="https://..." autofocus @update:model-value="detectLinkType" @keydown.enter.prevent="commitLink" />
       </div>
       <template #footer>
         <Button label="Cancel" severity="secondary" text @click="showLinkDialog = false" />

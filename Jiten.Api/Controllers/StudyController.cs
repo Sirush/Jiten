@@ -3800,8 +3800,7 @@ public partial class StudyController(
                 case FsrsState.Mastered: mastered++; masteredCount++; break;
                 case FsrsState.Blacklisted: blacklisted++; break;
                 case FsrsState.Review:
-                    var intervalDays = c.LastReview is { } lr ? (c.Due - lr).TotalDays : 0;
-                    if (intervalDays >= RetentionCalculator.MatureThresholdDays) mature++;
+                    if (KnownWordRules.IsMatureInterval(c.Due, c.LastReview)) mature++;
                     else young++;
                     break;
             }
@@ -4539,8 +4538,7 @@ public partial class StudyController(
             {
                 review++;
                 if (dueCutoff.IsDue(state, due)) dueCount++;
-                // Maturity mirrors UserController.ComputeEffectiveCategory: interval = due - lastReview, mature at >= 21 days.
-                if (lastReview.HasValue && (due - lastReview.Value).TotalDays >= 21) mature++;
+                if (KnownWordRules.IsMatureInterval(due, lastReview)) mature++;
                 else young++;
             }
             else if (state == FsrsState.Mastered) mastered++;

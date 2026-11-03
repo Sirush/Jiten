@@ -1044,7 +1044,7 @@ public class DeckWordResolver(JitenDbContext context, UserDbContext userContext,
             cardQuery = cardQuery.Where(c =>
                 c.State == FsrsState.Mastered ||
                 c.State == FsrsState.Blacklisted ||
-                (c.LastReview != null && c.Due >= c.LastReview.Value.AddDays(21)));
+                (c.State != FsrsState.New && c.LastReview != null && c.Due >= c.LastReview.Value.AddDays(KnownWordRules.MatureIntervalDays)));
         }
 
         var cards = await cardQuery
