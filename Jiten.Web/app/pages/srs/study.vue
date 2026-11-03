@@ -315,6 +315,7 @@
     () => srsStore.isSessionComplete,
     (done) => {
       if (done) stopElapsedTimer();
+      else startElapsedTimer();
     }
   );
   onUnmounted(stopElapsedTimer);

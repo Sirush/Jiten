@@ -93,6 +93,26 @@ describe('cancelling wrap-up after grading', () => {
     expect(store.sessionStats.cardsReviewed).toBe(2);
   });
 
+  it('does not count the time spent on the summary towards the resumed card', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    try {
+      const store = await start([1, 2, 3].map((w) => card(w)));
+      store.wrapUp();
+      store.revealCard();
+      store.gradeCard(3);
+      await flush();
+      expect(store.isSessionComplete).toBe(true);
+      const activeAtSummary = store.sessionActiveMs();
+
+      vi.advanceTimersByTime(90_000);
+      store.cancelWrapUp();
+
+      expect(store.sessionActiveMs()).toBe(activeAtSummary);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('keeps a pending Again repeat from the wrap-up ahead of the returned cards', async () => {
     const store = await start([1, 2, 3, 4].map((w) => card(w)));
     store.revealCard();

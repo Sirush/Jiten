@@ -1667,6 +1667,7 @@ export const useSrsStore = defineStore('srs', () => {
     currentBatch.value = [...currentBatch.value, ...preWrapUpBatch.value];
     preWrapUpBatch.value = [];
     if (currentCardIndex.value < currentBatch.value.length) {
+      if (isSessionComplete.value) cardShownAt.value = Date.now();
       isSessionComplete.value = false;
       batchComplete.value = false;
     }
