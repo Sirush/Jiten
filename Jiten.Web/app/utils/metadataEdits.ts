@@ -160,6 +160,7 @@ const LINK_HOST_TEXT: Partial<Record<LinkType, string>> = {
   [LinkType.Imdb]: 'imdb.com',
   [LinkType.Igdb]: 'igdb.com',
   [LinkType.Syosetsu]: 'syosetu.com',
+  [LinkType.Kakuyomu]: 'kakuyomu.jp',
   [LinkType.Bookmeter]: 'bookmeter.com',
   [LinkType.Amazon]: 'an Amazon store',
   [LinkType.YouTube]: 'youtube.com',

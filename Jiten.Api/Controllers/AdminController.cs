@@ -12,6 +12,7 @@ using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data.Providers;
+using Jiten.Core.WebNovel;
 using Jiten.Parser;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -1121,7 +1122,11 @@ public partial class AdminController(
                     backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchGoogleBooksMissingMetadata(deckId));
                 break;
             case MediaType.WebNovel:
-                backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchSyosetuMissingMetadata(deckId));
+                var work = await WebNovelDeckWork.ResolveAsync(dbContext, deckId, deck.Links);
+                if (work == null)
+                    return NotFound("This webnovel deck has no work link.");
+
+                backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchWebNovelMetadata(work.Provider, deckId));
                 break;
             default:
                 return NotFound("No fetch job for this media type.");
@@ -1136,6 +1141,8 @@ public partial class AdminController(
         var decks = await dbContext
                           .Decks.Where(d => d.ParentDeck == null)
                           .Include(deck => deck.Links).ToListAsync();
+
+        var trackedWebNovels = await WebNovelDeckWork.TrackedByDeckAsync(dbContext);
 
         foreach (var deck in decks)
         {
@@ -1173,8 +1180,9 @@ public partial class AdminController(
 
                     break;
                 case MediaType.WebNovel:
-                    if (deck.Links.Any(l => l.LinkType == LinkType.Syosetsu))
-                        backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchSyosetuMissingMetadata(deck.DeckId));
+                    if (WebNovelDeckWork.Resolve(trackedWebNovels.GetValueOrDefault(deck.DeckId), deck.Links) is { } work)
+                        backgroundJobs.Enqueue<FetchMetadataJob>(job => job.FetchWebNovelMetadata(work.Provider, deck.DeckId));
+
                     break;
                 default:
                     break;

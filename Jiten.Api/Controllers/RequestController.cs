@@ -9,6 +9,7 @@ using Jiten.Api.Dtos.Requests;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Data.Providers;
 using Jiten.Core.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -2215,30 +2216,6 @@ public partial class RequestController(
     [GeneratedRegex(@"[<>:""/\\|?*\x00-\x1F]")]
     private static partial Regex SanitiseFileNameRegex();
 
-    private static LinkType InferLinkType(string url)
-    {
-        try
-        {
-            var uri = new Uri(url);
-            var host = uri.Host.ToLowerInvariant();
-
-            if (host.Contains("anilist.co")) return LinkType.Anilist;
-            if (host.Contains("vndb.org")) return LinkType.Vndb;
-            if (host.Contains("themoviedb.org")) return LinkType.Tmdb;
-            if (host.Contains("myanimelist.net")) return LinkType.Mal;
-            if (host.Contains("imdb.com")) return LinkType.Imdb;
-            if (host.Contains("igdb.com")) return LinkType.Igdb;
-            if (host.Contains("syosetu.com")) return LinkType.Syosetsu;
-            if (host.Contains("bookmeter.com")) return LinkType.Bookmeter;
-            if (host.Contains("youtube.com") || host.Contains("youtu.be")) return LinkType.YouTube;
-            if (host.Contains("amazon.")) return LinkType.Amazon;
-            if (host.Contains("google.") && uri.AbsolutePath.Contains("/books/")) return LinkType.GoogleBooks;
-
-            return LinkType.Web;
-        }
-        catch
-        {
-            return LinkType.Web;
-        }
-    }
+    private static LinkType InferLinkType(string url) =>
+        Uri.TryCreate(url, UriKind.Absolute, out var uri) ? ExternalUrlParser.DetectLinkType(uri) : LinkType.Web;
 }

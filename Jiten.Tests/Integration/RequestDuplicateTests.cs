@@ -6,6 +6,7 @@ using Jiten.Api.Jobs;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Data.WebNovel;
 using Jiten.Core.Data.Providers;
 using Jiten.Parser.Tests.Integration.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -54,7 +55,7 @@ public class RequestDuplicateTests(JitenWebApplicationFactory factory)
                 .ReturnsAsync((string u, MediaType? _) => _providerData.GetValueOrDefault(u));
         var job = new MediaRequestMetadataJob(factory.Services.GetRequiredService<IDbContextFactory<JitenDbContext>>(), resolver.Object,
             NullLogger<MediaRequestMetadataJob>.Instance);
-        await job.FetchSyosetu(requestId, url);
+        await job.FetchWebNovel(WebNovelProvider.Syosetu, requestId, url);
     }
 
     private async Task<JsonElement> Get(int id)

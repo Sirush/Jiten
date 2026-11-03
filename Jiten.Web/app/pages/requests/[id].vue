@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import { RequestStatus, RequestKind, MediaType, LinkType, RequestMetadataStatus } from '~/types';
+  import { RequestStatus, RequestKind, MediaType, RequestMetadataStatus } from '~/types';
   import { formatDateOmitCurrentYear, formatDateShort } from '~/utils/dateFormat';
   import type {
     Deck,
@@ -13,7 +13,7 @@
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getRequestStatusText, getRequestStatusSeverity } from '~/utils/requestStatusMapper';
   import { getRequestKindText, getRequestKindIcon } from '~/utils/requestKindMapper';
-  import { getLinkTypeText, resolveLinkType } from '~/utils/linkTypeMapper';
+  import { getLinkTypeText, isWebNovelLinkType, resolveLinkType } from '~/utils/linkTypeMapper';
   import { stripEpubImages } from '~/utils/epubStripper';
   import { useAuthStore } from '~/stores/authStore';
   import { useJitenStore } from '~/stores/jitenStore';
@@ -692,11 +692,11 @@
 
   const canCreateDeck = computed(() => !!request.value && !isTerminal.value && !request.value.fulfilledDeckId && !updateDeckHref.value);
 
-  // Syosetsu novels are imported chapter by chapter, so they go through the webnovel page instead
+  /** Web novels are imported chapter by chapter, so they go through the webnovel page instead. */
   const createDeckHref = computed(() => {
     const req = request.value;
     if (!req) return '';
-    if (resolveLinkType(req.externalUrl, req.externalLinkType) === LinkType.Syosetsu && req.externalUrl)
+    if (isWebNovelLinkType(resolveLinkType(req.externalUrl, req.externalLinkType)) && req.externalUrl)
       return `/dashboard/add-webnovel?url=${encodeURIComponent(req.externalUrl)}`;
     return `/dashboard/add-media?requestId=${req.id}`;
   });

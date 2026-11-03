@@ -146,24 +146,7 @@ builder.Services.AddHttpClient("Voicevox", client =>
 });
 builder.Services.AddSingleton<ITtsService, TtsService>();
 
-builder.Services.AddHttpClient(SyosetuSource.HttpClientName, client =>
-       {
-           client.DefaultRequestHeaders.Add("User-Agent",
-                                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-                                            "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-           client.Timeout = TimeSpan.FromSeconds(30);
-       })
-       // The API's gzip=5 body is inflated by hand; this covers the HTML pages
-       .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-       {
-           AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate
-       });
-
-builder.Services.AddSingleton<IWebNovelSource, SyosetuSource>();
-builder.Services.AddSingleton<IWebNovelSource>(sp => new SyosetuSource(sp.GetRequiredService<IHttpClientFactory>(),
-                                                                        sp.GetRequiredService<ILogger<SyosetuSource>>(),
-                                                                        WebNovelProvider.SyosetuNovel18));
-builder.Services.AddSingleton<IWebNovelSourceResolver, WebNovelSourceResolver>();
+builder.Services.AddWebNovelSources();
 
 builder.Services.Configure<YtDlpOptions>(builder.Configuration.GetSection("YtDlp"));
 builder.Services.Configure<YouTubeOptions>(builder.Configuration.GetSection("YouTube"));
@@ -1088,22 +1071,25 @@ builder.Services.AddHangfireServer((options) =>
 });
 
 
-builder.Services.AddHangfireServer((options) =>
+foreach (var site in WebNovelProviders.Sites)
 {
-    options.ServerName = "WebNovelSyosetuServer";
-    options.Queues = [WebNovelQueues.Syosetu];
-    options.WorkerCount = 1;
-    // A large novel can take hours
-    options.ShutdownTimeout = TimeSpan.FromHours(3);
-    options.StopTimeout = TimeSpan.FromHours(3);
-});
+    builder.Services.AddHangfireServer((options) =>
+    {
+        options.ServerName = $"WebNovelServer-{site.Key}";
+        options.Queues = [WebNovelQueues.For(site, WebNovelQueueKind.Fetch)];
+        options.WorkerCount = 1;
+        // A large novel can take hours
+        options.ShutdownTimeout = TimeSpan.FromHours(3);
+        options.StopTimeout = TimeSpan.FromHours(3);
+    });
 
-builder.Services.AddHangfireServer((options) =>
-{
-    options.ServerName = "WebNovelSyosetuMetadataServer";
-    options.Queues = [WebNovelQueues.SyosetuMetadata];
-    options.WorkerCount = 1;
-});
+    builder.Services.AddHangfireServer((options) =>
+    {
+        options.ServerName = $"WebNovelMetadataServer-{site.Key}";
+        options.Queues = [WebNovelQueues.For(site, WebNovelQueueKind.Metadata)];
+        options.WorkerCount = 1;
+    });
+}
 
 builder.Services.AddHangfireServer((options) =>
 {

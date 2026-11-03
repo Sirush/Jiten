@@ -37,6 +37,11 @@ public class WebNovelInfo
     public bool IsOnHiatus { get; set; }
     public bool IsAdultOnly { get; set; }
     public bool IsR15 { get; set; }
+
+    /// <summary>
+    /// Cover art hosted by the source, when the work has one
+    /// </summary>
+    public string? CoverUrl { get; set; }
 }
 
 /// <summary>
@@ -56,9 +61,14 @@ public class WebNovelTitles
 public class WebNovelEpisodeRef
 {
     /// <summary>
-    /// 1-based index at the source
+    /// 1-based position in the table of contents
     /// </summary>
     public int Number { get; set; }
+
+    /// <summary>
+    /// The source's own id for the episode: builds its URL and matches it against the ledger
+    /// </summary>
+    public string SourceEpisodeId { get; set; } = string.Empty;
 
     public string Title { get; set; } = string.Empty;
 

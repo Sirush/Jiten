@@ -21,7 +21,7 @@ public class WebNovelImportJob(
     /// Runs on the per-site queue: a 1,000-episode novel is ~20 minutes of polite fetching, so it must
     /// never run in-request, and it must serialise with syncs so the site never sees two requests at once.
     /// </summary>
-    [Queue(WebNovelQueues.Syosetu)]
+    [WebNovelQueue(WebNovelQueueKind.Fetch)]
     [AutomaticRetry(Attempts = 1)]
     public async Task Import(WebNovelProvider provider, string sourceId, string? coverPath, int? chunkCharBudget,
                              WebNovelTitles? titles = null)
@@ -53,6 +53,8 @@ public class WebNovelImportJob(
         if (toc.Count == 0)
             throw new InvalidOperationException($"{provider}/{sourceId} has no episodes.");
 
+        WebNovelLedger.EnsureUniqueIds(toc);
+
         logger.LogInformation("WebNovelImport: {Title} ({SourceId}) — {Episodes} episodes, ~{Chars} chars",
                               originalTitle, sourceId, toc.Count, info.TotalCharacters);
 
@@ -69,7 +71,7 @@ public class WebNovelImportJob(
             {
                 var text = await source.GetEpisodeTextAsync(sourceId, reference);
                 episodes.Add((reference,
-                              new ChunkEpisode(reference.Number, reference.Title, SubdeckChunker.CountCharacters(text)),
+                              new ChunkEpisode(episodes.Count + 1, reference.Title, SubdeckChunker.CountCharacters(text)),
                               text));
             }
 
@@ -194,6 +196,7 @@ public class WebNovelImportJob(
                 {
                     DeckId = parentDeckId,
                     EpisodeNumber = episode.Number,
+                    SourceEpisodeId = referenceByNumber[episode.Number].SourceEpisodeId,
                     ChildDeckId = childDeckId,
                     Title = Truncate(episode.Title, 500),
                     SourceUpdatedAt = referenceByNumber[episode.Number].UpdatedAt,

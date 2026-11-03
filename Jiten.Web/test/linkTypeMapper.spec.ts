@@ -78,6 +78,7 @@ describe('detectLinkTypeFromUrl', () => {
     expect(detectLinkTypeFromUrl('https://www.imdb.com/title/tt0111161/')).toBe(LinkType.Imdb);
     expect(detectLinkTypeFromUrl('https://www.igdb.com/games/clannad')).toBe(LinkType.Igdb);
     expect(detectLinkTypeFromUrl('https://ncode.syosetu.com/n2267be/')).toBe(LinkType.Syosetsu);
+    expect(detectLinkTypeFromUrl('https://kakuyomu.jp/works/16816452219192161720')).toBe(LinkType.Kakuyomu);
     expect(detectLinkTypeFromUrl('https://bookmeter.com/books/548199')).toBe(LinkType.Bookmeter);
   });
 

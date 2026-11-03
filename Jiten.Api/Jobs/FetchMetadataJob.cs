@@ -242,51 +242,30 @@ public class FetchMetadataJob(
     }
 
     /// <summary>
-    /// Refreshes a tracked webnovel from the source's metadata API
+    /// Refreshes a webnovel deck from its source. <paramref name="provider"/> only routes the job to the site's
+    /// queue; <see cref="WebNovelDeckWork.ResolveAsync"/> decides the work fetched.
     /// </summary>
-    [Queue(WebNovelQueues.SyosetuMetadata)]
-    public async Task FetchSyosetuMissingMetadata(int deckId)
+    [WebNovelQueue(WebNovelQueueKind.Metadata)]
+    public async Task FetchWebNovelMetadata(WebNovelProvider provider, int deckId)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
 
         var refetch = await BeginAsync(context, deckId);
         var deck = refetch.Deck;
 
-        var (provider, sourceId) = await ResolveWebNovelWork(context, deck);
+        var work = await WebNovelDeckWork.ResolveAsync(context, deck.DeckId, deck.Links)
+                   ?? throw new Exception($"Deck {deck.DeckId} has no webnovel work link.");
 
-        var info = await sourceResolver.Resolve(provider).GetInfoAsync(sourceId);
+        var linkType = WebNovelProviders.Get(work.Provider).LinkType;
+        var info = await sourceResolver.Resolve(work.Provider).GetInfoAsync(work.SourceId);
         var metadata = info.ToMetadata();
 
-        if (deck.Links.All(l => l.LinkType != LinkType.Syosetsu))
-            deck.Links.Add(new Link { DeckId = deck.DeckId, LinkType = LinkType.Syosetsu, Url = info.Url });
+        if (deck.Links.All(l => l.LinkType != linkType))
+            deck.Links.Add(new Link { DeckId = deck.DeckId, LinkType = linkType, Url = info.Url });
 
-        await MetadataProviderHelper.ApplyProviderMetadataAsync(context, deck, metadata, LinkType.Syosetsu, refetch.Exclusions);
+        await MetadataProviderHelper.ApplyProviderMetadataAsync(context, deck, metadata, linkType, refetch.Exclusions);
 
-        await CompleteAsync(context, refetch, LinkType.Syosetsu);
-    }
-
-    /// <summary>
-    /// The ledger is the authority on which work a deck came from; the link is the fallback for a webnovel
-    /// deck that was added by hand rather than imported.
-    /// </summary>
-    private static async Task<(WebNovelProvider Provider, string SourceId)> ResolveWebNovelWork(JitenDbContext context, Deck deck)
-    {
-        var tracked = await context.WebNovelSources
-                                   .AsNoTracking()
-                                   .FirstOrDefaultAsync(s => s.DeckId == deck.DeckId);
-
-        if (tracked != null)
-            return (tracked.Provider, tracked.SourceId);
-
-        var link = deck.Links.FirstOrDefault(l => l.LinkType == LinkType.Syosetsu);
-
-        if (link == null)
-            throw new Exception($"No Syosetsu link found for deck with ID {deck.DeckId}.");
-
-        if (!WebNovelUrlParser.TryParse(link.Url, out var provider, out var sourceId))
-            throw new Exception($"Syosetsu link '{link.Url}' on deck {deck.DeckId} is not a work URL.");
-
-        return (provider, sourceId);
+        await CompleteAsync(context, refetch, linkType);
     }
 
     private sealed record Refetch(Deck Deck, DeckMetadataSnapshot Before, DeckMetadataExclusionSet Exclusions)

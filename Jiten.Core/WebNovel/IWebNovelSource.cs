@@ -13,7 +13,7 @@ public interface IWebNovelSource
     Task<WebNovelInfo> GetInfoAsync(string sourceId, CancellationToken ct = default);
 
     /// <summary>
-    /// Full table of contents, ordered by episode number. One-shots return a single entry.
+    /// Full table of contents in reading order, numbered from 1. One-shots return a single entry.
     /// </summary>
     Task<List<WebNovelEpisodeRef>> GetTocAsync(string sourceId, CancellationToken ct = default);
 
@@ -30,4 +30,14 @@ public interface IWebNovelSource
 public interface IBatchPollableSource
 {
     Task<Dictionary<string, WebNovelInfo>> BatchPollAsync(IEnumerable<string> sourceIds, CancellationToken ct = default);
+}
+
+/// <summary>
+/// A source that can turn an indirect page (see <see cref="WebNovelProviderDescriptor.IsIndirectWorkUrl"/>) into the
+/// id of the work it points at.
+/// </summary>
+public interface IWebNovelLinkResolver
+{
+    /// <exception cref="InvalidOperationException">The page links to no work, or to several.</exception>
+    Task<string> ResolveWorkIdAsync(Uri url, CancellationToken ct = default);
 }

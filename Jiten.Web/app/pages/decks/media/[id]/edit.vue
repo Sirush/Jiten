@@ -192,6 +192,7 @@
     [LinkType.Imdb]: 'https://www.imdb.com/title/...',
     [LinkType.Igdb]: 'https://www.igdb.com/games/...',
     [LinkType.Syosetsu]: 'https://ncode.syosetu.com/...',
+    [LinkType.Kakuyomu]: 'https://kakuyomu.jp/works/...',
     [LinkType.Bookmeter]: 'https://bookmeter.com/books/...',
   };
 

@@ -7,56 +7,43 @@ using AngleSharp.Dom;
 using AngleSharp.Html.Parser;
 using Jiten.Core.Data.WebNovel;
 using Microsoft.Extensions.Logging;
+using static Jiten.Core.WebNovel.WebNovelParsing;
 
 namespace Jiten.Core.WebNovel;
 
 /// <summary>
 /// 小説家になろう. Metadata comes from the official API; episode text is scraped.
-/// Politeness matches narou.rb's shipped defaults (0.7s between requests, a longer pause every 10).
 /// </summary>
 public partial class SyosetuSource : IWebNovelSource, IBatchPollableSource
 {
-    public const string HttpClientName = "webnovel-syosetu";
-
-    /// <summary>
-    /// narou.rb download.interval
-    /// </summary>
-    private static readonly TimeSpan RequestInterval = TimeSpan.FromMilliseconds(700);
-
-    /// <summary>
-    /// narou.rb download.wait-steps: an extra pause every N requests, Syosetu only
-    /// </summary>
-    private const int WaitStepEvery = 10;
-    private static readonly TimeSpan WaitStepPause = TimeSpan.FromSeconds(5);
-
-    private const int MaxRetries = 4;
-
     /// <summary>
     /// The API caps a batch query at 500 ncodes
     /// </summary>
     public const int BatchPollChunkSize = 500;
 
-    private readonly IHttpClientFactory _httpClientFactory;
-    private readonly ILogger<SyosetuSource> _logger;
-
-    private static readonly SemaphoreSlim _throttle = new(1, 1);
-    private static DateTimeOffset _lastRequest = DateTimeOffset.MinValue;
-    private static int _requestCount;
+    private readonly WebNovelHttp _http;
 
     public WebNovelProvider Provider { get; }
 
     private bool IsNovel18 => Provider == WebNovelProvider.SyosetuNovel18;
-    private string Host => IsNovel18 ? "novel18.syosetu.com" : "ncode.syosetu.com";
     private string ApiUrl => IsNovel18
         ? "https://api.syosetu.com/novel18api/api/"
         : "https://api.syosetu.com/novelapi/api/";
 
     public SyosetuSource(IHttpClientFactory httpClientFactory, ILogger<SyosetuSource> logger,
                          WebNovelProvider provider = WebNovelProvider.Syosetu)
+        : this(httpClientFactory, logger, provider, WebNovelThrottle.For(WebNovelProviders.Get(provider).Site))
     {
-        _httpClientFactory = httpClientFactory;
-        _logger = logger;
+    }
+
+    internal SyosetuSource(IHttpClientFactory httpClientFactory, ILogger<SyosetuSource> logger,
+                           WebNovelProvider provider, WebNovelThrottle throttle)
+    {
         Provider = provider;
+        _http = new WebNovelHttp(httpClientFactory, WebNovelProviders.Get(provider).Site.HttpClientName, throttle, logger,
+                                 provider == WebNovelProvider.SyosetuNovel18
+                                     ? request => request.Headers.Add("Cookie", "over18=yes")
+                                     : null);
     }
 
     public async Task<WebNovelInfo> GetInfoAsync(string sourceId, CancellationToken ct = default)
@@ -165,6 +152,7 @@ public partial class SyosetuSource : IWebNovelSource, IBatchPollableSource
                 new WebNovelEpisodeRef
                 {
                     Number = 1,
+                    SourceEpisodeId = "1",
                     Title = info.Title,
                     UpdatedAt = info.LastUpdatedAt,
                     IsOneShot = true
@@ -174,15 +162,14 @@ public partial class SyosetuSource : IWebNovelSource, IBatchPollableSource
 
         var episodes = new List<WebNovelEpisodeRef>();
         var parser = new HtmlParser();
+        var workUrl = WebNovelUrlParser.BuildWorkUrl(Provider, sourceId);
         var page = 1;
 
         while (true)
         {
-            var url = page == 1
-                ? $"https://{Host}/{sourceId}/"
-                : $"https://{Host}/{sourceId}/?p={page}";
+            var url = page == 1 ? workUrl : $"{workUrl}?p={page}";
 
-            var html = await FetchStringAsync(url, ct);
+            var html = await _http.GetStringAsync(url, ct);
             using var document = await parser.ParseDocumentAsync(html, ct);
 
             var before = episodes.Count;
@@ -209,6 +196,7 @@ public partial class SyosetuSource : IWebNovelSource, IBatchPollableSource
                 episodes.Add(new WebNovelEpisodeRef
                 {
                     Number = number.Value,
+                    SourceEpisodeId = number.Value.ToString(CultureInfo.InvariantCulture),
                     Title = link.TextContent.Trim(),
                     UpdatedAt = ParseTocUpdate(node.QuerySelector(".p-eplist__update")),
                     SectionTitle = sectionTitle
@@ -231,11 +219,10 @@ public partial class SyosetuSource : IWebNovelSource, IBatchPollableSource
                                                   CancellationToken ct = default)
     {
         // A one-shot's body lives on the work page itself; /{ncode}/1/ is a 404 for it
-        var url = episode.IsOneShot
-            ? $"https://{Host}/{sourceId}/"
-            : $"https://{Host}/{sourceId}/{episode.Number}/";
+        var workUrl = WebNovelUrlParser.BuildWorkUrl(Provider, sourceId);
+        var url = episode.IsOneShot ? workUrl : $"{workUrl}{episode.SourceEpisodeId}/";
 
-        var html = await FetchStringAsync(url, ct);
+        var html = await _http.GetStringAsync(url, ct);
 
         var parser = new HtmlParser();
         using var document = await parser.ParseDocumentAsync(html, ct);
@@ -248,19 +235,7 @@ public partial class SyosetuSource : IWebNovelSource, IBatchPollableSource
         if (body == null)
             throw new InvalidOperationException($"No novel text found at {url} (markup may have changed).");
 
-        return ExtractBlockText(body, document);
-    }
-
-    private static string ExtractBlockText(IElement block, IDocument document)
-    {
-        RubyHtmlHelper.InlineRubyAnnotations(block, document);
-
-        var sb = new StringBuilder();
-        foreach (var paragraph in block.QuerySelectorAll("p"))
-            sb.AppendLine(paragraph.TextContent.Trim());
-
-        // Blank paragraphs are <p><br/></p>; collapse the runs they leave behind
-        return BlankLineRuns().Replace(sb.ToString(), "\n\n").Trim();
+        return ParagraphText(body, document);
     }
 
     private static int? EpisodeNumberFromHref(string href)
@@ -314,18 +289,12 @@ public partial class SyosetuSource : IWebNovelSource, IBatchPollableSource
         return null;
     }
 
-    private async Task<string> FetchStringAsync(string url, CancellationToken ct)
-    {
-        using var response = await SendAsync(url, ct);
-        return await response.Content.ReadAsStringAsync(ct);
-    }
-
     /// <summary>
     /// The API's gzip=5 returns a gzip body regardless of Accept-Encoding, so it is inflated by hand.
     /// </summary>
     private async Task<string> FetchGzipJsonAsync(string url, CancellationToken ct)
     {
-        using var response = await SendAsync(url, ct);
+        using var response = await _http.SendAsync(url, ct);
 
         await using var stream = await response.Content.ReadAsStreamAsync(ct);
         await using var gzip = new GZipStream(stream, CompressionMode.Decompress);
@@ -333,71 +302,6 @@ public partial class SyosetuSource : IWebNovelSource, IBatchPollableSource
 
         return await reader.ReadToEndAsync(ct);
     }
-
-    private async Task<HttpResponseMessage> SendAsync(string url, CancellationToken ct)
-    {
-        for (var attempt = 0; ; attempt++)
-        {
-            await ThrottleAsync(ct);
-
-            var client = _httpClientFactory.CreateClient(HttpClientName);
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-
-            if (IsNovel18)
-                request.Headers.Add("Cookie", "over18=yes");
-
-            var response = await client.SendAsync(request, ct);
-
-            // 503 is Syosetu's "Too many access" — back off rather than hammer
-            if ((response.StatusCode == System.Net.HttpStatusCode.ServiceUnavailable ||
-                 (int)response.StatusCode == 429) && attempt < MaxRetries)
-            {
-                response.Dispose();
-
-                var backoff = TimeSpan.FromSeconds(Math.Pow(2, attempt + 1));
-                _logger.LogWarning("Syosetu throttled us on {Url}, backing off {Backoff}s (attempt {Attempt})",
-                                   url, backoff.TotalSeconds, attempt + 1);
-                await Task.Delay(backoff, ct);
-                continue;
-            }
-
-            if (!response.IsSuccessStatusCode)
-            {
-                var status = response.StatusCode;
-                response.Dispose();
-                throw new HttpRequestException($"Request to {url} failed with status {(int)status} ({status}).",
-                                               inner: null, statusCode: status);
-            }
-
-            return response;
-        }
-    }
-
-    private async Task ThrottleAsync(CancellationToken ct)
-    {
-        await _throttle.WaitAsync(ct);
-        try
-        {
-            var sinceLast = DateTimeOffset.UtcNow - _lastRequest;
-            if (sinceLast < RequestInterval)
-                await Task.Delay(RequestInterval - sinceLast, ct);
-
-            if (++_requestCount % WaitStepEvery == 0)
-                await Task.Delay(WaitStepPause, ct);
-
-            _lastRequest = DateTimeOffset.UtcNow;
-        }
-        finally
-        {
-            _throttle.Release();
-        }
-    }
-
-    private static string? GetString(JsonElement e, string name) =>
-        e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
-
-    private static int GetInt(JsonElement e, string name) =>
-        e.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
 
     private static string? GenreLabel(int code) => code switch
     {
@@ -436,7 +340,4 @@ public partial class SyosetuSource : IWebNovelSource, IBatchPollableSource
 
     [GeneratedRegex(@"/(\d+)/?$")]
     private static partial Regex EpisodeHrefPattern();
-
-    [GeneratedRegex(@"\n{3,}")]
-    private static partial Regex BlankLineRuns();
 }

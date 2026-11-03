@@ -20,6 +20,7 @@
 
   interface WebNovelPreview {
     provider: string;
+    providerName: string;
     sourceId: string;
     url: string;
     title: string;
@@ -37,7 +38,9 @@
     isAdultOnly: boolean;
     firstPublishedAt: string | null;
     lastUpdatedAt: string | null;
+    coverUrl: string | null;
     estimatedSubdecks: number;
+    estimatedFetchMinutes: number;
   }
 
   const toast = useToast();
@@ -96,11 +99,13 @@
     }
   };
 
-  // A long novel is fetched one episode at a time at ~0.7s each, plus a pause every 10
-  const estimatedMinutes = computed(() => {
-    if (!preview.value) return 0;
-    return Math.max(1, Math.round((preview.value.episodeCount * 0.7 + (preview.value.episodeCount / 10) * 5) / 60));
-  });
+  const estimatedMinutes = computed(() => preview.value?.estimatedFetchMinutes ?? 0);
+  const usingSourceCover = computed(() => !coverImage.value && !!preview.value?.coverUrl && coverImageUrl.value === preview.value.coverUrl);
+
+  const restoreSourceCover = () => {
+    coverImage.value = null;
+    coverImageUrl.value = preview.value?.coverUrl ?? null;
+  };
 
   const fetchPreview = async () => {
     if (!url.value.trim()) return;
@@ -113,6 +118,8 @@
       romajiTitle.value = '';
       englishTitle.value = '';
       titleConflict.value = preview.value.titleConflict;
+      coverImage.value = null;
+      coverImageUrl.value = preview.value.coverUrl;
     } catch (error) {
       console.error(error);
       toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Could not read this novel.'), life: 5000 });
@@ -130,6 +137,7 @@
     formData.append('romajiTitle', romajiTitle.value.trim());
     formData.append('englishTitle', englishTitle.value.trim());
     if (coverImage.value) formData.append('coverImage', coverImage.value);
+    else if (usingSourceCover.value) formData.append('useSourceCover', 'true');
     if (chunkCharBudget.value) formData.append('chunkCharBudget', String(chunkCharBudget.value));
 
     submitting.value = true;
@@ -138,7 +146,7 @@
       toast.add({
         severity: 'success',
         summary: 'Import queued',
-        detail: `'${originalTitle.value.trim()}' is being fetched — roughly ${estimatedMinutes.value} min.`,
+        detail: `'${originalTitle.value.trim()}' is being fetched, roughly ${estimatedMinutes.value} min.`,
         life: 5000,
       });
 
@@ -177,13 +185,14 @@
   <div class="container mx-auto p-4">
     <h1 class="text-3xl font-bold mb-2">Add Webnovel</h1>
     <p class="text-surface-500 dark:text-surface-400 mb-6">
-      Paste a syosetu URL or ncode. The novel is split into chapter-range subdecks and new chapters are picked up automatically.
+      Paste a Syosetu or Kakuyomu URL, a Kakuyomu book page, or a Syosetu ncode. The novel is split into chapter-range subdecks and new
+      chapters are picked up automatically.
     </p>
 
     <div class="max-w-2xl mb-6">
       <label for="novelUrl" class="block mb-2 font-medium">Novel URL</label>
       <InputGroup>
-        <InputText id="novelUrl" v-model="url" placeholder="https://ncode.syosetu.com/n9669bk/" :disabled="fetching" @keydown.enter="fetchPreview" />
+        <InputText id="novelUrl" v-model="url" placeholder="https://kakuyomu.jp/works/… or https://ncode.syosetu.com/n9669bk/" :disabled="fetching" @keydown.enter="fetchPreview" />
         <Button label="Fetch" icon="pi pi-search" :loading="fetching" :disabled="!url.trim()" @click="fetchPreview" />
       </InputGroup>
     </div>
@@ -197,7 +206,7 @@
               <i class="pi pi-external-link text-sm align-middle text-surface-400" />
             </a>
           </h2>
-          <div class="text-sm text-surface-500 dark:text-surface-400 mb-3">{{ preview.author }} · {{ preview.sourceId }}</div>
+          <div class="text-sm text-surface-500 dark:text-surface-400 mb-3">{{ preview.author }} · {{ preview.providerName }} {{ preview.sourceId }}</div>
 
           <div class="flex flex-wrap gap-2 mb-4">
             <Tag v-if="preview.isCompleted" value="Completed" severity="success" />
@@ -277,7 +286,19 @@
 
       <div>
         <CoverImageField v-model:file="coverImage" v-model:url="coverImageUrl" :title="originalTitle" :subtitle="romajiTitle || preview.author || ''" />
-        <p class="mt-2 text-xs text-surface-500 dark:text-surface-400">Syosetu works have no cover art — upload one or generate it from the title.</p>
+        <p v-if="usingSourceCover" class="mt-2 text-xs text-surface-500 dark:text-surface-400">
+          The cover from {{ preview.providerName }} will be used unless you replace it.
+        </p>
+        <Button
+          v-else-if="preview.coverUrl"
+          :label="`Use the cover from ${preview.providerName}`"
+          icon="pi pi-replay"
+          size="small"
+          text
+          class="mt-2"
+          @click="restoreSourceCover"
+        />
+        <p v-else class="mt-2 text-xs text-surface-500 dark:text-surface-400">This work has no cover art. Upload one or generate it from the title.</p>
 
         <div class="mt-4">
           <label for="chunkChars" class="block mb-1 text-sm font-medium">Subdeck size (characters)</label>
