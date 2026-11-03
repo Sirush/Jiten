@@ -6,6 +6,7 @@
   import { FsrsState } from '~/types/enums';
   import { useSrsStore } from '~/stores/srsStore';
   import { formatDateShort, formatDateTime } from '~/utils/dateFormat';
+  import { type BulkCardAction, type BulkCardInfo, bulkStatusFromFsrsState } from '~/utils/srsBulkActions';
 
   definePageMeta({
     middleware: ['auth'],
@@ -27,14 +28,6 @@
   const sortBy = ref<'due' | 'state' | 'rank' | 'lapses' | 'stability' | 'difficulty' | 'created' | 'lastReview'>('due');
   const sortAsc = ref(true);
   const selectedIds = ref(new Set<string>());
-  const bulkLoading = ref(false);
-
-  // Bulk forget confirmation
-  const FORGET_ACK_THRESHOLD = 25;
-  const forgetDialogVisible = ref(false);
-  const forgetCount = ref(0);
-  const forgetAck = ref(false);
-  const forgetNeedsAck = computed(() => forgetCount.value > FORGET_ACK_THRESHOLD);
   const actionsOpenFor = ref<string | null>(null);
   const expandedCards = ref(new Set<string>());
 
@@ -290,13 +283,13 @@
     for (const c of sortedCards.value) selectedIds.value.add(cardKey(c));
   }
 
-  type CardSnapshot = Pick<FsrsCardWithWordDto, 'state' | 'stability' | 'difficulty' | 'due' | 'lastReview'>;
+  type CardSnapshot = Pick<FsrsCardWithWordDto, 'state' | 'stability' | 'difficulty' | 'due' | 'lastReview' | 'lapses'>;
 
   function snapshotCard(card: FsrsCardWithWordDto): CardSnapshot {
-    return { state: card.state, stability: card.stability, difficulty: card.difficulty, due: card.due, lastReview: card.lastReview };
+    return { state: card.state, stability: card.stability, difficulty: card.difficulty, due: card.due, lastReview: card.lastReview, lapses: card.lapses };
   }
 
-  function applyOptimisticState(card: FsrsCardWithWordDto, action: string) {
+  function applyOptimisticState(card: FsrsCardWithWordDto, action: BulkCardAction) {
     switch (action) {
       case 'neverForget-add':
         card.state = FsrsState.Mastered;
@@ -327,18 +320,7 @@
     }
   }
 
-  const actionEligibility: Record<string, (card: FsrsCardWithWordDto) => boolean> = {
-    'neverForget-add': (c) => c.state !== FsrsState.Mastered,
-    'neverForget-remove': (c) => c.state === FsrsState.Mastered,
-    'suspend-add': (c) => c.state !== FsrsState.Suspended,
-    'suspend-remove': (c) => c.state === FsrsState.Suspended,
-    'blacklist-add': (c) => c.state !== FsrsState.Blacklisted,
-    'blacklist-remove': (c) => c.state === FsrsState.Blacklisted,
-    'reset-schedule': () => true,
-    'clear-lapses': (c) => (c.lapses ?? 0) > 0,
-  };
-
-  async function setVocabularyState(card: FsrsCardWithWordDto, state: string) {
+  async function setVocabularyState(card: FsrsCardWithWordDto, state: BulkCardAction) {
     const prev = snapshotCard(card);
     applyOptimisticState(card, state);
 
@@ -370,7 +352,7 @@
       actions.push(master, suspend, blacklist);
     }
 
-    actions.push({ label: 'Add to list', icon: 'pi pi-list', action: () => openAddToList([card]) });
+    actions.push({ label: 'Add to list', icon: 'pi pi-list', action: () => openAddToList(card) });
     if ((card.lapses ?? 0) > 0) actions.push({ label: 'Clear lapses', icon: 'pi pi-eraser', action: () => setVocabularyState(card, 'clear-lapses') });
     actions.push({ label: 'Reset schedule', icon: 'pi pi-history', action: () => confirmResetSchedule(card) });
 
@@ -394,13 +376,9 @@
     });
   }
 
-  function openAddToList(cards: FsrsCardWithWordDto[]) {
-    addToListCards.value = cards.map((c) => ({ wordId: c.wordId, readingIndex: c.readingIndex }));
+  function openAddToList(card: FsrsCardWithWordDto) {
+    addToListCards.value = [{ wordId: card.wordId, readingIndex: card.readingIndex }];
     addToListVisible.value = true;
-  }
-
-  function onAddedToList() {
-    if (addToListCards.value.length > 1) selectedIds.value.clear();
   }
 
   function confirmForget(card: FsrsCardWithWordDto) {
@@ -428,128 +406,34 @@
     }
   }
 
-  // Bulk actions
-  const BULK_CHUNK = 5000;
-
-  interface BulkActionDef {
-    label: string;
-    icon: string;
-    severity: string;
-    run: () => void;
+  function describeCard(card: FsrsCardWithWordDto): BulkCardInfo {
+    return { wordId: card.wordId, readingIndex: card.readingIndex, status: bulkStatusFromFsrsState(card.state), lapses: card.lapses };
   }
 
-  const visibleBulkActions = computed<BulkActionDef[]>(() => {
-    const selected = selectedCards.value;
-    const anyEligible = (state: string) => selected.some(actionEligibility[state]!);
-    const defs: BulkActionDef[] = [{ label: 'Add to list', icon: 'pi pi-list', severity: 'secondary', run: () => openAddToList(selected) }];
-
-    if (anyEligible('neverForget-add'))
-      defs.push({ label: 'Master', icon: 'pi pi-check-circle', severity: 'success', run: () => confirmBulkAction('Master', 'neverForget-add') });
-    if (anyEligible('neverForget-remove'))
-      defs.push({ label: 'Unmaster', icon: 'pi pi-replay', severity: 'success', run: () => confirmBulkAction('Unmaster', 'neverForget-remove') });
-    if (anyEligible('suspend-add'))
-      defs.push({ label: 'Suspend', icon: 'pi pi-pause', severity: 'warn', run: () => confirmBulkAction('Suspend', 'suspend-add') });
-    if (anyEligible('suspend-remove'))
-      defs.push({ label: 'Resume', icon: 'pi pi-play', severity: 'warn', run: () => confirmBulkAction('Resume', 'suspend-remove') });
-    if (anyEligible('blacklist-add'))
-      defs.push({ label: 'Blacklist', icon: 'pi pi-ban', severity: 'secondary', run: () => confirmBulkAction('Blacklist', 'blacklist-add') });
-    if (anyEligible('blacklist-remove'))
-      defs.push({ label: 'Unblacklist', icon: 'pi pi-undo', severity: 'secondary', run: () => confirmBulkAction('Unblacklist', 'blacklist-remove') });
-
-    if (anyEligible('clear-lapses'))
-      defs.push({ label: 'Clear lapses', icon: 'pi pi-eraser', severity: 'info', run: () => confirmBulkAction('Clear lapses', 'clear-lapses') });
-    defs.push({ label: 'Reset', icon: 'pi pi-history', severity: 'info', run: () => confirmBulkAction('Reset', 'reset-schedule') });
-    defs.push({ label: 'Forget', icon: 'pi pi-trash', severity: 'danger', run: confirmBulkForget });
-    return defs;
-  });
-
-  function confirmBulkAction(label: string, state: string) {
-    const eligible = selectedCards.value.filter(actionEligibility[state] ?? (() => true));
-    if (eligible.length === 0) return;
-    const skipped = selectedCards.value.length - eligible.length;
-
-    const n = eligible.length;
-    const cardsWord = `card${n !== 1 ? 's' : ''}`;
-    let message =
-      state === 'reset-schedule'
-        ? `Reset ${n} ${cardsWord}? This clears their scheduling (stability, difficulty, lapses) and puts them back into Learning. Review history is kept.`
-        : state === 'clear-lapses'
-          ? `Clear the lapse count on ${n} ${cardsWord}? They stop being leeches; scheduling and review history are kept.`
-          : `Are you sure you want to ${label.toLowerCase()} ${n} ${cardsWord}?`;
-    if (skipped > 0) {
-      message += ` ${skipped} selected card${skipped !== 1 ? 's are' : ' is'} not applicable and will be skipped.`;
+  function applyBulkOptimistic(action: BulkCardAction, targets: FsrsCardWithWordDto[]) {
+    if (action === 'forget-add') {
+      const targetSet = new Set(targets);
+      const removed: { card: FsrsCardWithWordDto; idx: number }[] = [];
+      const kept: FsrsCardWithWordDto[] = [];
+      cards.value.forEach((card, idx) => (targetSet.has(card) ? removed.push({ card, idx }) : kept.push(card)));
+      cards.value = kept;
+      return () => {
+        const current = cards.value;
+        const restored: FsrsCardWithWordDto[] = [];
+        let ci = 0;
+        for (const { card, idx } of removed) {
+          while (restored.length < idx && ci < current.length) restored.push(current[ci++]!);
+          restored.push(card);
+        }
+        cards.value = restored.concat(current.slice(ci));
+      };
     }
 
-    confirm.require({
-      message,
-      header: `Bulk ${label}`,
-      acceptLabel: label,
-      rejectLabel: 'Cancel',
-      acceptClass: 'p-button-danger',
-      accept: () => bulkSetState(state),
-    });
-  }
-
-  async function bulkSetState(state: string) {
-    const eligible = selectedCards.value.filter(actionEligibility[state] ?? (() => true));
-    if (eligible.length === 0) return;
-
-    bulkLoading.value = true;
-    const snapshots = eligible.map((c) => ({ card: c, prev: snapshotCard(c) }));
-    for (const c of eligible) applyOptimisticState(c, state);
-    selectedIds.value.clear();
-
-    try {
-      for (let i = 0; i < eligible.length; i += BULK_CHUNK) {
-        const chunk = eligible.slice(i, i + BULK_CHUNK);
-        await $api('srs/set-vocabulary-state-bulk', {
-          method: 'POST',
-          body: { state, items: chunk.map((c) => ({ wordId: c.wordId, readingIndex: c.readingIndex })) },
-        });
-      }
-    } catch {
+    const snapshots = targets.map((card) => ({ card, prev: snapshotCard(card) }));
+    for (const card of targets) applyOptimisticState(card, action);
+    return () => {
       for (const { card, prev } of snapshots) Object.assign(card, prev);
-      toast.add({ severity: 'error', summary: 'Error', detail: 'Some cards failed to update', life: 5000 });
-    } finally {
-      bulkLoading.value = false;
-    }
-  }
-
-  function confirmBulkForget() {
-    if (selectedIds.value.size === 0) return;
-    forgetCount.value = selectedIds.value.size;
-    forgetAck.value = false;
-    forgetDialogVisible.value = true;
-  }
-
-  async function executeBulkForget() {
-    if (forgetNeedsAck.value && !forgetAck.value) return;
-
-    bulkLoading.value = true;
-    const selected = [...selectedCards.value];
-    const removedWithIndex = selected.map((c) => ({ card: c, idx: cards.value.indexOf(c) }));
-
-    cards.value = cards.value.filter((c) => !selectedIds.value.has(cardKey(c)));
-    selectedIds.value.clear();
-    forgetDialogVisible.value = false;
-
-    try {
-      for (let i = 0; i < selected.length; i += BULK_CHUNK) {
-        const chunk = selected.slice(i, i + BULK_CHUNK);
-        await $api('srs/set-vocabulary-state-bulk', {
-          method: 'POST',
-          body: { state: 'forget-add', items: chunk.map((c) => ({ wordId: c.wordId, readingIndex: c.readingIndex })) },
-        });
-      }
-      toast.add({ severity: 'success', summary: 'Forgotten', detail: `${selected.length} card${selected.length !== 1 ? 's' : ''} forgotten`, life: 3000 });
-    } catch {
-      for (const { card, idx } of removedWithIndex.sort((a, b) => a.idx - b.idx)) {
-        cards.value.splice(idx, 0, card);
-      }
-      toast.add({ severity: 'error', summary: 'Error', detail: 'Some cards failed to forget', life: 5000 });
-    } finally {
-      bulkLoading.value = false;
-    }
+    };
   }
 
   function toggleActions(key: string) {
@@ -700,19 +584,15 @@
         <span class="font-semibold">{{ selectedIds.size }} card{{ selectedIds.size !== 1 ? 's' : '' }} selected,</span>
         including {{ hiddenSelectedCount }} on other pages. Bulk actions will affect every selected card, not just the ones you can see.
       </Message>
-      <div class="flex items-center gap-3 px-3 py-2 text-sm text-surface-500 dark:text-surface-400">
-        <Checkbox :model-value="allOnPageSelected" :binary="true" @change="toggleSelectAll" />
-        <span class="text-xs cursor-pointer select-none" @click="toggleSelectAll">
-          {{ selectedCards.length > 0 ? `${selectedCards.length} selected` : `Select page (${paginatedCards.length})` }}
-        </span>
-        <button
-          v-if="sortedCards.length > paginatedCards.length && !allMatchingSelected"
-          class="text-xs text-primary-600 dark:text-primary-400 hover:underline cursor-pointer"
-          @click="selectAllMatching"
-        >
-          Select all {{ sortedCards.length }}
-        </button>
-      </div>
+      <SrsSelectionRow
+        :all-on-page-selected="allOnPageSelected"
+        :selected-count="selectedCards.length"
+        :page-count="paginatedCards.length"
+        :matching-count="sortedCards.length"
+        :all-matching-selected="allMatchingSelected"
+        @toggle-page="toggleSelectAll"
+        @select-all-matching="selectAllMatching"
+      />
 
       <div
         class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm overflow-visible divide-y divide-surface-100 dark:divide-surface-800"
@@ -859,89 +739,10 @@
       </div>
     </template>
 
-    <!-- Bulk action bar -->
-    <Transition name="slide-up">
-      <div
-        v-if="selectedIds.size > 0"
-        class="fixed bottom-0 left-0 right-0 z-40 bg-surface-0 dark:bg-surface-900 border-t border-surface-200 dark:border-surface-700 shadow-[0_-4px_12px_rgba(0,0,0,0.1)] px-4 py-3"
-      >
-        <div class="container mx-auto flex items-center justify-between gap-3">
-          <div class="flex items-center gap-2">
-            <span class="text-sm font-medium">{{ selectedIds.size }} selected</span>
-            <Button label="Clear" text size="small" severity="secondary" @click="selectedIds.clear()" />
-          </div>
-          <div class="flex gap-2 flex-wrap justify-end">
-            <template v-for="action in visibleBulkActions" :key="action.label">
-              <Button
-                :icon="action.icon"
-                :label="action.label"
-                size="small"
-                :severity="action.severity"
-                :loading="bulkLoading"
-                class="!hidden sm:!inline-flex"
-                @click="action.run()"
-              />
-              <Button :icon="action.icon" size="small" :severity="action.severity" :loading="bulkLoading" class="sm:!hidden" @click="action.run()" />
-            </template>
-          </div>
-        </div>
-      </div>
-    </Transition>
-
-    <!-- Bulk forget confirmation -->
-    <Dialog
-      v-model:visible="forgetDialogVisible"
-      modal
-      :header="`Forget ${forgetCount} card${forgetCount !== 1 ? 's' : ''}`"
-      :style="{ width: '30rem' }"
-      :breakpoints="{ '500px': '95vw' }"
-      :dismissable-mask="!bulkLoading"
-    >
-      <div class="flex flex-col gap-4">
-        <div class="flex items-start gap-3">
-          <i class="pi pi-exclamation-triangle text-2xl text-amber-500 shrink-0 mt-0.5" />
-          <div class="text-sm text-surface-700 dark:text-surface-300">
-            <p class="mb-2">
-              You are about to forget
-              <span class="font-bold">{{ forgetCount }}</span>
-              card{{ forgetCount !== 1 ? 's' : '' }}.
-            </p>
-            <p class="mb-2">
-              {{ forgetCount === 1 ? 'It leaves' : 'They leave' }} your collection but your review history is kept, so your activity study chart, streaks and
-              retention stay as they are, and the FSRS optimiser still trains on it.
-            </p>
-            <p>
-              Restore {{ forgetCount === 1 ? 'it' : 'them' }} any time from
-              <NuxtLink to="/settings/vocabulary" class="text-blue-500 hover:underline">Recently Removed</NuxtLink>
-              in vocabulary settings, or delete the history completely there.
-            </p>
-          </div>
-        </div>
-
-        <label
-          v-if="forgetNeedsAck"
-          class="flex items-start gap-2 cursor-pointer rounded-lg border border-amber-200 dark:border-amber-900/40 bg-amber-50 dark:bg-amber-900/10 p-3"
-        >
-          <Checkbox v-model="forgetAck" :binary="true" class="mt-0.5" />
-          <span class="text-sm text-surface-700 dark:text-surface-300">I understand this removes {{ forgetCount }} cards from my collection.</span>
-        </label>
-      </div>
-
-      <template #footer>
-        <Button label="Cancel" severity="secondary" text :disabled="bulkLoading" @click="forgetDialogVisible = false" />
-        <Button
-          label="Forget"
-          icon="pi pi-trash"
-          severity="danger"
-          :loading="bulkLoading"
-          :disabled="forgetNeedsAck && !forgetAck"
-          @click="executeBulkForget"
-        />
-      </template>
-    </Dialog>
+    <SrsBulkActionBar :items="selectedCards" :describe="describeCard" :apply-optimistic="applyBulkOptimistic" @clear="selectedIds.clear()" />
 
     <!-- Add to word list -->
-    <SrsAddToListDialog v-model:visible="addToListVisible" :cards="addToListCards" @added="onAddedToList" />
+    <SrsAddToListDialog v-model:visible="addToListVisible" :cards="addToListCards" />
   </div>
 </template>
 
@@ -952,25 +753,6 @@
   }
   .fade-enter-from,
   .fade-leave-to {
-    opacity: 0;
-  }
-
-  .slide-up-enter-active {
-    transition:
-      transform 0.2s ease-out,
-      opacity 0.2s ease-out;
-  }
-  .slide-up-leave-active {
-    transition:
-      transform 0.15s ease-in,
-      opacity 0.15s ease-in;
-  }
-  .slide-up-enter-from {
-    transform: translateY(100%);
-    opacity: 0;
-  }
-  .slide-up-leave-to {
-    transform: translateY(100%);
     opacity: 0;
   }
 

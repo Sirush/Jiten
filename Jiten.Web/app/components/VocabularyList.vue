@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import type { Word } from '~/types/types';
+  import type { KnownState } from '~/types/enums';
   import type { AsyncDataRequestStatus } from '#app';
   import { LazyHydrateVocabularyEntry } from '~/utils/lazyHydratedComponents';
   import type { WordListContextInput, WordListItem } from '~/composables/useWordListContext';
@@ -22,6 +23,7 @@
   const emit = defineEmits<{
     remove: [word: Word];
     select: [word: Word];
+    statusChanged: [word: Word, states: KnownState[]];
   }>();
 
   const entryKey = (word: Word) => `${word.wordId}-${word.mainReading.readingIndex}`;
@@ -84,6 +86,7 @@
       :class="index >= 8 ? '[content-visibility:auto] [contain-intrinsic-size:auto_8rem]' : ''"
       @remove="emit('remove', word)"
       @select="emit('select', word)"
+      @status-changed="(w, states) => emit('statusChanged', w, states)"
     />
   </div>
 </template>
