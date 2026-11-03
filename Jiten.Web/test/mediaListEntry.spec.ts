@@ -207,12 +207,14 @@ describe('restartQuestion', () => {
 });
 
 describe('dropQuestion', () => {
-  it('asks whether a Completed title was finished, when a pass under way stopped, and nothing otherwise', () => {
+  it('asks whether a Completed title was finished, when a pass under way or an unlisted title stopped, and nothing otherwise', () => {
     expect(dropQuestion(DeckStatus.Completed, summary())).toBe('unfinish');
     expect(dropQuestion(DeckStatus.Planning, summary())).toBeNull();
+    expect(dropQuestion(DeckStatus.Planning, null)).toBeNull();
     expect(dropQuestion(DeckStatus.Ongoing, summary({ state: MediaListEntryState.InProgress }))).toBe('stopped');
     expect(dropQuestion(DeckStatus.Planning, summary({ state: MediaListEntryState.Dropped }))).toBeNull();
-    expect(dropQuestion(DeckStatus.None, null)).toBeNull();
+    expect(dropQuestion(DeckStatus.None, null)).toBe('stopped');
+    expect(dropQuestion(undefined, undefined)).toBe('stopped');
     expect(dropQuestion(DeckStatus.Paused, summary({ state: MediaListEntryState.InProgress }))).toBe('stopped');
   });
 });

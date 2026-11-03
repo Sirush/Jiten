@@ -888,6 +888,51 @@ public class MediaListEntryTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task DroppingATitleNotOnTheList_RecordsADroppedPassToLogProgressOn()
+    {
+        var deckId = await SeedDeck("VN");
+
+        await SetStatus(deckId, DeckStatus.Dropped, new { date = "2024-06-01" });
+        await LogCharacters(deckId, 200);
+
+        (await Preference(deckId))!.Status.Should().Be(DeckStatus.Dropped);
+        var entry = (await Entries(deckId)).Single();
+        entry.State.Should().Be(MediaListEntryState.Dropped);
+        entry.FinishedOn.Should().Be(new DateOnly(2024, 6, 1));
+        entry.CharactersRead.Should().Be(200);
+        (await Preference(deckId))!.CurrentEntryId.Should().Be(entry.Id);
+    }
+
+    [Fact]
+    public async Task BulkDroppingTitlesNotOnTheList_RecordsNoPass()
+    {
+        var deckId = await SeedDeck("VN");
+
+        (await Send(HttpMethod.Post, "/api/user/deck-preferences/bulk", new { deckIds = new[] { deckId }, status = DeckStatus.Dropped }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        (await Entries(deckId)).Should().BeEmpty();
+        (await Preference(deckId))!.Status.Should().Be(DeckStatus.Dropped);
+    }
+
+    [Fact]
+    public async Task PastDroppedRead_OnATitleNotOnTheList_MarksItDropped()
+    {
+        var deckId = await SeedDeck("VN");
+
+        (await Send(HttpMethod.Post, $"/api/user/media-list/entries/{deckId}",
+                    new { state = MediaListEntryState.Dropped, finishedOn = "2023-03-01", charactersRead = 150 }))
+            .StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var preference = (await Preference(deckId))!;
+        preference.Status.Should().Be(DeckStatus.Dropped);
+        var entry = (await Entries(deckId)).Single();
+        entry.State.Should().Be(MediaListEntryState.Dropped);
+        entry.CharactersRead.Should().Be(150);
+        preference.CurrentEntryId.Should().Be(entry.Id);
+    }
+
+    [Fact]
     public async Task CompletingAPlannedTitle_LeavesItsSetAsidePassInTheHistory()
     {
         var deckId = await SeedDeck("VN");

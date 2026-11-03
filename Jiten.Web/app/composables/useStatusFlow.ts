@@ -127,8 +127,12 @@ export function useStatusFlow(deck: () => Deck, { close, isOpen, home = 'list' }
     if (busy.value) return;
     const target = deck();
     const undo = undoCompletion.value;
-    close();
-    await send(target, DeckStatus.Dropped, { date, undoCompletion: undo });
+    const unlisted = (target.status ?? DeckStatus.None) === DeckStatus.None && !target.listEntry;
+    if (!unlisted) close();
+    const response = await send(target, DeckStatus.Dropped, { date, undoCompletion: undo });
+    if (!unlisted || !isOpen() || deck().deckId !== target.deckId) return;
+    if (response) goTo('progress');
+    else close();
   }
 
   async function start(newEntry = false) {

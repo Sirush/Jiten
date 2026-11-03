@@ -45,7 +45,7 @@
   const maxDate = entryMaxDate();
 
   const entry = computed(() => props.deck.listEntry ?? null);
-  const tracksUnits = computed(() => canTrackUnits(props.deck) && !!entry.value?.unitCount);
+  const tracksUnits = computed(() => canTrackUnits(props.deck) && !!entry.value?.unitCount && entry.value.state === MediaListEntryState.InProgress);
   const unitCount = computed(() => entry.value?.unitCount ?? 0);
   const units = computed(() => unitWord(props.deck.mediaType).toLowerCase());
   const unitsDraft = ref<number>(entry.value?.completedUnits ?? 0);

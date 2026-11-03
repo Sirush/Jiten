@@ -52,10 +52,11 @@ export function restartQuestion(status: DeckStatus | undefined, entry: MediaList
   return null;
 }
 
-/** What dropping asks first: whether a Completed title was really finished, or when a pass under way stopped; anything else records no pass. */
+/** What dropping asks first: whether a Completed title was really finished, or when a pass under way, or one on a title not yet listed, stopped; Planning records no pass. */
 export function dropQuestion(status: DeckStatus | undefined, entry: MediaListEntrySummary | null | undefined): 'unfinish' | 'stopped' | null {
   if (status === DeckStatus.Completed && entry?.state === MediaListEntryState.Completed) return 'unfinish';
-  return entry?.state === MediaListEntryState.InProgress ? 'stopped' : null;
+  if (entry?.state === MediaListEntryState.InProgress) return 'stopped';
+  return (status ?? DeckStatus.None) === DeckStatus.None && !entry ? 'stopped' : null;
 }
 
 /** The day in the viewer's calendar; the server stores dates as the user sees them. */

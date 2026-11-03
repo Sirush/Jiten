@@ -2376,7 +2376,7 @@ public partial class UserController(
         var previous = await TakeSnapshotsAsync(userId, deck?.ParentDeckId is { } seriesDeckId ? [deckId, seriesDeckId] : [deckId]);
         var outcome = await DeckPreferenceHelper.ApplyStatusesAsync(userContext, jitenContext, userId, [(deckId, request.Status)],
                                                                     overwriteExisting: true, skipIgnored: false,
-                                                                    date, request.NewEntry, request.UndoCompletion);
+                                                                    date, request.NewEntry, request.UndoCompletion, recordNewDrop: true);
         if (outcome.SkippedFull > 0)
             return Results.BadRequest(new { message = MediaListEntryHelper.HistoryFullMessage });
 
