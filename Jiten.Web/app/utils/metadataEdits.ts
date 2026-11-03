@@ -635,29 +635,54 @@ export function submissionError({ draft, fields, sources, note }: SubmissionChec
   return null;
 }
 
+export interface ListEntry {
+  label: string;
+  role?: string;
+  href?: string;
+  meta?: string[];
+}
+
 /** The other deck's role, read from the deck the edit belongs to: the deck is the edge's source when the other deck is its target. */
-export function relationshipLabel(r: MetadataRelationshipValue): string {
+export function relationshipEntry(r: MetadataRelationshipValue): ListEntry {
   const type = Number(r.relationshipType) as DeckRelationshipType;
   const perspective = r.targetDeckId === r.otherDeckId ? type : getInverseRelationshipType(type);
-  return `${getRelationshipRoleLabel(perspective)}: ${r.otherDeckTitle}`;
+  const meta = [r.otherDeckMediaType != null ? getMediaTypeText(r.otherDeckMediaType) : null, r.otherDeckReleaseYear ? String(r.otherDeckReleaseYear) : null];
+  return {
+    label: r.otherDeckTitle,
+    role: getRelationshipRoleLabel(perspective),
+    href: `/decks/media/${r.otherDeckId}/detail`,
+    meta: meta.filter((m): m is string => m !== null),
+  };
+}
+
+export function relationshipLabel(r: MetadataRelationshipValue): string {
+  const entry = relationshipEntry(r);
+  return `${entry.role}: ${entry.label}`;
 }
 
 export type ChangeView =
   | { kind: 'scalar'; before: string | null; after: string | null }
   | { kind: 'text'; before: string | null; after: string | null; delta: number }
-  | { kind: 'list'; added: string[]; removed: string[]; changed: { label: string; before: string; after: string }[] };
+  | { kind: 'list'; added: ListEntry[]; removed: ListEntry[]; changed: { label: string; before: string; after: string }[] };
 
 const asArray = <T>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
 const asText = (value: unknown): string | null => (value === null || value === undefined || value === '' ? null : String(value));
 
-function keyedDiff<T>(before: T[], after: T[], key: (item: T) => string, label: (item: T) => string): { added: string[]; removed: string[] } {
+function keyedDiff<T>(
+  before: T[],
+  after: T[],
+  key: (item: T) => string,
+  entry: (item: T) => ListEntry
+): { added: ListEntry[]; removed: ListEntry[] } {
   const beforeKeys = new Set(before.map(key));
   const afterKeys = new Set(after.map(key));
   return {
-    added: after.filter((i) => !beforeKeys.has(key(i))).map(label),
-    removed: before.filter((i) => !afterKeys.has(key(i))).map(label),
+    added: after.filter((i) => !beforeKeys.has(key(i))).map(entry),
+    removed: before.filter((i) => !afterKeys.has(key(i))).map(entry),
   };
 }
+
+const plainEntry = (label: string): ListEntry => ({ label });
 
 export function describeChange(change: MetadataFieldChange): ChangeView {
   const { field, before, after } = change;
@@ -675,11 +700,11 @@ export function describeChange(change: MetadataFieldChange): ChangeView {
       };
     case MetadataField.Aliases:
     case MetadataField.CharacterNames:
-      return { kind: 'list', ...keyedDiff(asArray<string>(before), asArray<string>(after), String, String), changed: [] };
+      return { kind: 'list', ...keyedDiff(asArray<string>(before), asArray<string>(after), String, plainEntry), changed: [] };
     case MetadataField.Genres:
       return {
         kind: 'list',
-        ...keyedDiff(asArray<number>(before), asArray<number>(after), String, (g) => getGenreText(Number(g) as Genre)),
+        ...keyedDiff(asArray<number>(before), asArray<number>(after), String, (g) => plainEntry(getGenreText(Number(g) as Genre))),
         changed: [],
       };
     case MetadataField.Tags: {
@@ -689,7 +714,7 @@ export function describeChange(change: MetadataFieldChange): ChangeView {
         b,
         a,
         (t) => String(t.tagId),
-        (t) => `${t.name} ${tagWeightText(t.percentage)}`
+        (t) => plainEntry(`${t.name} ${tagWeightText(t.percentage)}`)
       );
       const beforeById = new Map(b.map((t) => [t.tagId, t]));
       const changed = a
@@ -704,14 +729,14 @@ export function describeChange(change: MetadataFieldChange): ChangeView {
           asArray<MetadataLinkValue>(before),
           asArray<MetadataLinkValue>(after),
           (l) => `${l.linkType}|${l.url}`,
-          (l) => `${getLinkLabel({ linkType: Number(l.linkType), url: l.url })}: ${l.url}`
+          (l) => plainEntry(`${getLinkLabel({ linkType: Number(l.linkType), url: l.url })}: ${l.url}`)
         ),
         changed: [],
       };
     case MetadataField.Relationships:
       return {
         kind: 'list',
-        ...keyedDiff(asArray<MetadataRelationshipValue>(before), asArray<MetadataRelationshipValue>(after), edgeId, relationshipLabel),
+        ...keyedDiff(asArray<MetadataRelationshipValue>(before), asArray<MetadataRelationshipValue>(after), edgeId, relationshipEntry),
         changed: [],
       };
     default:

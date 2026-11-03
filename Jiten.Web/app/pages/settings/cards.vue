@@ -31,7 +31,6 @@
   const actionsOpenFor = ref<string | null>(null);
   const expandedCards = ref(new Set<string>());
 
-  // Add to word list
   const addToListVisible = ref(false);
   const addToListCards = ref<{ wordId: number; readingIndex: number }[]>([]);
   const page = ref(1);
@@ -72,7 +71,6 @@
     return `${card.wordId}-${card.readingIndex}`;
   }
 
-  // Stats
   const stats = computed(() => {
     const total = cards.value.length;
     const now = new Date();
@@ -117,7 +115,6 @@
     selectedIds.value.clear();
   }
 
-  // Filtering
   const filteredCards = computed(() => {
     let result = cards.value;
     const now = new Date();
@@ -140,7 +137,6 @@
     return result;
   });
 
-  // Sorting
   const sortedCards = computed(() => {
     const arr = [...filteredCards.value];
     const dir = sortAsc.value ? 1 : -1;
@@ -171,7 +167,6 @@
     return arr;
   });
 
-  // Pagination
   const totalPages = computed(() => Math.max(1, Math.ceil(sortedCards.value.length / pageSize)));
   const paginatedCards = computed(() => {
     const start = (page.value - 1) * pageSize;
@@ -185,7 +180,6 @@
     if (page.value < totalPages.value) page.value++;
   }
 
-  // Relative due date
   function relativeDue(due: Date | undefined): { text: string; severity: 'overdue' | 'today' | 'soon' | 'later' | 'none' } {
     if (!due) return { text: '-', severity: 'none' };
     const now = new Date();
@@ -249,7 +243,6 @@
     else expandedCards.value.add(key);
   }
 
-  // Selection
   const allOnPageSelected = computed(() => paginatedCards.value.length > 0 && paginatedCards.value.every((c) => selectedIds.value.has(cardKey(c))));
 
   function toggleSelectAll() {
@@ -470,7 +463,6 @@
 <template>
   <div class="container mx-auto p-2 md:p-4 pb-24" @click="closeActions">
     <SrsSubNav />
-    <!-- Header -->
     <div class="flex flex-wrap items-center justify-between gap-2 mb-4 min-h-[2.5rem]">
       <div class="flex items-center gap-2">
         <SettingsBackLink />
@@ -480,13 +472,11 @@
       <Button icon="pi pi-refresh" severity="secondary" text rounded :loading="loading" @click="fetchCards" />
     </div>
 
-    <!-- Word set notice -->
     <Message v-if="hasWordSetSubscriptions && !loading" severity="info" :closable="true" class="mb-4">
       Word set subscriptions (~{{ wordSetTotalWords }} words) are managed separately.
       <NuxtLink to="/settings/word-sets" class="font-semibold underline ml-1">Manage Word Sets</NuxtLink>
     </Message>
 
-    <!-- Filter chips -->
     <div class="flex gap-2 overflow-x-auto pb-2 mb-3 -mx-2 px-2 no-scrollbar">
       <button
         v-for="chip in filterChips"
@@ -504,7 +494,6 @@
       </button>
     </div>
 
-    <!-- Search + Sort -->
     <div class="flex gap-2 mb-3">
       <IconField class="flex-1">
         <InputIcon class="pi pi-search" />
@@ -538,7 +527,6 @@
       />
     </div>
 
-    <!-- Loading -->
     <div v-if="loading" class="flex flex-col gap-2">
       <div
         v-for="i in 8"
@@ -554,7 +542,6 @@
       </div>
     </div>
 
-    <!-- Empty state -->
     <div
       v-else-if="filteredCards.length === 0"
       class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 p-12 text-center"
@@ -577,9 +564,7 @@
       </template>
     </div>
 
-    <!-- Card list -->
     <template v-else>
-      <!-- Select all row -->
       <Message v-if="hiddenSelectedCount > 0" severity="warn" :closable="false" class="mb-2">
         <span class="font-semibold">{{ selectedIds.size }} card{{ selectedIds.size !== 1 ? 's' : '' }} selected,</span>
         including {{ hiddenSelectedCount }} on other pages. Bulk actions will affect every selected card, not just the ones you can see.
@@ -598,7 +583,6 @@
         class="rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm overflow-visible divide-y divide-surface-100 dark:divide-surface-800"
       >
         <div v-for="card in paginatedCards" :key="cardKey(card)">
-          <!-- Main row -->
           <div
             class="flex items-center gap-2 sm:gap-3 px-3 py-2 sm:py-2.5 hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors cursor-pointer select-none"
             :class="{
@@ -609,7 +593,6 @@
           >
             <Checkbox :model-value="selectedIds.has(cardKey(card))" :binary="true" @change="toggleSelect(card)" @click.stop />
 
-            <!-- Two-line grid on mobile, single-line flex on desktop -->
             <div class="flex-1 min-w-0 grid grid-cols-[auto_1fr_auto] gap-x-2 gap-y-0.5 items-center sm:flex sm:items-center sm:gap-3">
               <span
                 class="font-medium text-primary-600 dark:text-primary-400 truncate min-w-0 col-start-1 col-span-2 row-start-2 sm:hidden"
@@ -680,7 +663,6 @@
             </div>
           </div>
 
-          <!-- Expanded detail panel -->
           <Transition name="expand">
             <div v-if="expandedCards.has(cardKey(card))" class="px-3 pb-3 pt-1 bg-surface-50 dark:bg-surface-800/30">
               <NuxtLink
@@ -726,7 +708,6 @@
         </div>
       </div>
 
-      <!-- Pagination -->
       <div v-if="totalPages > 1" class="flex items-center justify-between mt-4 px-1">
         <span class="text-sm text-surface-500 dark:text-surface-400">
           {{ (page - 1) * pageSize + 1 }}&ndash;{{ Math.min(page * pageSize, sortedCards.length) }} of {{ sortedCards.length }}
@@ -741,7 +722,6 @@
 
     <SrsBulkActionBar :items="selectedCards" :describe="describeCard" :apply-optimistic="applyBulkOptimistic" @clear="selectedIds.clear()" />
 
-    <!-- Add to word list -->
     <SrsAddToListDialog v-model:visible="addToListVisible" :cards="addToListCards" />
   </div>
 </template>

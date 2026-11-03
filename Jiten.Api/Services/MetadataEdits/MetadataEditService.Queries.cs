@@ -33,8 +33,41 @@ public sealed partial class MetadataEditService
     private static bool HidesContent(MetadataEditStatus status, string? authorId, string? viewerId, bool canReview) =>
         status == MetadataEditStatus.Reverted && !canReview && authorId != viewerId;
 
-    private static List<FieldChangeDto> ChangeDtos(IEnumerable<MetadataFieldChange> changes) =>
-        changes.Select(c => new FieldChangeDto((int)c.Field, c.Before, c.After)).ToList();
+    private sealed record RelatedDeckInfo(int MediaType, int? ReleaseYear);
+
+    private static List<SnapshotRelationship> RelationshipValues(JsonElement value) =>
+        value.ValueKind == JsonValueKind.Array ? value.Deserialize<List<SnapshotRelationship>>(DeckMetadataSnapshot.Json) ?? [] : [];
+
+    private async Task<Dictionary<int, RelatedDeckInfo>> RelatedDecksAsync(IEnumerable<MetadataFieldChange> changes, CancellationToken ct)
+    {
+        var ids = changes.Where(c => c.Field == MetadataField.Relationships)
+                         .SelectMany(c => RelationshipValues(c.Before).Concat(RelationshipValues(c.After)))
+                         .Select(r => r.OtherDeckId).Distinct().ToList();
+        if (ids.Count == 0)
+            return new Dictionary<int, RelatedDeckInfo>();
+
+        var rows = await db.Decks.AsNoTracking().Where(d => ids.Contains(d.DeckId)).Select(d => new { d.DeckId, d.MediaType, d.ReleaseDate }).ToListAsync(ct);
+        return rows.ToDictionary(d => d.DeckId, d => new RelatedDeckInfo((int)d.MediaType, d.ReleaseDate == default ? null : d.ReleaseDate.Year));
+    }
+
+    private static JsonElement WithRelatedDeckInfo(JsonElement value, Dictionary<int, RelatedDeckInfo> related)
+    {
+        if (value.ValueKind != JsonValueKind.Array)
+            return value;
+
+        var enriched = RelationshipValues(value).Select(r =>
+        {
+            var info = related.GetValueOrDefault(r.OtherDeckId);
+            return new RelationshipChangeValueDto(r.SourceDeckId, r.TargetDeckId, r.RelationshipType, r.OtherDeckId, r.OtherDeckTitle, info?.MediaType, info?.ReleaseYear);
+        });
+        return JsonSerializer.SerializeToElement(enriched, DeckMetadataSnapshot.Json);
+    }
+
+    private static List<FieldChangeDto> ChangeDtos(IEnumerable<MetadataFieldChange> changes, Dictionary<int, RelatedDeckInfo> related) =>
+        changes.Select(c => c.Field == MetadataField.Relationships
+                            ? new FieldChangeDto((int)c.Field, WithRelatedDeckInfo(c.Before, related), WithRelatedDeckInfo(c.After, related))
+                            : new FieldChangeDto((int)c.Field, c.Before, c.After))
+               .ToList();
 
     private IQueryable<MetadataEdit> QueueQuery(MetadataEditStatus status, int? deckId)
     {
@@ -89,6 +122,7 @@ public sealed partial class MetadataEditService
         var checkerIds = page.SelectMany(p => p.Edit.Checks.Select(c => c.UserId)).ToList();
         var names = await DisplayNamesAsync(page.Select(p => p.Edit.UserId).Concat(checkerIds), ct);
         var snapshots = canReview && !unreviewed ? await deckMetadata.LoadSnapshotsAsync(deckIds, ct) : new();
+        var related = await RelatedDecksAsync(page.SelectMany(p => p.Changes), ct);
         var records = canReview
             ? await trust.GetManyAsync(page.Where(p => p.Edit.UserId != null).Select(p => p.Edit.UserId!).Concat(checkerIds), ct)
             : new();
@@ -128,7 +162,7 @@ public sealed partial class MetadataEditService
                 CreatedAt = edit.CreatedAt,
                 Author = new QueueAuthorDto(edit.UserId == null ? "Jiten" : names.GetValueOrDefault(edit.UserId, UnnamedContributor), edit.UserId == viewerId),
                 Fields = (int)edit.Fields,
-                Changes = ChangeDtos(changes),
+                Changes = ChangeDtos(changes, related),
                 Sources = ParseSources(edit.SourcesJson),
                 Note = edit.EditNote,
                 ConfirmCount = edit.Checks.Count(c => c.Verdict == MetadataEditVerdict.Confirm),
@@ -136,7 +170,7 @@ public sealed partial class MetadataEditService
                 CanCheck = blockedReason == null,
                 CheckBlockedReason = blockedReason,
                 CharacterNameChecks = nameResults,
-                FranchiseEffect = await FranchiseEffectAsync(edit.DeckId, deck.FranchiseId, changes, ct),
+                FranchiseEffect = await FranchiseEffectAsync(deck.FranchiseId, changes, ct),
                 Tier = canReview ? (int)MaxTier(changes) : null,
                 AuthorRecord = canReview && author != null ? new AuthorRecordDto(author.LevelName, author.Accepted, author.Reverted) : null,
                 Checks = checks,
@@ -152,15 +186,15 @@ public sealed partial class MetadataEditService
         return new QueueResponseDto(ViewerRole(viewer), total, otherTotal, items);
     }
 
-    /// <summary>User-facing sentence when an added story link would merge or extend franchises.</summary>
-    private async Task<string?> FranchiseEffectAsync(int deckId, int? franchiseId, List<MetadataFieldChange> changes, CancellationToken ct)
+    /// <summary>The franchises an added story link would merge or extend.</summary>
+    private async Task<FranchiseEffectDto?> FranchiseEffectAsync(int? franchiseId, List<MetadataFieldChange> changes, CancellationToken ct)
     {
         var change = changes.FirstOrDefault(c => c.Field == MetadataField.Relationships);
         if (change == null)
             return null;
 
-        var before = change.Before.Deserialize<List<SnapshotRelationship>>(DeckMetadataSnapshot.Json) ?? [];
-        var added = (change.After.Deserialize<List<SnapshotRelationship>>(DeckMetadataSnapshot.Json) ?? [])
+        var before = RelationshipValues(change.Before);
+        var added = RelationshipValues(change.After)
                     .Where(r => DeckRelationship.IsStoryLinkType(r.RelationshipType))
                     .Where(r => !before.Any(b => b.SourceDeckId == r.SourceDeckId && b.TargetDeckId == r.TargetDeckId && b.RelationshipType == r.RelationshipType))
                     .Select(r => r.OtherDeckId).Distinct().ToList();
@@ -174,16 +208,21 @@ public sealed partial class MetadataEditService
             return null;
 
         var all = involved.Concat(franchiseId.HasValue ? [franchiseId.Value] : Array.Empty<int>()).Distinct().ToList();
-        var titles = await db.Set<Franchise>().AsNoTracking().Where(f => all.Contains(f.FranchiseId))
-                             .ToDictionaryAsync(f => f.FranchiseId, f => f.OriginalTitle, ct);
+        var franchises = await db.Set<Franchise>().AsNoTracking().Where(f => all.Contains(f.FranchiseId))
+                                 .Select(f => new { f.FranchiseId, f.OriginalTitle, f.RomajiTitle, f.EnglishTitle })
+                                 .ToDictionaryAsync(f => f.FranchiseId, ct);
         var sizes = await db.Decks.AsNoTracking().Where(d => d.FranchiseId != null && all.Contains(d.FranchiseId!.Value) && d.ParentDeckId == null)
                             .GroupBy(d => d.FranchiseId!.Value).Select(g => new { g.Key, Count = g.Count() })
                             .ToDictionaryAsync(g => g.Key, g => g.Count, ct);
 
-        string Describe(int id) => $"{titles.GetValueOrDefault(id, "a franchise")} ({sizes.GetValueOrDefault(id)} decks)";
-        if (franchiseId == null)
-            return $"Will add this deck to the franchise {string.Join(" and ", involved.Select(Describe))}.";
-        return $"Will merge the franchise {string.Join(" and ", involved.Select(Describe))} into {Describe(franchiseId.Value)}. Franchise pages and study decks built from them will change.";
+        FranchiseRefDto? Ref(int id) => franchises.TryGetValue(id, out var f)
+            ? new FranchiseRefDto(id, f.OriginalTitle, f.RomajiTitle, f.EnglishTitle, sizes.GetValueOrDefault(id))
+            : null;
+
+        var joining = involved.Select(Ref).OfType<FranchiseRefDto>().ToList();
+        if (joining.Count == 0)
+            return null;
+        return new FranchiseEffectDto(joining, franchiseId.HasValue ? Ref(franchiseId.Value) : null);
     }
 
     private async Task<List<HistoryItemDto>> HistoryItemsAsync(List<MetadataEdit> edits, MetadataViewer? viewer, bool withDeck, CancellationToken ct)
@@ -210,6 +249,9 @@ public sealed partial class MetadataEditService
                             .ToDictionaryAsync(d => d.DeckId, ct);
         }
 
+        var parsed = edits.ToDictionary(e => e.Id, e => ParseChanges(e.ChangesJson));
+        var related = await RelatedDecksAsync(parsed.Values.SelectMany(c => c), ct);
+
         return edits.Select(e =>
         {
             var revertFields = reverts.FirstOrDefault(r => r.RevertsEditId == e.Id)?.Fields;
@@ -227,7 +269,7 @@ public sealed partial class MetadataEditService
                 Provider = e.Actor == MetadataEditActor.Provider ? (int?)e.Provider : null,
                 PublicStatus = PublicStatus(e.Status),
                 Status = canReview ? (int)e.Status : null,
-                Changes = hidden ? [] : ChangeDtos(ParseChanges(e.ChangesJson)),
+                Changes = hidden ? [] : ChangeDtos(parsed[e.Id], related),
                 Sources = hidden ? [] : ParseSources(e.SourcesJson),
                 ConfirmCount = confirms.GetValueOrDefault(e.Id),
                 ReviewNote = (canReview || isYours) && e.Status is MetadataEditStatus.Rejected or MetadataEditStatus.Reverted ? e.ReviewNote : null,
@@ -293,6 +335,9 @@ public sealed partial class MetadataEditService
                             .Select(d => new RecentDeckDto(d.DeckId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle))
                             .ToDictionaryAsync(d => d.DeckId, ct);
 
+        var parsed = rows.ToDictionary(r => r.Id, r => ParseChanges(r.ChangesJson));
+        var related = await RelatedDecksAsync(parsed.Values.SelectMany(c => c), ct);
+
         var items = rows.Select(r =>
         {
             var hidden = HidesContent(r.Status, r.UserId, viewerId, canReview);
@@ -304,7 +349,7 @@ public sealed partial class MetadataEditService
                 (int)r.Fields,
                 r.ConfirmCount,
                 decks.GetValueOrDefault(r.DeckId),
-                hidden ? [] : ChangeDtos(ParseChanges(r.ChangesJson)),
+                hidden ? [] : ChangeDtos(parsed[r.Id], related),
                 viewerId != null && r.UserId == viewerId,
                 hidden);
         }).ToList();

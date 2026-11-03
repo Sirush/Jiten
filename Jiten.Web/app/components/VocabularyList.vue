@@ -66,10 +66,6 @@
     <p v-if="emptyMessage" class="text-sm text-surface-400">{{ emptyMessage }}</p>
   </div>
 
-  <!-- LazyHydrate defers per-entry hydration until scrolled into view;
-       content-visibility skips layout/paint for offscreen entries. The first
-       viewport-worth of entries renders normally so the page paints at its real
-       size immediately (no first-frame shift from the intrinsic-size estimate). -->
   <div v-else class="flex flex-col gap-2" @click="rememberFromEvent">
     <LazyHydrateVocabularyEntry
       v-for="(word, index) in words"

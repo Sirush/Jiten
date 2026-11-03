@@ -150,6 +150,15 @@ public sealed record QueueCheckDto(string DisplayName, int Verdict, int? Reason,
 
 public sealed record ConflictDto(int Field, JsonElement EditBefore, JsonElement Current, JsonElement EditAfter);
 
+public sealed record FranchiseRefDto(int FranchiseId, string OriginalTitle, string? RomajiTitle, string? EnglishTitle, int DeckCount);
+
+/// <summary>Into is null when the deck has no franchise yet and joins the others; otherwise they merge into it.</summary>
+public sealed record FranchiseEffectDto(List<FranchiseRefDto> Joining, FranchiseRefDto? Into);
+
+/// <summary>A relationship as stored in an edit, plus the other deck's current media type and year, since titles repeat across a franchise; both are null once that deck is gone.</summary>
+public sealed record RelationshipChangeValueDto(int SourceDeckId, int TargetDeckId, DeckRelationshipType RelationshipType, int OtherDeckId, string OtherDeckTitle,
+                                                int? OtherDeckMediaType, int? OtherDeckReleaseYear);
+
 public sealed class QueueItemDto
 {
     public long Id { get; init; }
@@ -167,7 +176,7 @@ public sealed class QueueItemDto
     public bool CanCheck { get; init; }
     public string? CheckBlockedReason { get; init; }
     public List<CharacterNameSurfaceDto>? CharacterNameChecks { get; init; }
-    public string? FranchiseEffect { get; init; }
+    public FranchiseEffectDto? FranchiseEffect { get; init; }
     public int? Tier { get; init; }
     public AuthorRecordDto? AuthorRecord { get; init; }
     public List<QueueCheckDto>? Checks { get; init; }

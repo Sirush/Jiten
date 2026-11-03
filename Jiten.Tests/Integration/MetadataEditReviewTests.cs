@@ -114,7 +114,16 @@ public class MetadataEditReviewTests(JitenWebApplicationFactory factory)
         var namesEdit = EditId(await SubmitOkAsync(Users.Author, new { addCharacterNames = new[] { "前島 鹿之助" }, sources = new[] { Source } }));
 
         var relationshipItem = await QueueItemAsync(Users.Checker, relationshipEdit);
-        relationshipItem["franchiseEffect"]!.GetValue<string>().Should().Be("Will add this deck to the franchise Other Franchise (1 decks).");
+        var effect = relationshipItem["franchiseEffect"]!;
+        effect["into"].Should().BeNull();
+        effect["joining"]![0]!["franchiseId"]!.GetValue<int>().Should().Be(OtherFranchiseId);
+        effect["joining"]![0]!["originalTitle"]!.GetValue<string>().Should().Be("Other Franchise");
+        effect["joining"]![0]!["deckCount"]!.GetValue<int>().Should().Be(1);
+
+        var added = relationshipItem["changes"]![0]!["after"]![0]!;
+        added["otherDeckId"]!.GetValue<int>().Should().Be(OtherDeckId);
+        added["otherDeckMediaType"]!.GetValue<int>().Should().Be((int)MediaType.Novel);
+        added["otherDeckReleaseYear"].Should().BeNull();
 
         var namesItem = await QueueItemAsync(Users.Checker, namesEdit);
         namesItem["characterNameChecks"]!.AsArray().Select(s => (s!["surface"]!.GetValue<string>(), s["status"]!.GetValue<string>()))

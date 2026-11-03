@@ -140,7 +140,7 @@ describe('buildSubmission', () => {
     expect(payload.removeCharacterNames).toEqual(['圭一']);
 
     const [change] = draftChanges(original, draft, fields);
-    expect(describeChange(change!)).toMatchObject({ added: ['レナ', '竜宮', '竜宮レナ'], removed: ['圭一'] });
+    expect(describeChange(change!)).toMatchObject({ added: [{ label: 'レナ' }, { label: '竜宮' }, { label: '竜宮レナ' }], removed: [{ label: '圭一' }] });
   });
 
   it('detects a tag percentage change', () => {

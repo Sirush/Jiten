@@ -12,6 +12,7 @@
     type ChangeView,
     type DiffPiece,
     type DiffSegment,
+    type ListEntry,
   } from '~/utils/metadataEdits';
 
   const props = defineProps<{
@@ -30,13 +31,13 @@
   const BEFORE = 'text-red-700 dark:text-red-400 line-through decoration-1';
   const AFTER = 'text-green-700 dark:text-green-400';
 
-  type ListToken = { kind: 'add' | 'remove'; label: string } | { kind: 'change'; label: string; before: string; after: string };
+  type ListToken = ({ kind: 'add' | 'remove' } & ListEntry) | { kind: 'change'; label: string; before: string; after: string };
 
   function listTokens(view: ChangeView): ListToken[] {
     if (view.kind !== 'list') return [];
     return [
-      ...view.added.map((label) => ({ kind: 'add' as const, label })),
-      ...view.removed.map((label) => ({ kind: 'remove' as const, label })),
+      ...view.added.map((entry) => ({ kind: 'add' as const, ...entry })),
+      ...view.removed.map((entry) => ({ kind: 'remove' as const, ...entry })),
       ...view.changed.map((c) => ({ kind: 'change' as const, ...c })),
     ];
   }
@@ -126,9 +127,18 @@
             ><template v-if="token.kind === 'change'"
               >{{ token.label }} <span :class="[BEFORE, 'tabular-nums']">{{ token.before }}</span
               ><span class="text-muted-color px-1" aria-label="changed to">→</span><span :class="[AFTER, 'tabular-nums']">{{ token.after }}</span></template
-            ><span v-else :class="token.kind === 'add' ? AFTER : BEFORE" v-bind="japaneseTextAttrs(token.label)">{{
-              token.kind === 'add' ? `+ ${token.label}` : token.label
-            }}</span
+            ><template v-else
+              ><span :class="token.kind === 'add' ? AFTER : BEFORE"
+                >{{ token.kind === 'add' ? '+ ' : '' }}<template v-if="token.role">{{ token.role }}: </template
+                ><NuxtLink
+                  v-if="token.href"
+                  :to="token.href"
+                  target="_blank"
+                  class="!text-inherit underline decoration-1 underline-offset-2 hover:decoration-2"
+                  v-bind="japaneseTextAttrs(token.label)"
+                  >{{ token.label }}</NuxtLink
+                ><span v-else v-bind="japaneseTextAttrs(token.label)">{{ token.label }}</span></span
+              ><span v-for="m in token.meta ?? []" :key="m" class="text-xs text-muted-color ml-2 whitespace-nowrap">{{ m }}</span></template
             >{{ compact && i < row.tokens.length - 1 ? ', ' : '' }}</span
           >
           <span v-if="!row.tokens.length" class="text-muted-color">reordered</span>

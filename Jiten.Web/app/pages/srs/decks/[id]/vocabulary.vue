@@ -245,7 +245,6 @@
     refresh();
   }
 
-  // Selection + bulk actions
   const selectedKeys = ref(new Set<string>());
   const bulkLoading = ref(false);
 
@@ -299,7 +298,6 @@
     };
   }
 
-  /** Swaps in new word objects: the paginated response is a shallow ref, so in-place edits never reach VocabularyStatus. */
   function applyBulkOptimistic(action: BulkCardAction, words: Word[]) {
     const next = knownStatesAfter[action];
     if (!next) return () => {};
