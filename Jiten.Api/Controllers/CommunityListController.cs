@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq.Expressions;
 using System.Text;
 using Jiten.Api.Dtos;
 using Jiten.Api.Helpers;
@@ -40,6 +41,7 @@ public class CommunityListController(
     private const int MaxProfileLists = 48;
     private const int MaxFilterIds = 50;
     private const int MaxItemSearchLength = 200;
+    private const int MinDescriptionSearchLength = 2;
 
     /// <summary>Above the Full item cap so a whole selected library tab fits in one check.</summary>
     private const int MaxMembershipDecks = 5000;
@@ -77,29 +79,30 @@ public class CommunityListController(
         if (TooManyFilterIds(filter))
             return FilterLimitError();
 
-        var query = PublicMatching(q, filter);
+        var needle = SearchNeedle(q);
+        var query = PublicMatching(needle, filter);
         var total = await query.CountAsync();
 
         int? usedSeed = null;
         if (sort == "random")
         {
             usedSeed = seed is > 0 ? seed.Value : Random.Shared.Next(1, int.MaxValue);
-            query = OrderRandomly(query, usedSeed.Value);
+            query = OrderRandomly(query, needle, usedSeed.Value);
         }
         else if (sort == "popular")
         {
             var since = DateTime.UtcNow.AddDays(-(days == 30 ? 30 : 7));
-            query = query.OrderByDescending(l => context.CommunityListFavourites.Count(f => f.ListId == l.ListId && f.CreatedAt >= since))
-                         .ThenByDescending(l => l.FavouriteCount)
-                         .ThenByDescending(l => l.ListId);
+            query = OrderNameMatchesFirst(query, needle, l => context.CommunityListFavourites.Count(f => f.ListId == l.ListId && f.CreatedAt >= since), descending: true)
+                    .ThenByDescending(l => l.FavouriteCount)
+                    .ThenByDescending(l => l.ListId);
         }
         else
         {
             query = sort switch
             {
-                "newest" => query.OrderByDescending(l => l.PublishedAt).ThenByDescending(l => l.ListId),
-                "updated" => query.OrderByDescending(l => l.UpdatedAt).ThenByDescending(l => l.ListId),
-                _ => query.OrderByDescending(l => l.FavouriteCount).ThenByDescending(l => l.ListId)
+                "newest" => OrderNameMatchesFirst(query, needle, l => l.PublishedAt, descending: true).ThenByDescending(l => l.ListId),
+                "updated" => OrderNameMatchesFirst(query, needle, l => l.UpdatedAt, descending: true).ThenByDescending(l => l.ListId),
+                _ => OrderNameMatchesFirst(query, needle, l => l.FavouriteCount, descending: true).ThenByDescending(l => l.ListId)
             };
         }
 
@@ -123,7 +126,7 @@ public class CommunityListController(
         if (TooManyFilterIds(filter))
             return FilterLimitError();
 
-        var query = PublicMatching(q, filter);
+        var query = PublicMatching(SearchNeedle(q), filter);
 
         var genreCounts = await query.SelectMany(l => l.Genres)
                                      .GroupBy(g => g.Genre)
@@ -787,18 +790,34 @@ public class CommunityListController(
     private Task<int> GetFavouriteCountAsync(int listId) =>
         context.CommunityLists.AsNoTracking().Where(l => l.ListId == listId).Select(l => l.FavouriteCount).FirstAsync();
 
-    private IQueryable<CommunityList> PublicMatching(string? q, GenreTagFilter filter)
+    private static string? SearchNeedle(string? q) => string.IsNullOrWhiteSpace(q) ? null : q.Trim().ToLower();
+
+    /// <summary>Descriptions join the match from two characters up; a single kana or letter would hit nearly every description.</summary>
+    private IQueryable<CommunityList> PublicMatching(string? needle, GenreTagFilter filter)
     {
         var query = context.CommunityLists.AsNoTracking().Where(l => l.Status == CommunityListStatus.Public);
-        if (!string.IsNullOrWhiteSpace(q))
-        {
-            var needle = q.Trim().ToLower();
-            query = needle.Length > CommunityList.MaxNameLength
-                ? query.Where(_ => false)
-                : query.Where(l => l.Name.ToLower().Contains(needle));
-        }
+        if (needle == null)
+            return ApplyGenreTagFilters(query, filter);
+
+        if (needle.Length > CommunityList.MaxDescriptionLength)
+            query = query.Where(_ => false);
+        else if (needle.Length < MinDescriptionSearchLength)
+            query = query.Where(l => l.Name.ToLower().Contains(needle));
+        else
+            query = query.Where(l => l.Name.ToLower().Contains(needle) || (l.Description != null && l.Description.ToLower().Contains(needle)));
 
         return ApplyGenreTagFilters(query, filter);
+    }
+
+    /// <summary>Under a search, lists named after the query outrank lists that only mention it in their description.</summary>
+    private static IOrderedQueryable<CommunityList> OrderNameMatchesFirst<TKey>(IQueryable<CommunityList> query, string? needle,
+                                                                                Expression<Func<CommunityList, TKey>> key, bool descending)
+    {
+        if (needle == null)
+            return descending ? query.OrderByDescending(key) : query.OrderBy(key);
+
+        var byName = query.OrderByDescending(l => l.Name.ToLower().Contains(needle));
+        return descending ? byName.ThenByDescending(key) : byName.ThenBy(key);
     }
 
     /// <summary>Each id adds a subquery to the browse SQL, so the total is capped well above what the filter UI produces.</summary>
@@ -1044,14 +1063,15 @@ public class CommunityListController(
     }
 
     /// <summary>Seeded shuffle that stays stable across pages; seeds pick the hash's multipliers, since shifting a fixed hash only rotates one order.</summary>
-    private static IQueryable<CommunityList> OrderRandomly(IQueryable<CommunityList> query, int seed)
+    private static IQueryable<CommunityList> OrderRandomly(IQueryable<CommunityList> query, string? needle, int seed)
     {
         const long prime = 2147483647L;
         var rng = new Random(seed);
         long linear = rng.Next(1, int.MaxValue);
         long quadratic = rng.Next(1, int.MaxValue);
-        return query.OrderBy(l => ((long)l.ListId * linear % prime + (long)l.ListId * l.ListId % prime * quadratic % prime) % prime)
-                    .ThenBy(l => l.ListId);
+        return OrderNameMatchesFirst(query, needle, l => ((long)l.ListId * linear % prime + (long)l.ListId * l.ListId % prime * quadratic % prime) % prime,
+                                     descending: false)
+               .ThenBy(l => l.ListId);
     }
 
     private async Task<(List<int> DeckIds, List<string?> Notes, IResult? Error)> ValidateItemsAsync(List<CommunityListItemInput> inputs)
