@@ -55,7 +55,7 @@
 
         <h2 class="text-xl font-semibold mb-3">Fix deck details</h2>
         <p class="text-gray-700 dark:text-gray-300 leading-relaxed mb-3">
-          Wrong release date, missing alias, a character name that splits badly? Open the deck, choose Suggest an edit from its menu, and add a source. You can
+          Wrong release date, missing alias, a character name that splits badly? Open the deck, choose Suggest an edit from its menu, and add a source if you have one. You can
           also check other people's suggestions against their sources.
         </p>
         <div class="flex flex-wrap gap-2 mb-2">

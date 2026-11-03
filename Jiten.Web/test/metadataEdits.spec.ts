@@ -163,9 +163,10 @@ describe('submissionError', () => {
     return submissionError({ original, draft, fields, sources, note });
   };
 
-  it('asks for a source on fields an editor does not always check', () => {
-    expect(check((d) => (d.releaseDate = '2002-08-10'))).toBe('Add at least one source so someone can check this.');
+  it('accepts a factual change with or without a source', () => {
+    expect(check((d) => (d.releaseDate = '2002-08-10'))).toBeNull();
     expect(check((d) => (d.releaseDate = '2002-08-10'), ['https://vndb.org/r1'])).toBeNull();
+    expect(check((d) => (d.releaseDate = '2002-08-10'), ['not a link'])).toBe('Sources need to be links, such as https://vndb.org/v17.');
   });
 
   it('asks for a note on the original title, media type and description', () => {
@@ -424,8 +425,8 @@ describe('sources', () => {
   it('adds https to a bare host and reports problems apart from other errors', () => {
     expect(normaliseSourceUrl(' vndb.org/v17 ')).toBe('https://vndb.org/v17');
     expect(normaliseSourceUrl('just words')).toBe('just words');
-    expect(sourcesError([MetadataField.ReleaseDate], [''])).toBe('Add at least one source so someone can check this.');
-    expect(sourcesError([MetadataField.Description], [''])).toBeNull();
+    expect(sourcesError([''])).toBeNull();
+    expect(sourcesError(['just words'])).toBe('Sources need to be links, such as https://vndb.org/v17.');
   });
 });
 

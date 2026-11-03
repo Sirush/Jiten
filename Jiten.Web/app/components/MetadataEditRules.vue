@@ -5,7 +5,7 @@
     'Make sure every change is factual.',
     'For translated works, use the date of the Japanese edition release, not the original one.',
     'Do not use MTL or AI translation anywhere. Do not translate titles in "English title" if they don\'t have an official release under that name',
-    'Add a source for changes: big databases like VNDB, AniList or Wikipedia, the publisher site, a trustworthy news source...',
+    'Add a source when you have one: big databases like VNDB, AniList or Wikipedia, the publisher site, a trustworthy news source...',
     'No spoilers anywhere: tags, aliases and descriptions included.',
     'Aliases are alternative names or spellings used for search: official titles, common abbreviations, translations. No jokes and no links.',
     'Related decks are for works in the same story: sequels, side stories, adaptations. Not works that only share an author or publisher.',

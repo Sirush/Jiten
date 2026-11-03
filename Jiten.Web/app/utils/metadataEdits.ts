@@ -614,11 +614,9 @@ export interface SubmissionCheckInput {
   note: string;
 }
 
-/** Every factual change needs a source; free-text fields need a note instead. */
-export function sourcesError(fields: MetadataField[], sources: string[]): string | null {
+export function sourcesError(sources: string[]): string | null {
   const filled = sources.map(normaliseSourceUrl).filter(Boolean);
   if (filled.some((s) => !isSourceUrl(s))) return 'Sources need to be links, such as https://vndb.org/v17.';
-  if (fields.some((f) => !NOTE_REQUIRED_FIELDS.has(f)) && filled.length === 0) return 'Add at least one source so someone can check this.';
   return null;
 }
 
@@ -628,7 +626,7 @@ export function submissionError({ draft, fields, sources, note }: SubmissionChec
   if (fields.includes(MetadataField.OriginalTitle) && !draft.originalTitle.trim()) return "The original title can't be empty.";
   if (draft.description.length > MAX_DESCRIPTION_LENGTH) return `Keep the description under ${MAX_DESCRIPTION_LENGTH} characters.`;
 
-  const sourceProblem = sourcesError(fields, sources);
+  const sourceProblem = sourcesError(sources);
   if (sourceProblem) return sourceProblem;
 
   const noteFields = fields.filter((f) => NOTE_REQUIRED_FIELDS.has(f));
