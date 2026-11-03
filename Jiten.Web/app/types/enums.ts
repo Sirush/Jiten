@@ -246,6 +246,13 @@ export enum NotificationType {
   MetadataEditReverted = 32,
 }
 
+export enum NotificationGroup {
+  FromJiten = 0,
+  MediaRequests = 1,
+  MetadataEdits = 2,
+  CommunityLists = 3,
+}
+
 export enum RequestAction {
   RequestCreated = 1,
   RequestDeleted = 2,

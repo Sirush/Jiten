@@ -1443,6 +1443,8 @@ public class JitenDbContext : DbContext
             entity.Property(n => n.LinkUrl).HasMaxLength(300);
             entity.Property(n => n.IsRead).HasDefaultValue(false);
             entity.Property(n => n.CreatedAt).IsRequired();
+            entity.Property(n => n.GroupKey).HasMaxLength(100);
+            entity.Property(n => n.GroupCount).HasDefaultValue(1);
 
             if (isNpgsql)
             {

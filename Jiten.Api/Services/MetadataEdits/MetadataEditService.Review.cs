@@ -148,15 +148,35 @@ public sealed partial class MetadataEditService
         await AfterApplyAsync(edit.DeckId, MetadataFields.Of(toApply.Select(m => m.Field)), ct);
 
         if (edit.UserId != null)
-        {
-            var title = await DeckTitleAsync(edit.DeckId, ct);
-            var message = leftOut.Count == 0
-                ? $"Your edit to {title} is now live."
-                : $"Your edit to {title} is now live, except the {JoinLabels(leftOut.Select(c => c.Field))}: {excludeNote}";
-            await notifications.Notify(edit.UserId, NotificationType.MetadataEditApproved, "Your edit was approved", message, DeckHistoryUrl(edit.DeckId));
-        }
+            await NotifyApprovedAsync(edit.UserId, edit.DeckId, leftOut, excludeNote, ct);
 
         return ServiceResult<object>.Ok(new { status = (int)edit.Status });
+    }
+
+    private const string ApprovedGroupKey = "metadata-edit-approved";
+    private const string ContributionsUrl = "/requests?tab=contributions";
+
+    /// <summary>Partial approvals carry the reviewer's note, so they stand alone and reach every author; plain approvals fold together and stop once the author's edits go live without review.</summary>
+    private async Task NotifyApprovedAsync(string authorId, int deckId, List<MetadataFieldChange> leftOut, string? excludeNote, CancellationToken ct)
+    {
+        var title = await DeckTitleAsync(deckId, ct);
+        var deckLink = DeckHistoryUrl(deckId);
+        if (leftOut.Count > 0)
+        {
+            await notifications.Notify(authorId, NotificationType.MetadataEditApproved, "Your edit was approved",
+                                       $"Your edit to {title} is now live, except the {JoinLabels(leftOut.Select(c => c.Field))}: {excludeNote}", deckLink);
+            return;
+        }
+
+        var author = await trust.GetAsync(authorId, ct);
+        if (author != null && await trust.AutoApplyMaxTierAsync(author, ct) >= 0)
+            return;
+
+        await notifications.NotifyGrouped(authorId, NotificationType.MetadataEditApproved, ApprovedGroupKey,
+                                          (count, previousLink) => count == 1
+                                              ? new GroupedNotificationContent("Your edit was approved", $"Your edit to {title} is now live.", deckLink)
+                                              : new GroupedNotificationContent("Your edits were approved", $"{count} of your edits are now live.",
+                                                                               previousLink == deckLink ? deckLink : ContributionsUrl));
     }
 
     public async Task<ServiceResult<object>> RejectAsync(long editId, string reviewerId, RejectMetadataEditRequest request, CancellationToken ct)

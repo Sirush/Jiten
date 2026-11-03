@@ -1,6 +1,6 @@
 <script setup lang="ts">
   import type { NotificationType } from '~/types';
-  import { getNotificationIcon, getNotificationIconClass } from '~/utils/notificationType';
+  import { getNotificationIcon, getNotificationIconClass, isFromJiten } from '~/utils/notificationType';
   import type { NotificationDto } from '~/types/types';
 
   definePageMeta({
@@ -14,24 +14,27 @@
   const router = useRouter();
   const toast = useToast();
 
-  const unreadOnly = ref(false);
+  type Filter = 'all' | 'unread' | 'jiten';
+  const filter = ref<Filter>('all');
   const offset = ref(0);
   const limit = 20;
 
-  const filterOptions = [
-    { label: 'All', value: false },
-    { label: 'Unread', value: true },
+  const filterOptions: { label: string; value: Filter }[] = [
+    { label: 'All', value: 'all' },
+    { label: 'Unread', value: 'unread' },
+    { label: 'From Jiten', value: 'jiten' },
   ];
 
   async function loadNotifications() {
     await fetchNotifications({
-      unreadOnly: unreadOnly.value,
+      unreadOnly: filter.value === 'unread',
+      fromJitenOnly: filter.value === 'jiten',
       offset: offset.value,
       limit,
     });
   }
 
-  watch([unreadOnly], () => {
+  watch(filter, () => {
     offset.value = 0;
     loadNotifications();
   });
@@ -89,7 +92,7 @@
     </div>
 
     <div class="flex gap-3 mb-4">
-      <SelectButton v-model="unreadOnly" :options="filterOptions" option-label="label" option-value="value" />
+      <SelectButton v-model="filter" :options="filterOptions" option-label="label" option-value="value" :allow-empty="false" />
     </div>
 
     <div v-if="isLoading" class="flex justify-center py-12">
@@ -98,7 +101,8 @@
 
     <div v-else-if="notifications.length === 0" class="text-center py-12 text-muted-color">
       <i class="pi pi-bell-slash text-4xl mb-3" />
-      <p v-if="unreadOnly">No unread notifications.</p>
+      <p v-if="filter === 'unread'">No unread notifications.</p>
+      <p v-else-if="filter === 'jiten'">No site updates or messages from Jiten yet.</p>
       <p v-else>No notifications yet.</p>
     </div>
 
@@ -107,7 +111,10 @@
         v-for="notification in notifications"
         :key="notification.id"
         class="shadow-sm cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors"
-        :class="{ '!bg-primary-50 dark:!bg-primary-950/20': !notification.isRead }"
+        :class="[
+          { '!border-l-4 !border-l-primary': isFromJiten(notification.type) },
+          { '!bg-primary-50 dark:!bg-primary-950/20': !notification.isRead },
+        ]"
         @click="handleClick(notification)"
       >
         <template #content>

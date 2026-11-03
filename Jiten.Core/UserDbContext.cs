@@ -192,6 +192,7 @@ public class UserDbContext : IdentityDbContext<User>
                 entity.Property(us => us.DisplayProfilesJson).HasColumnType("jsonb").HasDefaultValue("{}");
                 entity.Property(us => us.DismissedNoticesJson).HasColumnType("jsonb").HasDefaultValue("[]");
                 entity.Property(us => us.GrantedNoticesJson).HasColumnType("jsonb").HasDefaultValue("[]");
+                entity.Property(us => us.MutedNotificationGroupsJson).HasColumnType("jsonb").HasDefaultValue("[]");
             }
             else
             {
@@ -200,6 +201,7 @@ public class UserDbContext : IdentityDbContext<User>
                 entity.Property(us => us.DisplayProfilesJson).HasDefaultValue("{}");
                 entity.Property(us => us.DismissedNoticesJson).HasDefaultValue("[]");
                 entity.Property(us => us.GrantedNoticesJson).HasDefaultValue("[]");
+                entity.Property(us => us.MutedNotificationGroupsJson).HasDefaultValue("[]");
             }
 
             entity.HasOne<User>()

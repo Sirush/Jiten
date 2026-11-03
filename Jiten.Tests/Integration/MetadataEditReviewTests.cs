@@ -146,6 +146,52 @@ public class MetadataEditReviewTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Unread_approvals_fold_into_one_notification()
+    {
+        var first = await PendingDateEditAsync();
+        var second = EditId(await SubmitOkAsync(Users.Author, new { releaseDate = "2007-03-29", sources = new[] { Source } }, OtherDeckId));
+        var third = EditId(await SubmitOkAsync(Users.Author, new { releaseDate = "2007-03-29", sources = new[] { Source } }, ThirdDeckId));
+
+        await OkAsync(ApproveAsync(first, Users.Editor));
+        var single = await DbAsync(db => db.Notifications.AsNoTracking().SingleAsync(n => n.UserId == Users.Author));
+        single.Title.Should().Be("Your edit was approved");
+        single.LinkUrl.Should().Be($"/decks/media/{DeckId}/history");
+
+        await OkAsync(ApproveAsync(second, Users.Editor));
+        var folded = await DbAsync(db => db.Notifications.AsNoTracking().SingleAsync(n => n.UserId == Users.Author));
+        folded.Id.Should().Be(single.Id);
+        folded.GroupCount.Should().Be(2);
+        folded.Message.Should().Be("2 of your edits are now live.");
+        folded.LinkUrl.Should().Be("/requests?tab=contributions");
+
+        await DbAsync(db => db.Notifications.Where(n => n.UserId == Users.Author).ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true)));
+        await OkAsync(ApproveAsync(third, Users.Editor));
+        (await NotificationCountAsync(Users.Author, NotificationType.MetadataEditApproved)).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Authors_whose_edits_go_live_without_review_get_no_approval_notification()
+    {
+        var edit = EditId(await SubmitOkAsync(Users.PlusFan, new { genres = new[] { (int)Genre.Action, (int)Genre.Drama }, sources = new[] { Source } }));
+        (await EditAsync(edit)).Status.Should().Be(MetadataEditStatus.Pending);
+
+        await OkAsync(ApproveAsync(edit, Users.Editor));
+
+        (await NotificationCountAsync(Users.PlusFan, NotificationType.MetadataEditApproved)).Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Muted_edit_notifications_are_not_sent()
+    {
+        await OkAsync(SendAsync(HttpMethod.Put, $"/api/user/settings/notifications/{(int)NotificationGroup.MetadataEdits}", Users.Author, new { enabled = false }));
+        var edit = await PendingDateEditAsync();
+
+        await OkAsync(ApproveAsync(edit, Users.Editor));
+
+        (await NotificationCountAsync(Users.Author, NotificationType.MetadataEditApproved)).Should().Be(0);
+    }
+
+    [Fact]
     public async Task Reviewers_approve_low_risk_edits_only_and_editors_approve_everything()
     {
         var dateEdit = await PendingDateEditAsync();

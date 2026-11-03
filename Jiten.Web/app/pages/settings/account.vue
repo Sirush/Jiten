@@ -508,6 +508,8 @@
         </template>
       </Card>
 
+      <NotificationPreferencesCard />
+
       <!-- Security -->
       <Card>
         <template #title>

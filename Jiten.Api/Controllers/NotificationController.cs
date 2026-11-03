@@ -1,6 +1,7 @@
 using Jiten.Api.Dtos;
 using Jiten.Api.Services;
 using Jiten.Core;
+using Jiten.Core.Data;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
@@ -20,6 +21,7 @@ public class NotificationController(
     [HttpGet]
     public async Task<IResult> GetNotifications(
         [FromQuery] bool unreadOnly = false,
+        [FromQuery] bool fromJitenOnly = false,
         [FromQuery] int offset = 0,
         [FromQuery] int limit = 20)
     {
@@ -34,6 +36,9 @@ public class NotificationController(
 
         if (unreadOnly)
             query = query.Where(n => !n.IsRead);
+
+        if (fromJitenOnly)
+            query = query.Where(n => NotificationGroups.FromJitenTypes.Contains(n.Type));
 
         var totalCount = await query.CountAsync();
 
