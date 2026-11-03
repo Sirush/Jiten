@@ -16,6 +16,7 @@ using Swashbuckle.AspNetCore.Annotations;
 namespace Jiten.Api.Controllers;
 
 [ApiController]
+[Authorize]
 [Route("api/word-sets")]
 [Produces("application/json")]
 public class WordSetController(
@@ -224,7 +225,6 @@ public class WordSetController(
     }
 
     [HttpGet("subscriptions")]
-    [Authorize]
     [SwaggerOperation(Summary = "Get user's word set subscriptions", Description = "Returns the current user's word set subscriptions with state.")]
     [ProducesResponseType(typeof(List<UserWordSetSubscriptionDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -273,7 +273,6 @@ public class WordSetController(
     }
 
     [HttpPost("{setId:int}/subscribe")]
-    [Authorize]
     [SwaggerOperation(Summary = "Subscribe to a word set", Description = "Subscribe to a word set with the specified state (Blacklisted or Mastered).")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
@@ -321,7 +320,6 @@ public class WordSetController(
     }
 
     [HttpDelete("{setId:int}/subscribe")]
-    [Authorize]
     [SwaggerOperation(Summary = "Unsubscribe from a word set", Description = "Remove subscription from a word set.")]
     [ProducesResponseType(StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status401Unauthorized)]
@@ -397,21 +395,23 @@ public class WordSetController(
     {
         var userIdGuid = Guid.Parse(userId);
 
-        // Mirrors VocabularyDisplayFilter.ResolveTier: a card outranks word-set membership, an unreviewed card
-        // is Learning rather than Unknown, and a suspended card keeps the tier its interval earned it.
+        // Mirrors VocabularyDisplayFilter.ResolveTier over KnownWordRules.CardTier: a card outranks word-set membership,
+        // an unreviewed or reset card is Learning rather than Unknown, and a suspended card keeps the tier its interval earned it.
         const string activeCard = @"f.""WordId"" IS NOT NULL AND f.""State"" NOT IN (4,5)";
+        const string reviewed = @"f.""State"" <> 0 AND f.""LastReview"" IS NOT NULL";
         const string interval = @"(EXTRACT(EPOCH FROM (f.""Due"" - f.""LastReview"")) / 86400.0)";
+        const int matureDays = KnownWordRules.MatureIntervalDays;
 
         var tierClauses = filter.Tiers.Select(tier => tier switch
         {
             VocabularyTier.Unknown =>
                 @"(f.""WordId"" IS NULL AND NOT COALESCE(use_s.has_mastered, FALSE) AND NOT COALESCE(use_s.has_blacklisted, FALSE))",
             VocabularyTier.Learning =>
-                $@"({activeCard} AND f.""LastReview"" IS NULL)",
+                $@"({activeCard} AND NOT ({reviewed}))",
             VocabularyTier.Young =>
-                $@"({activeCard} AND f.""LastReview"" IS NOT NULL AND {interval} < 21)",
+                $@"({activeCard} AND {reviewed} AND {interval} < {matureDays})",
             VocabularyTier.Mature =>
-                $@"({activeCard} AND f.""LastReview"" IS NOT NULL AND {interval} >= 21)",
+                $@"({activeCard} AND {reviewed} AND {interval} >= {matureDays})",
             VocabularyTier.Mastered =>
                 @"((f.""WordId"" IS NOT NULL AND f.""State"" = 5) OR (f.""WordId"" IS NULL AND COALESCE(use_s.has_mastered, FALSE)))",
             VocabularyTier.Blacklisted =>

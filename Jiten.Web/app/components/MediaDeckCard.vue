@@ -291,6 +291,12 @@
       route: `/dashboard/media/${props.deck.deckId}`,
     },
     {
+      label: 'Suggest an edit',
+      icon: 'pi pi-file-edit',
+      visible: !props.isCompact && props.titleTag !== 'h1',
+      route: `/decks/media/${props.deck.deckId}/edit`,
+    },
+    {
       label: 'Report an issue',
       icon: 'pi pi-exclamation-triangle',
       visible: !props.isCompact,
@@ -589,6 +595,24 @@
                   class="inline-block p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                 >
                   <i class="pi pi-chart-bar utility-icon" />
+                </router-link>
+              </Tooltip>
+              <Tooltip v-if="!isCompact && titleTag === 'h1'" content="Suggest an edit">
+                <router-link
+                  :to="`/decks/media/${deck.deckId}/edit`"
+                  aria-label="Suggest an edit"
+                  class="inline-block p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                >
+                  <i class="pi pi-file-edit utility-icon" />
+                </router-link>
+              </Tooltip>
+              <Tooltip v-if="authStore.isAuthenticated && !isCompact && titleTag === 'h1'" content="Edit history">
+                <router-link
+                  :to="`/decks/media/${deck.deckId}/history`"
+                  aria-label="Edit history"
+                  class="inline-block p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                >
+                  <i class="pi pi-history utility-icon" />
                 </router-link>
               </Tooltip>
               <Tooltip v-if="authStore.isAuthenticated" content="More options">

@@ -4,6 +4,7 @@ using System.Text.Json;
 using FluentAssertions;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Services;
 using Jiten.Parser.Tests.Integration.Infrastructure;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -50,6 +51,59 @@ public class NotificationTests(JitenWebApplicationFactory factory)
         data.GetArrayLength().Should().Be(2);
         data[0].GetProperty("title").GetString().Should().Be("Second");
         data[1].GetProperty("title").GetString().Should().Be("First");
+    }
+
+    [Fact]
+    public async Task FromJitenOnly_ReturnsOnlyNotificationsSentByJiten()
+    {
+        using (var scope = factory.Services.CreateScope())
+        {
+            var service = scope.ServiceProvider.GetRequiredService<NotificationService>();
+            await service.Notify(TestUsers.UserA, NotificationType.SiteUpdate, "Update", "Body");
+            await service.Notify(TestUsers.UserA, NotificationType.MetadataEditRejected, "Rejected", "Body");
+            await service.Notify(TestUsers.UserA, NotificationType.General, "Message", "Body");
+        }
+
+        var request = new HttpRequestMessage(HttpMethod.Get, "/api/notifications?fromJitenOnly=true").WithUser(TestUsers.UserA);
+        var body = await (await _client.SendAsync(request)).Content.ReadFromJsonAsync<JsonElement>();
+
+        body.GetProperty("data").EnumerateArray().Select(n => n.GetProperty("title").GetString())
+            .Should().BeEquivalentTo(["Update", "Message"]);
+    }
+
+    [Fact]
+    public async Task MutedGroup_IsSkippedByNotifyAndNotifyMany()
+    {
+        var mute = new HttpRequestMessage(HttpMethod.Put, $"/api/user/settings/notifications/{(int)NotificationGroup.MediaRequests}")
+                   .WithUser(TestUsers.UserA).WithJsonContent(new { enabled = false });
+        (await _client.SendAsync(mute)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var service = scope.ServiceProvider.GetRequiredService<NotificationService>();
+            await service.Notify(TestUsers.UserA, NotificationType.RequestCompleted, "Done", "Body");
+            await service.NotifyMany([TestUsers.UserA, TestUsers.UserB], NotificationType.RequestStatusChanged, "Status", "Body");
+            await service.Notify(TestUsers.UserA, NotificationType.CommunityListMilestone, "Milestone", "Body");
+        }
+
+        using var readScope = factory.Services.CreateScope();
+        var db = readScope.ServiceProvider.GetRequiredService<JitenDbContext>();
+        db.Notifications.Where(n => n.UserId == TestUsers.UserA).Select(n => n.Title).ToList().Should().Equal("Milestone");
+        db.Notifications.Count(n => n.UserId == TestUsers.UserB).Should().Be(1);
+    }
+
+    [Fact]
+    public async Task FromJitenGroup_CannotBeMuted()
+    {
+        var mute = new HttpRequestMessage(HttpMethod.Put, $"/api/user/settings/notifications/{(int)NotificationGroup.FromJiten}")
+                   .WithUser(TestUsers.UserA).WithJsonContent(new { enabled = false });
+        (await _client.SendAsync(mute)).StatusCode.Should().Be(HttpStatusCode.BadRequest);
+
+        var get = new HttpRequestMessage(HttpMethod.Get, "/api/user/settings/notifications").WithUser(TestUsers.UserA);
+        var prefs = await (await _client.SendAsync(get)).Content.ReadFromJsonAsync<JsonElement>();
+        prefs.EnumerateArray().Select(p => p.GetProperty("group").GetInt32())
+             .Should().Equal(NotificationGroups.Mutable.Select(g => (int)g));
+        prefs.EnumerateArray().Should().OnlyContain(p => p.GetProperty("enabled").GetBoolean());
     }
 
     [Fact]

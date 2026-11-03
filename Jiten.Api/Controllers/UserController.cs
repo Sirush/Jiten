@@ -94,20 +94,12 @@ public partial class UserController(
         // Same conductor set as new-card selection: every card plus Mastered/Blacklisted set members.
         var derivationConductors = fsrsCards.Select(c => (c.WordId, c.ReadingIndex)).ToList();
 
-        var now = DateTime.UtcNow;
-
-        // Build effective state per (WordId, ReadingIndex) form.
-        // FSRS cards take precedence over WordSet membership per form.
-        var effectiveForms = new Dictionary<(int WordId, int ReadingIndex), KnownState>();
+        var cardForms = new Dictionary<(int WordId, int ReadingIndex), KnownState>();
         foreach (var c in fsrsCards)
-        {
-            effectiveForms[(c.WordId, c.ReadingIndex)] =
-                ComputeEffectiveCategory(c.State, c.Due, c.LastReview, now) ?? KnownState.New;
-        }
+            cardForms[(c.WordId, c.ReadingIndex)] = KnownWordRules.CardTier(c.State, c.Due, c.LastReview);
 
-        // Count FSRS-only forms and words
         int youngForms = 0, matureForms = 0, masteredForms = 0, blacklistedForms = 0;
-        foreach (var state in effectiveForms.Values)
+        foreach (var state in cardForms.Values)
         {
             switch (state)
             {
@@ -118,27 +110,8 @@ public partial class UserController(
             }
         }
 
-        int youngWords = 0, matureWords = 0, masteredWords = 0, blacklistedWords = 0;
-        foreach (var wordGroup in effectiveForms.GroupBy(kvp => kvp.Key.WordId))
-        {
-            var best = wordGroup.Max(kvp => kvp.Value == KnownState.Blacklisted ? KnownState.New : kvp.Value);
-            if (best == KnownState.New && wordGroup.Any(kvp => kvp.Value == KnownState.Blacklisted))
-                best = KnownState.Blacklisted;
-            switch (best)
-            {
-                case KnownState.Young: youngWords++; break;
-                case KnownState.Mature: matureWords++; break;
-                case KnownState.Mastered: masteredWords++; break;
-                case KnownState.Blacklisted: blacklistedWords++; break;
-            }
-        }
-
-        var fsrsWordIds = new HashSet<int>(effectiveForms.Keys.Select(k => k.WordId));
-
-        // Word set contributions (only forms/words not already in FSRS)
+        var effectiveForms = new Dictionary<(int WordId, int ReadingIndex), KnownState>(cardForms);
         int wsMasteredForms = 0, wsBlacklistedForms = 0;
-        var wsMasteredWordIds = new HashSet<int>();
-        var wsBlacklistedWordIds = new HashSet<int>();
 
         var userSetStates = await userContext.UserWordSetStates
             .Where(uwss => uwss.UserId == userId)
@@ -162,14 +135,8 @@ public partial class UserController(
                 foreach (var m in masteredSetForms)
                 {
                     derivationConductors.Add((m.WordId, (byte)m.ReadingIndex));
-                    var key = (m.WordId, m.ReadingIndex);
-                    if (!effectiveForms.ContainsKey(key))
-                    {
-                        effectiveForms[key] = KnownState.Mastered;
+                    if (effectiveForms.TryAdd((m.WordId, m.ReadingIndex), KnownWordRules.WordSetTier(WordSetStateType.Mastered)))
                         wsMasteredForms++;
-                        if (!fsrsWordIds.Contains(m.WordId))
-                            wsMasteredWordIds.Add(m.WordId);
-                    }
                 }
             }
 
@@ -184,15 +151,25 @@ public partial class UserController(
                 foreach (var m in blacklistedSetForms)
                 {
                     derivationConductors.Add((m.WordId, (byte)m.ReadingIndex));
-                    var key = (m.WordId, m.ReadingIndex);
-                    if (!effectiveForms.ContainsKey(key))
-                    {
-                        effectiveForms[key] = KnownState.Blacklisted;
+                    if (effectiveForms.TryAdd((m.WordId, m.ReadingIndex), KnownWordRules.WordSetTier(WordSetStateType.Blacklisted)))
                         wsBlacklistedForms++;
-                        if (!fsrsWordIds.Contains(m.WordId))
-                            wsBlacklistedWordIds.Add(m.WordId);
-                    }
                 }
+            }
+        }
+
+        int youngWords = 0, matureWords = 0, masteredWords = 0, blacklistedWords = 0, wsMasteredWords = 0, wsBlacklistedWords = 0;
+        foreach (var wordGroup in effectiveForms.GroupBy(kvp => kvp.Key.WordId))
+        {
+            var tier = KnownWordRules.WordTier(wordGroup.Select(kvp => kvp.Value));
+            var fromCard = wordGroup.Any(kvp => kvp.Value == tier && cardForms.ContainsKey(kvp.Key));
+            switch (tier)
+            {
+                case KnownState.Young: youngWords++; break;
+                case KnownState.Mature: matureWords++; break;
+                case KnownState.Mastered when fromCard: masteredWords++; break;
+                case KnownState.Mastered: wsMasteredWords++; break;
+                case KnownState.Blacklisted when fromCard: blacklistedWords++; break;
+                case KnownState.Blacklisted: wsBlacklistedWords++; break;
             }
         }
 
@@ -208,7 +185,7 @@ public partial class UserController(
                 if (effectiveForms.ContainsKey(kanaKey)) continue;
 
                 if (!redundantExpansions.TryGetValue(kanaKey, out var existing) ||
-                    StateRank(kvp.Value) > StateRank(existing))
+                    KnownWordRules.FormRank(kvp.Value) > KnownWordRules.FormRank(existing))
                     redundantExpansions[kanaKey] = kvp.Value;
             }
         }
@@ -257,9 +234,9 @@ public partial class UserController(
                    MasteredForm = masteredForms,
                    Blacklisted = blacklistedWords,
                    BlacklistedForm = blacklistedForms,
-                   WordSetMastered = wsMasteredWordIds.Count,
+                   WordSetMastered = wsMasteredWords,
                    WordSetMasteredForm = wsMasteredForms,
-                   WordSetBlacklisted = wsBlacklistedWordIds.Count,
+                   WordSetBlacklisted = wsBlacklistedWords,
                    WordSetBlacklistedForm = wsBlacklistedForms,
                    RedundantForms = redundantForms,
                    DerivationCovered = derivationCoveredWordIds.Count,
@@ -4061,34 +4038,6 @@ public partial class UserController(
 
     private record CachedKanjiInfo(string Character, int? FrequencyRank, short? JlptLevel, short? Grade, short StrokeCount);
     private record ReadingFrequencyResult(int WordId, short ReadingIndex, int FrequencyRank);
-
-    private static int StateRank(KnownState s) => s switch
-    {
-        KnownState.Mastered => 4,
-        KnownState.Blacklisted => 3,
-        KnownState.Mature => 2,
-        KnownState.Young => 1,
-        _ => 0
-    };
-
-    private static KnownState? ComputeEffectiveCategory(FsrsState state, DateTime due, DateTime? lastReview, DateTime now)
-    {
-        switch (state)
-        {
-            case FsrsState.Mastered: return KnownState.Mastered;
-            case FsrsState.Blacklisted: return KnownState.Blacklisted;
-        }
-
-        if (lastReview == null)
-            return null;
-
-        var interval = (due - lastReview.Value).TotalDays;
-        if (interval >= 21)
-            return KnownState.Mature;
-        return state is FsrsState.Learning or FsrsState.Review or FsrsState.Relearning or FsrsState.Suspended
-            ? KnownState.Young
-            : null;
-    }
 
     #endregion
 

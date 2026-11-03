@@ -16,4 +16,7 @@ public class UserSettings
 
     /// <summary>JSON array of granted notice keys, written by the migration that snapshots who a change affected at deploy time.</summary>
     public string GrantedNoticesJson { get; set; } = "[]";
+
+    /// <summary>JSON array of muted <see cref="NotificationGroup"/> values.</summary>
+    public string MutedNotificationGroupsJson { get; set; } = "[]";
 }

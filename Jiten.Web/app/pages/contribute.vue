@@ -2,6 +2,7 @@
   import { type GlobalStats, MediaType } from '~/types';
 
   const discordUrl = getDiscordLink();
+  const authStore = useAuthStore();
 
   const globalStatsUrl = 'stats/get-global-stats';
   const { data: response, status, error } = await useApiFetch<GlobalStats>(globalStatsUrl);
@@ -49,6 +50,18 @@
             <span class="ml-1 font-semibold">.mokuro</span>
           </li>
         </ul>
+
+        <Divider />
+
+        <h2 class="text-xl font-semibold mb-3">Fix deck details</h2>
+        <p class="text-gray-700 dark:text-gray-300 leading-relaxed mb-3">
+          Wrong release date, missing alias, a character name that splits badly? Open the deck, choose Suggest an edit from its menu, and add a source. You can
+          also check other people's suggestions against their sources.
+        </p>
+        <div class="flex flex-wrap gap-2 mb-2">
+          <Button as="router-link" to="/review" label="Open the review queue" severity="secondary" />
+          <Button v-if="authStore.isAuthenticated" as="router-link" to="/changes" label="See recent changes" severity="secondary" text />
+        </div>
 
         <Divider />
 

@@ -16,6 +16,7 @@ export function useNotifications() {
   const fetchNotifications = async (
     params: {
       unreadOnly?: boolean;
+      fromJitenOnly?: boolean;
       offset?: number;
       limit?: number;
     } = {}
@@ -26,6 +27,7 @@ export function useNotifications() {
       const result = await $api<PaginatedResponse<NotificationDto[]>>('notifications', {
         query: {
           unreadOnly: params.unreadOnly ?? false,
+          fromJitenOnly: params.fromJitenOnly ?? false,
           offset: params.offset ?? 0,
           limit: params.limit ?? 20,
         },
@@ -38,6 +40,17 @@ export function useNotifications() {
       totalCount.value = 0;
     } finally {
       isLoading.value = false;
+    }
+  };
+
+  const fetchPinned = async (): Promise<NotificationDto[]> => {
+    try {
+      const result = await $api<PaginatedResponse<NotificationDto[]>>('notifications', {
+        query: { unreadOnly: true, fromJitenOnly: true, limit: 5 },
+      });
+      return result?.data ?? [];
+    } catch {
+      return [];
     }
   };
 
@@ -121,6 +134,7 @@ export function useNotifications() {
     isLoading,
     error,
     fetchNotifications,
+    fetchPinned,
     fetchUnreadCount,
     markAsRead,
     markAllAsRead,

@@ -77,14 +77,7 @@ public class CurrentUserService(
                 return GetKnownStatesFromCard(card);
 
             if (wordSets.TryGetState(k, out var setState))
-            {
-                return setState switch
-                {
-                    WordSetStateType.Blacklisted => [KnownState.Blacklisted],
-                    WordSetStateType.Mastered => [KnownState.Mastered],
-                    _ => [KnownState.New]
-                };
-            }
+                return [KnownWordRules.WordSetTier(setState)];
 
             coversByKey.TryGetValue(k, out var covers);
             return ResolveRedundantStates(k, cardsByKey, wordSets, covers) ?? [KnownState.New];
@@ -207,11 +200,11 @@ public class CurrentUserService(
             foreach (var kanjiRi in kanjiIndexes)
             {
                 if (!wordSets.TryGetState((key.WordId, kanjiRi), out var setState)) continue;
-                var mastered = setState == WordSetStateType.Mastered;
-                var rank = mastered ? MasteredRank : BlacklistedRank;
+                var setTier = KnownWordRules.WordSetTier(setState);
+                var rank = KnownWordRules.FormRank(setTier);
                 if (rank <= bestSetRank) continue;
                 bestSetRank = rank;
-                bestSetStates = mastered ? [KnownState.Mastered] : [KnownState.Blacklisted];
+                bestSetStates = [setTier];
             }
 
             if (bestSetStates != null)
@@ -294,9 +287,9 @@ public class CurrentUserService(
             }
             else if (wordSets.TryGetState(coverKey, out var setState))
             {
-                var mastered = setState == WordSetStateType.Mastered;
-                states = mastered ? [KnownState.Mastered] : [KnownState.Blacklisted];
-                rank = mastered ? MasteredRank : BlacklistedRank;
+                var setTier = KnownWordRules.WordSetTier(setState);
+                states = [setTier];
+                rank = KnownWordRules.FormRank(setTier);
             }
             else
             {
@@ -336,55 +329,24 @@ public class CurrentUserService(
         return result;
     }
 
-    private const int MasteredRank = 4;
-    private const int BlacklistedRank = 3;
+    private static KnownState GetCardTier(KnownCardSnapshot card) => KnownWordRules.CardTier(card.State, card.Due, card.LastReview);
 
-    private static int GetKnownStateRank(KnownCardSnapshot card) => card.State switch
-    {
-        FsrsState.Mastered => MasteredRank,
-        FsrsState.Blacklisted => BlacklistedRank,
-        FsrsState.Review or FsrsState.Relearning or FsrsState.Learning or FsrsState.Suspended when
-            card.LastReview != null && (card.Due - card.LastReview.Value).TotalDays >= 21 => 2,
-        FsrsState.Review or FsrsState.Relearning or FsrsState.Learning or FsrsState.Suspended when card.LastReview != null => 1,
-        _ => 0
-    };
+    private static int GetKnownStateRank(KnownCardSnapshot card) => KnownWordRules.FormRank(GetCardTier(card));
 
+    /// <summary>Suspended cards keep their tier for coverage but never present as Due, as Redundant strips Due.</summary>
     private static List<KnownState> GetKnownStatesFromCard(KnownCardSnapshot card)
     {
-        switch (card.State)
-        {
-            case FsrsState.Mastered:
-                return [KnownState.Mastered];
-            case FsrsState.Blacklisted:
-                return [KnownState.Blacklisted];
-        }
+        var tier = GetCardTier(card);
+        if (tier is KnownState.Mastered or KnownState.Blacklisted)
+            return [tier];
 
-        // Suspended cards are parked: they keep their tier (so they still count toward coverage),
-        // but must never present as Due/Overdue — mirroring how Redundant strips Due.
         if (card.State == FsrsState.Suspended)
-        {
-            if (card.LastReview == null)
-                return [KnownState.Suspended];
+            return tier == KnownState.New ? [KnownState.Suspended] : [tier, KnownState.Suspended];
 
-            var suspendedInterval = (card.Due - card.LastReview.Value).TotalDays;
-            return [suspendedInterval < 21 ? KnownState.Young : KnownState.Mature, KnownState.Suspended];
-        }
+        if (tier == KnownState.New)
+            return [KnownState.Due];
 
-        List<KnownState> knownState = new();
-
-        if (card.LastReview == null)
-        {
-            knownState.Add(KnownState.Due);
-            return knownState;
-        }
-
-        if (card.Due <= DateTime.UtcNow)
-            knownState.Add(KnownState.Due);
-
-        var interval = (card.Due - card.LastReview.Value).TotalDays;
-        knownState.Add(interval < 21 ? KnownState.Young : KnownState.Mature);
-
-        return knownState;
+        return card.Due <= DateTime.UtcNow ? [KnownState.Due, tier] : [tier];
     }
 
     public Task<UserWordSets> GetWordSets() =>

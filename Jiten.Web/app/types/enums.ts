@@ -241,6 +241,16 @@ export enum NotificationType {
   General = 10,
   SiteUpdate = 11,
   CommunityListMilestone = 12,
+  MetadataEditApproved = 30,
+  MetadataEditRejected = 31,
+  MetadataEditReverted = 32,
+}
+
+export enum NotificationGroup {
+  FromJiten = 0,
+  MediaRequests = 1,
+  MetadataEdits = 2,
+  CommunityLists = 3,
 }
 
 export enum RequestAction {

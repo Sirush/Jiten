@@ -145,6 +145,15 @@
     { immediate: true }
   );
 
+  /** A trigger that opens a menu never gets mouseleave, so the tooltip would survive the navigation the menu starts. */
+  const route = useRoute();
+  watch(
+    () => route.fullPath,
+    () => {
+      if (props.visible) emit('requestHide');
+    }
+  );
+
   onBeforeUnmount(() => {
     document.removeEventListener('pointerdown', handleClickOutside, true);
   });

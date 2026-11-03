@@ -172,6 +172,9 @@ public class Deck
         set => _dialoguePercentage = value;
     }
     
+    /// <summary>Fields a person corrected; provider imports and bulk re-imports leave them alone.</summary>
+    public MetadataEdits.MetadataField MetadataLocks { get; set; } = MetadataEdits.MetadataField.None;
+
     /// <summary>
     /// Whether to hide the dialogue percentage on the deck card
     /// </summary>

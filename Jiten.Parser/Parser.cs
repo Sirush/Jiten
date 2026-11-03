@@ -6114,7 +6114,8 @@ namespace Jiten.Parser
             return sb.Length > 0 ? Encoding.UTF8.GetBytes(sb.ToString()) : null;
         }
 
-        private static bool IsRiskyNameEntry(string surface) =>
+        /// <summary>Short all-hiragana names collide with ordinary words, so they stay out of the user dictionary and only override in a person-name context.</summary>
+        public static bool IsRiskyNameEntry(string surface) =>
             surface.Length <= 2 && WanaKana.IsHiragana(surface);
     }
 }

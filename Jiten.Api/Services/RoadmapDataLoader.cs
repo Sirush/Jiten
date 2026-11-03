@@ -86,30 +86,18 @@ public class RoadmapDataLoader(
         await using var userContext = await userFactory.CreateDbContextAsync(ct);
         await using var jiten = await jitenFactory.CreateDbContextAsync(ct);
 
-        // Blacklisted/mastered/suspended are known words taken out of rotation, not unknowns.
-        var matureStates = new HashSet<FsrsState> { FsrsState.Blacklisted, FsrsState.Mastered, FsrsState.Suspended };
-        var matureInterval = TimeSpan.FromDays(21);
-
         var cards = await userContext.FsrsCards.AsNoTracking()
                                      .Where(c => c.UserId == userId)
                                      .Select(c => new { c.WordId, c.ReadingIndex, c.State, c.Due, c.LastReview })
                                      .ToListAsync(ct);
 
-        bool IsMature(FsrsState state, DateTime due, DateTime? lastReview) =>
-            matureStates.Contains(state) || (lastReview != null && due - lastReview.Value >= matureInterval);
-
-        // Mirrors the coverage service's _fsrs_young: a completed review is required so brand-new cards don't count.
-        var youngStates = new HashSet<FsrsState>
-        {
-            FsrsState.Learning, FsrsState.Review, FsrsState.Relearning
-        };
-
         var direct = cards
-                     .Where(c => IsMature(c.State, c.Due, c.LastReview)
-                                 || (includeLearningWords
-                                     && youngStates.Contains(c.State)
-                                     && c.LastReview != null
-                                     && c.Due - c.LastReview.Value < matureInterval))
+                     .Where(c => KnownWordRules.CardTier(c.State, c.Due, c.LastReview) switch
+                     {
+                         KnownState.Mastered or KnownState.Blacklisted or KnownState.Mature => true,
+                         KnownState.Young => includeLearningWords,
+                         _ => false
+                     })
                      .Select(c => (WordId: c.WordId, ReadingIndex: (int)c.ReadingIndex))
                      .ToList();
 

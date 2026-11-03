@@ -17,7 +17,7 @@ function undo(message: ToastMessageOptions) {
     <template #message="{ message }">
       <div class="flex w-full items-center gap-3">
         <span class="text-sm font-medium">{{ message.summary }}</span>
-        <Button label="Undo" size="small" text class="ml-auto shrink-0" @click="undo(message)"/>
+        <Button v-if="(message.detail as UndoDetail | undefined)?.run" label="Undo" size="small" text class="ml-auto shrink-0" @click="undo(message)"/>
       </div>
     </template>
   </Toast>

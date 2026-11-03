@@ -259,6 +259,7 @@ public class JitenWebApplicationFactory : WebApplicationFactory<ApiProgram>, IAs
         userDb.UserFavouriteWords.RemoveRange(userDb.UserFavouriteWords);
         userDb.UserStudyDeckWords.RemoveRange(userDb.UserStudyDeckWords);
         userDb.UserStudyDecks.RemoveRange(userDb.UserStudyDecks);
+        userDb.UserSettings.RemoveRange(userDb.UserSettings);
         await userDb.SaveChangesAsync();
     }
 }

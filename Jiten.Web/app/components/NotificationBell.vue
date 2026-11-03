@@ -1,21 +1,31 @@
 <script setup lang="ts">
-  import { NotificationType } from '~/types';
+  import type { NotificationType } from '~/types';
+  import { getNotificationIcon, getNotificationIconClass } from '~/utils/notificationType';
   import type { NotificationDto } from '~/types/types';
 
-  const { unreadCount, notifications, fetchNotifications, fetchUnreadCount, markAsRead, markAllAsRead } = useNotifications();
+  const { unreadCount, notifications, fetchNotifications, fetchPinned, markAsRead, markAllAsRead } = useNotifications();
   const router = useRouter();
   const popover = ref();
 
+  const pinnedNotifications = ref<NotificationDto[]>([]);
   const recentNotifications = ref<NotificationDto[]>([]);
   const isLoadingRecent = ref(false);
   const expandedIds = ref<Set<number>>(new Set());
+
+  /** Unread messages from Jiten lead the list; they keep their place until the popover reopens so reading one never moves it. */
+  const rows = computed(() => [
+    ...pinnedNotifications.value.map((notification) => ({ notification, pinned: true })),
+    ...recentNotifications.value.map((notification) => ({ notification, pinned: false })),
+  ]);
 
   async function togglePopover(event: Event) {
     popover.value.toggle(event);
     isLoadingRecent.value = true;
     expandedIds.value = new Set();
-    await fetchNotifications({ limit: 10 });
-    recentNotifications.value = notifications.value;
+    const [pinned] = await Promise.all([fetchPinned(), fetchNotifications({ limit: 10 })]);
+    const pinnedIds = new Set(pinned.map((n) => n.id));
+    pinnedNotifications.value = pinned;
+    recentNotifications.value = notifications.value.filter((n) => !pinnedIds.has(n.id));
     isLoadingRecent.value = false;
   }
 
@@ -29,8 +39,7 @@
 
     if (!notification.isRead) {
       await markAsRead(notification.id);
-      const item = recentNotifications.value.find((n) => n.id === notification.id);
-      if (item) item.isRead = true;
+      notification.isRead = true;
     }
   }
 
@@ -43,43 +52,9 @@
 
   async function handleMarkAllRead() {
     await markAllAsRead();
-    recentNotifications.value.forEach((n) => {
-      n.isRead = true;
-      n.readAt = new Date().toISOString();
-    });
-  }
-
-  function getNotificationIcon(type: NotificationType): string {
-    switch (type) {
-      case NotificationType.RequestCompleted:
-        return 'pi pi-check-circle';
-      case NotificationType.RequestStatusChanged:
-        return 'pi pi-info-circle';
-      case NotificationType.RequestFileUploaded:
-        return 'pi pi-upload';
-      case NotificationType.SiteUpdate:
-        return 'pi pi-megaphone';
-      case NotificationType.CommunityListMilestone:
-        return 'pi pi-heart';
-      default:
-        return 'pi pi-bell';
-    }
-  }
-
-  function getNotificationIconClass(type: NotificationType): string {
-    switch (type) {
-      case NotificationType.RequestCompleted:
-        return 'text-green-500';
-      case NotificationType.RequestStatusChanged:
-        return 'text-blue-500';
-      case NotificationType.RequestFileUploaded:
-        return 'text-orange-500';
-      case NotificationType.SiteUpdate:
-        return 'text-purple-500';
-      case NotificationType.CommunityListMilestone:
-        return 'text-pink-500';
-      default:
-        return 'text-muted-color';
+    for (const { notification } of rows.value) {
+      notification.isRead = true;
+      notification.readAt = new Date().toISOString();
     }
   }
 
@@ -121,16 +96,19 @@
         <ProgressSpinner style="width: 30px; height: 30px" />
       </div>
 
-      <div v-else-if="recentNotifications.length === 0" class="text-center py-6 text-muted-color text-sm">No notifications yet</div>
+      <div v-else-if="rows.length === 0" class="text-center py-6 text-muted-color text-sm">No notifications yet</div>
 
       <div v-else class="max-h-80 overflow-y-auto">
         <div
-          v-for="notification in recentNotifications"
+          v-for="{ notification, pinned } in rows"
           :key="notification.id"
           role="button"
           tabindex="0"
-          class="flex items-start gap-3 px-4 py-3 cursor-pointer hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors border-b border-surface-100 dark:border-surface-700 last:border-b-0"
-          :class="{ 'bg-primary-50 dark:bg-primary-950/20': !notification.isRead }"
+          class="flex items-start gap-3 pl-3 pr-4 py-3 cursor-pointer border-l-4 hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors border-b border-b-surface-100 dark:border-b-surface-700 last:border-b-0"
+          :class="[
+            pinned ? 'border-l-primary bg-primary-50 dark:bg-primary-950/40' : 'border-l-transparent',
+            { 'bg-primary-50/60 dark:bg-primary-950/20': !pinned && !notification.isRead },
+          ]"
           :aria-expanded="expandedIds.has(notification.id)"
           @click="toggleNotification(notification)"
           @keydown.enter.prevent="toggleNotification(notification)"
@@ -139,7 +117,7 @@
           <i :class="[getNotificationIcon(notification.type), getNotificationIconClass(notification.type), 'mt-0.5']" />
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-2">
-              <span class="text-sm font-medium truncate">{{ notification.title }}</span>
+              <span class="text-sm truncate" :class="pinned ? 'font-semibold' : 'font-medium'">{{ notification.title }}</span>
               <span v-if="!notification.isRead" class="shrink-0 w-2 h-2 rounded-full bg-primary" />
               <i
                 class="pi ml-auto shrink-0 text-xs text-muted-color transition-transform"
@@ -168,7 +146,10 @@
         </div>
       </div>
 
-      <div class="px-4 py-2 border-t border-surface-200 dark:border-surface-700 text-center">
+      <div class="flex items-center justify-between px-4 py-2 border-t border-surface-200 dark:border-surface-700">
+        <NuxtLink to="/settings/account#notifications" class="text-sm text-muted-color hover:text-primary hover:underline" @click="popover.hide()">
+          <i class="pi pi-cog text-xs mr-1" />Manage
+        </NuxtLink>
         <NuxtLink to="/notifications" class="text-sm text-primary hover:underline" @click="popover.hide()">View all notifications</NuxtLink>
       </div>
     </Popover>

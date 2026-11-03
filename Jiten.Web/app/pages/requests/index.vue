@@ -413,6 +413,8 @@
       </div>
     </div>
 
+    <MetadataEditContributions v-if="isContributed && authStore.user?.id" :user-id="authStore.user.id" class="mb-4" />
+
     <div class="flex flex-wrap items-center gap-2 mb-4">
       <Tag
         v-if="quota"

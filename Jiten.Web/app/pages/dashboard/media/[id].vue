@@ -883,6 +883,7 @@
       formData.append('romajiTitle', romajiTitle.value);
       formData.append('englishTitle', englishTitle.value);
       formData.append('releaseDate', formatDateAsYyyyMmDd(releaseDate.value));
+      description.value = description.value.trim();
       formData.append('description', description.value);
       formData.append('difficultyOverride', difficultyOverride.value);
       formData.append('hideDialoguePercentage', hideDialoguePercentage.value);
@@ -1112,7 +1113,7 @@
                 </div>
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Description</label>
-                  <Textarea v-model="description" class="w-full" :rows="6" />
+                  <Textarea v-model="description" class="w-full" :rows="6" @blur="description = description.trim()" />
                 </div>
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Difficulty Override</label>

@@ -158,6 +158,7 @@
       : []),
     { label: 'Settings', icon: 'material-symbols:settings-outline', route: '/settings', active: route.path.startsWith('/settings') },
     { label: 'Media Requests', icon: 'material-symbols:post-add', route: '/requests', active: route.path.startsWith('/requests') },
+    { label: 'Review Edits', icon: 'material-symbols:fact-check-outline', route: '/review', active: route.path === '/review' || route.path === '/changes' },
     { label: 'Ratings', icon: 'material-symbols:star-outline', route: '/ratings', active: route.path.startsWith('/ratings') },
     { separator: true },
     { label: 'Logout', icon: 'material-symbols:logout', command: () => auth.logout() },
@@ -397,6 +398,14 @@
               :class="route.path.startsWith('/requests') ? 'font-semibold !text-purple-200' : '!text-white'"
               @click="mobileMenuOpen = false"
               >Media Requests</nuxt-link
+            >
+            <nuxt-link
+              v-if="auth.isAuthenticated"
+              to="/review"
+              class="py-2 px-3"
+              :class="route.path === '/review' || route.path === '/changes' ? 'font-semibold !text-purple-200' : '!text-white'"
+              @click="mobileMenuOpen = false"
+              >Review Edits</nuxt-link
             >
             <nuxt-link
               to="/frequency-dictionaries"

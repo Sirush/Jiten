@@ -50,6 +50,9 @@ public class TestAuthHandler(
             if (Request.Headers.TryGetValue("X-Test-Jti", out var jtiValues) && !string.IsNullOrEmpty(jtiValues.FirstOrDefault()))
                 claims.Add(new Claim(JwtRegisteredClaimNames.Jti, jtiValues.First()!));
 
+            if (Request.Headers.ContainsKey("X-Test-ApiKey"))
+                claims.Add(new Claim("auth_scheme", "ApiKey"));
+
             if (Request.Headers.TryGetValue("X-Test-Role", out var roleValues))
             {
                 var role = roleValues.FirstOrDefault();

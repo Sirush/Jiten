@@ -116,7 +116,7 @@ public static class CoverageComputeService
     public static async Task CreateKnownWordsTempTablesAsync(UserDbContext userContext, Guid userGuid,
                                                               short[]? derivationCategoryIds = null)
     {
-        await userContext.Database.ExecuteSqlRawAsync("""
+        await userContext.Database.ExecuteSqlRawAsync($$"""
             CREATE TEMP TABLE _mature_known ON COMMIT DROP AS
             WITH
             fsrs_mature_direct AS (
@@ -124,9 +124,9 @@ public static class CoverageComputeService
                 FROM "user"."FsrsCards" fc
                 WHERE fc."UserId" = {0}::uuid
                   AND (
-                      -- Blacklisted/Mastered only; Suspended keeps its interval-derived tier
+                      -- Mirrors KnownWordRules.CardTier: Blacklisted, Mastered or Mature; a New card stays unknown and Suspended keeps its interval-derived tier
                       fc."State" IN (4, 5)
-                      OR (fc."LastReview" IS NOT NULL AND (fc."Due" - fc."LastReview") >= INTERVAL '21 days')
+                      OR (fc."State" <> 0 AND fc."LastReview" IS NOT NULL AND (fc."Due" - fc."LastReview") >= INTERVAL '{{KnownWordRules.MatureIntervalDays}} days')
                   )
             ),
             fsrs_mature AS (
@@ -164,7 +164,7 @@ public static class CoverageComputeService
         await ExpandMatureThroughDerivations(userContext, userGuid, derivationCategoryIds ?? []);
         await userContext.Database.ExecuteSqlRawAsync("ANALYZE _mature_known;");
 
-        await userContext.Database.ExecuteSqlRawAsync("""
+        await userContext.Database.ExecuteSqlRawAsync($$"""
             CREATE TEMP TABLE _fsrs_young ON COMMIT DROP AS
             WITH
             fsrs_young_direct AS (
@@ -173,7 +173,7 @@ public static class CoverageComputeService
                 WHERE fc."UserId" = {0}::uuid
                   AND fc."State" IN (1, 2, 3, 6)
                   AND fc."LastReview" IS NOT NULL
-                  AND (fc."Due" - fc."LastReview") < INTERVAL '21 days'
+                  AND (fc."Due" - fc."LastReview") < INTERVAL '{{KnownWordRules.MatureIntervalDays}} days'
             ),
             young_expanded AS (
                 SELECT "WordId", "ReadingIndex" FROM fsrs_young_direct

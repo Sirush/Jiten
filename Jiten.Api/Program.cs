@@ -555,6 +555,9 @@ builder.Services.AddSingleton(OneTimeNoticeRegistry.Default);
 builder.Services.AddScoped<IOneTimeNoticeService, OneTimeNoticeService>();
 builder.Services.AddScoped<IStudyDeckMembershipService, StudyDeckMembershipService>();
 builder.Services.AddScoped<DeckMetadataService>();
+builder.Services.AddScoped<Jiten.Api.Services.MetadataEdits.MetadataTrustService>();
+builder.Services.AddScoped<Jiten.Api.Services.MetadataEdits.CharacterNameCheckService>();
+builder.Services.AddScoped<Jiten.Api.Services.MetadataEdits.MetadataEditService>();
 builder.Services.AddScoped<SubdeckListSeeder>();
 builder.Services.AddScoped<FranchiseService>();
 builder.Services.AddScoped<FranchiseSuggestionService>();
@@ -811,6 +814,20 @@ builder.Services.AddRateLimiter(options =>
             _ => new SlidingWindowRateLimiterOptions
             {
                 PermitLimit = 60, Window = TimeSpan.FromSeconds(60), SegmentsPerWindow = 6,
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
+                AutoReplenishment = true
+            });
+    });
+
+    options.AddPolicy("metadata-edit", context =>
+    {
+        var userId = context.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value;
+        var partitionKey = userId != null ? $"user:{userId}" : $"ip:{GetClientIp(context)}";
+
+        return RateLimitPartition.GetSlidingWindowLimiter(partitionKey,
+            _ => new SlidingWindowRateLimiterOptions
+            {
+                PermitLimit = 40, Window = TimeSpan.FromSeconds(60), SegmentsPerWindow = 6,
                 QueueProcessingOrder = QueueProcessingOrder.OldestFirst, QueueLimit = 0,
                 AutoReplenishment = true
             });
