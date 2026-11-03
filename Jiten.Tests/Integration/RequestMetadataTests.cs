@@ -8,6 +8,7 @@ using Jiten.Api.Jobs;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Data.WebNovel;
 using Jiten.Core.Data.Providers;
 using Jiten.Parser.Tests.Integration.Infrastructure;
 using Microsoft.EntityFrameworkCore;
@@ -296,10 +297,10 @@ public class RequestMetadataTests(JitenWebApplicationFactory factory)
         var job = new MediaRequestMetadataJob(factory.Services.GetRequiredService<IDbContextFactory<JitenDbContext>>(), resolver.Object,
             NullLogger<MediaRequestMetadataJob>.Instance);
 
-        await job.FetchSyosetu(id, "https://anilist.co/manga/1");
+        await job.FetchWebNovel(WebNovelProvider.Syosetu, id, "https://anilist.co/manga/1");
         resolver.Verify(r => r.ResolveAsync(It.IsAny<string>(), It.IsAny<MediaType?>()), Times.Never);
 
-        await job.FetchSyosetu(id, AnilistUrl);
+        await job.FetchWebNovel(WebNovelProvider.Syosetu, id, AnilistUrl);
         (await GetRequest(id)).GetProperty("metadataStatus").GetInt32().Should().Be((int)MediaRequestMetadataStatus.Failed);
     }
 }

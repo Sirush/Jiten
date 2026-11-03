@@ -79,9 +79,7 @@ public partial class AdminController
         string? coverPath = null;
         if (model.CoverImage is { Length: > 0 })
         {
-            var directory = Path.Join(config["StaticFilesPath"], "tmp", Guid.NewGuid().ToString());
-            Directory.CreateDirectory(directory);
-            coverPath = Path.Join(directory, "cover.jpg");
+            coverPath = NewTempCoverPath();
             await using var stream = new FileStream(coverPath, FileMode.Create);
             await model.CoverImage.CopyToAsync(stream);
         }

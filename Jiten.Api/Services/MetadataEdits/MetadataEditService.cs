@@ -355,8 +355,6 @@ public sealed partial class MetadataEditService(
             return Bad($"Add at most {MaxSources} sources.");
         if (sources.Any(s => s.Length > 500 || !IsHttpUrl(s)))
             return Bad("Sources need to be links starting with http:// or https://.");
-        if (changes.Any(c => EffectiveTier(c) < MetadataRiskTier.High) && sources.Count == 0)
-            return Bad("Add at least one source so someone can check this.");
 
         var note = request.Note?.Trim();
         if (note is { Length: > MaxNoteLength })
@@ -731,6 +729,7 @@ public sealed partial class MetadataEditService(
         LinkType.Imdb => "imdb.com",
         LinkType.Igdb => "igdb.com",
         LinkType.Syosetsu => "syosetu.com",
+        LinkType.Kakuyomu => "kakuyomu.jp",
         LinkType.Bookmeter => "bookmeter.com",
         LinkType.Amazon => "amazon.co.jp",
         LinkType.YouTube => "youtube.com",
@@ -747,6 +746,7 @@ public sealed partial class MetadataEditService(
         LinkType.Igdb => "IGDB",
         LinkType.GoogleBooks => "Google Books",
         LinkType.Syosetsu => "Syosetsu",
+        LinkType.Kakuyomu => "Kakuyomu",
         LinkType.Bookmeter => "Bookmeter",
         LinkType.Amazon => "Amazon",
         LinkType.YouTube => "YouTube",

@@ -19,11 +19,12 @@ public partial class AdminController
     public async Task<IActionResult> PreviewWebNovel([FromQuery] string url,
                                                      [FromServices] IWebNovelSourceResolver sourceResolver)
     {
-        if (!WebNovelUrlParser.TryParse(url, out var provider, out var sourceId))
-            return BadRequest(new { Message = "Not a supported webnovel URL." });
+        var (work, error) = await ResolveWebNovelUrlAsync(url, sourceResolver);
+        if (work == null)
+            return error!;
 
-        if (!sourceResolver.IsSupported(provider))
-            return BadRequest(new { Message = $"{provider} is not enabled yet." });
+        var (provider, sourceId) = (work.Provider, work.SourceId);
+        var descriptor = WebNovelProviders.Get(provider);
 
         var existing = await dbContext.WebNovelSources
                                       .FirstOrDefaultAsync(s => s.Provider == provider && s.SourceId == sourceId);
@@ -43,6 +44,7 @@ public partial class AdminController
             return Ok(new
             {
                 Provider = provider.ToString(),
+                ProviderName = descriptor.DisplayName,
                 info.SourceId,
                 info.Url,
                 info.Title,
@@ -58,9 +60,11 @@ public partial class AdminController
                 info.IsOneShot,
                 info.IsR15,
                 info.IsAdultOnly,
+                info.CoverUrl,
                 FirstPublishedAt = info.FirstPublishedAt?.UtcDateTime,
                 LastUpdatedAt = info.LastUpdatedAt?.UtcDateTime,
-                EstimatedSubdecks = EstimateSubdecks(info.TotalCharacters)
+                EstimatedSubdecks = EstimateSubdecks(info.TotalCharacters),
+                EstimatedFetchMinutes = Math.Max(1, (int)Math.Round(descriptor.Site.Politeness.EstimateSeconds(info.EpisodeCount + 1) / 60))
             });
         }
         catch (Exception ex)
@@ -95,11 +99,11 @@ public partial class AdminController
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
 
-        if (!WebNovelUrlParser.TryParse(model.Url, out var provider, out var sourceId))
-            return BadRequest(new { Message = "Not a supported webnovel URL." });
+        var (work, error) = await ResolveWebNovelUrlAsync(model.Url, sourceResolver);
+        if (work == null)
+            return error!;
 
-        if (!sourceResolver.IsSupported(provider))
-            return BadRequest(new { Message = $"{provider} is not enabled yet." });
+        var (provider, sourceId) = (work.Provider, work.SourceId);
 
         if (await dbContext.WebNovelSources.AnyAsync(s => s.Provider == provider && s.SourceId == sourceId))
             return Conflict(new { Message = "This novel is already tracked." });
@@ -107,12 +111,13 @@ public partial class AdminController
         string? coverPath = null;
         if (model.CoverImage is { Length: > 0 })
         {
-            var directory = Path.Join(config["StaticFilesPath"], "tmp", Guid.NewGuid().ToString());
-            Directory.CreateDirectory(directory);
-
-            coverPath = Path.Join(directory, "cover.jpg");
+            coverPath = NewTempCoverPath();
             await using var stream = new FileStream(coverPath, FileMode.Create);
             await model.CoverImage.CopyToAsync(stream);
+        }
+        else if (model.UseSourceCover)
+        {
+            coverPath = await DownloadSourceCoverAsync(sourceResolver.Resolve(provider), sourceId);
         }
 
         var titles = new WebNovelTitles
@@ -162,6 +167,7 @@ public partial class AdminController
         {
             tracked.DeckId,
             Provider = tracked.Provider.ToString(),
+            ProviderName = WebNovelProviders.Get(tracked.Provider).DisplayName,
             tracked.SourceId,
             Url = WebNovelUrlParser.BuildWorkUrl(tracked.Provider, tracked.SourceId),
             tracked.LastEpisodeCount,
@@ -182,10 +188,10 @@ public partial class AdminController
     [HttpPost("webnovel/{deckId:int}/sync")]
     public async Task<IActionResult> SyncWebNovelNow(int deckId)
     {
-        if (!await dbContext.WebNovelSources.AnyAsync(s => s.DeckId == deckId))
+        if (await TrackedProviderAsync(deckId) is not { } provider)
             return NotFound();
 
-        var jobId = backgroundJobs.Enqueue<WebNovelFetchJob>(job => job.Sync(deckId));
+        var jobId = backgroundJobs.Enqueue<WebNovelFetchJob>(job => job.Sync(provider, deckId));
 
         return Accepted(new { Message = "Sync queued.", JobId = jobId });
     }
@@ -196,10 +202,14 @@ public partial class AdminController
     [HttpPost("webnovel/{deckId:int}/rebuild/{childDeckId:int}")]
     public async Task<IActionResult> RebuildWebNovelSubdeck(int deckId, int childDeckId)
     {
-        if (!await dbContext.WebNovelChapters.AnyAsync(c => c.DeckId == deckId && c.ChildDeckId == childDeckId))
+        var tracked = await dbContext.WebNovelSources
+                                     .Where(s => s.DeckId == deckId && s.Chapters.Any(c => c.ChildDeckId == childDeckId))
+                                     .Select(s => (WebNovelProvider?)s.Provider)
+                                     .FirstOrDefaultAsync();
+        if (tracked is not { } provider)
             return NotFound();
 
-        var jobId = backgroundJobs.Enqueue<WebNovelFetchJob>(job => job.RebuildSubdeck(deckId, childDeckId));
+        var jobId = backgroundJobs.Enqueue<WebNovelFetchJob>(job => job.RebuildSubdeck(provider, deckId, childDeckId));
 
         return Accepted(new { Message = "Rebuild queued.", JobId = jobId });
     }
@@ -210,7 +220,7 @@ public partial class AdminController
     [HttpPost("webnovel/{deckId:int}/rebuild-revised")]
     public async Task<IActionResult> RebuildRevisedWebNovelSubdecks(int deckId)
     {
-        if (!await dbContext.WebNovelSources.AnyAsync(s => s.DeckId == deckId))
+        if (await TrackedProviderAsync(deckId) is not { } provider)
             return NotFound();
 
         var childDeckIds = await dbContext.WebNovelChapters
@@ -221,7 +231,7 @@ public partial class AdminController
                                           .ToListAsync();
 
         foreach (var childDeckId in childDeckIds)
-            backgroundJobs.Enqueue<WebNovelFetchJob>(job => job.RebuildSubdeck(deckId, childDeckId));
+            backgroundJobs.Enqueue<WebNovelFetchJob>(job => job.RebuildSubdeck(provider, deckId, childDeckId));
 
         return Accepted(new { Message = $"{childDeckIds.Count} rebuild(s) queued.", SubdeckCount = childDeckIds.Count });
     }
@@ -246,6 +256,71 @@ public partial class AdminController
         await dbContext.SaveChangesAsync();
 
         return Ok(new { tracked.DeckId, tracked.SyncEnabled });
+    }
+
+    private async Task<WebNovelProvider?> TrackedProviderAsync(int deckId) =>
+        await dbContext.WebNovelSources
+                       .Where(s => s.DeckId == deckId)
+                       .Select(s => (WebNovelProvider?)s.Provider)
+                       .FirstOrDefaultAsync();
+
+    /// <summary>
+    /// Direct work URLs resolve offline; an indirect page (a Kakuyomu book page) is looked up at the source.
+    /// </summary>
+    private async Task<(WebNovelWorkRef? Work, IActionResult? Error)> ResolveWebNovelUrlAsync(
+        string url, IWebNovelSourceResolver sourceResolver)
+    {
+        try
+        {
+            if (await sourceResolver.ResolveUrlAsync(url) is not { } work)
+                return (null, BadRequest(new { Message = "Not a supported webnovel URL." }));
+
+            if (!sourceResolver.IsSupported(work.Provider))
+                return (null, BadRequest(new { Message = $"{WebNovelProviders.Get(work.Provider).DisplayName} is not enabled yet." }));
+
+            return (work, null);
+        }
+        catch (Exception ex) when (ex is NotSupportedException or InvalidOperationException)
+        {
+            return (null, BadRequest(new { ex.Message }));
+        }
+        catch (HttpRequestException ex)
+        {
+            logger.LogWarning(ex, "Webnovel link lookup failed for {Url}", url);
+            return (null, StatusCode(StatusCodes.Status502BadGateway,
+                                     new { Message = "Could not read this page from the source.", Details = ex.Message }));
+        }
+    }
+
+    private string NewTempCoverPath()
+    {
+        var directory = Path.Join(config["StaticFilesPath"], "tmp", Guid.NewGuid().ToString());
+        Directory.CreateDirectory(directory);
+        return Path.Join(directory, "cover.jpg");
+    }
+
+    /// <summary>
+    /// Only ever fetches the URL the source itself reports, never one from the request. Null when the work has no
+    /// cover or the download fails; the import then goes ahead without one.
+    /// </summary>
+    private async Task<string?> DownloadSourceCoverAsync(IWebNovelSource source, string sourceId)
+    {
+        try
+        {
+            var info = await source.GetInfoAsync(sourceId);
+            if (string.IsNullOrEmpty(info.CoverUrl))
+                return null;
+
+            var bytes = await httpClient.GetByteArrayAsync(info.CoverUrl);
+            var coverPath = NewTempCoverPath();
+            await System.IO.File.WriteAllBytesAsync(coverPath, bytes);
+            return coverPath;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Could not download the source cover for {Provider}/{SourceId}", source.Provider, sourceId);
+            return null;
+        }
     }
 
     private static int EstimateSubdecks(long totalCharacters) =>

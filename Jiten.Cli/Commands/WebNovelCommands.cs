@@ -13,29 +13,23 @@ public class WebNovelCommands
     /// </summary>
     public async Task Test(string url, int? chunkCharBudget)
     {
-        if (!WebNovelUrlParser.TryParse(url, out var provider, out var sourceId))
+        var services = new ServiceCollection();
+        services.AddSingleton<ILoggerFactory>(NullLoggerFactory.Instance);
+        services.AddSingleton(typeof(ILogger<>), typeof(NullLogger<>));
+        services.AddWebNovelSources();
+
+        await using var serviceProvider = services.BuildServiceProvider();
+        var resolver = serviceProvider.GetRequiredService<IWebNovelSourceResolver>();
+
+        var work = await resolver.ResolveUrlAsync(url);
+        if (work == null)
         {
             Console.WriteLine($"'{url}' is not a supported webnovel URL or ncode.");
             return;
         }
 
-        var services = new ServiceCollection();
-        services.AddHttpClient(SyosetuSource.HttpClientName, client =>
-                {
-                    client.DefaultRequestHeaders.Add("User-Agent",
-                                                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 " +
-                                                     "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
-                    client.Timeout = TimeSpan.FromSeconds(30);
-                })
-                .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
-                {
-                    AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
-                });
-
-        await using var serviceProvider = services.BuildServiceProvider();
-        var httpClientFactory = serviceProvider.GetRequiredService<IHttpClientFactory>();
-
-        var source = new SyosetuSource(httpClientFactory, NullLogger<SyosetuSource>.Instance, provider);
+        var (provider, sourceId) = (work.Provider, work.SourceId);
+        var source = resolver.Resolve(provider);
 
         Console.WriteLine($"Provider: {provider}   Source id: {sourceId}");
         Console.WriteLine("Fetching metadata...");
@@ -53,6 +47,7 @@ public class WebNovelCommands
         Console.WriteLine($"  Last up     : {info.LastUpdatedAt:yyyy-MM-dd HH:mm}");
         Console.WriteLine($"  One-shot    : {info.IsOneShot}   Completed: {info.IsCompleted}   Hiatus: {info.IsOnHiatus}   R15: {info.IsR15}");
         Console.WriteLine($"  Synopsis    : {Preview(info.Synopsis, 120)}");
+        Console.WriteLine($"  Cover       : {info.CoverUrl}");
 
         Console.WriteLine();
         Console.WriteLine("Fetching table of contents...");
@@ -64,7 +59,7 @@ public class WebNovelCommands
 
         foreach (var episode in toc.Take(3))
         {
-            Console.WriteLine($"    #{episode.Number,-4} {Preview(episode.Title, 40),-42} " +
+            Console.WriteLine($"    #{episode.Number,-4} [{episode.SourceEpisodeId}] {Preview(episode.Title, 40),-42} " +
                               $"updated {episode.UpdatedAt:yyyy-MM-dd HH:mm}   section: {episode.SectionTitle}");
         }
 

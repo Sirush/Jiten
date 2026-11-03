@@ -999,20 +999,4 @@
   .fade-leave-to {
     opacity: 0;
   }
-
-  .slide-up-enter-active {
-    transition:
-      transform 0.2s ease-out,
-      opacity 0.2s ease-out;
-  }
-  .slide-up-leave-active {
-    transition:
-      transform 0.15s ease-in,
-      opacity 0.15s ease-in;
-  }
-  .slide-up-enter-from,
-  .slide-up-leave-to {
-    transform: translateY(100%);
-    opacity: 0;
-  }
 </style>

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-  import type { Word } from '~/types';
+  import type { KnownState, Word } from '~/types';
   import Card from 'primevue/card';
   import Button from 'primevue/button';
   import { useJitenStore } from '~/stores/jitenStore';
@@ -21,6 +21,7 @@
   const emit = defineEmits<{
     remove: [word: Word];
     select: [word: Word];
+    statusChanged: [word: Word, states: KnownState[]];
   }>();
 
   const convertToRuby = useConvertToRuby();
@@ -78,7 +79,7 @@
         </div>
         <div class="text-gray-500 dark:text-gray-300 text-sm text-right shrink-0 ml-auto">
           <span @click.stop>
-            <VocabularyStatus :word="word" />
+            <VocabularyStatus :word="word" @changed="(states) => emit('statusChanged', word, states)" />
           </span>
           <template v-if="!hideOccurrences">x{{ word.occurrences }} | </template>Rank #{{ rankLabel.rank }}
           <Tooltip v-if="rankLabel.source && rankLabel.hint" :content="rankLabel.hint">

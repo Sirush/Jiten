@@ -1,5 +1,6 @@
 <script setup lang="ts">
   import type { Word } from '~/types/types';
+  import type { KnownState } from '~/types/enums';
   import type { AsyncDataRequestStatus } from '#app';
   import { LazyHydrateVocabularyEntry } from '~/utils/lazyHydratedComponents';
   import type { WordListContextInput, WordListItem } from '~/composables/useWordListContext';
@@ -22,6 +23,7 @@
   const emit = defineEmits<{
     remove: [word: Word];
     select: [word: Word];
+    statusChanged: [word: Word, states: KnownState[]];
   }>();
 
   const entryKey = (word: Word) => `${word.wordId}-${word.mainReading.readingIndex}`;
@@ -64,10 +66,6 @@
     <p v-if="emptyMessage" class="text-sm text-surface-400">{{ emptyMessage }}</p>
   </div>
 
-  <!-- LazyHydrate defers per-entry hydration until scrolled into view;
-       content-visibility skips layout/paint for offscreen entries. The first
-       viewport-worth of entries renders normally so the page paints at its real
-       size immediately (no first-frame shift from the intrinsic-size estimate). -->
   <div v-else class="flex flex-col gap-2" @click="rememberFromEvent">
     <LazyHydrateVocabularyEntry
       v-for="(word, index) in words"
@@ -84,6 +82,7 @@
       :class="index >= 8 ? '[content-visibility:auto] [contain-intrinsic-size:auto_8rem]' : ''"
       @remove="emit('remove', word)"
       @select="emit('select', word)"
+      @status-changed="(w, states) => emit('statusChanged', w, states)"
     />
   </div>
 </template>

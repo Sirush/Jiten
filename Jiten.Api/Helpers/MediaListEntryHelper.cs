@@ -95,9 +95,11 @@ public static class MediaListEntryHelper
     /// <summary>Mirrors a status change onto the current entry; call before setting Status. True when reading totals may have changed.</summary>
     /// <param name="undoCompletion">Dropping a Completed title turns its completion into a dropped pass; without it, dropping keeps the completion.</param>
     /// <param name="seriesPass">The series pass in progress the deck is a volume of; an entry created or completed now belongs to it.</param>
+    /// <param name="recordNewDrop">Dropping a title not on the list records a dropped pass, so the part that was read can be logged.</param>
     public static bool ApplyStatus(UserDbContext userContext, UserDeckPreference preference, DeckStatus status, DateOnly? date,
                                    bool newEntry,
-                                   int? deckCharacters = null, bool undoCompletion = false, UserMediaListEntry? seriesPass = null)
+                                   int? deckCharacters = null, bool undoCompletion = false, UserMediaListEntry? seriesPass = null,
+                                   bool recordNewDrop = false)
     {
         var entry = preference.CurrentEntry;
         var closedPass = StartsAfterCompletion(preference, newEntry);
@@ -150,6 +152,10 @@ public static class MediaListEntryHelper
                     entry.FinishedOn = FinishDate(entry, date);
                     return undone;
                 }
+
+                if (recordNewDrop && entry == null && preference.Status == DeckStatus.None)
+                    preference.CurrentEntry = NewEntry(userContext, preference, MediaListEntryState.Dropped, startedOn: null,
+                                                       finishedOn: date, seriesPass);
 
                 return false;
 

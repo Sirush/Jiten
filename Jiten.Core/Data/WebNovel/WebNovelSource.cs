@@ -17,7 +17,7 @@ public class WebNovelSource
     public WebNovelProvider Provider { get; set; }
 
     /// <summary>
-    /// Provider-specific work id (Syosetu ncode, lowercase)
+    /// Provider-specific work id (Syosetu ncode lowercased, Kakuyomu work id)
     /// </summary>
     [MaxLength(64)]
     public string SourceId { get; set; } = string.Empty;
@@ -28,7 +28,7 @@ public class WebNovelSource
     public int LastEpisodeCount { get; set; }
 
     /// <summary>
-    /// Latest episode timestamp reported by the source at the last sync (Narou general_lastup)
+    /// Latest episode timestamp reported by the source at the last sync (Narou general_lastup, Kakuyomu lastEpisodePublishedAt)
     /// </summary>
     public DateTimeOffset? LastSourceUpdate { get; set; }
 

@@ -27,9 +27,9 @@ public class ExternalMetadataResolver(IConfiguration config, IWebNovelSourceReso
             return true;
         }
 
-        if (TryParseWebNovel(url, out _, out _))
+        if (WebNovelUrlParser.IsWebNovelLink(url, out var webNovelProvider))
         {
-            provider = LinkType.Syosetsu;
+            provider = WebNovelProviders.Get(webNovelProvider).LinkType;
             return true;
         }
 
@@ -61,18 +61,11 @@ public class ExternalMetadataResolver(IConfiguration config, IWebNovelSourceReso
         if (ExternalUrlParser.TryParse(url, out var parsed))
             return await ResolveAsync(parsed, mediaType);
 
-        if (TryParseWebNovel(url, out var provider, out var sourceId) && webNovelSources.IsSupported(provider))
-            return (await webNovelSources.Resolve(provider).GetInfoAsync(sourceId)).ToMetadata();
+        if (!WebNovelUrlParser.IsWebNovelLink(url, out var provider) || !webNovelSources.IsSupported(provider))
+            return null;
 
-        return null;
-    }
-
-    /// <summary>Only full URLs: the parser also takes a bare ncode, which is not a link.</summary>
-    private static bool TryParseWebNovel(string? url, out Jiten.Core.Data.WebNovel.WebNovelProvider provider, out string sourceId)
-    {
-        provider = default;
-        sourceId = string.Empty;
-        return Uri.TryCreate(url?.Trim(), UriKind.Absolute, out _) && WebNovelUrlParser.TryParse(url!, out provider, out sourceId);
+        var work = await webNovelSources.ResolveUrlAsync(url);
+        return work == null ? null : (await webNovelSources.Resolve(work.Provider).GetInfoAsync(work.SourceId)).ToMetadata();
     }
 
     private static bool IsTmdbMovie(ExternalUrlKind kind, MediaType? mediaType) => kind switch

@@ -95,7 +95,7 @@
 <template>
   <section :aria-labelledby="headingId" class="flex flex-col gap-3">
     <div class="flex flex-wrap items-center justify-between gap-2">
-      <h3 :id="headingId" class="text-sm font-semibold">{{ title }}</h3>
+      <h3 :id="headingId" class="min-w-40 flex-1 basis-0 text-sm font-semibold">{{ title }}</h3>
       <slot name="actions" />
     </div>
     <div ref="scroller" :class="{ 'scrollbar-styled overflow-x-auto pb-1': scrolls }">

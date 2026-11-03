@@ -1,15 +1,13 @@
-using System.Text.RegularExpressions;
+using Jiten.Core.Data;
 using Jiten.Core.Data.WebNovel;
 
 namespace Jiten.Core.WebNovel;
 
-public static partial class WebNovelUrlParser
+public static class WebNovelUrlParser
 {
-    [GeneratedRegex(@"^[nN]\d{4}[a-zA-Z]{1,2}$")]
-    private static partial Regex NcodePattern();
-
     /// <summary>
-    /// Accepts a novel URL or a bare ncode. Returns false when the input isn't a supported source.
+    /// Accepts a work or episode URL, or a bare work id where the provider has one (a Syosetu ncode).
+    /// Returns false when the input isn't a supported source.
     /// </summary>
     public static bool TryParse(string input, out WebNovelProvider provider, out string sourceId)
     {
@@ -21,41 +19,70 @@ public static partial class WebNovelUrlParser
 
         input = input.Trim();
 
-        // Bare ncode (n9669bk)
-        if (NcodePattern().IsMatch(input))
+        foreach (var descriptor in WebNovelProviders.All)
         {
-            provider = WebNovelProvider.Syosetu;
-            sourceId = input.ToLowerInvariant();
-            return true;
+            if (descriptor.ParseBareId?.Invoke(input) is { } bareId)
+            {
+                provider = descriptor.Provider;
+                sourceId = bareId;
+                return true;
+            }
         }
 
-        if (!Uri.TryCreate(input, UriKind.Absolute, out var uri))
+        if (!Uri.TryCreate(input, UriKind.Absolute, out var uri) || !WebNovelProviders.TryMatchHost(uri, out var match))
             return false;
 
-        var host = uri.Host.ToLowerInvariant();
-        var firstSegment = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-
-        if (string.IsNullOrEmpty(firstSegment) || !NcodePattern().IsMatch(firstSegment))
+        if (match.ParseWorkUrl(uri) is not { } id)
             return false;
 
-        provider = host switch
-        {
-            "ncode.syosetu.com" => WebNovelProvider.Syosetu,
-            "novel18.syosetu.com" => WebNovelProvider.SyosetuNovel18,
-            _ => default
-        };
-
-        if (provider == default)
-            return false;
-
-        sourceId = firstSegment.ToLowerInvariant();
+        provider = match.Provider;
+        sourceId = id;
         return true;
     }
 
-    public static string BuildWorkUrl(WebNovelProvider provider, string sourceId) => provider switch
+    /// <summary>
+    /// A URL that names a work only after the provider looks it up, such as a Kakuyomu book page.
+    /// </summary>
+    public static bool TryMatchIndirect(string input, out WebNovelProvider provider)
     {
-        WebNovelProvider.Syosetu => $"https://ncode.syosetu.com/{sourceId}/",
-        WebNovelProvider.SyosetuNovel18 => $"https://novel18.syosetu.com/{sourceId}/",
-        _ => throw new NotSupportedException($"No URL template for provider {provider}")
-    };
+        provider = default;
+
+        if (!Uri.TryCreate(input?.Trim(), UriKind.Absolute, out var uri) ||
+            !WebNovelProviders.TryMatchHost(uri, out var match) ||
+            match.IsIndirectWorkUrl?.Invoke(uri) != true)
+            return false;
+
+        provider = match.Provider;
+        return true;
+    }
+
+    /// <summary>
+    /// Full URLs only, direct or indirect: a bare ncode is an id, not a link.
+    /// </summary>
+    public static bool IsWebNovelLink(string? url, out WebNovelProvider provider)
+    {
+        provider = default;
+
+        if (!Uri.TryCreate(url?.Trim(), UriKind.Absolute, out _))
+            return false;
+
+        return TryParse(url!, out provider, out _) || TryMatchIndirect(url!, out provider);
+    }
+
+    /// <summary>
+    /// The first of a deck's links that names a webnovel work directly
+    /// </summary>
+    public static WebNovelWorkRef? FirstWorkLink(IEnumerable<Link> links)
+    {
+        foreach (var link in links.Where(l => WebNovelProviders.IsWebNovelLinkType(l.LinkType)))
+        {
+            if (TryParse(link.Url, out var provider, out var sourceId))
+                return new WebNovelWorkRef(provider, sourceId);
+        }
+
+        return null;
+    }
+
+    public static string BuildWorkUrl(WebNovelProvider provider, string sourceId) =>
+        WebNovelProviders.Get(provider).BuildWorkUrl(sourceId);
 }

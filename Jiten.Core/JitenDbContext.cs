@@ -367,6 +367,10 @@ public class JitenDbContext : DbContext
 
             entity.HasIndex(c => c.ChildDeckId)
                   .HasDatabaseName("IX_WebNovelChapters_ChildDeckId");
+
+            entity.HasIndex(c => new { c.DeckId, c.SourceEpisodeId })
+                  .IsUnique()
+                  .HasDatabaseName("IX_WebNovelChapters_DeckId_SourceEpisodeId");
         });
 
         modelBuilder.Entity<YouTubeSource>(entity =>

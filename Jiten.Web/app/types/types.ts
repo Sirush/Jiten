@@ -1021,6 +1021,26 @@ export interface ProfileCount {
   characters: number;
 }
 
+export type ProfileChartMeasure = 'titles' | 'characters';
+
+/** Finished titles of one media type in one bucket of a stats chart. */
+export interface ProfileBucket {
+  key: string;
+  mediaType: MediaType;
+  count: number;
+  /** Characters read in those titles, rereads included. */
+  characters: number;
+}
+
+export interface ProfileMonth {
+  /** yyyy-MM. */
+  month: string;
+  mediaType: MediaType;
+  characters: number;
+  /** Completions of whole titles that month; a reread counts again. */
+  titles: number;
+}
+
 export interface ProfileLadderPoint {
   /** The volume's own id on a volume dot. */
   deckId: number | null;
@@ -1030,14 +1050,15 @@ export interface ProfileLadderPoint {
   englishTitle: string | null;
   isVolume: boolean;
   volumeTitle: string | null;
+  mediaType: MediaType;
   finishedOn: string;
   difficulty: number;
 }
 
 export interface ProfileLadder {
   points: ProfileLadderPoint[];
-  undatedTitles: number;
-  undatedVolumes: number;
+  /** Finished titles and completed volumes of split titles with no finish date, per media type. */
+  undated: { mediaType: MediaType; titles: number; volumes: number }[];
   /** Media types with a completed volume or episode, the ones the chart can split. */
   volumeTypes: MediaType[];
 }
@@ -1047,14 +1068,15 @@ export interface ProfileStats {
   characters: number | null;
   meanScore: number | null;
   scoredCount: number;
-  charactersByMonth: { month: string; characters: number }[];
+  charactersByMonth: ProfileMonth[];
   mediaTypes: ProfileCount[];
   genres: ProfileGenreShare[] | null;
-  difficulty: ProfileCount[];
-  coverageAtFinish: ProfileCount[];
-  scores: ProfileCount[];
-  lengths: ProfileCount[];
-  releaseYears: ProfileCount[];
+  genresByMediaType: { mediaType: MediaType; genres: ProfileGenreShare[] }[] | null;
+  difficulty: ProfileBucket[];
+  coverageAtFinish: ProfileBucket[];
+  scores: ProfileBucket[];
+  lengths: ProfileBucket[];
+  releaseYears: ProfileBucket[];
   /** Null when hidden from this viewer or not computed yet. */
   readable: ProfileReadable | null;
 }

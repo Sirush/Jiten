@@ -1,13 +1,25 @@
 <script setup lang="ts">
-  import type { ProfileBar, ProfileColumn, ProfileCount, ProfileStats, UserAccomplishment } from '~/types';
+  import {
+    MediaType,
+    type ProfileBar,
+    type ProfileBucket,
+    type ProfileChartMeasure,
+    type ProfileColumn,
+    type ProfileStats,
+    type UserAccomplishment,
+  } from '~/types';
   import { getCompletedDisplay, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { difficultyNames, EXPERT_BAND, shelfDifficultyBand } from '~/utils/difficultyColours';
   import { formatApprox, formatCompact } from '~/utils/siteStats';
   import { formatMonthYear, MONTHS_SHORT } from '~/utils/dateFormat';
   import { genreRows } from '~/utils/profileGenres';
+  import { useJitenStore } from '~/stores/jitenStore';
 
   const { handle, header, isOwner, viewAsQuery, apiPath } = useProfileContext();
   const { chartColour } = useDifficultyColours();
+  const jitenStore = useJitenStore();
+  const route = useRoute();
+  const router = useRouter();
 
   const [{ data: stats, status, error }, { data: accomplishments }] = await Promise.all([
     useApiFetch<ProfileStats>(() => apiPath('stats'), { query: viewAsQuery.value }),
@@ -24,6 +36,54 @@
     return result;
   });
 
+  function parseTypeQuery(value: unknown): MediaType | null {
+    const parsed = Number(Array.isArray(value) ? value[0] : value);
+    const known = Object.values(MediaType).filter((v) => typeof v === 'number') as MediaType[];
+    return known.includes(parsed as MediaType) ? (parsed as MediaType) : null;
+  }
+
+  const mediaType = ref<MediaType | null>(parseTypeQuery(route.query.type));
+  watch(mediaType, (value) => router.replace({ query: { ...route.query, type: value ?? undefined } }));
+
+  /** Types with a visible finished title or with reading totals, so every type the totals card knows stays reachable. */
+  const mediaTypeOptions = computed(() => {
+    const finished = new Map<MediaType, number>();
+    for (const row of stats.value?.lengths ?? []) finished.set(row.mediaType, (finished.get(row.mediaType) ?? 0) + row.count);
+    const types = new Set<MediaType>([...finished.keys(), ...(accomplishments.value ?? []).flatMap((a) => (a.mediaType === null ? [] : [a.mediaType]))]);
+    const total = [...finished.values()].reduce((sum, n) => sum + n, 0);
+    return [
+      { label: 'All types', value: null as MediaType | null, count: total },
+      ...[...types]
+        .map((t) => ({ label: getMediaTypeText(t), value: t as MediaType | null, count: finished.get(t) ?? 0 }))
+        .sort((a, b) => a.label.localeCompare(b.label)),
+    ];
+  });
+
+  const ofType = <T extends { mediaType: MediaType }>(rows: T[] | undefined | null) =>
+    (rows ?? []).filter((r) => mediaType.value === null || r.mediaType === mediaType.value);
+
+  /** The chosen measure of one chart, kept in a cookie so the server render already draws it. */
+  function measureModel(chart: string, fallback: ProfileChartMeasure = 'titles') {
+    return computed<ProfileChartMeasure>({
+      get: () => jitenStore.profileChartMeasures[chart] ?? fallback,
+      set: (value) => (jitenStore.profileChartMeasures = { ...jitenStore.profileChartMeasures, [chart]: value }),
+    });
+  }
+  const measureOptions: { label: string; value: ProfileChartMeasure }[] = [
+    { label: 'Titles', value: 'titles' },
+    { label: 'Characters', value: 'characters' },
+  ];
+  const monthMeasure = measureModel('months', 'characters');
+  const difficultyMeasure = measureModel('difficulty');
+  const coverageMeasure = measureModel('coverage');
+  const lengthMeasure = measureModel('length');
+  const yearMeasure = measureModel('releaseYear');
+
+  const groupingOptions: { label: string; value: 'month' | 'year' }[] = [
+    { label: 'Month', value: 'month' },
+    { label: 'Year', value: 'year' },
+  ];
+
   const monthRange = ref<'year' | 'all'>('year');
   const monthRangeOptions = [
     { label: '12 months', value: 'year' },
@@ -32,65 +92,103 @@
   /** Width that fits a label such as "Jan 26" and a value such as "99.4K" on every column, so none are thinned out. */
   const MONTH_COLUMN_WIDTH = 40;
 
-  const charsPerMonth = computed<ProfileColumn[]>(() => {
-    const months = stats.value?.charactersByMonth ?? [];
-    if (!months.length) return [];
-    const byMonth = new Map(months.map((m) => [m.month, m.characters]));
+  const titlesText = (count: number) => `${count.toLocaleString('en-US')} ${count === 1 ? 'title' : 'titles'}`;
+
+  const profileMonthGroupingIsMonth = computed(() => jitenStore.profileMonthGrouping !== 'year');
+
+  const periodColumns = computed<ProfileColumn[]>(() => {
+    const rows = ofType(stats.value?.charactersByMonth);
+    if (!rows.length) return [];
+    const byYear = !profileMonthGroupingIsMonth.value;
+    const totals = new Map<string, { characters: number; titles: number }>();
+    for (const row of rows) {
+      const key = byYear ? row.month.slice(0, 4) : row.month;
+      const total = totals.get(key) ?? { characters: 0, titles: 0 };
+      total.characters += row.characters;
+      total.titles += row.titles;
+      totals.set(key, total);
+    }
+    const column = (key: string, label: string, name: string): ProfileColumn => {
+      const total = totals.get(key) ?? { characters: 0, titles: 0 };
+      return monthMeasure.value === 'titles'
+        ? { key, label, value: total.titles, tooltip: `${name}: ${titlesText(total.titles)}` }
+        : { key, label, value: total.characters, tooltip: `${name}: ${formatCompact(total.characters)} characters` };
+    };
+
     const now = new Date();
+    if (byYear) {
+      const first = Number(rows[0]!.month.slice(0, 4));
+      return Array.from({ length: now.getFullYear() - first + 1 }, (_, i) => String(first + i)).map((y) => column(y, y, y));
+    }
+
     const [firstYear, firstMonth] =
       monthRange.value === 'all'
-        ? (months[0]!.month.split('-').map(Number) as [number, number])
+        ? (rows[0]!.month.split('-').map(Number) as [number, number])
         : [now.getMonth() >= 11 ? now.getFullYear() : now.getFullYear() - 1, ((now.getMonth() + 1) % 12) + 1];
     const total = (now.getFullYear() - firstYear) * 12 + now.getMonth() + 1 - firstMonth + 1;
     return Array.from({ length: total }, (_, i) => {
       const y = firstYear + Math.floor((firstMonth - 1 + i) / 12);
       const m = ((firstMonth - 1 + i) % 12) + 1;
-      const key = `${y}-${String(m).padStart(2, '0')}`;
-      const chars = byMonth.get(key) ?? 0;
-      return {
-        key,
-        label: m === 1 || i === 0 ? `${MONTHS_SHORT[m - 1]} ${String(y).slice(2)}` : MONTHS_SHORT[m - 1]!,
-        value: chars,
-        tooltip: `${formatMonthYear(new Date(y, m - 1, 1))}: ${formatCompact(chars)} characters`,
-      };
+      return column(
+        `${y}-${String(m).padStart(2, '0')}`,
+        m === 1 || i === 0 ? `${MONTHS_SHORT[m - 1]} ${String(y).slice(2)}` : MONTHS_SHORT[m - 1]!,
+        formatMonthYear(new Date(y, m - 1, 1))
+      );
     });
   });
+  const periodTitle = computed(
+    () => `${monthMeasure.value === 'titles' ? 'Titles' : 'Characters'} finished per ${jitenStore.profileMonthGrouping === 'year' ? 'year' : 'month'}`
+  );
 
-  /** Every key in order, zero where the server sent no row for it. */
-  function fillBuckets(items: ProfileCount[] | undefined, keys: string[]) {
-    const counts = new Map((items ?? []).map((i) => [i.key, i.count]));
-    return keys.map((key) => ({ key, count: counts.get(key) ?? 0 }));
+  /** Every key in order, zero where no row of the selected media type falls in it. */
+  function bucketColumns(
+    rows: ProfileBucket[] | undefined,
+    keys: string[],
+    options: { label: (key: string) => string; measure: ProfileChartMeasure; keyOf?: (row: ProfileBucket) => string; detail?: (key: string) => string }
+  ): ProfileColumn[] {
+    const totals = new Map<string, { count: number; characters: number }>();
+    for (const row of ofType(rows)) {
+      const key = options.keyOf?.(row) ?? row.key;
+      const total = totals.get(key) ?? { count: 0, characters: 0 };
+      total.count += row.count;
+      total.characters += row.characters;
+      totals.set(key, total);
+    }
+    return keys.map((key) => {
+      const { count, characters } = totals.get(key) ?? { count: 0, characters: 0 };
+      const main = options.measure === 'characters' ? `About ${formatApprox(characters)} characters in ${titlesText(count)}` : titlesText(count);
+      const detail = options.detail?.(key);
+      return {
+        key,
+        label: options.label(key),
+        value: options.measure === 'characters' ? characters : count,
+        tooltip: detail ? `${main}, ${detail}` : main,
+      };
+    });
   }
 
-  function countColumns(items: { key: string; count: number }[], label: (key: string) => string, noun = 'titles'): ProfileColumn[] {
-    return items.map((i) => ({
-      key: i.key,
-      label: label(i.key),
-      value: i.count,
-      tooltip: `${i.count.toLocaleString('en-US')} ${i.count === 1 ? noun.replace(/s$/, '') : noun}`,
-    }));
-  }
+  const charactersTitle = (measure: ProfileChartMeasure, titles: string, characters: string) => (measure === 'characters' ? characters : titles);
 
-  const difficultyColumns = computed(() => {
-    const counts = difficultyNames.slice(0, EXPERT_BAND + 1).map(() => 0);
-    for (const d of stats.value?.difficulty ?? []) counts[shelfDifficultyBand(Number(d.key))]! += d.count;
-    return countColumns(
-      counts.map((count, i) => ({ key: String(i), count })),
-      (k) => difficultyNames[Number(k)]!
-    ).map((col) => ({ ...col, colour: chartColour(Number(col.key)) }));
-  });
+  const difficultyColumns = computed(() =>
+    bucketColumns(
+      stats.value?.difficulty,
+      difficultyNames.slice(0, EXPERT_BAND + 1).map((_, i) => String(i)),
+      { label: (k) => difficultyNames[Number(k)]!, measure: difficultyMeasure.value, keyOf: (row) => String(shelfDifficultyBand(Number(row.key))) }
+    ).map((col) => ({ ...col, colour: chartColour(Number(col.key)) }))
+  );
 
-  const coverageColumns = computed(() => {
-    return countColumns(fillBuckets(stats.value?.coverageAtFinish, ['<70', '70', '75', '80', '85', '90', '95']), (k) => (k === '<70' ? '<70%' : `${k}%`));
-  });
+  const coverageColumns = computed(() =>
+    bucketColumns(stats.value?.coverageAtFinish, ['<70', '70', '75', '80', '85', '90', '95'], {
+      label: (k) => (k === '<70' ? '<70%' : `${k}%`),
+      measure: coverageMeasure.value,
+    })
+  );
 
   const scoreColumns = computed(() =>
-    countColumns(
-      fillBuckets(
-        stats.value?.scores,
-        Array.from({ length: 10 }, (_, i) => String(i + 1))
-      ),
-      (k) => k
+    bucketColumns(
+      stats.value?.scores,
+      Array.from({ length: 10 }, (_, i) => String(i + 1)),
+      { label: (k) => k, measure: 'titles' }
     )
   );
 
@@ -103,26 +201,26 @@
     { key: '1M', label: '>1M', range: 'over 1M' },
   ];
   const lengthColumns = computed(() =>
-    countColumns(
-      fillBuckets(
-        stats.value?.lengths,
-        LENGTH_BUCKETS.map((b) => b.key)
-      ),
-      (k) => LENGTH_BUCKETS.find((b) => b.key === k)!.label
-    ).map((col) => ({ ...col, tooltip: `${col.tooltip}, ${LENGTH_BUCKETS.find((b) => b.key === col.key)!.range} characters` }))
+    bucketColumns(
+      stats.value?.lengths,
+      LENGTH_BUCKETS.map((b) => b.key),
+      {
+        label: (k) => LENGTH_BUCKETS.find((b) => b.key === k)!.label,
+        measure: lengthMeasure.value,
+        detail: (k) => `${LENGTH_BUCKETS.find((b) => b.key === k)!.range} characters each`,
+      }
+    )
   );
 
   const yearColumns = computed(() => {
-    const years = stats.value?.releaseYears ?? [];
+    const years = ofType(stats.value?.releaseYears).map((r) => Number(r.key));
     if (!years.length) return [];
-    const first = Number(years[0]!.key);
-    const last = Number(years[years.length - 1]!.key);
-    return countColumns(
-      fillBuckets(
-        years,
-        Array.from({ length: last - first + 1 }, (_, i) => String(first + i))
-      ),
-      (k) => k
+    const first = Math.min(...years);
+    const last = Math.max(...years);
+    return bucketColumns(
+      stats.value?.releaseYears,
+      Array.from({ length: last - first + 1 }, (_, i) => String(first + i)),
+      { label: (k) => k, measure: yearMeasure.value }
     );
   });
 
@@ -137,24 +235,17 @@
       tooltip: `About ${formatApprox(i.characters)} characters`,
     }));
   });
+  const showMediaTypeBars = computed(() => mediaType.value === null && mediaTypeBars.value.length > 0);
 
   const genreBars = computed<ProfileBar[]>(() => {
-    const rows = genreRows((stats.value?.genres ?? []).filter((g) => g.share >= 0.01).slice(0, 10));
+    const shares =
+      mediaType.value === null ? stats.value?.genres : stats.value?.genresByMediaType?.find((t) => t.mediaType === mediaType.value)?.genres;
+    const rows = genreRows((shares ?? []).filter((g) => g.share >= 0.01).slice(0, 10));
     const max = Math.max(0.0001, ...rows.map((r) => r.share));
     return rows.map((r) => ({ key: r.key, label: r.label, swatch: r.swatch, fraction: r.share / max, value: `${r.percent}%`, tooltip: r.tooltip }));
   });
 
-  const selectedType = ref('global');
-  const typeTabs = computed(() => [
-    { label: 'All', value: 'global' },
-    ...(accomplishments.value ?? [])
-      .filter((a) => a.mediaType !== null)
-      .map((a) => ({ label: getMediaTypeText(a.mediaType!), value: String(a.mediaType) }))
-      .sort((a, b) => a.label.localeCompare(b.label)),
-  ]);
-  const selectedAccomplishment = computed(() =>
-    (accomplishments.value ?? []).find((a) => (selectedType.value === 'global' ? a.mediaType === null : String(a.mediaType) === selectedType.value))
-  );
+  const selectedAccomplishment = computed(() => (accomplishments.value ?? []).find((a) => a.mediaType === mediaType.value));
   const accomplishmentTiles = computed(() => {
     const a = selectedAccomplishment.value;
     if (!a) return [];
@@ -179,9 +270,12 @@
   });
 
   const isEmpty = computed(() => !!stats.value && stats.value.lengths.length === 0);
+  const typeHasFinished = computed(() => ofType(stats.value?.lengths).length > 0);
+  const hasCoverage = computed(() => ofType(stats.value?.coverageAtFinish).length > 0);
+  const hasScores = computed(() => ofType(stats.value?.scores).length > 0);
 
   /** Three across on wide screens, or two by two when scores make it four, so no chart sits alone in a row. */
-  const columnChartCount = computed(() => 2 + (stats.value?.coverageAtFinish.length ? 1 : 0) + (stats.value?.scores.length ? 1 : 0));
+  const columnChartCount = computed(() => 2 + (hasCoverage.value ? 1 : 0) + (hasScores.value ? 1 : 0));
   const columnChartGrid = computed(() => (columnChartCount.value === 3 ? 'lg:grid-cols-2 xl:grid-cols-3' : 'lg:grid-cols-2'));
 
   useHead(() => ({ title: `${handle.value} - Stats` }));
@@ -209,16 +303,34 @@
 
       <ProfileGrowthSummary v-if="isOwner" />
 
+      <ProfileReadableCard v-if="stats.readable" :readable="stats.readable" :name="isOwner ? null : (header?.displayName ?? null)" />
+
+      <div v-if="mediaTypeOptions.length > 2" class="flex justify-end">
+        <Select
+          v-model="mediaType"
+          :options="mediaTypeOptions"
+          option-label="label"
+          option-value="value"
+          placeholder="All types"
+          aria-label="Filter stats by media type"
+          size="small"
+          scroll-height="50vh"
+          class="w-full sm:w-56"
+        >
+          <template #option="{ option }">
+            <div class="flex w-full items-center justify-between gap-3" :class="{ 'text-muted-color': option.count === 0 }">
+              <span>{{ option.label }}</span>
+              <span class="text-xs tabular-nums text-muted-color">{{ option.count }}</span>
+            </div>
+          </template>
+        </Select>
+      </div>
+
       <Card v-if="accomplishmentTiles.length">
         <template #title>
-          <h2 class="text-base font-semibold">Totals by media type</h2>
+          <h2 class="text-base font-semibold">{{ mediaType === null ? 'Totals' : `${getMediaTypeText(mediaType)} totals` }}</h2>
         </template>
         <template #content>
-          <Tabs v-model:value="selectedType" :show-navigators="false" class="mb-4">
-            <TabList class="flex-wrap">
-              <Tab v-for="tab in typeTabs" :key="tab.value" :value="tab.value">{{ tab.label }}</Tab>
-            </TabList>
-          </Tabs>
           <dl class="grid grid-cols-2 gap-4 md:grid-cols-3">
             <div v-for="tile in accomplishmentTiles" :key="tile.label">
               <dt class="text-sm text-muted-color">{{ tile.label }}</dt>
@@ -229,85 +341,135 @@
         </template>
       </Card>
 
-      <ProfileReadableCard v-if="stats.readable" :readable="stats.readable" :name="isOwner ? null : (header?.displayName ?? null)" />
-
       <Message v-if="isEmpty" severity="info" :closable="false">
         {{ isOwner ? 'Mark a title as Completed and your stats will start filling in.' : 'No finished titles yet.' }}
       </Message>
 
       <template v-else>
-        <Card v-if="charsPerMonth.length">
+        <Card v-if="periodColumns.length">
           <template #content>
             <ProfileColumnChart
-              title="Characters finished per month"
-              :columns="charsPerMonth"
+              :title="periodTitle"
+              :columns="periodColumns"
               show-values="fit"
-              :column-width="MONTH_COLUMN_WIDTH"
-              :caption="charsPerMonth.every((c) => c.value === 0) ? 'Nothing finished in the last 12 months.' : undefined"
+              :column-width="profileMonthGroupingIsMonth ? MONTH_COLUMN_WIDTH : undefined"
+              :caption="
+                profileMonthGroupingIsMonth && monthRange === 'year' && periodColumns.every((c) => c.value === 0)
+                  ? 'Nothing finished in the last 12 months.'
+                  : undefined
+              "
               clip-outliers
             >
               <template #actions>
-                <SelectButton
-                  v-model="monthRange"
-                  :options="monthRangeOptions"
-                  option-label="label"
-                  option-value="value"
-                  :allow-empty="false"
-                  aria-label="Months shown"
-                  size="small"
-                />
+                <div class="flex items-center gap-1">
+                  <SelectButton
+                    v-if="profileMonthGroupingIsMonth"
+                    v-model="monthRange"
+                    :options="monthRangeOptions"
+                    option-label="label"
+                    option-value="value"
+                    :allow-empty="false"
+                    aria-label="Months shown"
+                    size="small"
+                  />
+                  <ProfileChartSettings>
+                    <ProfileChartChoice v-model="monthMeasure" label="Count" :options="measureOptions" />
+                    <ProfileChartChoice v-model="jitenStore.profileMonthGrouping" label="Group by" :options="groupingOptions" />
+                  </ProfileChartSettings>
+                </div>
               </template>
             </ProfileColumnChart>
           </template>
         </Card>
 
-        <div class="grid grid-cols-1 gap-5 lg:grid-cols-2">
-          <Card v-if="mediaTypeBars.length" :class="{ 'lg:col-span-2': !genreBars.length }">
+        <div v-if="showMediaTypeBars || genreBars.length" class="grid grid-cols-1 gap-5 lg:grid-cols-2">
+          <Card v-if="showMediaTypeBars" :class="{ 'lg:col-span-2': !genreBars.length }">
             <template #content>
               <ProfileBarList title="Media types, by characters" :bars="mediaTypeBars" />
             </template>
           </Card>
-          <Card v-if="genreBars.length">
+          <Card v-if="genreBars.length" :class="{ 'lg:col-span-2': !showMediaTypeBars }">
             <template #content>
               <ProfileBarList title="Genres, by characters" :bars="genreBars" caption="Share of characters read in titles with this genre" />
             </template>
           </Card>
         </div>
 
-        <div class="grid grid-cols-1 gap-5" :class="columnChartGrid">
-          <Card>
-            <template #content>
-              <ProfileColumnChart title="Difficulty of finished titles" :columns="difficultyColumns" />
-            </template>
-          </Card>
-          <Card v-if="stats.coverageAtFinish.length">
+        <Message v-if="!typeHasFinished" severity="info" :closable="false">
+          Nothing of this type finished yet.
+        </Message>
+
+        <template v-else>
+          <div class="grid grid-cols-1 gap-5" :class="columnChartGrid">
+            <Card>
+              <template #content>
+                <ProfileColumnChart
+                  :title="charactersTitle(difficultyMeasure, 'Difficulty of finished titles', 'Characters read by difficulty')"
+                  :columns="difficultyColumns"
+                >
+                  <template #actions>
+                    <ProfileChartSettings>
+                      <ProfileChartChoice v-model="difficultyMeasure" label="Count" :options="measureOptions" />
+                    </ProfileChartSettings>
+                  </template>
+                </ProfileColumnChart>
+              </template>
+            </Card>
+            <Card v-if="hasCoverage">
+              <template #content>
+                <ProfileColumnChart
+                  :title="charactersTitle(coverageMeasure, 'Coverage when finishing', 'Characters read by coverage when finishing')"
+                  :columns="coverageColumns"
+                  caption="Share of a title's words known on the day it was finished"
+                >
+                  <template #actions>
+                    <ProfileChartSettings>
+                      <ProfileChartChoice v-model="coverageMeasure" label="Count" :options="measureOptions" />
+                    </ProfileChartSettings>
+                  </template>
+                </ProfileColumnChart>
+              </template>
+            </Card>
+            <Card v-if="hasScores">
+              <template #content>
+                <ProfileColumnChart title="Scores given" :columns="scoreColumns" />
+              </template>
+            </Card>
+            <Card :class="{ 'lg:max-xl:col-span-2': columnChartCount === 3 }">
+              <template #content>
+                <ProfileColumnChart
+                  :title="charactersTitle(lengthMeasure, 'Length of finished titles', 'Characters read by title length')"
+                  :columns="lengthColumns"
+                  caption="Title length, in characters"
+                >
+                  <template #actions>
+                    <ProfileChartSettings>
+                      <ProfileChartChoice v-model="lengthMeasure" label="Count" :options="measureOptions" />
+                    </ProfileChartSettings>
+                  </template>
+                </ProfileColumnChart>
+              </template>
+            </Card>
+          </div>
+
+          <ProfileLadderCard :media-type="mediaType" />
+
+          <Card v-if="yearColumns.length">
             <template #content>
               <ProfileColumnChart
-                title="Coverage when finishing"
-                :columns="coverageColumns"
-                caption="Share of a title's words known on the day it was finished"
-              />
+                :title="charactersTitle(yearMeasure, 'Release year of finished titles', 'Characters read by release year')"
+                :columns="yearColumns"
+                :visible-columns="15"
+              >
+                <template #actions>
+                  <ProfileChartSettings>
+                    <ProfileChartChoice v-model="yearMeasure" label="Count" :options="measureOptions" />
+                  </ProfileChartSettings>
+                </template>
+              </ProfileColumnChart>
             </template>
           </Card>
-          <Card v-if="stats.scores.length">
-            <template #content>
-              <ProfileColumnChart title="Scores given" :columns="scoreColumns" />
-            </template>
-          </Card>
-          <Card :class="{ 'lg:max-xl:col-span-2': columnChartCount === 3 }">
-            <template #content>
-              <ProfileColumnChart title="Length of finished titles" :columns="lengthColumns" caption="In characters" />
-            </template>
-          </Card>
-        </div>
-
-        <ProfileLadderCard />
-
-        <Card v-if="yearColumns.length">
-          <template #content>
-            <ProfileColumnChart title="Release year of finished titles" :columns="yearColumns" :visible-columns="15" />
-          </template>
-        </Card>
+        </template>
       </template>
     </div>
   </ProfileTabGate>

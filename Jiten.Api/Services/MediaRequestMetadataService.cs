@@ -4,6 +4,7 @@ using Jiten.Api.Jobs;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Data.Providers;
+using Jiten.Core.WebNovel;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using MetadataProviderHelper = Jiten.Core.MetadataProviderHelper;
@@ -78,6 +79,13 @@ public class MediaRequestMetadataService(JitenDbContext context, IBackgroundJobC
     /// <summary>Queues a lookup on the provider's own single-worker queue, which spaces calls to that provider across all callers.</summary>
     public bool QueueFetch(int requestId, string? url)
     {
+        if (WebNovelUrlParser.IsWebNovelLink(url, out var webNovelProvider))
+        {
+            var webNovelLink = url!;
+            backgroundJobs.Enqueue<MediaRequestMetadataJob>(job => job.FetchWebNovel(webNovelProvider, requestId, webNovelLink));
+            return true;
+        }
+
         if (!ExternalMetadataResolver.TryGetProvider(url, out var provider))
             return false;
 
@@ -101,9 +109,6 @@ public class MediaRequestMetadataService(JitenDbContext context, IBackgroundJobC
                 break;
             case LinkType.GoogleBooks or LinkType.Bookmeter:
                 backgroundJobs.Enqueue<MediaRequestMetadataJob>(job => job.FetchBooks(requestId, link));
-                break;
-            case LinkType.Syosetsu:
-                backgroundJobs.Enqueue<MediaRequestMetadataJob>(job => job.FetchSyosetu(requestId, link));
                 break;
             default:
                 return false;

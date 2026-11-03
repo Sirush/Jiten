@@ -192,6 +192,7 @@
     [LinkType.Imdb]: 'https://www.imdb.com/title/...',
     [LinkType.Igdb]: 'https://www.igdb.com/games/...',
     [LinkType.Syosetsu]: 'https://ncode.syosetu.com/...',
+    [LinkType.Kakuyomu]: 'https://kakuyomu.jp/works/...',
     [LinkType.Bookmeter]: 'https://bookmeter.com/books/...',
   };
 
@@ -401,7 +402,7 @@
     if (!original.value || !draft.value || submitting.value) return;
     draft.value.description = draft.value.description.trim();
     sources.value = sources.value.map((s) => (s.trim() ? normaliseSourceUrl(s) : s));
-    sourceErrorText.value = sourcesError(submission.value.fields, sources.value);
+    sourceErrorText.value = sourcesError(sources.value);
     if (sourceErrorText.value) {
       submitErrorText.value = null;
       return;
@@ -929,7 +930,7 @@
               <template v-else>
                 <div class="flex flex-col gap-1.5 pt-2 border-t border-surface-200 dark:border-surface-700">
                   <div class="flex items-center gap-2">
-                    <label for="source-0" class="text-xs font-semibold text-muted-color">Sources</label>
+                    <label for="source-0" class="text-xs font-semibold text-muted-color">Sources <span class="font-normal">(optional)</span></label>
                     <span class="text-xs text-muted-color tabular-nums">{{ sources.length }} of {{ MAX_SOURCES }}</span>
                   </div>
                   <div v-for="(_, index) in sources" :key="index" class="grid grid-cols-[minmax(0,1fr)_2.75rem] gap-1 items-center">

@@ -70,6 +70,9 @@ export interface MetadataRelationshipValue {
   relationshipType: DeckRelationshipType | number;
   otherDeckId: number;
   otherDeckTitle: string;
+  /** Sent with recorded edits; null once the other deck is gone. */
+  otherDeckMediaType?: MediaType | null;
+  otherDeckReleaseYear?: number | null;
 }
 
 export interface MetadataFieldChange {
@@ -188,6 +191,20 @@ export interface MetadataQueueConflict {
   editAfter: unknown;
 }
 
+export interface MetadataFranchiseRef {
+  franchiseId: number;
+  originalTitle: string;
+  romajiTitle: string | null;
+  englishTitle: string | null;
+  deckCount: number;
+}
+
+/** into is null when the deck has no franchise yet and joins the others; otherwise they merge into it. */
+export interface MetadataFranchiseEffect {
+  joining: MetadataFranchiseRef[];
+  into: MetadataFranchiseRef | null;
+}
+
 export interface MetadataQueueItem {
   id: number;
   submissionId: string;
@@ -211,7 +228,7 @@ export interface MetadataQueueItem {
   canCheck: boolean;
   checkBlockedReason: string | null;
   characterNameChecks: CharacterNameSurface[] | null;
-  franchiseEffect: string | null;
+  franchiseEffect: MetadataFranchiseEffect | null;
   tier: MetadataRiskTier | null;
   authorRecord: { level: MetadataContributorLevel; accepted: number; reverted: number } | null;
   checks: MetadataQueueCheck[] | null;

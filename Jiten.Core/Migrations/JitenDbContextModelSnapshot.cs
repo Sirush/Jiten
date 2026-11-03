@@ -2921,6 +2921,11 @@ namespace Jiten.Core.Migrations
                     b.Property<bool>("RevisedAtSource")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("SourceEpisodeId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<DateTimeOffset?>("SourceUpdatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -2933,6 +2938,10 @@ namespace Jiten.Core.Migrations
 
                     b.HasIndex("ChildDeckId")
                         .HasDatabaseName("IX_WebNovelChapters_ChildDeckId");
+
+                    b.HasIndex("DeckId", "SourceEpisodeId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_WebNovelChapters_DeckId_SourceEpisodeId");
 
                     b.ToTable("WebNovelChapters", "jiten");
                 });

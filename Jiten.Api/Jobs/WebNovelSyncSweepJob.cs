@@ -1,3 +1,4 @@
+using System.Net;
 using Hangfire;
 using Jiten.Core;
 using Jiten.Core.Data.WebNovel;
@@ -13,14 +14,8 @@ public class WebNovelSyncSweepJob(
     ILogger<WebNovelSyncSweepJob> logger)
 {
     /// <summary>
-    /// Polls every tracked novel's update state and enqueues a fetch for the ones worth syncing.
-    ///
-    /// For Syosetu this is two API calls per 1,000 novels — the metadata API reports episode count and last
-    /// update, so no episode or table-of-contents page is touched until there is something to fetch.
-    ///
-    /// Polling is daily but syncs are batched (<see cref="WebNovelSchedule.ShouldSync"/>): a sync reparses
-    /// the subdeck and rewrites the parent's aggregated words however few episodes it ingests, so a
-    /// daily-updating serial is left to accumulate ~15 episodes (or two weeks) between syncs.
+    /// Hands every provider with novels due a check to <see cref="SweepProvider"/> on its site's metadata queue,
+    /// where polls share the site's throttle with imports instead of blocking a default worker.
     /// </summary>
     [Queue("default")]
     public async Task Sweep()
@@ -28,46 +23,78 @@ public class WebNovelSyncSweepJob(
         await using var context = await contextFactory.CreateDbContextAsync();
 
         var now = DateTimeOffset.UtcNow;
-        var due = await context.WebNovelSources
-                               .Where(s => s.SyncEnabled && s.NextCheckAt <= now)
-                               .ToListAsync();
+        var dueByProvider = await context.WebNovelSources
+                                         .Where(s => s.SyncEnabled && s.NextCheckAt <= now)
+                                         .GroupBy(s => s.Provider)
+                                         .Select(g => new { Provider = g.Key, Count = g.Count() })
+                                         .ToListAsync();
 
-        if (due.Count == 0)
+        if (dueByProvider.Count == 0)
         {
             logger.LogInformation("WebNovelSweep: nothing due");
             return;
         }
 
-        var dirtyCount = 0;
+        QueueProviderPolls(dueByProvider.Select(d => (d.Provider, d.Count)));
+    }
 
-        foreach (var group in due.GroupBy(s => s.Provider))
+    internal void QueueProviderPolls(IEnumerable<(WebNovelProvider Provider, int Count)> dueByProvider)
+    {
+        foreach (var (provider, count) in dueByProvider)
         {
-            if (!sourceResolver.IsSupported(group.Key))
+            if (!sourceResolver.IsSupported(provider))
             {
                 logger.LogWarning("WebNovelSweep: provider {Provider} is not enabled, skipping {Count} novels",
-                                  group.Key, group.Count());
+                                  provider, count);
                 continue;
             }
 
-            try
-            {
-                dirtyCount += await SweepProviderAsync(context, sourceResolver.Resolve(group.Key), group.ToList());
-            }
-            catch (Exception ex)
-            {
-                logger.LogError(ex, "WebNovelSweep: polling {Provider} failed", group.Key);
-            }
+            backgroundJobs.Enqueue<WebNovelSyncSweepJob>(job => job.SweepProvider(provider));
+            logger.LogInformation("WebNovelSweep: queued a poll of {Count} {Provider} novels", count, provider);
         }
-
-        await context.SaveChangesAsync();
-
-        logger.LogInformation("WebNovelSweep: polled {Due} novels, {Dirty} due a sync", due.Count, dirtyCount);
     }
 
-    private async Task<int> SweepProviderAsync(JitenDbContext context, IWebNovelSource source, List<WebNovelSource> tracked)
+    /// <summary>
+    /// Polls one provider's due novels and enqueues a fetch for the ones worth syncing.
+    ///
+    /// A batch-pollable source (Syosetu) answers for 1,000 novels in two API calls; any other source costs one work
+    /// page per novel. Either way no episode page is touched until there is something to fetch.
+    ///
+    /// Polling is daily but syncs are batched (<see cref="WebNovelSchedule.ShouldSync"/>): a sync reparses
+    /// the subdeck and rewrites the parent's aggregated words however few episodes it ingests, so a
+    /// daily-updating serial is left to accumulate ~15 episodes (or two weeks) between syncs.
+    /// </summary>
+    [WebNovelQueue(WebNovelQueueKind.Metadata)]
+    public async Task SweepProvider(WebNovelProvider provider)
     {
-        var polled = source is IBatchPollableSource batch
-            ? await batch.BatchPollAsync(tracked.Select(s => s.SourceId))
+        await using var context = await contextFactory.CreateDbContextAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var tracked = await context.WebNovelSources
+                                   .Where(s => s.Provider == provider && s.SyncEnabled && s.NextCheckAt <= now)
+                                   .ToListAsync();
+
+        if (tracked.Count == 0)
+            return;
+
+        var dirty = await PollAsync(provider, tracked);
+        await context.SaveChangesAsync();
+
+        logger.LogInformation("WebNovelSweep: polled {Due} {Provider} novels, {Dirty} due a sync",
+                              tracked.Count, provider, dirty);
+    }
+
+    /// <summary>
+    /// Updates each novel's poll state in place and enqueues the syncs; the caller saves.
+    /// </summary>
+    /// <returns>How many novels were handed to a sync</returns>
+    internal async Task<int> PollAsync(WebNovelProvider provider, List<WebNovelSource> tracked)
+    {
+        var source = sourceResolver.Resolve(provider);
+        var stableEpisodeIds = WebNovelProviders.Get(provider).StableEpisodeIds;
+
+        var (polled, errors) = source is IBatchPollableSource batch
+            ? (await batch.BatchPollAsync(tracked.Select(s => s.SourceId)), new Dictionary<string, string>())
             : await PollIndividuallyAsync(source, tracked);
 
         var dirty = 0;
@@ -76,24 +103,22 @@ public class WebNovelSyncSweepJob(
         {
             if (!polled.TryGetValue(novel.SourceId, out var info))
             {
-                // The work was deleted or made private at the source
+                var error = errors.GetValueOrDefault(novel.SourceId);
                 novel.ConsecutiveFailures++;
-                novel.LastError = "Not found at the source.";
+                novel.LastError = WebNovelImportJob.Truncate(error ?? "Not found at the source.", 1000);
                 novel.NextCheckAt = WebNovelSchedule.NextCheckAfterFailure(novel.ConsecutiveFailures);
-                logger.LogWarning("WebNovelSweep: {SourceId} was not returned by the source", novel.SourceId);
+                logger.LogWarning("WebNovelSweep: {Provider}/{SourceId} could not be polled: {Error}",
+                                  provider, novel.SourceId, novel.LastError);
                 continue;
             }
 
             novel.CompletedAtSource = info.IsCompleted;
             novel.OnHiatusAtSource = info.IsOnHiatus;
 
-            // Fewer episodes than ingested means deletions/renumbering at the source: every later episode
-            // shifted position, so a sync would append the wrong text. Alert instead of syncing.
-            if (info.EpisodeCount < novel.LastEpisodeCount)
+            if (WebNovelLedger.PositionalShrinkError(stableEpisodeIds, info.EpisodeCount, novel.LastEpisodeCount) is { } shrink)
             {
                 novel.ConsecutiveFailures++;
-                novel.LastError = $"The source lists {info.EpisodeCount} episodes but {novel.LastEpisodeCount} are " +
-                                  "ingested — episodes were deleted or renumbered. Rebuild the affected subdecks or re-import.";
+                novel.LastError = shrink;
                 novel.NextCheckAt = WebNovelSchedule.NextCheckAfterFailure(novel.ConsecutiveFailures);
                 logger.LogWarning("WebNovelSweep: {SourceId} episode count dropped from {Known} to {Polled}",
                                   novel.SourceId, novel.LastEpisodeCount, info.EpisodeCount);
@@ -104,7 +129,7 @@ public class WebNovelSyncSweepJob(
             {
                 dirty++;
                 var deckId = novel.DeckId;
-                backgroundJobs.Enqueue<WebNovelFetchJob>(job => job.Sync(deckId));
+                backgroundJobs.Enqueue<WebNovelFetchJob>(job => job.Sync(provider, deckId));
 
                 // The fetch job owns the next check time from here
                 continue;
@@ -125,14 +150,32 @@ public class WebNovelSyncSweepJob(
         return dirty;
     }
 
-    private static async Task<Dictionary<string, WebNovelInfo>> PollIndividuallyAsync(IWebNovelSource source,
-                                                                                      List<WebNovelSource> tracked)
+    /// <summary>
+    /// One failing novel must not stop the rest: a 404/410 counts as gone from the source, anything else is
+    /// recorded as that novel's error.
+    /// </summary>
+    private async Task<(Dictionary<string, WebNovelInfo> Polled, Dictionary<string, string> Errors)>
+        PollIndividuallyAsync(IWebNovelSource source, List<WebNovelSource> tracked)
     {
         var polled = new Dictionary<string, WebNovelInfo>(StringComparer.OrdinalIgnoreCase);
+        var errors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var novel in tracked)
-            polled[novel.SourceId] = await source.GetInfoAsync(novel.SourceId);
+        {
+            try
+            {
+                polled[novel.SourceId] = await source.GetInfoAsync(novel.SourceId);
+            }
+            catch (HttpRequestException ex) when (ex.StatusCode is HttpStatusCode.NotFound or HttpStatusCode.Gone)
+            {
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "WebNovelSweep: polling {Provider}/{SourceId} failed", source.Provider, novel.SourceId);
+                errors[novel.SourceId] = ex.Message;
+            }
+        }
 
-        return polled;
+        return (polled, errors);
     }
 }

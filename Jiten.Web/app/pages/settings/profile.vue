@@ -612,7 +612,7 @@
           <li
             v-for="(word, i) in favouriteWords"
             :key="`${word.wordId}-${word.readingIndex}`"
-            class="flex items-center gap-3 border-t border-surface-200 py-2 first:border-t-0 dark:border-surface-700"
+            class="group flex items-center gap-3 border-t border-surface-200 py-2 first:border-t-0 dark:border-surface-700"
           >
             <ProfileFavouriteWord :word="word" />
             <ProfileReorderButtons
@@ -640,7 +640,7 @@
             >
               <button
                 type="button"
-                class="flex w-full items-baseline gap-3 px-3 py-2 text-left hover:bg-surface-100 focus-visible:bg-surface-100 dark:hover:bg-surface-800 dark:focus-visible:bg-surface-800"
+                class="group flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-surface-100 focus-visible:bg-surface-100 dark:hover:bg-surface-800 dark:focus-visible:bg-surface-800"
                 :disabled="wordBusy"
                 @click="addWord(entry)"
               >

@@ -39,6 +39,7 @@ export enum LinkType {
   Bookmeter = 10,
   Amazon = 11,
   YouTube = 12,
+  Kakuyomu = 13,
 }
 
 export enum Genre {

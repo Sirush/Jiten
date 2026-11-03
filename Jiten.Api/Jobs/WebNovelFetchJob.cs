@@ -20,10 +20,12 @@ public class WebNovelFetchJob(
     /// never be used here: JitenHelper.CollectChildDeckUpdates matches children by OriginalTitle and
     /// orphan-deletes the ones it can't match, and the open subdeck's title changes on every append — that
     /// would delete the subdeck and every user's progress on it.
+    ///
+    /// <paramref name="provider"/> only routes the job to the site's queue; the ledger's own provider is fetched.
     /// </summary>
-    [Queue(WebNovelQueues.Syosetu)]
+    [WebNovelQueue(WebNovelQueueKind.Fetch)]
     [AutomaticRetry(Attempts = 1)]
-    public async Task Sync(int parentDeckId)
+    public async Task Sync(WebNovelProvider provider, int parentDeckId)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
 
@@ -44,23 +46,18 @@ public class WebNovelFetchJob(
             var info = await source.GetInfoAsync(tracked.SourceId);
             var toc = await source.GetTocAsync(tracked.SourceId);
 
-            var ledger = tracked.Chapters.ToDictionary(c => c.EpisodeNumber);
+            var diff = WebNovelLedger.Diff(tracked.Chapters, toc,
+                                           WebNovelProviders.Get(tracked.Provider).StableEpisodeIds);
+            var newEpisodes = diff.NewEpisodes;
 
-            // Episode numbers at the source are positional: deleting one renumbers everything after it,
-            // so the ledger no longer lines up with the table of contents. Appending would attach the
-            // wrong text to the wrong episode — stop and surface it instead.
-            if (toc.Count < ledger.Count)
+            if (diff.MissingAtSource > 0 || diff.InsertedBeforeIngested > 0)
             {
-                throw new InvalidOperationException(
-                    $"The source lists {toc.Count} episodes but {ledger.Count} are ingested — episodes were " +
-                    "deleted or renumbered at the source. Rebuild the affected subdecks or re-import the novel.");
+                logger.LogInformation("WebNovelSync: deck {DeckId} has {Missing} episodes gone from the source and " +
+                                      "{Inserted} inserted ahead of ingested ones (appended at the end)",
+                                      parentDeckId, diff.MissingAtSource, diff.InsertedBeforeIngested);
             }
 
-            var newEpisodes = toc.Where(e => !ledger.ContainsKey(e.Number)).OrderBy(e => e.Number).ToList();
-
-            // Episodes we already hold whose text changed at the source (改稿). Applying these means
-            // rebuilding the subdeck that holds them, so they are flagged for a manual refresh instead.
-            var revisedCount = MarkRevisions(tracked, toc.ToDictionary(e => e.Number));
+            var revisedCount = WebNovelLedger.MarkRevisions(tracked.Chapters, toc);
 
             if (newEpisodes.Count == 0)
             {
@@ -74,11 +71,11 @@ public class WebNovelFetchJob(
             logger.LogInformation("WebNovelSync: deck {DeckId} has {Count} new episodes", parentDeckId, newEpisodes.Count);
 
             var fetched = new List<(WebNovelEpisodeRef Reference, ChunkEpisode Chunk, string Text)>();
-            foreach (var reference in newEpisodes)
+            foreach (var episode in newEpisodes)
             {
-                var text = await source.GetEpisodeTextAsync(tracked.SourceId, reference);
-                fetched.Add((reference,
-                             new ChunkEpisode(reference.Number, reference.Title, SubdeckChunker.CountCharacters(text)),
+                var text = await source.GetEpisodeTextAsync(tracked.SourceId, episode.Reference);
+                fetched.Add((episode.Reference,
+                             new ChunkEpisode(episode.Number, episode.Reference.Title, SubdeckChunker.CountCharacters(text)),
                              text));
             }
 
@@ -144,9 +141,9 @@ public class WebNovelFetchJob(
 
             if (tracked.ConsecutiveFailures >= 3)
             {
-                logger.LogError(ex, "WebNovelSync: deck {DeckId} has failed {Count} times in a row — the site's markup " +
-                                    "has probably changed, re-check the narou.rb site definitions",
-                                parentDeckId, tracked.ConsecutiveFailures);
+                logger.LogError(ex, "WebNovelSync: deck {DeckId} ({Provider}) has failed {Count} times in a row — the " +
+                                    "site's markup has probably changed",
+                                parentDeckId, tracked.Provider, tracked.ConsecutiveFailures);
             }
             else
             {
@@ -162,10 +159,11 @@ public class WebNovelFetchJob(
     /// <summary>
     /// Re-fetches every episode in one subdeck and replaces its text, picking up revisions (改稿) to episodes
     /// that were already ingested. Manual, because a rebuild costs one request per episode in the range.
+    /// <paramref name="provider"/> only routes the job to the site's queue.
     /// </summary>
-    [Queue(WebNovelQueues.Syosetu)]
+    [WebNovelQueue(WebNovelQueueKind.Fetch)]
     [AutomaticRetry(Attempts = 1)]
-    public async Task RebuildSubdeck(int parentDeckId, int childDeckId)
+    public async Task RebuildSubdeck(WebNovelProvider provider, int parentDeckId, int childDeckId)
     {
         await using var context = await contextFactory.CreateDbContextAsync();
 
@@ -187,16 +185,18 @@ public class WebNovelFetchJob(
         }
 
         var source = sourceResolver.Resolve(tracked.Provider);
-        var toc = (await source.GetTocAsync(tracked.SourceId)).ToDictionary(e => e.Number);
+        var toc = await source.GetTocAsync(tracked.SourceId);
+        WebNovelLedger.EnsureUniqueIds(toc);
+        var tocById = toc.ToDictionary(e => e.SourceEpisodeId, StringComparer.Ordinal);
 
         var texts = new List<string>();
         foreach (var chapter in chapters)
         {
-            if (!toc.TryGetValue(chapter.EpisodeNumber, out var reference))
+            if (!tocById.TryGetValue(chapter.SourceEpisodeId, out var reference))
             {
-                // The episode was deleted at the source; keep the range intact and skip it
-                logger.LogWarning("WebNovelRebuild: episode {Episode} no longer exists at the source",
-                                  chapter.EpisodeNumber);
+                logger.LogWarning("WebNovelRebuild: episode {Episode} ({SourceEpisodeId}) no longer exists at the " +
+                                  "source; its range is kept and its text dropped",
+                                  chapter.EpisodeNumber, chapter.SourceEpisodeId);
                 continue;
             }
 
@@ -219,28 +219,13 @@ public class WebNovelFetchJob(
 
         // Recompute over the whole ledger: this rebuild refreshed its own chapters' SourceUpdatedAt, but
         // other subdecks may still hold revised episodes awaiting their own rebuild.
-        tracked.PendingRevisionCount = MarkRevisions(tracked, toc);
+        tracked.PendingRevisionCount = WebNovelLedger.MarkRevisions(tracked.Chapters, toc);
         await context.SaveChangesAsync();
 
         backgroundJobs.Enqueue<ParseNewSubdecksJob>(job => job.ParseNewSubdecks(parentDeckId, new List<int> { childDeckId }));
 
         logger.LogInformation("WebNovelRebuild: rebuilt subdeck {ChildDeckId} from {Count} episodes",
                               childDeckId, texts.Count);
-    }
-
-    private static int MarkRevisions(WebNovelSource tracked, Dictionary<int, WebNovelEpisodeRef> toc)
-    {
-        var revised = 0;
-        foreach (var chapter in tracked.Chapters)
-        {
-            chapter.RevisedAtSource = toc.TryGetValue(chapter.EpisodeNumber, out var e) &&
-                                      e.UpdatedAt != null && chapter.SourceUpdatedAt != null &&
-                                      e.UpdatedAt > chapter.SourceUpdatedAt;
-            if (chapter.RevisedAtSource)
-                revised++;
-        }
-
-        return revised;
     }
 
     private static async Task<List<ExistingChunk>> BuildExistingChunksAsync(JitenDbContext context, WebNovelSource tracked)
@@ -330,6 +315,7 @@ public class WebNovelFetchJob(
                 {
                     DeckId = tracked.DeckId,
                     EpisodeNumber = episode.Number,
+                    SourceEpisodeId = referenceByEpisode[episode.Number].SourceEpisodeId,
                     ChildDeckId = childDeckId,
                     Title = WebNovelImportJob.Truncate(episode.Title, 500),
                     SourceUpdatedAt = referenceByEpisode[episode.Number].UpdatedAt,

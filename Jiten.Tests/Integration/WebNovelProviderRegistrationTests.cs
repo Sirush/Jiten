@@ -12,7 +12,8 @@ public class WebNovelProviderRegistrationTests(JitenWebApplicationFactory factor
     [Theory]
     [InlineData(WebNovelProvider.Syosetu)]
     [InlineData(WebNovelProvider.SyosetuNovel18)]
-    public void SyosetuProvidersAreEnabled(WebNovelProvider provider)
+    [InlineData(WebNovelProvider.Kakuyomu)]
+    public void ProvidersAreEnabled(WebNovelProvider provider)
     {
         var resolver = factory.Services.GetRequiredService<IWebNovelSourceResolver>();
 

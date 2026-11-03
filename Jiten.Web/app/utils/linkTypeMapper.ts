@@ -26,10 +26,19 @@ export function getLinkTypeText(linkType: LinkType): string {
       return 'Amazon';
     case LinkType.YouTube:
       return 'YouTube';
+    case LinkType.Kakuyomu:
+      return 'Kakuyomu';
 
     default:
       return 'Unknown';
   }
+}
+
+/** Sites imported through the webnovel page, chapter by chapter; must match WebNovelProviders on the server. */
+const webNovelLinkTypes = new Set<LinkType>([LinkType.Syosetsu, LinkType.Kakuyomu]);
+
+export function isWebNovelLinkType(linkType: LinkType | null | undefined): boolean {
+  return linkType != null && webNovelLinkTypes.has(linkType);
 }
 
 const vndbReleasePath = /^\/r\d+/;
@@ -66,6 +75,7 @@ const hostedDomains: Array<{ domains: string[]; type: LinkType }> = [
   { domains: ['imdb.com'], type: LinkType.Imdb },
   { domains: ['igdb.com'], type: LinkType.Igdb },
   { domains: ['syosetu.com'], type: LinkType.Syosetsu },
+  { domains: ['kakuyomu.jp'], type: LinkType.Kakuyomu },
   { domains: ['bookmeter.com'], type: LinkType.Bookmeter },
   { domains: ['amzn.to', 'amzn.asia'], type: LinkType.Amazon },
   { domains: ['youtube.com', 'youtu.be', 'youtube-nocookie.com'], type: LinkType.YouTube },

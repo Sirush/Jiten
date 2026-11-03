@@ -3,7 +3,7 @@ namespace Jiten.Api.Dtos.Requests;
 public class AddWebNovelDeckRequest
 {
     /// <summary>
-    /// Novel URL (https://ncode.syosetu.com/n9669bk/) or a bare ncode
+    /// Work URL, a page linking to one (a Kakuyomu book page), or a bare ncode
     /// </summary>
     public required string Url { get; set; }
 
@@ -23,6 +23,11 @@ public class AddWebNovelDeckRequest
     /// Optional: uploaded or generated in the browser. Syosetu works have no cover art of their own.
     /// </summary>
     public IFormFile? CoverImage { get; set; }
+
+    /// <summary>
+    /// Without an uploaded cover, use the art the source hosts for the work, when it has some
+    /// </summary>
+    public bool UseSourceCover { get; set; }
 
     /// <summary>
     /// Optional per-novel override of the subdeck character budget

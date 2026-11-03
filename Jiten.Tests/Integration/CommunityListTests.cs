@@ -152,20 +152,21 @@ public class CommunityListTests(JitenWebApplicationFactory factory)
     }
 
     private Task<HttpResponseMessage> PutDetails(int listId, string userId, CommunityListStatus status, string name = "My list",
-                                                 int[]? genres = null, int[]? tagIds = null, bool admin = false) =>
+                                                 int[]? genres = null, int[]? tagIds = null, bool admin = false, string description = "About") =>
         Send(HttpMethod.Put, $"/api/lists/{listId}", userId,
-             new { name, description = "About", status = (int)status, genres = genres ?? [], tagIds = tagIds ?? [] }, admin);
+             new { name, description, status = (int)status, genres = genres ?? [], tagIds = tagIds ?? [] }, admin);
 
     private Task<HttpResponseMessage> PutItems(int listId, string userId, IEnumerable<int> deckIds, Func<int, string?>? note = null) =>
         Send(HttpMethod.Put, $"/api/lists/{listId}/items", userId,
              new { items = deckIds.Select(id => new { deckId = id, note = note?.Invoke(id) }).ToList() });
 
-    private async Task<int> CreatePublicList(string userId, string name, IEnumerable<int>? deckIds = null, int[]? genres = null, int[]? tagIds = null)
+    private async Task<int> CreatePublicList(string userId, string name, IEnumerable<int>? deckIds = null, int[]? genres = null, int[]? tagIds = null,
+                                             string description = "About")
     {
         var id = await CreateList(userId, name);
         if (deckIds != null)
             (await PutItems(id, userId, deckIds)).StatusCode.Should().Be(HttpStatusCode.OK);
-        (await PutDetails(id, userId, CommunityListStatus.Public, name, genres, tagIds)).StatusCode.Should().Be(HttpStatusCode.OK);
+        (await PutDetails(id, userId, CommunityListStatus.Public, name, genres, tagIds, description: description)).StatusCode.Should().Be(HttpStatusCode.OK);
         return id;
     }
 
@@ -891,6 +892,33 @@ public class CommunityListTests(JitenWebApplicationFactory factory)
         facets.GetProperty("genres").GetProperty(((int)Genre.SliceOfLife).ToString()).GetInt32().Should().Be(2);
         facets.GetProperty("genres").GetProperty(((int)Genre.Comedy).ToString()).GetInt32().Should().Be(1);
         facets.GetProperty("tags").GetProperty(TagCozy.ToString()).GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Browse_MatchesDescriptionsAndRanksNameMatchesFirst()
+    {
+        var mentioned = await CreatePublicList(TestUsers.UserA, "Favourite reads", description: "Starts with a Steins;Gate spinoff", genres: [(int)Genre.Drama]);
+        var named = await CreatePublicList(TestUsers.UserA, "Steins;Gate route order", description: "In release order");
+        await CreatePublicList(TestUsers.UserA, "Unrelated", description: "Nothing here");
+        await Mutate(mentioned, l => l.FavouriteCount = 50);
+
+        foreach (var sort in new[] { "top", "newest", "updated", "popular&days=7", "random&seed=4242" })
+            (await BrowseIds($"q=steins&sort={sort}")).Should().Equal(named, mentioned);
+
+        (await BrowseIds("sort=top")).First().Should().Be(mentioned);
+
+        var facets = await (await Send(HttpMethod.Get, "/api/lists/facets?q=spinoff")).Content.ReadFromJsonAsync<JsonElement>();
+        facets.GetProperty("genres").GetProperty(((int)Genre.Drama).ToString()).GetInt32().Should().Be(1);
+    }
+
+    [Fact]
+    public async Task Browse_SingleCharacterQueryMatchesNamesOnly()
+    {
+        var named = await CreatePublicList(TestUsers.UserA, "Xmas reads", description: "Winter titles");
+        await CreatePublicList(TestUsers.UserA, "Winter reads", description: "Snowy X stories");
+
+        (await BrowseIds("q=x")).Should().Equal(named);
+        (await BrowseIds("q=snowy")).Should().HaveCount(1);
     }
 
     [Fact]

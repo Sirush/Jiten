@@ -13,5 +13,6 @@ public enum LinkType
     Syosetsu = 9,
     Bookmeter = 10,
     Amazon = 11,
-    YouTube = 12
+    YouTube = 12,
+    Kakuyomu = 13
 }

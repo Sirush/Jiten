@@ -16,6 +16,7 @@ const SAMEAS_LINK_TYPES = new Set<LinkType>([
   LinkType.Imdb,
   LinkType.Igdb,
   LinkType.Syosetsu,
+  LinkType.Kakuyomu,
   LinkType.Bookmeter,
   LinkType.YouTube,
 ]);

@@ -2,6 +2,7 @@ using Hangfire;
 using Jiten.Api.Services;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Data.WebNovel;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Api.Jobs;
@@ -33,9 +34,9 @@ public class MediaRequestMetadataJob(
     [Queue("books")]
     public Task FetchBooks(int requestId, string url) => Fetch(requestId, url, FetchMetadataJob.GOOGLE_BOOKS_DELAY);
 
-    /// <summary>The Syosetu source throttles its own calls.</summary>
-    [Queue(WebNovelQueues.SyosetuMetadata)]
-    public Task FetchSyosetu(int requestId, string url) => Fetch(requestId, url, 0);
+    /// <summary>Webnovel sources throttle their own calls.</summary>
+    [WebNovelQueue(WebNovelQueueKind.Metadata)]
+    public Task FetchWebNovel(WebNovelProvider provider, int requestId, string url) => Fetch(requestId, url, 0);
 
     private async Task Fetch(int requestId, string url, float delaySeconds)
     {

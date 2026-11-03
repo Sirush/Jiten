@@ -116,6 +116,7 @@ public static partial class ExternalUrlParser
         (LinkType.Imdb, ["imdb.com"]),
         (LinkType.Igdb, ["igdb.com"]),
         (LinkType.Syosetsu, ["syosetu.com"]),
+        (LinkType.Kakuyomu, ["kakuyomu.jp"]),
         (LinkType.Bookmeter, ["bookmeter.com"]),
         (LinkType.Amazon, ["amzn.to", "amzn.asia"]),
         (LinkType.YouTube, ["youtube.com", "youtu.be", "youtube-nocookie.com"])

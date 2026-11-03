@@ -1,14 +1,19 @@
 <script setup lang="ts">
   import type { ProfileFavouriteWord } from '~/types';
 
-  defineProps<{
+  const props = defineProps<{
     word: Pick<ProfileFavouriteWord, 'text' | 'reading' | 'meaning'>;
-    meaningEnd?: boolean;
   }>();
+
+  const showReading = computed(() => !!props.word.reading && props.word.reading !== props.word.text);
 </script>
 
 <template>
-  <span lang="ja" class="shrink-0 text-lg font-bold">{{ word.text }}</span>
-  <span v-if="word.reading" lang="ja" class="shrink-0 text-xs text-muted-color">{{ word.reading }}</span>
-  <span class="min-w-0 flex-1 truncate text-sm" :class="{ 'text-right': meaningEnd }">{{ word.meaning }}</span>
+  <div class="min-w-0 flex-1">
+    <div class="flex flex-wrap items-baseline gap-x-2.5">
+      <span lang="ja" class="line-clamp-2 text-lg/snug font-bold [overflow-wrap:anywhere] [word-break:auto-phrase]">{{ word.text }}</span>
+      <span v-if="showReading" lang="ja" class="text-xs text-muted-color [overflow-wrap:anywhere]">{{ word.reading }}</span>
+    </div>
+    <p v-if="word.meaning" class="mt-0.5 line-clamp-1 text-sm text-muted-color group-focus-within:line-clamp-none group-hover:line-clamp-none">{{ word.meaning }}</p>
+  </div>
 </template>

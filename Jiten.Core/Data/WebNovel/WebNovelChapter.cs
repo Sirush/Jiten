@@ -14,9 +14,16 @@ public class WebNovelChapter
     public int DeckId { get; set; }
 
     /// <summary>
-    /// 1-based episode index at the source
+    /// 1-based ingest order. Equals the source position for positional providers; an episode a stable-id source
+    /// inserts mid-work is numbered after everything already ingested.
     /// </summary>
     public int EpisodeNumber { get; set; }
+
+    /// <summary>
+    /// The source's id for the episode (Syosetu: its position; Kakuyomu: its episode id)
+    /// </summary>
+    [MaxLength(64)]
+    public string SourceEpisodeId { get; set; } = string.Empty;
 
     /// <summary>
     /// Subdeck this episode's text lives in

@@ -78,8 +78,8 @@
                 :key="`${word.wordId}-${word.readingIndex}`"
                 class="border-t border-surface-200 first:border-t-0 dark:border-surface-700"
               >
-                <NuxtLink :to="`/vocabulary/${word.wordId}/${word.readingIndex}`" class="flex items-baseline gap-2.5 py-2 !text-surface-900 !no-underline hover:!text-primary-600 dark:!text-surface-0 dark:hover:!text-primary-300">
-                  <ProfileFavouriteWord :word="word" meaning-end />
+                <NuxtLink :to="`/vocabulary/${word.wordId}/${word.readingIndex}`" class="group flex py-2.5 !text-surface-900 !no-underline hover:!text-primary-600 dark:!text-surface-0 dark:hover:!text-primary-300">
+                  <ProfileFavouriteWord :word="word" />
                 </NuxtLink>
               </li>
             </ul>

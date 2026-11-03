@@ -8,12 +8,12 @@
   import { debounce } from 'perfect-debounce';
   import { parseStringArray, toBooleanOrNull } from '~/utils/queryParams';
   import { studyDeckPresentation } from '~/utils/studyDeckPresentation';
+  import { type BulkActionDef, type BulkCardAction, type BulkCardInfo, bulkStatusFromKnownStates } from '~/utils/srsBulkActions';
 
   definePageMeta({ middleware: ['auth'] });
 
   const route = useRoute();
   const router = useRouter();
-  const { $api } = useNuxtApp();
   const srsStore = useSrsStore();
   const auth = useAuthStore();
   const toast = useToast();
@@ -136,7 +136,7 @@
     (lapsed) => {
       if (lapsed && sortBy.value === 'sentenceUnlock') sortBy.value = 'deckFreq';
     },
-    { immediate: true },
+    { immediate: true }
   );
 
   watch(sortDescending, () => {
@@ -245,7 +245,6 @@
     refresh();
   }
 
-  // Selection + bulk actions
   const selectedKeys = ref(new Set<string>());
   const bulkLoading = ref(false);
 
@@ -256,7 +255,10 @@
 
   watch(
     () => response.value?.data,
-    () => selectedKeys.value.clear()
+    (data) => {
+      const onPage = new Set((data ?? []).map(wordKey));
+      for (const key of [...selectedKeys.value]) if (!onPage.has(key)) selectedKeys.value.delete(key);
+    }
   );
 
   function toggleSelect(word: Word) {
@@ -273,52 +275,44 @@
     }
   }
 
-  interface BulkActionDef {
-    label: string;
-    icon: string;
-    severity: string;
-    run: () => void;
+  const knownStatesAfter: Partial<Record<BulkCardAction, KnownState[]>> = {
+    'neverForget-add': [KnownState.Mastered],
+    'suspend-add': [KnownState.Suspended],
+    'blacklist-add': [KnownState.Blacklisted],
+    'neverForget-remove': [KnownState.Young],
+    'suspend-remove': [KnownState.Young],
+    'blacklist-remove': [KnownState.Young],
+    'reset-schedule': [KnownState.Young],
+    'forget-add': [KnownState.New],
+  };
+
+  function describeWord(word: Word): BulkCardInfo {
+    return { wordId: word.wordId, readingIndex: word.mainReading.readingIndex, status: bulkStatusFromKnownStates(word.knownStates) };
   }
 
-  const bulkActions = computed<BulkActionDef[]>(() => {
-    const actions: BulkActionDef[] = [
-      { label: 'Master', icon: 'pi pi-check-circle', severity: 'success', run: () => confirmBulkState('Master', 'neverForget-add', [KnownState.Mastered]) },
-      { label: 'Suspend', icon: 'pi pi-pause', severity: 'warn', run: () => confirmBulkState('Suspend', 'suspend-add', [KnownState.Suspended]) },
-      { label: 'Blacklist', icon: 'pi pi-ban', severity: 'secondary', run: () => confirmBulkState('Blacklist', 'blacklist-add', [KnownState.Blacklisted]) },
-    ];
-    if (isStaticDeck.value) {
-      actions.push({ label: 'Remove', icon: 'pi pi-trash', severity: 'danger', run: confirmBulkRemove });
-    }
-    return actions;
-  });
-
-  function confirmBulkState(label: string, state: string, optimistic: KnownState[]) {
-    const words = selectedWords.value;
-    if (words.length === 0) return;
-    confirm.require({
-      message: `${label} ${words.length} word${words.length !== 1 ? 's' : ''}?`,
-      header: `Bulk ${label}`,
-      acceptLabel: label,
-      rejectLabel: 'Cancel',
-      acceptClass: 'p-button-danger',
-      accept: async () => {
-        bulkLoading.value = true;
-        try {
-          await $api('srs/set-vocabulary-state-bulk', {
-            method: 'POST',
-            body: { state, items: words.map((w) => ({ wordId: w.wordId, readingIndex: w.mainReading.readingIndex })) },
-          });
-          for (const w of words) w.knownStates = optimistic;
-          selectedKeys.value.clear();
-          toast.add({ severity: 'success', summary: `${words.length} word${words.length !== 1 ? 's' : ''} updated`, life: 2500 });
-        } catch {
-          toast.add({ severity: 'error', summary: 'Failed to update words', life: 3000 });
-        } finally {
-          bulkLoading.value = false;
-        }
-      },
-    });
+  function replacePageWords(statesByKey: Map<string, KnownState[] | undefined>) {
+    if (!response.value || statesByKey.size === 0) return;
+    response.value = {
+      ...response.value,
+      data: response.value.data.map((w) => (statesByKey.has(wordKey(w)) ? { ...w, knownStates: statesByKey.get(wordKey(w)) } : w)),
+    };
   }
+
+  function applyBulkOptimistic(action: BulkCardAction, words: Word[]) {
+    const next = knownStatesAfter[action];
+    if (!next) return () => {};
+    const previous = new Map(words.map((w) => [wordKey(w), w.knownStates]));
+    replacePageWords(new Map(words.map((w) => [wordKey(w), [...next]])));
+    return () => replacePageWords(previous);
+  }
+
+  function onStatusChanged(word: Word, states: KnownState[]) {
+    replacePageWords(new Map([[wordKey(word), states]]));
+  }
+
+  const extraBulkActions = computed<BulkActionDef[]>(() =>
+    isStaticDeck.value ? [{ label: 'Remove from deck', icon: 'pi pi-minus-circle', severity: 'danger', run: confirmBulkRemove }] : []
+  );
 
   function confirmBulkRemove() {
     const words = selectedWords.value;
@@ -413,12 +407,13 @@
         mobile-compact
       />
 
-      <div v-if="pageWords.length > 0" class="flex items-center gap-3 px-3 py-2 text-sm text-surface-500 dark:text-surface-400">
-        <Checkbox :model-value="allOnPageSelected" :binary="true" @change="toggleSelectAll" />
-        <span class="text-xs cursor-pointer select-none" @click="toggleSelectAll">
-          {{ selectedWords.length > 0 ? `${selectedWords.length} selected` : `Select page (${pageWords.length})` }}
-        </span>
-      </div>
+      <SrsSelectionRow
+        v-if="pageWords.length > 0"
+        :all-on-page-selected="allOnPageSelected"
+        :selected-count="selectedWords.length"
+        :page-count="pageWords.length"
+        @toggle-page="toggleSelectAll"
+      />
 
       <VocabularyList
         :words="response?.data ?? []"
@@ -434,6 +429,7 @@
         empty-message="Try adjusting your search or filters"
         @remove="confirmRemoveWord"
         @select="toggleSelect"
+        @status-changed="onStatusChanged"
       >
         <template #error="{ error: err }">
           <div>Error: {{ err }}</div>
@@ -457,53 +453,14 @@
 
     <SrsAddWordsDialog v-if="isStaticDeck" v-model:visible="showAddDialog" :deck-id="deckId" @words-added="onWordsAdded" />
 
-    <Transition name="slide-up">
-      <div
-        v-if="selectedKeys.size > 0"
-        class="fixed bottom-0 left-0 right-0 z-40 bg-surface-0 dark:bg-surface-900 border-t border-surface-200 dark:border-surface-700 shadow-[0_-4px_12px_rgba(0,0,0,0.1)] px-4 py-3"
-      >
-        <div class="container mx-auto flex items-center justify-between gap-3">
-          <div class="flex items-center gap-2">
-            <span class="text-sm font-medium">{{ selectedKeys.size }} selected</span>
-            <Button label="Clear" text size="small" severity="secondary" @click="selectedKeys.clear()" />
-          </div>
-          <div class="flex gap-2 flex-wrap justify-end">
-            <template v-for="action in bulkActions" :key="action.label">
-              <Button
-                :icon="action.icon"
-                :label="action.label"
-                size="small"
-                :severity="action.severity"
-                :loading="bulkLoading"
-                class="!hidden sm:!inline-flex"
-                @click="action.run()"
-              />
-              <Button :icon="action.icon" size="small" :severity="action.severity" :loading="bulkLoading" class="sm:!hidden" @click="action.run()" />
-            </template>
-          </div>
-        </div>
-      </div>
-    </Transition>
+    <SrsBulkActionBar
+      :items="selectedWords"
+      :describe="describeWord"
+      :apply-optimistic="applyBulkOptimistic"
+      :extra-actions="extraBulkActions"
+      :busy="bulkLoading"
+      noun="word"
+      @clear="selectedKeys.clear()"
+    />
   </div>
 </template>
-
-<style scoped>
-  .slide-up-enter-active {
-    transition:
-      transform 0.2s ease-out,
-      opacity 0.2s ease-out;
-  }
-  .slide-up-leave-active {
-    transition:
-      transform 0.15s ease-in,
-      opacity 0.15s ease-in;
-  }
-  .slide-up-enter-from {
-    transform: translateY(100%);
-    opacity: 0;
-  }
-  .slide-up-leave-to {
-    transform: translateY(100%);
-    opacity: 0;
-  }
-</style>

@@ -57,6 +57,7 @@
   const { $api } = useNuxtApp();
   const toast = useToast();
   const localiseTitle = useLocaliseTitle();
+  const deckCountText = (count: number) => `${count} ${count === 1 ? 'deck' : 'decks'}`;
 
   const deckFilter = computed(() => {
     const value = Number(route.query.deckId);
@@ -737,7 +738,29 @@
             </template>
 
             <div v-if="selected.franchiseEffect" class="rounded-md px-3 py-2 text-sm bg-amber-50 text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
-              <strong>Franchise effect.</strong> {{ selected.franchiseEffect }}
+              <strong>Franchise effect.</strong>
+              {{ selected.franchiseEffect.into ? 'Will merge the franchise' : 'Will add this deck to the franchise' }}
+              <template v-for="(franchise, i) in selected.franchiseEffect.joining" :key="franchise.franchiseId"
+                ><template v-if="i > 0"> and </template
+                ><NuxtLink
+                  :to="`/franchise/${franchise.franchiseId}`"
+                  target="_blank"
+                  class="!text-inherit font-medium underline decoration-1 underline-offset-2 hover:decoration-2"
+                  v-bind="japaneseTextAttrs(localiseTitle(franchise))"
+                  >{{ localiseTitle(franchise) }}</NuxtLink
+                >
+                ({{ deckCountText(franchise.deckCount) }})</template
+              ><template v-if="selected.franchiseEffect.into">
+                into
+                <NuxtLink
+                  :to="`/franchise/${selected.franchiseEffect.into.franchiseId}`"
+                  target="_blank"
+                  class="!text-inherit font-medium underline decoration-1 underline-offset-2 hover:decoration-2"
+                  v-bind="japaneseTextAttrs(localiseTitle(selected.franchiseEffect.into))"
+                  >{{ localiseTitle(selected.franchiseEffect.into) }}</NuxtLink
+                >
+                ({{ deckCountText(selected.franchiseEffect.into.deckCount) }}). Franchise pages and study decks built from them will change.</template
+              ><template v-else>.</template>
             </div>
 
             <div

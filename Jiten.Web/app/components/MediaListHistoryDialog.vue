@@ -276,6 +276,12 @@
   }
 
   const pickingPastFinish = ref(false);
+  const pastState = ref<MediaListEntryState.Completed | MediaListEntryState.Dropped>(MediaListEntryState.Completed);
+  const pastStateOptions = [
+    { label: 'Finished', value: MediaListEntryState.Completed },
+    { label: 'Stopped', value: MediaListEntryState.Dropped },
+  ];
+  const pastDateLabel = computed(() => `When did you ${pastState.value === MediaListEntryState.Dropped ? 'stop' : 'finish'} that ${words.value.noun}?`);
   const highlightedEntryId = ref<number | null>(null);
   const entryElements = new Map<number, HTMLElement>();
   let highlightTimer: ReturnType<typeof setTimeout> | undefined;
@@ -289,7 +295,7 @@
     const saved = await action('past', () =>
       $api<MediaListEntriesResponse>(`user/media-list/entries/${deck.value.deckId}`, {
         method: 'POST',
-        body: { state: MediaListEntryState.Completed, finishedOn },
+        body: { state: pastState.value, finishedOn },
       })
     );
 
@@ -549,10 +555,21 @@
           <template v-if="deck.childrenDeckCount > 0">{{ seriesCountNote }}</template>
         </p>
 
-        <div v-if="pickingPastFinish" class="rounded-md border border-gray-200 dark:border-gray-700 p-1 self-end">
+        <div v-if="pickingPastFinish" class="flex flex-col gap-2 rounded-md border border-gray-200 dark:border-gray-700 p-1 self-end">
+          <SelectButton
+            v-model="pastState"
+            :options="pastStateOptions"
+            option-label="label"
+            option-value="value"
+            :allow-empty="false"
+            :aria-label="`How that ${words.noun} ended`"
+            size="small"
+            class="self-start"
+          />
           <FinishDateChoice
-            :label="`When did you finish that ${words.noun}?`"
+            :label="pastDateLabel"
             :release-date="deck.releaseDate"
+            :hide-release="pastState === MediaListEntryState.Dropped"
             back-label="Cancel"
             closes
             @choose="addPastRead"

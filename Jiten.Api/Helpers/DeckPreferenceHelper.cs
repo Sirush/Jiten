@@ -22,12 +22,13 @@ public static class DeckPreferenceHelper
     /// <paramref name="date"/> is the day the status took effect for the entries it opens or closes; null records it as unknown.
     /// <paramref name="newEntry"/> starts a new pass on titles already completed instead of reopening their completion.
     /// <paramref name="undoCompletion"/> turns the completion of a title dropped from Completed into a dropped pass.
+    /// <paramref name="recordNewDrop"/> records a dropped pass for titles dropped without being on the list.
     /// </summary>
     public static async Task<DeckStatusApplyOutcome> ApplyStatusesAsync(
         UserDbContext userContext, JitenDbContext jitenContext, string userId,
         IReadOnlyCollection<(int DeckId, DeckStatus Status)> entries,
         bool overwriteExisting, bool skipIgnored,
-        DateOnly? date = null, bool newEntry = false, bool undoCompletion = false)
+        DateOnly? date = null, bool newEntry = false, bool undoCompletion = false, bool recordNewDrop = false)
     {
         var deckIds = entries.Select(e => e.DeckId).ToList();
         var preferences = await userContext.UserDeckPreferences
@@ -66,7 +67,7 @@ public static class DeckPreferenceHelper
                 preferences[deckId] = preference;
                 added++;
                 totalsChanged |= MediaListEntryHelper.ApplyStatus(userContext, preference, status, date, newEntry,
-                                                                  seriesPass: seriesPasses.GetValueOrDefault(deckId));
+                                                                  seriesPass: seriesPasses.GetValueOrDefault(deckId), recordNewDrop: recordNewDrop);
                 preference.Status = status;
                 continue;
             }
@@ -99,7 +100,7 @@ public static class DeckPreferenceHelper
             totalsChanged |= previous == DeckStatus.Completed || status == DeckStatus.Completed;
             totalsChanged |= MediaListEntryHelper.ApplyStatus(userContext, preference, status, date, newEntry,
                                                               deckCharacters.TryGetValue(deckId, out var characters) ? characters : null, undoCompletion,
-                                                              seriesPasses.GetValueOrDefault(deckId));
+                                                              seriesPasses.GetValueOrDefault(deckId), recordNewDrop);
             preference.Status = status;
             if (status == DeckStatus.None)
                 clearedDeckIds.Add(deckId);

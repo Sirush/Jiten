@@ -102,7 +102,6 @@ public class MetadataEditSubmitTests(JitenWebApplicationFactory factory)
 
     public static TheoryData<string, string> InvalidSubmissions => new()
     {
-        { """{"releaseDate":"2007-03-31"}""", "Add at least one source so someone can check this." },
         { """{"releaseDate":"2007-03-31","sources":["javascript:alert(1)"]}""", "Sources need to be links starting with http:// or https://." },
         { """{"releaseDate":"2007-03-31","sources":["https://a.example.com/1","https://a.example.com/2","https://a.example.com/3","https://a.example.com/4","https://a.example.com/5","https://a.example.com/6"]}""", "Add at most 5 sources." },
         { """{"releaseDate":"2007-03-30","sources":["https://vndb.org/v1474"]}""", "Nothing changed." },
