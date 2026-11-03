@@ -20,6 +20,9 @@ import {
   submissionError,
   textDiff,
   diffExcerpt,
+  diffPieces,
+  isRewrite,
+  isWhitespaceOnlyChange,
   normaliseSourceUrl,
   sourcesError,
   rebaseDraft,
@@ -369,6 +372,51 @@ describe('textDiff', () => {
     expect(excerpt[0]).toEqual({ kind: 'gap', text: '…' });
     expect(excerpt.at(-1)).toEqual({ kind: 'gap', text: '…' });
     expect(excerpt.filter((s) => s.kind === 'same').every((s) => s.text.length <= 10)).toBe(true);
+  });
+
+  it('folds short unchanged words between edits into one replacement', () => {
+    expect(render(textDiff('The story follows a group of students.', 'One day Minakami witnessed a ritual.'))).not.toMatch(/\]\w+ \[/);
+    expect(render(textDiff('She told the truth about it.', 'He hid the facts about it.'))).toBe('[remove:She told the truth][add:He hid the facts] about it.');
+  });
+
+  it('treats a mostly different text as a rewrite and a small edit as a diff', () => {
+    const before = 'Subarashiki Hibi is a story told in seven chapters spanning one July in Tokyo.';
+    const after = 'One day, Minakami Yuki witnesses a toy falling through the air on the rooftop.';
+    expect(isRewrite(before, after, textDiff(before, after))).toBe(true);
+    const edited = before.replace('seven', 'six');
+    expect(isRewrite(before, edited, textDiff(before, edited))).toBe(false);
+  });
+
+  it('detects changes to line breaks and spacing alone', () => {
+    expect(isWhitespaceOnlyChange('Escape!\n\nA remake', 'Escape!\nA remake')).toBe(true);
+    expect(isWhitespaceOnlyChange('Escape!', 'Escape?')).toBe(false);
+  });
+
+  it('draws removed line breaks as a mark instead of an invisible struck newline', () => {
+    const pieces = diffPieces(textDiff('escape!\n\nA remake', 'escape!A remake'), true);
+    expect(pieces).toContainEqual({ kind: 'remove', text: '¶', lineBreak: true });
+    expect(pieces.some((p) => p.text.includes('\n'))).toBe(false);
+  });
+
+  it('leaves a paragraph break unmarked when only its blank line count changed', () => {
+    expect(textDiff('One.\n\nTwo.', 'One.\nTwo.')).toEqual([{ kind: 'same', text: 'One.\nTwo.' }]);
+  });
+
+  it('caps compact excerpts at a few changes and a bounded length', () => {
+    const words = Array.from({ length: 40 }, (_, i) => `word${i}`);
+    const changed = words.map((w, i) => (i % 8 === 0 ? `${w}x` : w));
+    const excerpt = diffExcerpt(textDiff(words.join(' '), changed.join(' ')));
+    expect(excerpt.at(-1)).toEqual({ kind: 'gap', text: ' … +3 more' });
+    const added = diffExcerpt(textDiff('Short start.', `Short start. ${'Long added paragraph. '.repeat(20)}`));
+    expect(added.find((s) => s.kind === 'add')!.text.length).toBeLessThanOrEqual(81);
+  });
+
+  it('cuts excerpt context at word boundaries', () => {
+    const before = 'Patton turns to an unlikely ally: the most formidable and brutal warrior of them all.';
+    const after = before.replace('ally:', 'ally: Rance,');
+    const same = diffExcerpt(textDiff(before, after)).filter((s) => s.kind === 'same');
+    expect(same[0]!.text).toBe(' an unlikely ally: ');
+    expect(same.at(-1)!.text).toBe('the most formidable ');
   });
 });
 

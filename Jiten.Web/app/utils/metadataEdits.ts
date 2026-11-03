@@ -417,37 +417,161 @@ export function textDiff(before: string | null, after: string | null): DiffSegme
   }
   ops.push(...a.slice(endA).map((text) => ({ kind: 'same' as const, text })));
 
-  const segments: DiffSegment[] = [];
-  for (const op of ops) {
-    const last = segments[segments.length - 1];
-    if (last && last.kind === op.kind) last.text += op.text;
-    else segments.push({ ...op });
-  }
-  return segments;
+  return hunksToSegments(absorbShortEqualities(keepParagraphBreaks(toHunks(ops))));
 }
 
-/** Keeps only the changed parts with a little unchanged text around each, for one-line timelines. */
-export function diffExcerpt(segments: DiffSegment[], context = 30): DiffSegment[] {
+const LINE_BREAK = /^\s*\n\s*$/;
+
+/** A paragraph break that only changed how many blank lines it has stays unchanged text; the after side's breaks are kept. */
+function keepParagraphBreaks(hunks: Hunk[]): Hunk[] {
+  const merged: Hunk[] = [];
+  for (const hunk of hunks) {
+    const unchanged = hunk.kind === 'edit' && LINE_BREAK.test(hunk.removed) && LINE_BREAK.test(hunk.added) ? { kind: 'same' as const, text: hunk.added } : hunk;
+    const last = merged[merged.length - 1];
+    if (unchanged.kind === 'same' && last?.kind === 'same') last.text += unchanged.text;
+    else merged.push({ ...unchanged });
+  }
+  return merged;
+}
+
+type Hunk = { kind: 'same'; text: string } | { kind: 'edit'; removed: string; added: string };
+
+function toHunks(ops: { kind: Exclude<DiffKind, 'gap'>; text: string }[]): Hunk[] {
+  const hunks: Hunk[] = [];
+  for (const op of ops) {
+    const last = hunks[hunks.length - 1];
+    if (op.kind === 'same') {
+      if (last?.kind === 'same') last.text += op.text;
+      else hunks.push({ kind: 'same', text: op.text });
+      continue;
+    }
+    const edit = last?.kind === 'edit' ? last : (hunks[hunks.push({ kind: 'edit', removed: '', added: '' }) - 1] as Extract<Hunk, { kind: 'edit' }>);
+    if (op.kind === 'remove') edit.removed += op.text;
+    else edit.added += op.text;
+  }
+  return hunks;
+}
+
+const editSize = (hunk: Hunk) => (hunk.kind === 'edit' ? hunk.removed.length + hunk.added.length : 0);
+
+/** Folds an unchanged run no longer than the edits on both sides into them, so a rewritten sentence reads as one replacement instead of alternating word swaps. */
+function absorbShortEqualities(hunks: Hunk[]): Hunk[] {
+  let i = 1;
+  while (i < hunks.length - 1) {
+    const prev = hunks[i - 1]!;
+    const same = hunks[i]!;
+    const next = hunks[i + 1]!;
+    if (prev.kind === 'edit' && same.kind === 'same' && next.kind === 'edit' && same.text.length <= Math.min(editSize(prev), editSize(next))) {
+      hunks.splice(i - 1, 3, { kind: 'edit', removed: prev.removed + same.text + next.removed, added: prev.added + same.text + next.added });
+      i = Math.max(1, i - 2);
+    } else i++;
+  }
+  return hunks;
+}
+
+function hunksToSegments(hunks: Hunk[]): DiffSegment[] {
+  return hunks.flatMap((hunk): DiffSegment[] => {
+    if (hunk.kind === 'same') return [{ kind: 'same', text: hunk.text }];
+    const segments: DiffSegment[] = [];
+    if (hunk.removed) segments.push({ kind: 'remove', text: hunk.removed });
+    if (hunk.added) segments.push({ kind: 'add', text: hunk.added });
+    return segments;
+  });
+}
+
+const visibleLength = (text: string) => text.replace(/\s+/g, '').length;
+
+/** Below this share of kept text, a word-level diff is noise and the change shows as old text then new text. */
+const REWRITE_KEPT_RATIO = 0.4;
+const REWRITE_MIN_LENGTH = 40;
+
+export function isRewrite(before: string, after: string, segments: DiffSegment[]): boolean {
+  const longest = Math.max(visibleLength(before), visibleLength(after));
+  if (longest < REWRITE_MIN_LENGTH) return false;
+  const kept = segments.reduce((sum, s) => sum + (s.kind === 'same' ? visibleLength(s.text) : 0), 0);
+  return kept / longest < REWRITE_KEPT_RATIO;
+}
+
+export function isWhitespaceOnlyChange(before: string, after: string): boolean {
+  return before !== after && before.replace(/\s+/g, '') === after.replace(/\s+/g, '');
+}
+
+/** Keeps the first few changed parts with a little unchanged text around each, for timelines and feeds. */
+export function diffExcerpt(segments: DiffSegment[], context = 20, maxEdit = 80, maxHunks = 2): DiffSegment[] {
   if (segments.length === 1) return segments;
-  return segments.flatMap((segment, index): DiffSegment[] => {
-    if (segment.kind !== 'same') return [segment];
+  const out: DiffSegment[] = [];
+  const head = (chars: string[]) => ({ kind: 'same' as const, text: wordHead(chars, context) });
+  const tail = (chars: string[]) => ({ kind: 'same' as const, text: wordTail(chars, context) });
+  const gap = { kind: 'gap' as const, text: '…' };
+  let hunks = 0;
+
+  for (let index = 0; index < segments.length; index++) {
+    const segment = segments[index]!;
     const chars = [...segment.text];
-    if (chars.length <= context * 2) return [segment];
-    if (index === 0)
-      return [
-        { kind: 'gap', text: '…' },
-        { kind: 'same', text: chars.slice(-context).join('') },
-      ];
-    if (index === segments.length - 1)
-      return [
-        { kind: 'same', text: chars.slice(0, context).join('') },
-        { kind: 'gap', text: '…' },
-      ];
-    return [
-      { kind: 'same', text: chars.slice(0, context).join('') },
-      { kind: 'gap', text: '…' },
-      { kind: 'same', text: chars.slice(-context).join('') },
-    ];
+    if (segment.kind !== 'same') {
+      if (index === 0 || segments[index - 1]!.kind === 'same') hunks++;
+      if (chars.length <= maxEdit) {
+        out.push(segment);
+        continue;
+      }
+      out.push({ kind: segment.kind, text: `${wordHead(chars, maxEdit).trimEnd()}…` });
+      if (index === segments.length - 2 && segments[index + 1]!.kind === 'same') return out;
+      continue;
+    }
+
+    const leading = index === 0;
+    const truncated = index < segments.length - 1 && hunks === maxHunks;
+    if (truncated) {
+      out.push(head(chars), { kind: 'gap', text: ` … +${countHunks(segments.slice(index))} more` });
+      return out;
+    }
+    const trailing = index === segments.length - 1;
+    if (chars.length <= (leading || trailing ? context : context * 2)) out.push(segment);
+    else if (leading) out.push(gap, tail(chars));
+    else if (trailing) out.push(head(chars), gap);
+    else out.push(head(chars), gap, tail(chars));
+  }
+  return out;
+}
+
+/** Cuts at the last space inside the limit so Latin words stay whole; text without spaces, like Japanese, cuts at the limit. */
+function wordHead(chars: string[], limit: number): string {
+  const text = chars.slice(0, limit).join('');
+  if (chars.length <= limit || /\s/.test(chars[limit]!)) return text;
+  const space = text.search(/\s\S*$/);
+  return space > 0 ? text.slice(0, space + 1) : text;
+}
+
+function wordTail(chars: string[], limit: number): string {
+  const text = chars.slice(-limit).join('');
+  if (chars.length <= limit || /\s/.test(chars[chars.length - limit - 1]!)) return text;
+  const space = text.search(/\s/);
+  return space >= 0 && space < text.length - 1 ? text.slice(space) : text;
+}
+
+function countHunks(segments: DiffSegment[]): number {
+  return segments.reduce((count, s, i) => count + (s.kind !== 'same' && (i === 0 || segments[i - 1]!.kind === 'same') ? 1 : 0), 0);
+}
+
+export interface DiffPiece {
+  kind: DiffKind;
+  text: string;
+  /** A line break that was added or removed, drawn as a pilcrow because a bare newline has nothing to colour. */
+  lineBreak?: boolean;
+}
+
+/** Splits changed segments around line breaks; in compact rows, where newlines collapse, unchanged breaks become spaces. */
+export function diffPieces(segments: DiffSegment[], compact: boolean): DiffPiece[] {
+  return segments.flatMap((segment): DiffPiece[] => {
+    if (segment.kind === 'same' || segment.kind === 'gap') return [segment];
+    return segment.text
+      .split(/(\s*\n\s*)/)
+      .filter(Boolean)
+      .flatMap((part): DiffPiece[] => {
+        if (!part.includes('\n')) return [{ kind: segment.kind, text: part }];
+        const mark: DiffPiece = { kind: segment.kind, text: '¶', lineBreak: true };
+        return segment.kind === 'add' && !compact ? [mark, { kind: 'same', text: part }] : [mark];
+      });
   });
 }
 
