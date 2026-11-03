@@ -659,7 +659,7 @@ public class ProfileTests(JitenWebApplicationFactory factory)
         ownTypes.GetProperty("characters").GetInt64().Should().Be(5850);
 
         var others = await (await Get($"/api/user/profile/{TestUsers.UserA}/stats", TestUsers.UserB)).Content.ReadFromJsonAsync<JsonElement>();
-        others.GetProperty("mediaTypes")[0].GetProperty("characters").GetInt64().Should().Be(5600);
+        others.GetProperty("mediaTypes")[0].GetProperty("characters").GetInt64().Should().Be(5850);
     }
 
     [Fact]
@@ -701,7 +701,7 @@ public class ProfileTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task CharactersMatchAcrossSectionsAndKeepProgressPrivate()
+    public async Task CharactersIncludeProgressForEveryViewer()
     {
         await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
         await SetPrivacy(TestUsers.UserA, """{"profile":"public","sections":{"stats":"everyone"}}""");
@@ -713,10 +713,11 @@ public class ProfileTests(JitenWebApplicationFactory factory)
                                                UserId = TestUsers.UserA, MediaType = null, CompletedDeckCount = 3, CompletedUnitCount = 3,
                                                TotalCharacterCount = 120_000, UnfinishedCharacterCount = 5_000
                                            });
+            userDb.UserAccomplishments.Add(new UserAccomplishment { UserId = TestUsers.UserA, MediaType = MediaType.Novel, UnfinishedCharacterCount = 5_000 });
             await userDb.SaveChangesAsync();
         }
 
-        foreach (var (viewer, characters) in new[] { (TestUsers.UserA, 125_000L), (TestUsers.UserB, 120_000L) })
+        foreach (var (viewer, characters) in new[] { (TestUsers.UserA, 125_000L), (TestUsers.UserB, 125_000L) })
         {
             var overview = await (await Get($"/api/user/profile/{TestUsers.UserA}/overview", viewer)).Content.ReadFromJsonAsync<JsonElement>();
             overview.GetProperty("snapshot").GetProperty("characters").GetInt64().Should().Be(characters);
@@ -725,13 +726,15 @@ public class ProfileTests(JitenWebApplicationFactory factory)
         }
 
         var othersTotals = await (await Get($"/api/user/profile/{TestUsers.UserA}/accomplishments", TestUsers.UserB)).Content.ReadFromJsonAsync<JsonElement>();
-        othersTotals[0].GetProperty("unfinishedCharacterCount").GetInt64().Should().Be(0);
+        othersTotals.GetArrayLength().Should().Be(2);
+        othersTotals[0].GetProperty("unfinishedCharacterCount").GetInt64().Should().Be(5_000);
 
         await SetPrivacy(TestUsers.UserA, """{"profile":"public","sections":{"stats":"everyone"},"hiddenFields":["characters"]}""");
         var hiddenStats = await (await Get($"/api/user/profile/{TestUsers.UserA}/stats", TestUsers.UserB)).Content.ReadFromJsonAsync<JsonElement>();
         hiddenStats.GetProperty("characters").ValueKind.Should().Be(JsonValueKind.Null);
         var hiddenTotals = await (await Get($"/api/user/profile/{TestUsers.UserA}/accomplishments", TestUsers.UserB)).Content.ReadFromJsonAsync<JsonElement>();
         hiddenTotals[0].GetProperty("totalCharacterCount").GetInt64().Should().Be(0);
+        hiddenTotals[0].GetProperty("unfinishedCharacterCount").GetInt64().Should().Be(0);
     }
 
     [Fact]

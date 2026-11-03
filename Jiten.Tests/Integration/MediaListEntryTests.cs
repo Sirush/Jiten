@@ -711,7 +711,7 @@ public class MediaListEntryTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
-    public async Task PublicList_KeepsEntriesAndUnfinishedCountsPrivate()
+    public async Task PublicList_KeepsEntriesPrivateButNotTotals()
     {
         var deckId = await SeedDeck("VN");
         await SetStatus(deckId, DeckStatus.Completed, new { date = "2024-05-12" });
@@ -730,26 +730,24 @@ public class MediaListEntryTests(JitenWebApplicationFactory factory)
         var listUrl = $"/api/user/profile/{TestUsers.UserA}/media-list";
         var accomplishmentsUrl = $"/api/user/profile/{TestUsers.UserA}/accomplishments";
         var unfinishedOnlyUrl = $"/api/user/user/{TestUsers.UserA}/accomplishments/{MediaType.Novel}";
+        foreach (var viewer in new[] { null, TestUsers.UserB, TestUsers.UserA })
+        {
+            var totals = (await Get(accomplishmentsUrl, viewer)).EnumerateArray().ToList();
+            totals.Should().HaveCount(2);
+            var global = totals.Single(t => t.GetProperty("mediaType").ValueKind == JsonValueKind.Null);
+            global.GetProperty("unfinishedCharacterCount").GetInt64().Should().Be(500);
+            global.GetProperty("totalCharacterCount").GetInt64().Should().Be(3000);
+            (await Get(unfinishedOnlyUrl, viewer)).GetProperty("unfinishedCharacterCount").GetInt64().Should().Be(200);
+        }
+
         foreach (var viewer in new[] { null, TestUsers.UserB })
         {
             var deck = (await Get(listUrl, viewer)).EnumerateArray().Single();
             (deck.TryGetProperty("listEntry", out var listEntry) ? listEntry.ValueKind : JsonValueKind.Null).Should().Be(JsonValueKind.Null);
-            var totals = (await Get(accomplishmentsUrl, viewer)).EnumerateArray().Single();
-            totals.GetProperty("unfinishedCharacterCount").GetInt64().Should().Be(0);
-            totals.GetProperty("totalCharacterCount").GetInt64().Should().Be(3000);
-
-            var unfinishedOnly = new HttpRequestMessage(HttpMethod.Get, unfinishedOnlyUrl);
-            if (viewer != null)
-                unfinishedOnly.WithUser(viewer);
-            (await _client.SendAsync(unfinishedOnly)).StatusCode.Should().Be(HttpStatusCode.NotFound);
         }
 
         (await Get(listUrl, TestUsers.UserA)).EnumerateArray().Single().GetProperty("listEntry").GetProperty("finishedOn").GetString()
                                             .Should().Be("2024-05-12");
-        var ownTotals = (await Get(accomplishmentsUrl, TestUsers.UserA)).EnumerateArray().ToList();
-        ownTotals.Should().HaveCount(2);
-        ownTotals.Single(t => t.GetProperty("mediaType").ValueKind == JsonValueKind.Null).GetProperty("unfinishedCharacterCount").GetInt64().Should().Be(500);
-        (await Get(unfinishedOnlyUrl, TestUsers.UserA)).GetProperty("unfinishedCharacterCount").GetInt64().Should().Be(200);
     }
 
     [Fact]

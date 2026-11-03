@@ -3134,7 +3134,7 @@ public partial class UserController(
                                                .OrderBy(ua => ua.MediaType)
                                                .ToListAsync();
 
-        return Results.Ok(access.IsOwner ? accomplishments : HideEntryTotals(accomplishments, access));
+        return Results.Ok(HideCharacters(accomplishments, access));
     }
 
     /// <summary>
@@ -3154,25 +3154,21 @@ public partial class UserController(
 
         if (accomplishment == null)
             return Results.NotFound();
-        if (access.IsOwner)
-            return Results.Ok(accomplishment);
 
-        var visible = HideEntryTotals([accomplishment], access);
-        return visible.Count == 0 ? Results.NotFound() : Results.Ok(visible[0]);
+        return Results.Ok(HideCharacters([accomplishment], access)[0]);
     }
 
-    /// <summary>Counts typed on unfinished media list entries are private; other viewers see completed titles only, without characters when the owner hides that field. Expects untracked rows.</summary>
-    private static List<UserAccomplishment> HideEntryTotals(IEnumerable<UserAccomplishment> accomplishments, ProfileContext access)
+    private static List<UserAccomplishment> HideCharacters(List<UserAccomplishment> accomplishments, ProfileContext access)
     {
-        var hideCharacters = !access.Shows(ProfileField.Characters);
-        var visible = accomplishments.Where(a => a.CompletedUnitCount > 0).ToList();
-        foreach (var accomplishment in visible)
+        if (access.Shows(ProfileField.Characters))
+            return accomplishments;
+
+        foreach (var accomplishment in accomplishments)
         {
+            accomplishment.TotalCharacterCount = 0;
             accomplishment.UnfinishedCharacterCount = 0;
-            if (hideCharacters)
-                accomplishment.TotalCharacterCount = 0;
         }
-        return visible;
+        return accomplishments;
     }
 
     /// <summary>
@@ -3645,7 +3641,7 @@ public partial class UserController(
                                                .OrderBy(ua => ua.MediaType)
                                                .ToListAsync();
 
-        return Results.Ok(access.IsOwner ? accomplishments : HideEntryTotals(accomplishments, access));
+        return Results.Ok(HideCharacters(accomplishments, access));
     }
 
     /// <summary>

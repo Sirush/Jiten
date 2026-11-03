@@ -221,7 +221,7 @@ public partial class UserController
             dto.Genres = (await cache.GetOrSetAsync(ProfileCacheKind.Genres, async () =>
                          {
                              var ledger = await ReadingTally.LoadAsync(jitenContext, userContext, userId);
-                             var reading = ReadingTally.CharactersByTitle(ledger, ReadingTally.CreditCompletedReading(ledger), withUnfinished: access.IsOwner);
+                             var reading = ReadingTally.CharactersByTitle(ledger, ReadingTally.CreditCompletedReading(ledger), withUnfinished: true);
                              var hiddenReading = await profileAccess.GetHiddenDeckIdsAsync(access, reading.Keys.ToList());
                              return await ComputeGenreSharesAsync(reading.Where(kv => !hiddenReading.Contains(kv.Key)).ToDictionary(), splitAcrossGenres: true);
                          })).Take(OverviewGenreCount).ToList();
@@ -552,11 +552,10 @@ public partial class UserController
 
     private sealed record LifetimeTotals(int CompletedDeckCount, long CharactersRead);
 
-    /// <summary>Private titles count for everyone; reading in progress only for the owner, as counts typed on unfinished entries are private.</summary>
     private async Task<LifetimeTotals> LoadLifetimeTotalsAsync(ProfileContext access) =>
         await userContext.UserAccomplishments.AsNoTracking()
                          .Where(a => a.UserId == access.UserId && a.MediaType == null)
-                         .Select(a => new LifetimeTotals(a.CompletedDeckCount, a.TotalCharacterCount + (access.IsOwner ? a.UnfinishedCharacterCount : 0)))
+                         .Select(a => new LifetimeTotals(a.CompletedDeckCount, a.TotalCharacterCount + a.UnfinishedCharacterCount))
                          .FirstOrDefaultAsync()
         ?? new LifetimeTotals(0, 0);
 
@@ -791,7 +790,7 @@ public partial class UserController
         var userId = access.UserId;
         var ledger = await ReadingTally.LoadAsync(jitenContext, userContext, userId);
         var credits = ReadingTally.CreditCompletedReading(ledger);
-        var reading = ReadingTally.CharactersByTitle(ledger, credits, withUnfinished: access.IsOwner);
+        var reading = ReadingTally.CharactersByTitle(ledger, credits, withUnfinished: true);
         var hidden = await profileAccess.GetHiddenDeckIdsAsync(access, ledger.FinishedTitleIds.Union(reading.Keys).ToList());
         var finishedIds = ledger.FinishedTitleIds.Where(id => !hidden.Contains(id)).ToList();
 
@@ -839,7 +838,7 @@ public partial class UserController
 
         var finishedByType = ledger.CompletedDecks.Where(d => d.ParentDeckId == null).GroupBy(d => d.MediaType).ToDictionary(g => g.Key, g => g.Count());
         var charactersByType = credits.Select(c => (c.MediaType, c.Characters))
-                                      .Concat(access.IsOwner ? ledger.Unfinished.Values : [])
+                                      .Concat(ledger.Unfinished.Values)
                                       .GroupBy(c => c.MediaType)
                                       .ToDictionary(g => g.Key, g => g.Sum(c => c.Characters));
         dto.MediaTypes = finishedByType.Keys.Union(charactersByType.Keys)
