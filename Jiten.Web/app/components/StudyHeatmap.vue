@@ -25,6 +25,8 @@
   const CELL_SIZE = 11;
   /** Largest cell the rolling view grows to when filling a wide card, in px. */
   const MAX_CELL_SIZE = 16;
+  /** Smallest cell the rolling view shrinks to before it scrolls instead, in px. */
+  const MIN_ROLLING_CELL_SIZE = 8;
   const CELL_GAP = 2;
   const LABEL_WIDTH = 28;
   const cellSize = ref(CELL_SIZE);
@@ -67,8 +69,8 @@
     resizeObserver?.disconnect();
     if (!el || !props.rolling) return;
     resizeObserver = new ResizeObserver(([entry]) => {
-      const fit = ((entry?.contentRect.width ?? 0) - LABEL_WIDTH - 1) / Math.max(1, weeks.value.length) - CELL_GAP;
-      cellSize.value = Math.min(MAX_CELL_SIZE, Math.max(CELL_SIZE, fit));
+      const fit = Math.floor((((entry?.contentRect.width ?? 0) - LABEL_WIDTH - 1) / Math.max(1, weeks.value.length) - CELL_GAP) * 4) / 4;
+      cellSize.value = Math.min(MAX_CELL_SIZE, Math.max(MIN_ROLLING_CELL_SIZE, fit));
       el.scrollLeft = el.scrollWidth;
     });
     resizeObserver.observe(el);
@@ -145,6 +147,7 @@
       }
     }
     if (labels.length > 1 && labels[1]!.col - labels[0]!.col < 3) labels.shift();
+    if (labels.length > 1 && weeks.value.length - labels[labels.length - 1]!.col < 3) labels.pop();
     return labels;
   });
 

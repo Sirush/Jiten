@@ -1,5 +1,13 @@
 import { defineStore } from 'pinia';
-import { type DifficultyDisplayStyle, DifficultyValueDisplayStyle, MediaType, type SentenceFuriganaMode, ThemeMode, TitleLanguage } from '~/types';
+import {
+  type DifficultyDisplayStyle,
+  DifficultyValueDisplayStyle,
+  MediaType,
+  type ProfileChartMeasure,
+  type SentenceFuriganaMode,
+  ThemeMode,
+  TitleLanguage,
+} from '~/types';
 import type { DisplayType as KanjiGridGrouping, KanjiScalePref } from '~/data/kanjiGroupings';
 import { DEFAULT_TTS_VOLUME } from '~/utils/ttsVolume';
 import type { CoverageScale } from '~/utils/coverageAxis';
@@ -252,6 +260,10 @@ export const useJitenStore = defineStore('jiten', () => {
   const coverageJourneyScale = createLocalStorageState<CoverageScale>('coverage-journey-scale', 'fit');
 
   const profileLadderSplitTypes = createCookieState<MediaType[]>('profile-ladder-split', [MediaType.Novel, MediaType.NonFiction]);
+  const profileLadderTrend = createCookieState<boolean>('profile-ladder-trend', false);
+  /** Keyed by stats chart; a chart without an entry counts titles, or characters for the per-month chart. */
+  const profileChartMeasures = createCookieState<Record<string, ProfileChartMeasure>>('profile-chart-measures', {});
+  const profileMonthGrouping = createCookieState<'month' | 'year'>('profile-month-grouping', 'month');
 
   const franchiseLinkMode = createLocalStorageState<FranchiseLinkMode>('franchise-link-mode', 'all');
   const franchiseCardSize = createLocalStorageState<FranchiseCardSize>('franchise-card-size', 'covers');
@@ -342,6 +354,9 @@ export const useJitenStore = defineStore('jiten', () => {
     separatePriorKnowledge,
     coverageJourneyScale,
     profileLadderSplitTypes,
+    profileLadderTrend,
+    profileChartMeasures,
+    profileMonthGrouping,
     franchiseLinkMode,
     franchiseCardSize,
     franchiseSeriesDensity,

@@ -318,10 +318,12 @@ public class ProfileTests(JitenWebApplicationFactory factory)
 
         var others = await (await Get($"/api/user/profile/{TestUsers.UserA}/stats", TestUsers.UserB)).Content.ReadFromJsonAsync<JsonElement>();
         others.GetProperty("genres").ValueKind.Should().Be(JsonValueKind.Null);
+        others.GetProperty("genresByMediaType").ValueKind.Should().Be(JsonValueKind.Null);
         others.GetProperty("mediaTypes").GetArrayLength().Should().Be(1);
 
         var own = await (await Get($"/api/user/profile/{TestUsers.UserA}/stats", TestUsers.UserA)).Content.ReadFromJsonAsync<JsonElement>();
         own.GetProperty("genres").GetArrayLength().Should().Be(1);
+        own.GetProperty("genresByMediaType")[0].GetProperty("mediaType").GetInt32().Should().Be((int)MediaType.Novel);
     }
 
     [Fact]
@@ -646,6 +648,12 @@ public class ProfileTests(JitenWebApplicationFactory factory)
         own.GetProperty("charactersByMonth").EnumerateArray()
            .ToDictionary(m => m.GetProperty("month").GetString()!, m => m.GetProperty("characters").GetInt64())
            .Should().Equal(new Dictionary<string, long> { ["2026-01"] = 1600, ["2026-02"] = 1000, ["2026-03"] = 1000, ["2026-04"] = 2000 });
+        own.GetProperty("charactersByMonth").EnumerateArray()
+           .ToDictionary(m => m.GetProperty("month").GetString()!, m => m.GetProperty("titles").GetInt32())
+           .Should().Equal(new Dictionary<string, int> { ["2026-01"] = 1, ["2026-02"] = 0, ["2026-03"] = 1, ["2026-04"] = 1 });
+        var lengths = own.GetProperty("lengths").EnumerateArray().Single();
+        lengths.GetProperty("mediaType").GetInt32().Should().Be((int)MediaType.Novel);
+        lengths.GetProperty("characters").GetInt64().Should().Be(4600);
         var ownTypes = own.GetProperty("mediaTypes")[0];
         ownTypes.GetProperty("count").GetInt32().Should().Be(2);
         ownTypes.GetProperty("characters").GetInt64().Should().Be(5850);
@@ -675,17 +683,21 @@ public class ProfileTests(JitenWebApplicationFactory factory)
         await SetStatus(TestUsers.UserA, manga, DeckStatus.Completed);
         await AddEntry(await SeedDeck("Manga volume", manga, mediaType: MediaType.Manga), MediaListEntryState.Completed, new DateOnly(2026, 5, 1));
 
+        await SetStatus(TestUsers.UserA, await SeedDeck("Undated manga", mediaType: MediaType.Manga), DeckStatus.Completed);
+
         var whole = await (await Get($"/api/user/profile/{TestUsers.UserA}/stats/ladder", TestUsers.UserA)).Content.ReadFromJsonAsync<JsonElement>();
         whole.GetProperty("points").EnumerateArray().Select(p => p.GetProperty("title").GetString()).Should().Equal("Series", "Manga");
         whole.GetProperty("points")[0].GetProperty("finishedOn").GetString().Should().Be("2026-03-01");
+        whole.GetProperty("points")[1].GetProperty("mediaType").GetInt32().Should().Be((int)MediaType.Manga);
         whole.GetProperty("volumeTypes").EnumerateArray().Select(t => t.GetInt32()).Should().Equal((int)MediaType.Novel, (int)MediaType.Manga);
 
         var split = await (await Get($"/api/user/profile/{TestUsers.UserA}/stats/ladder?split={(int)MediaType.Novel}", TestUsers.UserA))
                           .Content.ReadFromJsonAsync<JsonElement>();
         split.GetProperty("points").EnumerateArray().Select(p => p.GetProperty("volumeTitle").GetString() ?? p.GetProperty("title").GetString())
              .Should().Equal("Volume 1", "Volume 2", "Part-read volume", "Manga");
-        split.GetProperty("undatedVolumes").GetInt32().Should().Be(1);
-        split.GetProperty("undatedTitles").GetInt32().Should().Be(0);
+        split.GetProperty("undated").EnumerateArray()
+             .Select(u => (u.GetProperty("mediaType").GetInt32(), u.GetProperty("titles").GetInt32(), u.GetProperty("volumes").GetInt32()))
+             .Should().Equal(((int)MediaType.Novel, 0, 1), ((int)MediaType.Manga, 1, 0));
     }
 
     [Fact]

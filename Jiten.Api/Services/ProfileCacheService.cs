@@ -7,7 +7,7 @@ namespace Jiten.Api.Services;
 /// <summary>With <c>PerViewer</c>, each viewer kind gets its own entry, since what each may see differs.</summary>
 public sealed record ProfileCacheKind(string Name, TimeSpan Ttl, bool PerViewer)
 {
-    public static readonly ProfileCacheKind Stats = new("profile-stats", TimeSpan.FromMinutes(10), PerViewer: true);
+    public static readonly ProfileCacheKind Stats = new("profile-stats-2", TimeSpan.FromMinutes(10), PerViewer: true);
     public static readonly ProfileCacheKind Genres = new("profile-genres", TimeSpan.FromMinutes(10), PerViewer: true);
 
     /// <summary>Counting loads every FSRS card for the user, and the profile endpoints are anonymous and crawlable.</summary>

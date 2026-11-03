@@ -116,11 +116,15 @@ public class ProfileStatsDto
     public List<ProfileMonthDto> CharactersByMonth { get; set; } = [];
     public List<ProfileCountDto> MediaTypes { get; set; } = [];
     public List<ProfileGenreShareDto>? Genres { get; set; }
-    public List<ProfileCountDto> Difficulty { get; set; } = [];
-    public List<ProfileCountDto> CoverageAtFinish { get; set; } = [];
-    public List<ProfileCountDto> Scores { get; set; } = [];
-    public List<ProfileCountDto> Lengths { get; set; } = [];
-    public List<ProfileCountDto> ReleaseYears { get; set; } = [];
+
+    /// <summary>The same shares computed over one media type's reading; null with <see cref="Genres"/>.</summary>
+    public List<ProfileMediaTypeGenresDto>? GenresByMediaType { get; set; }
+
+    public List<ProfileBucketDto> Difficulty { get; set; } = [];
+    public List<ProfileBucketDto> CoverageAtFinish { get; set; } = [];
+    public List<ProfileBucketDto> Scores { get; set; } = [];
+    public List<ProfileBucketDto> Lengths { get; set; } = [];
+    public List<ProfileBucketDto> ReleaseYears { get; set; } = [];
 
     /// <summary>Null when hidden from this viewer or before the owner's coverage was first computed.</summary>
     public ProfileReadableDto? Readable { get; set; }
@@ -156,11 +160,8 @@ public class ProfileLadderDto
 {
     public List<ProfileLadderPointDto> Points { get; set; } = [];
 
-    /// <summary>Finished titles left off the chart because no finish date is recorded.</summary>
-    public int UndatedTitles { get; set; }
-
-    /// <summary>Completed volumes of split titles left off the chart because no finish date is recorded.</summary>
-    public int UndatedVolumes { get; set; }
+    /// <summary>Finished titles and completed volumes of split titles left off the chart because no finish date is recorded, per media type.</summary>
+    public List<ProfileLadderUndatedDto> Undated { get; set; } = [];
 
     /// <summary>Media types with a completed volume or episode, the ones a viewer can split.</summary>
     public List<MediaType> VolumeTypes { get; set; } = [];
@@ -177,8 +178,16 @@ public class ProfileLadderPointDto
     public string? EnglishTitle { get; set; }
     public bool IsVolume { get; set; }
     public string? VolumeTitle { get; set; }
+    public MediaType MediaType { get; set; }
     public DateOnly FinishedOn { get; set; }
     public float Difficulty { get; set; }
+}
+
+public class ProfileLadderUndatedDto
+{
+    public MediaType MediaType { get; set; }
+    public int Titles { get; set; }
+    public int Volumes { get; set; }
 }
 
 public class ProfileMonthDto
@@ -186,7 +195,28 @@ public class ProfileMonthDto
     /// <summary>yyyy-MM.</summary>
     public string Month { get; set; } = "";
 
+    public MediaType MediaType { get; set; }
     public long Characters { get; set; }
+
+    /// <summary>Completions of whole titles that month; a reread counts again.</summary>
+    public int Titles { get; set; }
+}
+
+/// <summary>Finished titles of one media type in one bucket of a stats chart.</summary>
+public class ProfileBucketDto
+{
+    public string Key { get; set; } = "";
+    public MediaType MediaType { get; set; }
+    public int Count { get; set; }
+
+    /// <summary>Characters read in those titles, rereads included.</summary>
+    public long Characters { get; set; }
+}
+
+public class ProfileMediaTypeGenresDto
+{
+    public MediaType MediaType { get; set; }
+    public List<ProfileGenreShareDto> Genres { get; set; } = [];
 }
 
 public class ProfileCountDto

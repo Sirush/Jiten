@@ -1,15 +1,18 @@
 <script setup lang="ts">
   import { Scatter } from 'vue-chartjs';
-  import { Chart as ChartJS, LinearScale, PointElement, Tooltip as ChartTooltip, type ChartData, type ChartOptions } from 'chart.js';
+  import { Chart as ChartJS, LinearScale, LineElement, PointElement, Tooltip as ChartTooltip, type ChartData, type ChartOptions } from 'chart.js';
   import type { ProfileLadderPoint } from '~/types';
   import { formatDateShort, formatMonthYear } from '~/utils/dateFormat';
   import { difficultyNames, EXPERT_BAND, shelfDifficultyBand } from '~/utils/difficultyColours';
+  import { rollingMedian } from '~/utils/rollingMedian';
 
-  ChartJS.register(LinearScale, PointElement, ChartTooltip);
+  ChartJS.register(LinearScale, LineElement, PointElement, ChartTooltip);
 
-  const props = defineProps<{ points: ProfileLadderPoint[] }>();
+  const props = withDefaults(defineProps<{ points: ProfileLadderPoint[]; trend?: boolean }>(), { trend: false });
 
   const AXIS = '#6b7280';
+  const TREND = 'rgba(107, 114, 128, 0.85)';
+  const DOTS = 0;
   const GRID = 'rgba(107, 114, 128, 0.15)';
 
   const { chartColour } = useDifficultyColours();
@@ -84,6 +87,12 @@
 
   const tickLabel = (value: number) => (tickStep.value >= 12 ? String(new Date(value).getUTCFullYear()) : formatMonthYear(value, { utc: true }));
 
+  const trendLine = computed(() => {
+    if (!props.trend) return [];
+    const medians = rollingMedian(props.points.map((p) => plotted(p.difficulty)));
+    return props.points.map((p, i) => ({ x: time(p), y: medians[i]! }));
+  });
+
   const chartData = computed<ChartData<'scatter'>>(() => ({
     datasets: [
       {
@@ -94,9 +103,23 @@
         pointRadius: 5,
         pointHoverRadius: 7,
         pointHitRadius: 10,
+        order: 0,
+      },
+      {
+        data: trendLine.value,
+        showLine: true,
+        borderColor: TREND,
+        borderWidth: 2,
+        cubicInterpolationMode: 'monotone',
+        pointRadius: 0,
+        pointHoverRadius: 0,
+        pointHitRadius: 0,
+        order: 1,
       },
     ],
   }));
+
+  const dotUnder = (elements: { datasetIndex: number; index: number }[]) => elements.find((e) => e.datasetIndex === DOTS);
 
   const options = computed<ChartOptions<'scatter'>>(() => ({
     responsive: true,
@@ -111,6 +134,7 @@
         titleMarginBottom: 6,
         boxPadding: 4,
         usePointStyle: true,
+        filter: (item) => item.datasetIndex === DOTS,
         itemSort: (a, b) => (props.points[a.dataIndex]!.volumeTitle ?? '').localeCompare(props.points[b.dataIndex]!.volumeTitle ?? '', undefined, { numeric: true }),
         callbacks: {
           title: (items) => {
@@ -163,12 +187,14 @@
       },
     },
     onClick: (_event, elements) => {
-      const deckId = elements[0] ? props.points[elements[0].index]!.deckId : null;
+      const dot = dotUnder(elements);
+      const deckId = dot ? props.points[dot.index]!.deckId : null;
       if (deckId) navigateTo(`/decks/media/${deckId}/detail`);
     },
     onHover: (event, elements) => {
       const target = event.native?.target as HTMLElement | undefined;
-      if (target) target.style.cursor = elements[0] && props.points[elements[0].index]!.deckId ? 'pointer' : 'default';
+      const dot = dotUnder(elements);
+      if (target) target.style.cursor = dot && props.points[dot.index]!.deckId ? 'pointer' : 'default';
     },
   }));
 </script>
@@ -177,7 +203,7 @@
   <div
     class="h-64"
     role="img"
-    :aria-label="`Difficulty of ${points.length} finished ${points.some((p) => p.isVolume) ? 'titles and volumes' : 'titles'} over time`"
+    :aria-label="`Difficulty of ${points.length} finished ${points.some((p) => p.isVolume) ? 'titles and volumes' : 'titles'} over time${trend ? ', with a trend line' : ''}`"
   >
     <Scatter :data="chartData" :options="options" />
   </div>
