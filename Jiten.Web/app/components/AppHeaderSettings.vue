@@ -73,11 +73,11 @@
     }, 750);
   };
 
-  const toggle = (event: boolean) => {
+  const toggle = (event: Event) => {
     settings.value.toggle(event);
   };
 
-  const show = (event: boolean) => {
+  const show = (event: Event) => {
     settings.value.show(event);
   };
 

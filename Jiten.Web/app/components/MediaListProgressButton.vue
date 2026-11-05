@@ -27,9 +27,11 @@
 
   const { menu, rememberTrigger, restoreFocus } = useMenuFocus();
 
+  const { component: statusFlowSteps, openWithSteps } = useLazyStatusFlowSteps();
+
   function toggle(event: Event) {
     rememberTrigger(event);
-    popover.value?.toggle(event);
+    void openWithSteps(event, (e) => popover.value?.toggle(e));
   }
 
   function onHide() {
@@ -57,7 +59,7 @@
 
     <Popover ref="popover" :pt="{ content: { class: 'p-1' } }" @show="open = true" @hide="onHide">
       <div ref="menu">
-        <StatusFlowSteps :deck="deck" :flow="flow" @open-history="openHistory" />
+        <component :is="statusFlowSteps" v-if="statusFlowSteps" :deck="deck" :flow="flow" @open-history="openHistory" />
       </div>
     </Popover>
   </span>

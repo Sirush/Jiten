@@ -24,7 +24,7 @@
       { label: 'Characters', value: s.characters },
       { label: 'Titles finished', value: s.titlesFinished },
     ]
-      .filter((x): x is { label: string; value: number } => x.value != null)
+      .filter((x): x is { label: string; value: number } => !!x.value)
       .map((x) => ({ label: x.label, value: formatCompact(x.value) }));
   });
 </script>

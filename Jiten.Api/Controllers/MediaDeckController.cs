@@ -102,19 +102,35 @@ public class MediaDeckController(
         return await context.Decks.AsNoTracking().Where(d => d.ParentDeckId == null).Select(d => d.DeckId).ToListAsync();
     }
 
-    /// <summary>
-    /// Returns top-level media decks with the fields needed for sitemap entries (lastmod + cover image).
-    /// </summary>
+    /// <summary>LastUpdate ignores reparses: they touch every deck at once, which teaches Google to distrust lastmod.</summary>
     [HttpGet("get-media-decks-sitemap")]
     [ResponseCache(Duration = 60 * 60)]
     [SwaggerOperation(Summary = "Get top-level media decks for sitemap generation")]
     [ProducesResponseType(typeof(List<MediaDeckSitemapEntry>), StatusCodes.Status200OK)]
     public async Task<List<MediaDeckSitemapEntry>> GetMediaDecksForSitemap()
     {
-        return await context.Decks.AsNoTracking()
-                            .Where(d => d.ParentDeckId == null)
-                            .Select(d => new MediaDeckSitemapEntry(d.DeckId, d.LastUpdate, d.CoverName))
-                            .ToListAsync();
+        var lastEdits = await context.MetadataEdits.AsNoTracking()
+                                     .Where(e => e.AppliedAt != null)
+                                     .GroupBy(e => e.Deck!.ParentDeckId ?? e.DeckId)
+                                     .Select(g => new { DeckId = g.Key, AppliedAt = g.Max(e => e.AppliedAt!.Value) })
+                                     .ToDictionaryAsync(x => x.DeckId, x => x.AppliedAt);
+
+        var decks = await context.Decks.AsNoTracking()
+                                 .Where(d => d.ParentDeckId == null)
+                                 .Select(d => new { d.DeckId, d.CreationDate, d.CoverName })
+                                 .ToListAsync();
+
+        return decks.Select(d =>
+        {
+            var lastUpdate = d.CreationDate;
+            if (lastEdits.TryGetValue(d.DeckId, out var appliedAt))
+            {
+                var applied = new DateTimeOffset(DateTime.SpecifyKind(appliedAt, DateTimeKind.Utc));
+                if (applied > lastUpdate) lastUpdate = applied;
+            }
+
+            return new MediaDeckSitemapEntry(d.DeckId, lastUpdate, d.CoverName);
+        }).ToList();
     }
 
     /// <summary>

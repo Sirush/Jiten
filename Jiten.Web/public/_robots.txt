@@ -75,6 +75,5 @@ Disallow: /ratings/*
 Allow: /parse-deck
 Allow: /decks/media/*/detail
 Allow: /decks/media/list/*
-Allow: /decks/media/*/stats
 
 Sitemap: https://jiten.moe/sitemap.xml
