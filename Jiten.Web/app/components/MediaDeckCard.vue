@@ -334,10 +334,11 @@
 
   const statusPopoverOpen = ref(false);
   const { menu: statusMenu, rememberTrigger, restoreFocus, focusList } = useMenuFocus();
+  const { component: statusFlowSteps, openWithSteps } = useLazyStatusFlowSteps();
   const toggleStatusPopover = (event: Event, hideTooltip: () => void) => {
     hideTooltip();
     rememberTrigger(event);
-    statusPopover.value?.toggle(event);
+    void openWithSteps(event, (e) => statusPopover.value?.toggle(e));
   };
 
   const onStatusPopoverShow = () => {
@@ -579,6 +580,7 @@
               <Tooltip v-if="showDiscussionLink || (!isCompact && deck.discussionReplyCount > 0)" :content="discussionTooltip">
                 <NuxtLink
                   :to="`/decks/media/${deck.deckId}/detail#discussion`"
+                  :rel="subdeckLinkRel(deck)"
                   :aria-label="discussionTooltip"
                   class="flex items-center gap-1 p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer no-underline"
                   @click="onDiscussionClick"
@@ -705,6 +707,7 @@
                   <NuxtLink
                     v-if="isCompact && hasLandscapeCover && deck.coverName != 'nocover.jpg'"
                     :to="`/decks/media/${deck.deckId}/${isVideo ? 'watch' : 'detail'}`"
+                    :rel="subdeckLinkRel(deck)"
                     class="block mb-2 -mx-1 rounded-md overflow-hidden bg-gray-200 dark:bg-gray-800"
                     :aria-label="isVideo ? `Watch ${localiseTitle(deck)}` : localiseTitle(deck)"
                   >
@@ -916,6 +919,7 @@
                         <Button
                           as="router-link"
                           :to="`/decks/media/${deck.deckId}/detail`"
+                          :rel="subdeckLinkRel(deck)"
                           :label="isCompact ? undefined : 'Details'"
                           icon="pi pi-eye"
                           size="small"
@@ -1029,7 +1033,7 @@
     </TieredMenu>
     <Popover v-if="authStore.isAuthenticated" ref="statusPopover" :pt="{ content: { class: 'p-1' } }" @show="onStatusPopoverShow" @hide="onStatusPopoverHide">
       <div ref="statusMenu">
-        <StatusFlowSteps :deck="deck" :flow="statusFlow" @open-history="openHistory">
+        <component :is="statusFlowSteps" v-if="statusFlowSteps" :deck="deck" :flow="statusFlow" @open-history="openHistory">
           <div class="flex flex-col min-w-36">
             <template v-if="canOpenHistory">
               <div v-if="listEntryLine.length" class="flex flex-col gap-0.5 px-3 pt-1.5 pb-1 text-xs tabular-nums text-gray-600 dark:text-gray-300">
@@ -1066,7 +1070,7 @@
               </button>
             </div>
           </div>
-        </StatusFlowSteps>
+        </component>
       </div>
     </Popover>
     <LoadingOverlay :visible="isRefreshingCoverage" message="Refreshing coverage…" />

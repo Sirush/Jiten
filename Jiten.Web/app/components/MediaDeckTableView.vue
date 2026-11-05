@@ -143,7 +143,7 @@
           <!-- Action Buttons -->
           <div class="flex gap-0.5">
             <Tooltip content="Details">
-              <Button as="router-link" :to="`/decks/media/${deck.deckId}/detail`" icon="pi pi-eye" size="small" class="p-button-sm" />
+              <Button as="router-link" :to="`/decks/media/${deck.deckId}/detail`" :rel="subdeckLinkRel(deck)" icon="pi pi-eye" size="small" class="p-button-sm" />
             </Tooltip>
             <Tooltip v-if="isVideo" content="Watch with the transcript">
               <Button as="router-link" :to="`/decks/media/${deck.deckId}/watch`" icon="pi pi-youtube" size="small" class="p-button-sm" />

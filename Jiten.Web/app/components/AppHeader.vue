@@ -91,7 +91,7 @@
 
   const { open: openSearch } = useHeaderSearch();
 
-  const settings = ref();
+  const settings = ref<{ toggle: (event: Event) => void; show: (event: Event) => void; hide: () => void } | null>(null);
   const userMenu = ref();
   const mediaMenu = ref();
 
@@ -175,13 +175,30 @@
     { immediate: true }
   );
 
-  const toggleSettings = (event: boolean) => {
-    settings.value.toggle(event);
+  type SettingsAction = 'toggle' | 'show';
+  const settingsRequested = ref(false);
+  let pendingSettings: { action: SettingsAction; event: Event } | null = null;
+
+  /** Display settings mount on first use so their kanji-scale data stays out of every page's initial bundle. */
+  const openSettings = (action: SettingsAction, event: Event) => {
+    if (settings.value) return settings.value[action](event);
+    pendingSettings = { action, event: popoverAnchorEvent(event) };
+    settingsRequested.value = true;
   };
 
-  const showSettings = (event: boolean) => {
-    settings.value.show(event);
-  };
+  watch(
+    settings,
+    (handle) => {
+      if (!handle || !pendingSettings) return;
+      const { action, event } = pendingSettings;
+      pendingSettings = null;
+      handle[action](event);
+    },
+    { flush: 'post' }
+  );
+
+  const toggleSettings = (event: Event) => openSettings('toggle', event);
+  const showSettings = (event: Event) => openSettings('show', event);
 </script>
 
 <template>
@@ -486,7 +503,7 @@
     </div>
   </header>
 
-  <LazyAppHeaderSettings ref="settings" />
+  <LazyAppHeaderSettings v-if="settingsRequested" ref="settings" />
   <LazyHeaderSearchDialog />
   <TieredMenu
     ref="mediaMenu"

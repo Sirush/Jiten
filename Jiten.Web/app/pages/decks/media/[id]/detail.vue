@@ -323,7 +323,8 @@
     const d = mainDeck.value;
     if (!d) return '';
     const type = getMediaTypeText(d.mediaType);
-    const orig = d.originalTitle ? ` (${d.originalTitle})` : '';
+    const original = d.originalTitle?.trim();
+    const orig = original && original.toLowerCase() !== localiseTitle(d).trim().toLowerCase() ? ` (${original})` : '';
     const chars = d.characterCount ? d.characterCount.toLocaleString() : '';
     const words = d.uniqueWordCount ? d.uniqueWordCount.toLocaleString() : '';
     const stats = chars ? ` - ${chars} chars, ${words} unique words` : '';
@@ -423,7 +424,7 @@
 
       <DeckStudyOverview v-if="showSeoBlocks && isTopLevel" :deck="response.data.mainDeck" />
 
-      <LazyCoverageJourneyCard :deck-id="response.data.mainDeck.deckId" />
+      <LazyCoverageJourneyCard v-if="authStore.isAuthenticated" :deck-id="response.data.mainDeck.deckId" />
 
       <LazyDeckSentenceCard :deck-id="response.data.mainDeck.deckId" />
 
