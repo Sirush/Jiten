@@ -1705,7 +1705,7 @@ public partial class StudyController(
                     Definitions = word.Definitions.ToDefinitionDtos(),
                     PartsOfSpeech = word.PartsOfSpeech.ToHumanReadablePartsOfSpeech(),
                     Occurrences = p.Occurrences,
-                    PitchAccents = word.PitchAccents,
+                    PitchAccents = PitchAccentResolver.For(word, form),
                     KnownStates = knownWordStates.GetValueOrDefault((p.WordId, readingIndex), [KnownState.New])
                 };
             })
@@ -2448,7 +2448,7 @@ public partial class StudyController(
                         PartsOfSpeech = d.PartsOfSpeech.ToHumanReadablePartsOfSpeech().ToArray()
                     }).ToList() ?? new(),
                 PartsOfSpeech = (word?.PartsOfSpeech.ToHumanReadablePartsOfSpeech() ?? []).ToArray(),
-                PitchAccents = word?.PitchAccents?.ToArray(),
+                PitchAccents = PitchAccentResolver.For(mainForm, word?.PitchAccents)?.ToArray(),
                 FrequencyRank = freq.Rank,
                 DeckOccurrences = occurrenceMap.TryGetValue(exKey, out var occs)
                     ? occs

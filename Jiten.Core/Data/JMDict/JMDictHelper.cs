@@ -3600,65 +3600,46 @@ public static class JmDictHelper
             return false;
         }
 
-        var pitchAccentDict = new Dictionary<string, List<int>>();
+        var source = await PitchAccentSource.LoadAsync(pitchAccentFiles);
 
-        foreach (var file in pitchAccentFiles)
+        if (verbose)
+            Console.WriteLine($"Found {source.Count} pitch accent records.");
+
+        List<int> wordIds;
+        await using (var idContext = await contextFactory.CreateDbContextAsync())
+            wordIds = await idContext.JMDictWords.AsNoTracking().OrderBy(w => w.WordId).Select(w => w.WordId).ToListAsync();
+
+        const int chunkSize = 20000;
+        int wordsWithAccent = 0;
+        int formsWithAccent = 0;
+        int processed = 0;
+
+        foreach (var chunk in wordIds.Chunk(chunkSize))
         {
-            string jsonContent = await File.ReadAllTextAsync(file);
-            using JsonDocument doc = JsonDocument.Parse(jsonContent);
+            var (first, last) = (chunk[0], chunk[^1]);
+            await using var context = await contextFactory.CreateDbContextAsync();
+            var words = await context.JMDictWords.Include(w => w.Forms)
+                                     .Where(w => w.WordId >= first && w.WordId <= last)
+                                     .ToListAsync();
 
-            foreach (JsonElement item in doc.RootElement.EnumerateArray())
+            foreach (var word in words)
             {
-                string? word = item[0].GetString();
-
-                if (word == null)
+                if (!PitchAccentImporter.Assign(word, source))
                     continue;
 
-                string? type = item[1].GetString();
-
-                JsonElement pitchInfo = item[2];
-                string? reading = pitchInfo.GetProperty("reading").GetString();
-
-                List<int> positions = new();
-                foreach (JsonElement pitch in pitchInfo.GetProperty("pitches").EnumerateArray())
-                {
-                    positions.Add(pitch.GetProperty("position").GetInt32());
-                }
-
-                pitchAccentDict.TryAdd(word, positions);
+                if (word.PitchAccents is { Count: > 0 })
+                    wordsWithAccent++;
+                formsWithAccent += word.Forms.Count(f => f.PitchAccents is { Count: > 0 });
             }
+
+            await context.SaveChangesAsync();
+            processed += chunk.Length;
+
+            if (verbose)
+                Console.WriteLine($"Processed {processed}/{wordIds.Count} words");
         }
 
-        if (verbose)
-            Console.WriteLine($"Found {pitchAccentDict.Count()} pitch accent records.");
-
-        await using var context = await contextFactory.CreateDbContextAsync();
-        var allWords = await context.JMDictWords.Include(w => w.Forms).ToListAsync();
-        int wordsUpdated = 0;
-
-        for (var i = 0; i < allWords.Count; i++)
-        {
-            if (verbose && i % 10000 == 0)
-                Console.WriteLine($"Processing word {i + 1}/{allWords.Count} ({(i + 1) * 100 / allWords.Count}%)");
-
-            var word = allWords[i];
-
-            foreach (var form in word.Forms.OrderBy(f => f.ReadingIndex))
-            {
-                if (pitchAccentDict.TryGetValue(form.Text, out var pitchAccents))
-                {
-                    word.PitchAccents = pitchAccents;
-
-                    wordsUpdated++;
-                    break;
-                }
-            }
-        }
-
-        if (verbose)
-            Console.WriteLine($"Updated pitch accents for {wordsUpdated} words. Saving to database...");
-
-        await context.SaveChangesAsync();
+        Console.WriteLine($"Pitch accents set on {wordsWithAccent} words and {formsWithAccent} forms. Run --flush-redis next.");
         return true;
     }
 

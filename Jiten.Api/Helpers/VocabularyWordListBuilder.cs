@@ -69,7 +69,7 @@ public static class VocabularyWordListBuilder
                 WordId = word.jmDictWord.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
                 PartsOfSpeech = word.jmDictWord.PartsOfSpeech.ToHumanReadablePartsOfSpeech(),
                 Definitions = word.jmDictWord.Definitions.ToDefinitionDtos(), Occurrences = word.row.Occurrences,
-                PitchAccents = word.jmDictWord.PitchAccents
+                PitchAccents = PitchAccentResolver.For(word.jmDictWord, mainForm)
             });
         }
 
