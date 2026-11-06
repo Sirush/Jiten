@@ -46,26 +46,12 @@ public class FsrsAutoOptimiseIntegrationTests(JitenWebApplicationFactory factory
     }
 
     [Fact]
-    public async Task DryRun_ReportsTheDecisionAndSavesNothing()
-    {
-        await SeedHistory();
-
-        var decisions = await Job().Sweep(dryRun: true, limit: 10, TestUsers.UserA);
-
-        decisions.Should().ContainSingle().Which.Outcome.Should().Be(FsrsAutoOptimiseOutcome.Accepted);
-        using var scope = factory.Services.CreateScope();
-        var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
-        (await userDb.UserFsrsSettings.AnyAsync(s => s.UserId == TestUsers.UserA)).Should().BeFalse();
-        (await userDb.FsrsParameterHistories.AnyAsync(h => h.UserId == TestUsers.UserA)).Should().BeFalse();
-    }
-
-    [Fact]
     public async Task Run_AppliesTheFitWithoutMovingDueDates_AndUndoRestoresTheDefaults()
     {
         await SeedHistory();
         var before = await LoadCards();
 
-        var decision = (await Job().Sweep(dryRun: false, limit: 10, TestUsers.UserA)).Should().ContainSingle().Subject;
+        var decision = (await Job().Sweep(TestUsers.UserA)).Should().ContainSingle().Subject;
 
         decision.Outcome.Should().Be(FsrsAutoOptimiseOutcome.Accepted);
         decision.Saved.Should().BeTrue();
@@ -80,7 +66,7 @@ public class FsrsAutoOptimiseIntegrationTests(JitenWebApplicationFactory factory
         (await StoredSettings())!.AutoOptimiseLastOutcome.Should().Be(FsrsAutoOptimiseOutcome.Accepted);
         var undoId = settings.GetProperty("undoHistoryId").GetInt64();
 
-        (await Job().Sweep(dryRun: false, limit: 10, TestUsers.UserA)).Should().BeEmpty();
+        (await Job().Sweep(TestUsers.UserA)).Should().BeEmpty();
 
         var restore = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, $"/api/srs/settings/history/{undoId}/restore").WithUser(TestUsers.UserA));
         restore.StatusCode.Should().Be(HttpStatusCode.OK);
@@ -103,7 +89,7 @@ public class FsrsAutoOptimiseIntegrationTests(JitenWebApplicationFactory factory
         await SeedHistory();
 
         (await Put(new { autoOptimise = false })).StatusCode.Should().Be(HttpStatusCode.OK);
-        (await Job().SelectCandidates(DateTime.UtcNow, 10, TestUsers.UserA)).Should().BeEmpty();
+        (await Job().SelectCandidates(DateTime.UtcNow, TestUsers.UserA)).Should().BeEmpty();
 
         var custom = FsrsConstants.DefaultParametersV7.ToArray();
         custom[0] = 0.5;
@@ -116,7 +102,7 @@ public class FsrsAutoOptimiseIntegrationTests(JitenWebApplicationFactory factory
                         .ExecuteUpdateAsync(u => u.SetProperty(s => s.AutoOptimiseAttemptedAtUtc, (DateTime?)null)
                                                   .SetProperty(s => s.AutoOptimiseAttemptedReviewCount, 0));
         }
-        (await Job().SelectCandidates(DateTime.UtcNow, 10, TestUsers.UserA)).Should().BeEmpty();
+        (await Job().SelectCandidates(DateTime.UtcNow, TestUsers.UserA)).Should().BeEmpty();
     }
 
     [Fact]

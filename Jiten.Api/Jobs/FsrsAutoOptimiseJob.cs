@@ -12,7 +12,6 @@ namespace Jiten.Api.Jobs;
 
 public class FsrsAutoOptimiseOptions
 {
-    public bool Enabled { get; set; }
     public int FirstFitMinimum { get; set; } = 1000;
     public double GrowthRatio { get; set; } = 0.25;
     public int GrowthFloor { get; set; } = 500;
@@ -44,20 +43,11 @@ public class FsrsAutoOptimiseJob(
 
     [Queue("default")]
     [DisableConcurrentExecution(timeoutInSeconds: 7200)]
-    public async Task Run()
-    {
-        if (!options.Value.Enabled)
-            return;
-        await Sweep(dryRun: false, limit: null);
-    }
+    public Task Run() => Sweep();
 
-    [Queue("default")]
-    [DisableConcurrentExecution(timeoutInSeconds: 7200)]
-    public Task DryRun(int limit) => Sweep(dryRun: true, limit);
-
-    public async Task<List<FsrsAutoOptimiseDecision>> Sweep(bool dryRun, int? limit, string? onlyUserId = null)
+    public async Task<List<FsrsAutoOptimiseDecision>> Sweep(string? onlyUserId = null)
     {
-        var candidates = await SelectCandidates(DateTime.UtcNow, limit, onlyUserId);
+        var candidates = await SelectCandidates(DateTime.UtcNow, onlyUserId);
         var decisions = new List<FsrsAutoOptimiseDecision>(candidates.Count);
 
         foreach (var candidate in candidates)
@@ -65,19 +55,18 @@ public class FsrsAutoOptimiseJob(
             FsrsAutoOptimiseDecision decision;
             try
             {
-                decision = await OptimiseUser(candidate, dryRun);
+                decision = await OptimiseUser(candidate);
             }
             catch (Exception ex)
             {
                 logger.LogError(ex, "FSRS auto-optimise failed for user {UserId}", candidate.UserId);
                 decision = new FsrsAutoOptimiseDecision(candidate.UserId, FsrsAutoOptimiseOutcome.Failed, candidate.ReviewTotal);
-                if (!dryRun)
-                    await RecordAttempt(candidate.UserId, FsrsAutoOptimiseOutcome.Failed, candidate.ReviewTotal);
+                await RecordAttempt(candidate.UserId, FsrsAutoOptimiseOutcome.Failed, candidate.ReviewTotal);
             }
 
             logger.LogInformation(
-                "FSRS auto-optimise {UserId}: {Outcome}, reviews {ReviewTotal}, loss {CurrentLoss} -> {NewLoss}, dry run {DryRun}",
-                decision.UserId, decision.Outcome, decision.ReviewTotal, decision.CurrentLoss, decision.NewLoss, dryRun);
+                "FSRS auto-optimise {UserId}: {Outcome}, reviews {ReviewTotal}, loss {CurrentLoss} -> {NewLoss}",
+                decision.UserId, decision.Outcome, decision.ReviewTotal, decision.CurrentLoss, decision.NewLoss);
             decisions.Add(decision);
         }
 
@@ -85,15 +74,15 @@ public class FsrsAutoOptimiseJob(
                              .Select(d => d.RelativeGain!.Value).Order().ToList();
         var byOutcome = decisions.GroupBy(d => d.Outcome).ToDictionary(g => g.Key.ToString(), g => g.Count());
         logger.LogInformation(
-            "FSRS auto-optimise run: {Candidates} candidates, {Accepted} accepted, outcomes {Outcomes}, median relative loss gain {MedianGain}, dry run {DryRun}",
+            "FSRS auto-optimise run: {Candidates} candidates, {Accepted} accepted, outcomes {Outcomes}, median relative loss gain {MedianGain}",
             candidates.Count, byOutcome.GetValueOrDefault(nameof(FsrsAutoOptimiseOutcome.Accepted)), byOutcome,
-            gains.Count > 0 ? gains[gains.Count / 2] : null, dryRun);
+            gains.Count > 0 ? gains[gains.Count / 2] : null);
 
         return decisions;
     }
 
     /// <summary>Active users due a refit, from the daily rollup and settings rows only; first fits first, then by growth.</summary>
-    public async Task<List<Candidate>> SelectCandidates(DateTime utcNow, int? limit, string? onlyUserId = null)
+    public async Task<List<Candidate>> SelectCandidates(DateTime utcNow, string? onlyUserId = null)
     {
         var o = options.Value;
         await using var userContext = await userContextFactory.CreateDbContextAsync();
@@ -129,10 +118,10 @@ public class FsrsAutoOptimiseJob(
                 due.Add(new Candidate(total.UserId, total.Total, baseline));
         }
 
-        var ordered = due.OrderBy(c => c.BaselineReviewCount > 0)
-                         .ThenByDescending(c => c.BaselineReviewCount > 0 ? (double)(c.ReviewTotal - c.BaselineReviewCount) / c.BaselineReviewCount : c.ReviewTotal)
-                         .ThenBy(c => c.UserId, StringComparer.Ordinal);
-        return (limit is { } max ? ordered.Take(max) : ordered).ToList();
+        return due.OrderBy(c => c.BaselineReviewCount > 0)
+                  .ThenByDescending(c => c.BaselineReviewCount > 0 ? (double)(c.ReviewTotal - c.BaselineReviewCount) / c.BaselineReviewCount : c.ReviewTotal)
+                  .ThenBy(c => c.UserId, StringComparer.Ordinal)
+                  .ToList();
     }
 
     /// <param name="baselineReviewCount">Lifetime total at the last attempt or manual change; 0 when there was none.</param>
@@ -156,13 +145,11 @@ public class FsrsAutoOptimiseJob(
         double? NewLoss = null,
         double[]? Fitted = null);
 
-    private async Task<FsrsAutoOptimiseDecision> OptimiseUser(Candidate candidate, bool dryRun)
+    private async Task<FsrsAutoOptimiseDecision> OptimiseUser(Candidate candidate)
     {
         var userId = candidate.UserId;
         var (snapshot, e) = await Evaluate(userId);
         var decision = new FsrsAutoOptimiseDecision(userId, e.Outcome, candidate.ReviewTotal, e.CurrentLoss, e.NewLoss);
-        if (dryRun)
-            return decision;
 
         if (e.Fitted == null)
         {
