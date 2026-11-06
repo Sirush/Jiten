@@ -13,6 +13,7 @@ export enum MetadataField {
   Links = 512,
   Relationships = 1024,
   CharacterNames = 2048,
+  Franchise = 4096,
 }
 
 export enum MetadataRiskTier {
@@ -75,6 +76,25 @@ export interface MetadataRelationshipValue {
   otherDeckReleaseYear?: number | null;
 }
 
+/** A null id is a franchise the edit will start with withDeckId, carrying that deck's titles. */
+export interface MetadataFranchiseValue {
+  franchiseId: number | null;
+  originalTitle: string;
+  romajiTitle: string | null;
+  englishTitle: string | null;
+  withDeckId?: number | null;
+}
+
+/** A null id means the picked deck has no franchise yet; the titles are then the deck's. */
+export interface MetadataFranchisePick {
+  franchiseId: number | null;
+  deckId: number;
+  originalTitle: string;
+  romajiTitle: string | null;
+  englishTitle: string | null;
+  deckCount: number;
+}
+
 export interface MetadataFieldChange {
   field: MetadataField;
   before: unknown;
@@ -112,6 +132,8 @@ export interface EditableDeck {
   links: MetadataLinkValue[];
   relationships: (MetadataRelationshipValue & { otherDeckMediaType: MediaType })[];
   characterNames: string[];
+  /** The franchise the deck is in, however it got there; only a deck without one can be added to a franchise. */
+  franchise: MetadataFranchiseRef | null;
   historyCount: number;
   pending: EditablePendingEdit[];
   viewer: EditableDeckViewer;
@@ -150,13 +172,14 @@ export interface SubmitMetadataEdit {
   relationships?: { sourceDeckId: number; targetDeckId: number; relationshipType: number }[];
   addCharacterNames?: string[];
   removeCharacterNames?: string[];
+  franchiseDeckId?: number;
   sources: string[];
   note?: string;
   base?: SubmitMetadataEditBase;
 }
 
 /** What the form loaded for each field it sends, so the API can replay list changes and catch scalars that moved meanwhile. */
-export type SubmitMetadataEditBase = Omit<SubmitMetadataEdit, 'sources' | 'note' | 'base' | 'addCharacterNames' | 'removeCharacterNames'>;
+export type SubmitMetadataEditBase = Omit<SubmitMetadataEdit, 'sources' | 'note' | 'base' | 'addCharacterNames' | 'removeCharacterNames' | 'franchiseDeckId'>;
 
 export interface SubmitConflictField {
   field: MetadataField;
@@ -203,6 +226,8 @@ export interface MetadataFranchiseRef {
 export interface MetadataFranchiseEffect {
   joining: MetadataFranchiseRef[];
   into: MetadataFranchiseRef | null;
+  /** Set when the edited deck joined `into` after the edit was made, so approving adds this picked deck instead. */
+  addedDeckTitle: string | null;
 }
 
 export interface MetadataQueueItem {

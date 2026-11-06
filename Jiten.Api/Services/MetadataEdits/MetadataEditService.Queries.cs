@@ -186,25 +186,41 @@ public sealed partial class MetadataEditService
         return new QueueResponseDto(ViewerRole(viewer), total, otherTotal, items);
     }
 
-    /// <summary>The franchises an added story link would merge or extend.</summary>
+    /// <summary>The franchises an added story link or franchise pin would merge or extend.</summary>
     private async Task<FranchiseEffectDto?> FranchiseEffectAsync(int? franchiseId, List<MetadataFieldChange> changes, CancellationToken ct)
     {
-        var change = changes.FirstOrDefault(c => c.Field == MetadataField.Relationships);
-        if (change == null)
-            return null;
+        var otherFranchises = new List<int>();
+        if (changes.FirstOrDefault(c => c.Field == MetadataField.Relationships) is { } change)
+        {
+            var before = RelationshipValues(change.Before);
+            var added = RelationshipValues(change.After)
+                        .Where(r => DeckRelationship.IsStoryLinkType(r.RelationshipType))
+                        .Where(r => !before.Any(b => b.SourceDeckId == r.SourceDeckId && b.TargetDeckId == r.TargetDeckId && b.RelationshipType == r.RelationshipType))
+                        .Select(r => r.OtherDeckId).Distinct().ToList();
+            if (added.Count > 0)
+                otherFranchises.AddRange(await db.Decks.AsNoTracking().Where(d => added.Contains(d.DeckId) && d.FranchiseId != null)
+                                                 .Select(d => d.FranchiseId!.Value).Distinct().ToListAsync(ct));
+        }
 
-        var before = RelationshipValues(change.Before);
-        var added = RelationshipValues(change.After)
-                    .Where(r => DeckRelationship.IsStoryLinkType(r.RelationshipType))
-                    .Where(r => !before.Any(b => b.SourceDeckId == r.SourceDeckId && b.TargetDeckId == r.TargetDeckId && b.RelationshipType == r.RelationshipType))
-                    .Select(r => r.OtherDeckId).Distinct().ToList();
-        if (added.Count == 0)
-            return null;
+        string? addedDeckTitle = null;
+        if (changes.FirstOrDefault(c => c.Field == MetadataField.Franchise) is { After.ValueKind: JsonValueKind.Object } pin)
+        {
+            if (!IsUnresolvedFranchise(pin.After))
+                otherFranchises.Add(pin.After.GetProperty("franchiseId").GetInt32());
+            else
+            {
+                var withDeckId = pin.After.GetProperty("withDeckId").GetInt32();
+                var picked = await db.Decks.AsNoTracking().Where(d => d.DeckId == withDeckId)
+                                     .Select(d => new { d.FranchiseId, d.OriginalTitle }).FirstOrDefaultAsync(ct);
+                if (picked?.FranchiseId is { } pickedFranchise && franchiseId == null)
+                    otherFranchises.Add(pickedFranchise);
+                else if (picked is { FranchiseId: null } && franchiseId != null)
+                    addedDeckTitle = picked.OriginalTitle;
+            }
+        }
 
-        var otherFranchises = await db.Decks.AsNoTracking().Where(d => added.Contains(d.DeckId) && d.FranchiseId != null)
-                                      .Select(d => d.FranchiseId!.Value).Distinct().ToListAsync(ct);
-        var involved = otherFranchises.Where(f => f != franchiseId).ToList();
-        if (involved.Count == 0)
+        var involved = otherFranchises.Where(f => f != franchiseId).Distinct().ToList();
+        if (involved.Count == 0 && addedDeckTitle == null)
             return null;
 
         var all = involved.Concat(franchiseId.HasValue ? [franchiseId.Value] : Array.Empty<int>()).Distinct().ToList();
@@ -220,9 +236,10 @@ public sealed partial class MetadataEditService
             : null;
 
         var joining = involved.Select(Ref).OfType<FranchiseRefDto>().ToList();
-        if (joining.Count == 0)
-            return null;
-        return new FranchiseEffectDto(joining, franchiseId.HasValue ? Ref(franchiseId.Value) : null);
+        var into = franchiseId.HasValue ? Ref(franchiseId.Value) : null;
+        if (addedDeckTitle != null && into != null)
+            return new FranchiseEffectDto(joining, into, addedDeckTitle);
+        return joining.Count == 0 ? null : new FranchiseEffectDto(joining, into);
     }
 
     private async Task<List<HistoryItemDto>> HistoryItemsAsync(List<MetadataEdit> edits, MetadataViewer? viewer, bool withDeck, CancellationToken ct)

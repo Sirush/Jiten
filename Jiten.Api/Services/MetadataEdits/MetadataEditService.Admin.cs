@@ -227,8 +227,8 @@ public sealed partial class MetadataEditService
         }
 
         foreach (var (deckId, fields) in touched)
-            await AfterApplyAsync(deckId, fields & ~MetadataField.Relationships, ct);
-        if (touched.Values.Any(f => f.HasFlag(MetadataField.Relationships)))
+            await AfterApplyAsync(deckId, fields & ~MetadataFields.FranchiseShaping, ct);
+        if (touched.Values.Any(f => (f & MetadataFields.FranchiseShaping) != 0))
             await franchiseSync.RunAsync(ct);
 
         var pending = await db.MetadataEdits.Where(e => e.UserId == userId && e.Status == MetadataEditStatus.Pending).ToListAsync(ct);

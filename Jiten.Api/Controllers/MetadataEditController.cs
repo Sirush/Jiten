@@ -35,6 +35,10 @@ public class MetadataEditController(MetadataEditService edits) : ControllerBase
     public async Task<IActionResult> GetEditable(int id, CancellationToken ct) =>
         Respond(await edits.GetEditableAsync(id, UserId!, ct));
 
+    [HttpGet("media-deck/{id:int}/franchise-ref")]
+    public async Task<IActionResult> FranchiseOfDeck(int id, CancellationToken ct) =>
+        Respond(await edits.FranchiseOfDeckAsync(id, ct));
+
     [HttpPost("media-deck/{id:int}/character-names/check")]
     [EnableRateLimiting("metadata-edit")]
     public async Task<IActionResult> CheckNames(int id, [FromBody] CheckNamesRequest request, CancellationToken ct) =>

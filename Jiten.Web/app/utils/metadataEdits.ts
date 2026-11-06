@@ -5,6 +5,7 @@ import {
   MetadataField,
   type EditableDeck,
   type MetadataFieldChange,
+  type MetadataFranchiseValue,
   type MetadataLinkValue,
   type MetadataPublicStatus,
   type MetadataQueueConflict,
@@ -44,6 +45,7 @@ const FIELD_ORDER: MetadataField[] = [
   MetadataField.Genres,
   MetadataField.Tags,
   MetadataField.Relationships,
+  MetadataField.Franchise,
   MetadataField.CharacterNames,
   MetadataField.OriginalTitle,
   MetadataField.MediaType,
@@ -63,6 +65,7 @@ const FIELD_LABELS: Record<MetadataField, string> = {
   [MetadataField.Links]: 'External links',
   [MetadataField.Relationships]: 'Related decks',
   [MetadataField.CharacterNames]: 'Character names',
+  [MetadataField.Franchise]: 'Franchise',
 };
 
 const PLURAL_FIELDS = new Set<MetadataField>([
@@ -123,16 +126,16 @@ export function submitOutcome(appliedFields: number[], pendingFields: number[]):
   if (pendingFields.length === 0) {
     return {
       kind: 'live',
-      title: 'Saved. Thanks for fixing this.',
-      body: `It's on the deck page now and listed in the deck history under your name.${namesNote}`,
+      title: 'Saved. Thanks for helping improve the database.',
+      body: `The changes are now on deck page now and listed in the deck history under your name.${namesNote}`,
     };
   }
 
   if (appliedFields.length === 0) {
     return {
       kind: 'pending',
-      title: 'Sent for review.',
-      body: "An editor will check it first. You'll get a notification either way.",
+      title: 'Sent for review. Thanks for helping improve the database.',
+      body: "An editor will check it first and you'll be notified when it has been processed.",
     };
   }
 
@@ -226,6 +229,7 @@ export interface MetadataDraft {
   relationships: MetadataRelationshipValue[];
   characterNames: string[];
   addedNames: MetadataDraftName[];
+  franchise: MetadataFranchiseValue | null;
 }
 
 type DraftKey = Exclude<keyof MetadataDraft, 'addedNames'>;
@@ -244,6 +248,7 @@ const DRAFT_KEY: Record<MetadataField, DraftKey> = {
   [MetadataField.Links]: 'links',
   [MetadataField.Relationships]: 'relationships',
   [MetadataField.CharacterNames]: 'characterNames',
+  [MetadataField.Franchise]: 'franchise',
 };
 
 const SCALAR_FIELDS = [
@@ -289,6 +294,7 @@ export function draftFromEditable(deck: EditableDeck): MetadataDraft {
     })),
     characterNames: [...(deck.characterNames ?? [])],
     addedNames: [],
+    franchise: null,
   };
 }
 
@@ -352,7 +358,12 @@ export function buildSubmission(original: MetadataDraft, draft: MetadataDraft): 
     mark(MetadataField.CharacterNames);
   }
 
-  if (fields.some((f) => f !== MetadataField.CharacterNames)) payload.base = base;
+  if (draft.franchise?.withDeckId && draft.franchise.withDeckId !== original.franchise?.withDeckId) {
+    payload.franchiseDeckId = draft.franchise.withDeckId;
+    mark(MetadataField.Franchise);
+  }
+
+  if (fields.some((f) => f !== MetadataField.CharacterNames && f !== MetadataField.Franchise)) payload.base = base;
   return { payload, fields: sortFields(fields) };
 }
 
@@ -601,6 +612,8 @@ export function draftChanges(original: MetadataDraft, draft: MetadataDraft, fiel
         for (const name of draft.addedNames) for (const s of name.surfaces) after.add(s);
         return { field, before: sortStrings(original.characterNames), after: sortStrings([...after]) };
       }
+      case MetadataField.Franchise:
+        return { field, before: original.franchise, after: draft.franchise };
       default:
         return { field, before: null, after: null };
     }
@@ -659,6 +672,16 @@ export function relationshipLabel(r: MetadataRelationshipValue): string {
   const entry = relationshipEntry(r);
   return `${entry.role}: ${entry.label}`;
 }
+
+const franchiseKey = (f: MetadataFranchiseValue) => (f.franchiseId != null ? String(f.franchiseId) : `with:${f.withDeckId}`);
+
+const franchiseEntry = (f: MetadataFranchiseValue): ListEntry =>
+  f.franchiseId != null
+    ? { label: f.originalTitle, href: `/franchise/${f.franchiseId}` }
+    : { label: f.originalTitle, role: 'New franchise with', href: `/decks/media/${f.withDeckId}/detail` };
+
+const asFranchise = (value: unknown): MetadataFranchiseValue | null =>
+  value && typeof value === 'object' && 'franchiseId' in value ? (value as MetadataFranchiseValue) : null;
 
 export type ChangeView =
   | { kind: 'scalar'; before: string | null; after: string | null }
@@ -739,6 +762,15 @@ export function describeChange(change: MetadataFieldChange): ChangeView {
         ...keyedDiff(asArray<MetadataRelationshipValue>(before), asArray<MetadataRelationshipValue>(after), edgeId, relationshipEntry),
         changed: [],
       };
+    case MetadataField.Franchise: {
+      const b = asFranchise(before);
+      const a = asFranchise(after);
+      return {
+        kind: 'list',
+        ...keyedDiff(b ? [b] : [], a ? [a] : [], franchiseKey, franchiseEntry),
+        changed: [],
+      };
+    }
     default:
       return { kind: 'scalar', before: asText(before), after: asText(after) };
   }
@@ -836,6 +868,12 @@ export function describeValue(field: MetadataField, value: unknown): string {
       );
     case MetadataField.Relationships:
       return asArray<MetadataRelationshipValue>(value).map(relationshipLabel).join(', ') || 'none';
+    case MetadataField.Franchise:
+    {
+      const franchise = asFranchise(value);
+      if (!franchise) return 'none';
+      return franchise.franchiseId != null ? franchise.originalTitle : `New franchise with ${franchise.originalTitle}`;
+    }
     default:
       return asText(value) ?? 'empty';
   }

@@ -92,6 +92,10 @@ public sealed partial class MetadataEditService
                 return ServiceResult<object>.Fail(400, "Leave at least one change in, or reject the edit.");
         }
 
+        var (move, moveError) = await FranchiseMoveAsync(edit.DeckId, changes, ct);
+        if (moveError != null)
+            return ServiceResult<object>.Fail(409, moveError);
+
         var current = (await deckMetadata.LoadSnapshotAsync(edit.DeckId, ct))!;
         var conflicts = Conflicts(current, changes);
         var resolutions = (request.Resolutions ?? []).ToDictionary(r => r.Field, r => r.Keep);
@@ -128,6 +132,37 @@ public sealed partial class MetadataEditService
                                      ReviewNote = excludeNote, IpAddress = edit.IpAddress
                                  });
 
+        if (move != null)
+        {
+            var picked = (await deckMetadata.LoadForPatchAsync(move.DeckId, ct))!;
+            var pickedError = await ApplyValuesAsync(picked, [(MetadataField.Franchise, move.Change.After)], edit.UserId, ct);
+            if (pickedError != null)
+                return ServiceResult<object>.Fail(400, pickedError);
+
+            if (toApply.Count == 0)
+            {
+                edit.DeckId = move.DeckId;
+                edit.ChangesJson = SerializeChanges([move.Change]);
+                edit.Fields = MetadataField.Franchise;
+                edit.Status = MetadataEditStatus.Approved;
+                edit.AppliedAt = now;
+                await db.SaveChangesAsync(ct);
+                await tx.CommitAsync(ct);
+                await AfterApplyAsync(move.DeckId, MetadataField.Franchise, ct);
+                if (edit.UserId != null)
+                    await NotifyApprovedAsync(edit.UserId, move.DeckId, leftOut, excludeNote, ct);
+                return ServiceResult<object>.Ok(new { status = (int)edit.Status });
+            }
+
+            db.MetadataEdits.Add(new MetadataEdit
+                                 {
+                                     DeckId = move.DeckId, Actor = edit.Actor, UserId = edit.UserId, SubmissionId = edit.SubmissionId,
+                                     Status = MetadataEditStatus.Approved, Fields = MetadataField.Franchise, ChangesJson = SerializeChanges([move.Change]),
+                                     SourcesJson = edit.SourcesJson, EditNote = edit.EditNote, CreatedAt = edit.CreatedAt, AppliedAt = now,
+                                     ReviewedAt = now, ReviewedByUserId = reviewerId, IpAddress = edit.IpAddress
+                                 });
+        }
+
         if (toApply.Count == 0)
         {
             edit.Status = MetadataEditStatus.Superseded;
@@ -143,14 +178,48 @@ public sealed partial class MetadataEditService
 
         edit.Status = MetadataEditStatus.Approved;
         edit.AppliedAt = now;
+        await RecordStartedFranchiseAsync(edit.DeckId, changes, ct);
+        edit.ChangesJson = SerializeChanges(changes);
         await db.SaveChangesAsync(ct);
         await tx.CommitAsync(ct);
         await AfterApplyAsync(edit.DeckId, MetadataFields.Of(toApply.Select(m => m.Field)), ct);
+        if (move != null)
+            await AfterApplyAsync(move.DeckId, MetadataField.Franchise, ct);
 
         if (edit.UserId != null)
             await NotifyApprovedAsync(edit.UserId, edit.DeckId, leftOut, excludeNote, ct);
 
         return ServiceResult<object>.Ok(new { status = (int)edit.Status });
+    }
+
+    private sealed record FranchiseMove(int DeckId, MetadataFieldChange Change);
+
+    /// <summary>If the edited deck joined a franchise since the edit was made, the change moves to the picked deck so a revert takes that deck out.</summary>
+    private async Task<(FranchiseMove? Move, string? Error)> FranchiseMoveAsync(int deckId, List<MetadataFieldChange> changes, CancellationToken ct)
+    {
+        var change = changes.FirstOrDefault(c => c.Field == MetadataField.Franchise && IsUnresolvedFranchise(c.After));
+        if (change == null)
+            return (null, null);
+
+        var pickedId = change.After.GetProperty("withDeckId").GetInt32();
+        var states = await db.Decks.AsNoTracking().Where(d => d.DeckId == deckId || d.DeckId == pickedId)
+                             .ToDictionaryAsync(d => d.DeckId, d => d.FranchiseId, ct);
+        if (states.GetValueOrDefault(deckId) is not { } joined)
+            return (null, null);
+
+        changes.Remove(change);
+        if (!states.TryGetValue(pickedId, out var pickedFranchise))
+            return (null, "The deck picked for the franchise no longer exists. Reject this edit.");
+        if (pickedFranchise == joined)
+            return (null, null);
+        if (pickedFranchise != null)
+            return (null, "Both decks joined different franchises since this edit was made, so approving it would merge them. Reject this edit.");
+
+        var target = await db.Franchises.AsNoTracking().Where(f => f.FranchiseId == joined)
+                             .Select(f => new SnapshotFranchise(f.FranchiseId, f.OriginalTitle, f.RomajiTitle, f.EnglishTitle, null))
+                             .FirstAsync(ct);
+        var before = (await deckMetadata.LoadSnapshotAsync(pickedId, ct))!.Value(MetadataField.Franchise);
+        return (new FranchiseMove(pickedId, new MetadataFieldChange { Field = MetadataField.Franchise, Before = before, After = DeckMetadataSnapshot.ToElement(target) }), null);
     }
 
     private const string ApprovedGroupKey = "metadata-edit-approved";
