@@ -88,6 +88,7 @@ public sealed partial class MetadataEditService(
         List<DeckMetadataTagPatch>? tags = null;
         List<DeckMetadataLinkPatch>? links = null;
         List<DeckMetadataRelationshipPatch>? relationships = null;
+        DeckMetadataFranchisePatch? franchise = null;
 
         static string Str(JsonElement v) => v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
 
@@ -122,6 +123,11 @@ public sealed partial class MetadataEditService(
                                                       })
                                          .ToList();
                     break;
+                case MetadataField.Franchise:
+                    franchise = value.Deserialize<SnapshotFranchise>(DeckMetadataSnapshot.Json) is { } pick
+                        ? new DeckMetadataFranchisePatch { FranchiseId = pick.FranchiseId, WithDeckId = pick.FranchiseId == null ? pick.WithDeckId : null }
+                        : new DeckMetadataFranchisePatch();
+                    break;
             }
         }
 
@@ -129,7 +135,7 @@ public sealed partial class MetadataEditService(
                {
                    OriginalTitle = originalTitle, RomajiTitle = romaji, EnglishTitle = english, Description = description,
                    ReleaseDate = releaseDate, MediaType = mediaType, Aliases = aliases, CharacterNames = names, Genres = genres,
-                   Tags = tags, Links = links, Relationships = relationships
+                   Tags = tags, Links = links, Relationships = relationships, Franchise = franchise
                };
     }
 
@@ -141,7 +147,7 @@ public sealed partial class MetadataEditService(
     /// <summary>Side effects that must follow a committed metadata write: franchise derivation, name reparse, search pings.</summary>
     private async Task AfterApplyAsync(int deckId, MetadataField fields, CancellationToken ct)
     {
-        if (fields.HasFlag(MetadataField.Relationships))
+        if ((fields & MetadataFields.FranchiseShaping) != 0)
             await franchiseSync.RunAsync(ct);
 
         if (fields.HasFlag(MetadataField.CharacterNames))
@@ -185,7 +191,10 @@ public sealed partial class MetadataEditService(
     /// <summary>A pending edit whose every field already holds its proposed value has nothing left to do.</summary>
     private async Task SupersedePendingAsync(int deckId, CancellationToken ct, DeckMetadataSnapshot? current = null)
     {
-        var pending = await db.MetadataEdits.Where(e => e.DeckId == deckId && e.Status == MetadataEditStatus.Pending).ToListAsync(ct);
+        var pending = await db.MetadataEdits.AsNoTracking()
+                              .Where(e => e.DeckId == deckId && e.Status == MetadataEditStatus.Pending)
+                              .Select(e => new { e.Id, e.ChangesJson })
+                              .ToListAsync(ct);
         if (pending.Count == 0)
             return;
 
@@ -193,20 +202,20 @@ public sealed partial class MetadataEditService(
         if (current == null)
             return;
 
-        var changed = false;
-        foreach (var edit in pending)
-        {
-            var changes = ParseChanges(edit.ChangesJson);
-            if (changes.Count > 0 && changes.All(c => Merge(c.Field, c.Before, c.After, current.Value(c.Field), preferEdit: false) is { Changes: false, Clash: false }))
-            {
-                edit.Status = MetadataEditStatus.Superseded;
-                edit.ReviewedAt = DateTime.UtcNow;
-                changed = true;
-            }
-        }
+        var supersededIds = pending.Where(edit =>
+                                   {
+                                       var changes = ParseChanges(edit.ChangesJson);
+                                       return changes.Count > 0 && changes.All(c => Merge(c.Field, c.Before, c.After, current.Value(c.Field), preferEdit: false) is { Changes: false, Clash: false });
+                                   })
+                                   .Select(edit => edit.Id)
+                                   .ToList();
+        if (supersededIds.Count == 0)
+            return;
 
-        if (changed)
-            await db.SaveChangesAsync(ct);
+        var now = DateTime.UtcNow;
+        await db.MetadataEdits.Where(e => supersededIds.Contains(e.Id) && e.Status == MetadataEditStatus.Pending)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.Status, MetadataEditStatus.Superseded)
+                                          .SetProperty(e => e.ReviewedAt, now), ct);
     }
 
     /// <summary>Logs a direct admin/dashboard write as an approved edit by that person.</summary>
@@ -228,7 +237,7 @@ public sealed partial class MetadataEditService(
     {
         var deck = await db.Decks.AsNoTracking()
                            .Where(d => d.DeckId == deckId)
-                           .Select(d => new { d.DeckId, d.ParentDeckId, d.CoverName, d.MediaType, d.CharacterCount, d.ReleaseDate })
+                           .Select(d => new { d.DeckId, d.ParentDeckId, d.CoverName, d.MediaType, d.CharacterCount, d.ReleaseDate, d.FranchiseId })
                            .FirstOrDefaultAsync(ct);
         if (deck == null)
             return ServiceResult<EditableDeckDto>.Fail(404, "This deck doesn't exist.");
@@ -269,11 +278,44 @@ public sealed partial class MetadataEditService(
                                                                              r.OtherDeckTitle, otherTypes.GetValueOrDefault(r.OtherDeckId)))
                                     .ToList(),
             CharacterNames = snapshot.CharacterNames,
+            Franchise = deck.FranchiseId is { } franchiseId ? await FranchiseRefAsync(franchiseId, ct) : null,
             HistoryCount = historyCount,
             Pending = pending.Select(p => new EditablePendingDto(p.Id, (int)p.Fields, p.UserId == userId, p.CreatedAt)).ToList(),
             Viewer = new EditableViewerDto(ViewerRole(viewer), !string.IsNullOrWhiteSpace(viewer?.DisplayName), viewer?.EmailConfirmed == true,
                                            viewer?.Banned == true)
         });
+    }
+
+    private async Task<FranchiseRefDto?> FranchiseRefAsync(int franchiseId, CancellationToken ct) =>
+        await db.Franchises.AsNoTracking().Where(f => f.FranchiseId == franchiseId)
+                .Select(f => new FranchiseRefDto(f.FranchiseId, f.OriginalTitle, f.RomajiTitle, f.EnglishTitle,
+                                                 db.Decks.Count(d => d.FranchiseId == f.FranchiseId && d.ParentDeckId == null)))
+                .FirstOrDefaultAsync(ct);
+
+    public async Task<ServiceResult<FranchisePickDto>> FranchiseOfDeckAsync(int deckId, CancellationToken ct)
+    {
+        var deck = await db.Decks.AsNoTracking().Where(d => d.DeckId == deckId)
+                           .Select(d => new { d.DeckId, d.FranchiseId, d.ParentDeckId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle })
+                           .FirstOrDefaultAsync(ct);
+        if (deck == null)
+            return ServiceResult<FranchisePickDto>.Fail(404, "This deck doesn't exist.");
+        if (deck.ParentDeckId != null)
+            return ServiceResult<FranchisePickDto>.Fail(400, "Pick the main deck, not one of its parts.");
+        if (deck.FranchiseId is { } id && await FranchiseRefAsync(id, ct) is { } franchise)
+            return ServiceResult<FranchisePickDto>.Ok(new FranchisePickDto(franchise.FranchiseId, deck.DeckId, franchise.OriginalTitle,
+                                                                           franchise.RomajiTitle, franchise.EnglishTitle, franchise.DeckCount));
+        return ServiceResult<FranchisePickDto>.Ok(new FranchisePickDto(null, deck.DeckId, deck.OriginalTitle, deck.RomajiTitle, deck.EnglishTitle, 1));
+    }
+
+    /// <summary>A franchise the edit starts only gets its id when applied; the recorded change keeps that id so a revert finds it.</summary>
+    private async Task RecordStartedFranchiseAsync(int deckId, List<MetadataFieldChange> applied, CancellationToken ct)
+    {
+        var change = applied.FirstOrDefault(c => c.Field == MetadataField.Franchise && IsUnresolvedFranchise(c.After));
+        if (change == null)
+            return;
+
+        await db.SaveChangesAsync(ct);
+        change.After = (await deckMetadata.LoadSnapshotAsync(deckId, ct))!.Value(MetadataField.Franchise);
     }
 
     public static string ViewerRole(MetadataViewer? viewer) =>
@@ -399,6 +441,7 @@ public sealed partial class MetadataEditService(
             var error = await ApplyValuesAsync(deck, live.Select(c => (c.Field, c.After)), userId, ct);
             if (error != null)
                 return Bad(error);
+            await RecordStartedFranchiseAsync(deckId, live, ct);
 
             var row = NewRow(live, record.IsEditor ? MetadataEditStatus.Approved : MetadataEditStatus.Applied);
             row.AppliedAt = now;
@@ -487,6 +530,7 @@ public sealed partial class MetadataEditService(
         MetadataField.Links => "external links",
         MetadataField.Relationships => "related decks",
         MetadataField.CharacterNames => "character names",
+        MetadataField.Franchise => "franchise",
         _ => field.ToString()
     };
 
@@ -676,11 +720,26 @@ public sealed partial class MetadataEditService(
             characterNames = existing.Concat(added).Distinct().Order(StringComparer.Ordinal).ToList();
         }
 
+        var franchise = before.Franchise;
+        if (r.FranchiseDeckId is { } franchiseDeckId)
+        {
+            var derived = await db.Decks.AsNoTracking().Where(d => d.DeckId == deckId).Select(d => d.FranchiseId).FirstAsync(ct);
+            if (derived != null || before.Franchise != null)
+                return Fail("This deck is already in a franchise.");
+            if (franchiseDeckId == deckId)
+                return Fail("Pick another deck from the franchise.");
+            var pick = await FranchiseOfDeckAsync(franchiseDeckId, ct);
+            if (!pick.IsOk)
+                return Fail(pick.Error!);
+            var p = pick.Value!;
+            franchise = new SnapshotFranchise(p.FranchiseId, p.OriginalTitle, p.RomajiTitle, p.EnglishTitle, p.FranchiseId == null ? p.DeckId : null);
+        }
+
         var after = new DeckMetadataSnapshot
                     {
                         OriginalTitle = originalTitle, RomajiTitle = romaji, EnglishTitle = english, Description = description,
                         ReleaseDate = releaseDate, MediaType = mediaType, Aliases = aliases, Genres = genres, Tags = tags, Links = links,
-                        Relationships = relationships, CharacterNames = characterNames
+                        Relationships = relationships, CharacterNames = characterNames, Franchise = franchise
                     };
         return new Built(after, null, ScalarConflicts(before, after, r));
     }

@@ -10,6 +10,9 @@ public sealed record SnapshotLink(LinkType LinkType, string Url);
 
 public sealed record SnapshotRelationship(int SourceDeckId, int TargetDeckId, DeckRelationshipType RelationshipType, int OtherDeckId, string OtherDeckTitle);
 
+/// <summary>A null id is a franchise still to be started with <paramref name="WithDeckId"/>, whose titles it carries; applying it records the new id.</summary>
+public sealed record SnapshotFranchise(int? FranchiseId, string OriginalTitle, string? RomajiTitle, string? EnglishTitle, int? WithDeckId = null);
+
 /// <summary>The community-editable state of one deck, in the JSON forms stored in <see cref="MetadataFieldChange"/>.</summary>
 public sealed class DeckMetadataSnapshot
 {
@@ -31,7 +34,10 @@ public sealed class DeckMetadataSnapshot
     public List<SnapshotRelationship> Relationships { get; init; } = [];
     public List<string> CharacterNames { get; init; } = [];
 
-    /// <summary>Unloaded navigations read as empty, so load the deck through <see cref="DeckMetadataSnapshotQueries.IncludeSnapshotGraph"/>.</summary>
+    /// <summary>The saved franchise board holding the deck, not its derived franchise; null when only links or series place it.</summary>
+    public SnapshotFranchise? Franchise { get; init; }
+
+    /// <summary>Unloaded navigations read as empty, so load the deck through <see cref="DeckMetadataSnapshotQueries.IncludeSnapshotGraph"/>; Franchise stays null because provider imports never write it.</summary>
     public static DeckMetadataSnapshot Capture(Deck deck) =>
         From(deck.OriginalTitle, deck.RomajiTitle, deck.EnglishTitle, deck.Description, deck.ReleaseDate, deck.MediaType,
              deck.Titles.Where(t => t.TitleType == DeckTitleType.Alias).Select(t => t.Title),
@@ -48,7 +54,7 @@ public sealed class DeckMetadataSnapshot
     public static DeckMetadataSnapshot From(string originalTitle, string? romajiTitle, string? englishTitle, string? description, DateOnly releaseDate,
                                             MediaType mediaType, IEnumerable<string> aliases, IEnumerable<Genre> genres, IEnumerable<SnapshotTag> tags,
                                             IEnumerable<SnapshotLink> links, IEnumerable<SnapshotRelationship> relationships,
-                                            IEnumerable<string> characterNames) => new()
+                                            IEnumerable<string> characterNames, SnapshotFranchise? franchise = null) => new()
     {
         OriginalTitle = originalTitle,
         RomajiTitle = NullIfBlank(romajiTitle),
@@ -63,7 +69,8 @@ public sealed class DeckMetadataSnapshot
         Relationships = relationships.Where(r => !DeckRelationship.IsLegacyGroupType(r.RelationshipType))
                                      .OrderBy(r => r.SourceDeckId).ThenBy(r => r.TargetDeckId).ThenBy(r => r.RelationshipType)
                                      .ToList(),
-        CharacterNames = characterNames.Distinct().Order(StringComparer.Ordinal).ToList()
+        CharacterNames = characterNames.Distinct().Order(StringComparer.Ordinal).ToList(),
+        Franchise = franchise
     };
 
     public JsonElement Value(MetadataField field) => field switch
@@ -80,6 +87,7 @@ public sealed class DeckMetadataSnapshot
         MetadataField.Links => ToElement(Links),
         MetadataField.Relationships => ToElement(Relationships),
         MetadataField.CharacterNames => ToElement(CharacterNames),
+        MetadataField.Franchise => ToElement(Franchise),
         _ => throw new ArgumentOutOfRangeException(nameof(field), field, null)
     };
 
@@ -122,6 +130,10 @@ public sealed class DeckMetadataSnapshot
                                              .Order(StringComparer.Ordinal));
             case MetadataField.Aliases or MetadataField.CharacterNames:
                 return string.Join("\u0001", value.EnumerateArray().Select(s => s.GetString() ?? "").Order(StringComparer.Ordinal));
+            case MetadataField.Franchise:
+                return value.GetProperty("franchiseId") is { ValueKind: JsonValueKind.Number } id
+                    ? id.GetInt32().ToString()
+                    : "with:" + value.GetProperty("withDeckId").GetInt32();
             case MetadataField.Genres:
                 return string.Join(",", value.EnumerateArray().Select(g => g.GetInt32()).Order());
             case MetadataField.Description or MetadataField.RomajiTitle or MetadataField.EnglishTitle or MetadataField.OriginalTitle:

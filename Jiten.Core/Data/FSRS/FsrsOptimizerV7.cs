@@ -116,6 +116,10 @@ public static class FsrsOptimizerV7
         return new FsrsOptimizationResult(parameters, ComputeLoss(cards, parameters), targetCount, config.Epochs);
     }
 
+    /// <summary>Recency-weighted mean log loss with the outlier filter and weighting <see cref="Optimize"/> uses, so two parameter sets compare like for like.</summary>
+    public static double EvaluateLoss(List<FsrsTrainingItem> items, double[] parameters)
+        => ComputeLoss(BuildWeightedCards(FilterOutliers(items)), parameters);
+
     /// <summary>Recency-weighted BCE sum over every target and its gradient, as one optimizer batch holding all the items would see it.</summary>
     public static (double Loss, double[] Gradients) WeightedLossAndGradients(List<FsrsTrainingItem> items, double[] parameters)
     {

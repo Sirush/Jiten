@@ -102,6 +102,7 @@ public partial class AdminController
         return Ok(new { Message = "Update saved" });
     }
 
+    /// <summary>Claims NotifiedAt with a conditional update inside the fan-out transaction, so concurrent publishes notify once and a failed fan-out releases the claim.</summary>
     [HttpPost("updates/{id:int}/publish")]
     public async Task<IActionResult> PublishSiteUpdate(int id, [FromServices] NotificationService notificationService)
     {
@@ -111,19 +112,21 @@ public partial class AdminController
 
         update.PublishedAt ??= DateTime.UtcNow;
 
-        if (update.NotifiedAt != null)
+        await using var transaction = await dbContext.Database.BeginTransactionAsync();
+
+        var claimed = await dbContext.SiteUpdates
+                                     .Where(u => u.Id == id && u.NotifiedAt == null)
+                                     .ExecuteUpdateAsync(s => s.SetProperty(u => u.NotifiedAt, DateTime.UtcNow)) == 1;
+        if (!claimed)
         {
             await dbContext.SaveChangesAsync();
+            await transaction.CommitAsync();
             return Ok(new { Message = "Update was already published, no notifications sent", Count = 0 });
         }
 
         var userIds = await userContext.Users.AsNoTracking()
                                        .Select(u => u.Id)
                                        .ToListAsync();
-
-        // Stamped before the fan-out so NotificationService's save commits the guard and the rows together;
-        // a partial commit would let a retry notify everyone twice.
-        update.NotifiedAt = DateTime.UtcNow;
 
         await notificationService.NotifyMany(
             userIds, NotificationType.SiteUpdate,
@@ -132,6 +135,7 @@ public partial class AdminController
             $"/updates#update-{update.Id}");
 
         await dbContext.SaveChangesAsync();
+        await transaction.CommitAsync();
 
         logger.LogInformation("Admin published site update: Id={Id}, Notified={Count}", id, userIds.Count);
         return Ok(new { Message = $"Published and notified {userIds.Count} users", Count = userIds.Count });

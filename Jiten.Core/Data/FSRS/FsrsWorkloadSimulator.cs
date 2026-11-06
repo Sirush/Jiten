@@ -24,6 +24,26 @@ public static class FsrsWorkloadSimulator
     /// </summary>
     public const int DefaultPasses = 4;
 
+    private const int MaxSimulatedCards = 8000;
+
+    /// <summary>Shrinks <paramref name="cards"/> in place to a seeded random sample small enough to simulate.</summary>
+    /// <returns>The factor that scales the sample's projection back up to the full population.</returns>
+    public static double SampleInPlace<T>(List<T> cards, int seed)
+    {
+        var total = cards.Count;
+        if (total <= MaxSimulatedCards)
+            return 1.0;
+
+        var rng = new Random(seed);
+        for (var i = 0; i < MaxSimulatedCards; i++)
+        {
+            var j = rng.Next(i, total);
+            (cards[i], cards[j]) = (cards[j], cards[i]);
+        }
+        cards.RemoveRange(MaxSimulatedCards, total - MaxSimulatedCards);
+        return (double)total / MaxSimulatedCards;
+    }
+
     private const int PerCardSafetyCap = 100_000;
 
     /// <summary>

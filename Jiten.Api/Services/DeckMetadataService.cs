@@ -31,6 +31,13 @@ public sealed class DeckMetadataRelationshipPatch
 /// Partial deck metadata update. A null member is not part of the patch and leaves the stored value
 /// alone; an empty collection clears every row of that kind.
 /// </summary>
+/// <summary>Both null takes the deck off its franchise board; <see cref="WithDeckId"/> joins that deck's franchise, starting one when it has none.</summary>
+public sealed class DeckMetadataFranchisePatch
+{
+    public int? FranchiseId { get; init; }
+    public int? WithDeckId { get; init; }
+}
+
 public sealed class DeckMetadataPatch
 {
     public string? OriginalTitle { get; init; }
@@ -53,6 +60,7 @@ public sealed class DeckMetadataPatch
     public List<DeckMetadataTagPatch>? Tags { get; init; }
     public List<DeckMetadataLinkPatch>? Links { get; init; }
     public List<DeckMetadataRelationshipPatch>? Relationships { get; init; }
+    public DeckMetadataFranchisePatch? Franchise { get; init; }
 }
 
 public sealed class DeckMetadataService(JitenDbContext dbContext)
@@ -100,6 +108,15 @@ public sealed class DeckMetadataService(JitenDbContext dbContext)
                                                })
                                   .AsSplitQuery()
                                   .ToListAsync(ct);
+        var franchises = await dbContext.FranchiseMembers.AsNoTracking()
+                                        .Where(m => deckIds.Contains(m.DeckId))
+                                        .Select(m => new
+                                                     {
+                                                         m.DeckId,
+                                                         Franchise = new SnapshotFranchise(m.FranchiseId, m.Franchise.OriginalTitle, m.Franchise.RomajiTitle,
+                                                                                           m.Franchise.EnglishTitle)
+                                                     })
+                                        .ToDictionaryAsync(m => m.DeckId, m => m.Franchise, ct);
 
         return rows.ToDictionary(r => r.DeckId, r => DeckMetadataSnapshot.From(
                                      r.OriginalTitle, r.RomajiTitle, r.EnglishTitle, r.Description, r.ReleaseDate, r.MediaType, r.Aliases, r.Genres,
@@ -108,7 +125,7 @@ public sealed class DeckMetadataService(JitenDbContext dbContext)
                                      r.Outgoing.Select(e => new SnapshotRelationship(e.SourceDeckId, e.TargetDeckId, e.RelationshipType, e.TargetDeckId, e.OriginalTitle))
                                       .Concat(r.Incoming.Select(e => new SnapshotRelationship(e.SourceDeckId, e.TargetDeckId, e.RelationshipType, e.SourceDeckId,
                                                                                               e.OriginalTitle))),
-                                     r.Names));
+                                     r.Names, franchises.GetValueOrDefault(r.DeckId)));
     }
 
     /// <summary>Returns an error or null; person edits lock fields, tombstone removals (not for reverts) and mark tag percentages manual. Caller saves.</summary>
@@ -146,6 +163,8 @@ public sealed class DeckMetadataService(JitenDbContext dbContext)
             ApplyLinks(deck, patch.Links);
         if (patch.Relationships != null)
             await ApplyRelationshipsAsync(deck, patch.Relationships, ct);
+        if (patch.Franchise != null)
+            await ApplyFranchiseAsync(deck, patch.Franchise, ct);
         if (patch.Aliases != null)
             ApplyStringSet(deck, deck.Titles, t => t.TitleType == DeckTitleType.Alias, t => t.Title,
                            alias => new DeckTitle { DeckId = deck.DeckId, Title = alias, TitleType = DeckTitleType.Alias },
@@ -344,6 +363,24 @@ public sealed class DeckMetadataService(JitenDbContext dbContext)
             }
         }
 
+        if (patch.Franchise?.FranchiseId is { } franchiseId)
+        {
+            if (!await dbContext.Franchises.AnyAsync(f => f.FranchiseId == franchiseId, ct))
+                return "That franchise no longer exists.";
+            if (deck.FranchiseId != null && deck.FranchiseId != franchiseId)
+                return "This deck is already in another franchise.";
+        }
+        else if (patch.Franchise?.WithDeckId is { } withDeckId)
+        {
+            if (withDeckId == deck.DeckId)
+                return "Pick another deck from the franchise.";
+            var other = await dbContext.Decks.AsNoTracking().Where(d => d.DeckId == withDeckId).Select(d => new { d.FranchiseId }).FirstOrDefaultAsync(ct);
+            if (other == null)
+                return "That deck no longer exists.";
+            if (deck.FranchiseId != null && deck.FranchiseId != other.FranchiseId)
+                return "This deck is already in another franchise.";
+        }
+
         return null;
     }
 
@@ -440,6 +477,54 @@ public sealed class DeckMetadataService(JitenDbContext dbContext)
 
         await RelationshipOverrides.MarkAsync(dbContext, removed.Select(e => (e.SourceDeckId, e.TargetDeckId))
                                                                 .Concat(added.Select(e => (e.SourceDeckId, e.TargetDeckId))), ct);
+    }
+
+    /// <summary>A lone board deck joins nothing, so the franchise's current decks go on the board too, as the builder saves them.</summary>
+    private async Task ApplyFranchiseAsync(Deck deck, DeckMetadataFranchisePatch patch, CancellationToken ct)
+    {
+        if (patch.FranchiseId == null && patch.WithDeckId == null)
+        {
+            if (await dbContext.FranchiseMembers.FirstOrDefaultAsync(m => m.DeckId == deck.DeckId, ct) is { } row)
+                dbContext.FranchiseMembers.Remove(row);
+            return;
+        }
+
+        var target = patch.FranchiseId ?? await StartOrFindFranchiseAsync(patch.WithDeckId!.Value, ct);
+        await PinAsync(deck.DeckId, target, ct);
+
+        var unpinned = await dbContext.Decks.AsNoTracking()
+                                      .Where(d => d.FranchiseId == target && d.DeckId != deck.DeckId &&
+                                                  !dbContext.FranchiseMembers.Any(m => m.DeckId == d.DeckId))
+                                      .Select(d => d.DeckId)
+                                      .ToListAsync(ct);
+        dbContext.FranchiseMembers.AddRange(unpinned.Select(id => new FranchiseMember { DeckId = id, FranchiseId = target }));
+    }
+
+    private async Task PinAsync(int deckId, int franchiseId, CancellationToken ct)
+    {
+        var row = await dbContext.FranchiseMembers.FirstOrDefaultAsync(m => m.DeckId == deckId, ct);
+        if (row != null)
+            row.FranchiseId = franchiseId;
+        else
+            dbContext.FranchiseMembers.Add(new FranchiseMember { DeckId = deckId, FranchiseId = franchiseId });
+    }
+
+    /// <summary>The other deck's franchise; when it has none, a new one titled after it with the other deck on its board.</summary>
+    private async Task<int> StartOrFindFranchiseAsync(int withDeckId, CancellationToken ct)
+    {
+        var other = await dbContext.Decks.AsNoTracking().Where(d => d.DeckId == withDeckId)
+                                   .Select(d => new { d.FranchiseId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle })
+                                   .FirstAsync(ct);
+        if (other.FranchiseId is { } existing)
+            return existing;
+
+        var franchise = new Franchise();
+        franchise.SetTitles(GroupTitles.Of(other.OriginalTitle, other.RomajiTitle, other.EnglishTitle));
+        dbContext.Franchises.Add(franchise);
+        await dbContext.SaveChangesAsync(ct);
+
+        await PinAsync(withDeckId, franchise.FranchiseId, ct);
+        return franchise.FranchiseId;
     }
 
     private static string? NullIfBlank(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();

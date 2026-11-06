@@ -65,6 +65,7 @@ const editable = (): EditableDeck => ({
     },
   ],
   characterNames: ['前原圭一', '前原', '圭一'],
+  franchise: null,
   historyCount: 3,
   pending: [],
   viewer: { role: 'user', hasDisplayName: true, emailConfirmed: true, banned: false },
@@ -99,6 +100,32 @@ describe('buildSubmission', () => {
     const draft = draftFromEditable(editable());
     draft.releaseDate = '';
     expect(buildSubmission(original, draft).payload).toEqual({ releaseDate: '', base: { releaseDate: '2002-08-01' } });
+  });
+
+  it('sends the picked deck for a franchise, without a base', () => {
+    const original = draftFromEditable(editable());
+    const draft = draftFromEditable(editable());
+    draft.franchise = { franchiseId: 7, originalTitle: 'ひぐらし', romajiTitle: null, englishTitle: null, withDeckId: 20 };
+
+    const { payload, fields } = buildSubmission(original, draft);
+    expect(payload).toEqual({ franchiseDeckId: 20 });
+    expect(fields).toEqual([MetadataField.Franchise]);
+    expect(describeChange(draftChanges(original, draft, fields)[0]!)).toEqual({
+      kind: 'list',
+      added: [{ label: 'ひぐらし', href: '/franchise/7' }],
+      removed: [],
+      changed: [],
+    });
+  });
+
+  it('describes a franchise the edit will start with the picked deck', () => {
+    const change = { field: MetadataField.Franchise, before: null, after: { franchiseId: null, originalTitle: '解', romajiTitle: null, englishTitle: null, withDeckId: 20 } };
+    expect(describeChange(change)).toEqual({
+      kind: 'list',
+      added: [{ label: '解', role: 'New franchise with', href: '/decks/media/20/detail' }],
+      removed: [],
+      changed: [],
+    });
   });
 
   it('ignores blank link rows and trims urls', () => {

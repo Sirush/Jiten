@@ -3305,9 +3305,6 @@ public partial class StudyController(
     // When the user's setting falls outside the default span we push the grid past it by this margin on
     // both sides, so the anchor point sits inside the curve instead of on the clamped edge.
     private const double WorkloadGridMargin = 0.03;
-    // Cap the simulated population (existing + injected new cards) so a huge collection can't make the
-    // endpoint slow; the result is scaled up by total/sampled. New-card inflow is clamped separately.
-    private const int WorkloadMaxSimCards = 8000;
     private const int WorkloadMaxNewCardsPerDay = 200;
     // Time model: per-maturity seconds/review are learned from the user's own review durations (ms, capped
     // to drop AFK outliers), bucketed by maturity exactly like RetentionCalculator. Below the
@@ -3399,18 +3396,7 @@ public partial class StudyController(
 
         // Sample once (shared across every retention point) so the multipliers compare like-for-like.
         var total = seeds.Count;
-        var scale = 1.0;
-        if (total > WorkloadMaxSimCards)
-        {
-            var rng = new Random(20260612);
-            for (var i = 0; i < WorkloadMaxSimCards; i++)
-            {
-                var j = rng.Next(i, total);
-                (seeds[i], seeds[j]) = (seeds[j], seeds[i]);
-            }
-            seeds.RemoveRange(WorkloadMaxSimCards, total - WorkloadMaxSimCards);
-            scale = (double)total / WorkloadMaxSimCards;
-        }
+        var scale = FsrsWorkloadSimulator.SampleInPlace(seeds, 20260612);
 
         // Per-maturity time model from the user's own review durations (data we already store).
         var (learningSeconds, youngSeconds, matureSeconds) = await ComputeReviewSecondsModel(userId);

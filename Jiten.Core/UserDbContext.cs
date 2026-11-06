@@ -33,6 +33,7 @@ public class UserDbContext : IdentityDbContext<User>
     public DbSet<UserMediaListEntry> UserMediaListEntries { get; set; }
     public DbSet<DeckDownload> DeckDownloads { get; set; }
     public DbSet<UserFsrsSettings> UserFsrsSettings { get; set; }
+    public DbSet<FsrsParameterHistory> FsrsParameterHistories { get; set; }
 
     public DbSet<FsrsCard> FsrsCards { get; set; }
     public DbSet<FsrsReviewLog> FsrsReviewLogs { get; set; }
@@ -475,6 +476,26 @@ public class UserDbContext : IdentityDbContext<User>
             entity.HasOne<User>()
                   .WithOne()
                   .HasForeignKey<UserFsrsSettings>(ufs => ufs.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<FsrsParameterHistory>(entity =>
+        {
+            entity.HasKey(h => h.Id);
+            if (isNpgsql)
+            {
+                entity.Property(h => h.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+                entity.Property(h => h.ParametersJson).HasColumnType("jsonb").IsRequired();
+            }
+            else
+            {
+                entity.Property(h => h.ParametersJson).IsRequired();
+            }
+            entity.HasIndex(h => new { h.UserId, h.CreatedAtUtc });
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(h => h.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
 

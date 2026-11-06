@@ -150,6 +150,7 @@ builder.Services.AddWebNovelSources();
 
 builder.Services.Configure<YtDlpOptions>(builder.Configuration.GetSection("YtDlp"));
 builder.Services.Configure<YouTubeOptions>(builder.Configuration.GetSection("YouTube"));
+builder.Services.Configure<FsrsAutoOptimiseOptions>(builder.Configuration.GetSection("Fsrs:AutoOptimise"));
 builder.Services.AddHttpClient("YouTube", client =>
 {
     client.DefaultRequestHeaders.UserAgent.ParseAdd("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Jiten/1.0");
@@ -1001,6 +1002,7 @@ builder.Services.AddScoped<ReparseJob>();
 builder.Services.AddScoped<ComputationJob>();
 builder.Services.AddScoped<SrsRecomputeJob>();
 builder.Services.AddScoped<FsrsModelMigrationJob>();
+builder.Services.AddScoped<FsrsAutoOptimiseJob>();
 builder.Services.AddScoped<LapseRecountJob>();
 builder.Services.AddScoped<ReviewRollupJob>();
 builder.Services.AddScoped<DifficultyAdjustmentJob>();
@@ -1269,6 +1271,11 @@ if (!app.Environment.IsEnvironment("Testing"))
         "site-stats-snapshot",
         job => job.Snapshot(),
         Cron.Daily(2));
+
+    recurringJobs.AddOrUpdate<FsrsAutoOptimiseJob>(
+        "fsrs-auto-optimise",
+        job => job.Run(),
+        "0 9 * * *");
 
     recurringJobs.AddOrUpdate<SiteStatsJob>(
         "site-stats-words-for-coverage",

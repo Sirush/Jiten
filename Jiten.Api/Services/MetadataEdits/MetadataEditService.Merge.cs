@@ -19,6 +19,9 @@ public sealed partial class MetadataEditService
     /// </summary>
     public static FieldMerge Merge(MetadataField field, JsonElement before, JsonElement after, JsonElement current, bool preferEdit)
     {
+        if (field == MetadataField.Franchise && IsUnresolvedFranchise(after))
+            return new FieldMerge(after, false, true);
+
         if (!IsListField(field))
         {
             var clash = !DeckMetadataSnapshot.KeyEquals(field, current, before) && !DeckMetadataSnapshot.KeyEquals(field, current, after);
@@ -36,6 +39,10 @@ public sealed partial class MetadataEditService
         };
         return new FieldMerge(merged, hasClash, !DeckMetadataSnapshot.KeyEquals(field, merged, current));
     }
+
+    /// <summary>A franchise picked through a deck that had none when the edit was made; approval decides what it resolves to.</summary>
+    public static bool IsUnresolvedFranchise(JsonElement value) =>
+        value.ValueKind == JsonValueKind.Object && value.GetProperty("franchiseId").ValueKind != JsonValueKind.Number;
 
     private static List<T> ListOf<T>(JsonElement value) =>
         value.ValueKind == JsonValueKind.Array ? value.Deserialize<List<T>>(DeckMetadataSnapshot.Json) ?? [] : [];

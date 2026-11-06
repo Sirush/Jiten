@@ -57,6 +57,7 @@ public class SrsRecomputeJob(
         var scheduler = FsrsSettingsHelper.CreateScheduler(await FsrsSettingsHelper.LoadAsync(userContext, userId), enableFuzzing: false);
 
         var lastCardId = 0L;
+        var raced = new List<long>();
         while (true)
         {
             var cards = await userContext.FsrsCards
@@ -67,29 +68,15 @@ public class SrsRecomputeJob(
             if (cards.Count == 0)
                 break;
 
-            var cardIds = cards.Select(card => card.CardId).ToList();
-            var logsByCard = (await userContext.FsrsReviewLogs
-                                               .AsNoTracking()
-                                               .Where(log => cardIds.Contains(log.CardId))
-                                               .ToListAsync())
-                             .GroupBy(log => log.CardId)
-                             .ToDictionary(group => group.Key, group => group.ToList());
-
-            foreach (var card in cards)
-            {
-                if (logsByCard.TryGetValue(card.CardId, out var cardLogs)
-                    && FsrsReplay.Recompute(card, cardLogs, scheduler, scheduler, preserveSchedule: true))
-                    continue;
-
-                if (scheduler.Version != FsrsVersion.V7)
-                    card.StabilityFast = null;
-                else if (card.Stability != null)
-                    // Without a log there is nothing to replay; pinning the fallback keeps the migration job from revisiting the card.
-                    card.StabilityFast ??= FsrsHelperV7.FromCard(card).StabilityFast;
-            }
-
+            raced.AddRange(await ReplayMemoryStateBatch(userContext, cards, scheduler));
             lastCardId = cards[^1].CardId;
-            await userContext.SaveChangesAsync();
+            userContext.ChangeTracker.Clear();
+        }
+
+        foreach (var chunk in raced.Chunk(BatchSize))
+        {
+            var cards = await userContext.FsrsCards.Where(card => chunk.Contains(card.CardId)).ToListAsync();
+            await ReplayMemoryStateBatch(userContext, cards, scheduler);
             userContext.ChangeTracker.Clear();
         }
 
@@ -128,6 +115,50 @@ public class SrsRecomputeJob(
         }
 
         logger.LogInformation("Recomputed FSRS-{Version} memory states for user {UserId}", (int)scheduler.Version, userId);
+    }
+
+    /// <summary>Replays and saves tracked cards, skipping any reviewed or removed meanwhile so a stale replay never overwrites a newer review.</summary>
+    /// <returns>Cards reviewed meanwhile, to replay again.</returns>
+    private static async Task<List<long>> ReplayMemoryStateBatch(UserDbContext userContext, List<FsrsCard> cards, FsrsScheduler scheduler)
+    {
+        var cardIds = cards.Select(card => card.CardId).ToList();
+        var logsByCard = (await userContext.FsrsReviewLogs
+                                           .AsNoTracking()
+                                           .Where(log => cardIds.Contains(log.CardId))
+                                           .ToListAsync())
+                         .GroupBy(log => log.CardId)
+                         .ToDictionary(group => group.Key, group => group.ToList());
+
+        foreach (var card in cards)
+        {
+            if (logsByCard.TryGetValue(card.CardId, out var cardLogs)
+                && FsrsReplay.Recompute(card, cardLogs, scheduler, scheduler, preserveSchedule: true))
+                continue;
+
+            if (scheduler.Version != FsrsVersion.V7)
+                card.StabilityFast = null;
+            else if (card.Stability != null)
+                // Without a log there is nothing to replay; pinning the fallback keeps the migration job from revisiting the card.
+                card.StabilityFast ??= FsrsHelperV7.FromCard(card).StabilityFast;
+        }
+
+        var stored = await userContext.FsrsCards
+                                      .AsNoTracking()
+                                      .Where(card => cardIds.Contains(card.CardId))
+                                      .Select(card => new { card.CardId, card.LastReview })
+                                      .ToDictionaryAsync(card => card.CardId, card => card.LastReview);
+        var raced = new List<long>();
+        foreach (var card in cards)
+        {
+            if (stored.TryGetValue(card.CardId, out var lastReview) && lastReview == userContext.Entry(card).Property(c => c.LastReview).OriginalValue)
+                continue;
+            userContext.Entry(card).State = EntityState.Detached;
+            if (stored.ContainsKey(card.CardId))
+                raced.Add(card.CardId);
+        }
+
+        await userContext.SaveChangesAsync();
+        return raced;
     }
 
     /// <summary>Due counts a reschedule would leave today and over the next week, without saving; the week is approximate when load balancing is off.</summary>

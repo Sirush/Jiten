@@ -739,6 +739,20 @@
 
             <div v-if="selected.franchiseEffect" class="rounded-md px-3 py-2 text-sm bg-amber-50 text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
               <strong>Franchise effect.</strong>
+              <template v-if="selected.franchiseEffect.addedDeckTitle && selected.franchiseEffect.into">
+                This deck already joined
+                <NuxtLink
+                  :to="`/franchise/${selected.franchiseEffect.into.franchiseId}`"
+                  target="_blank"
+                  class="!text-inherit font-medium underline decoration-1 underline-offset-2 hover:decoration-2"
+                  v-bind="japaneseTextAttrs(localiseTitle(selected.franchiseEffect.into))"
+                  >{{ localiseTitle(selected.franchiseEffect.into) }}</NuxtLink
+                >
+                ({{ deckCountText(selected.franchiseEffect.into.deckCount) }}), so approving will add
+                <span class="font-medium" v-bind="japaneseTextAttrs(selected.franchiseEffect.addedDeckTitle)">{{ selected.franchiseEffect.addedDeckTitle }}</span>
+                to it instead. The edit will move to that deck's history.
+              </template>
+              <template v-else>
               {{ selected.franchiseEffect.into ? 'Will merge the franchise' : 'Will add this deck to the franchise' }}
               <template v-for="(franchise, i) in selected.franchiseEffect.joining" :key="franchise.franchiseId"
                 ><template v-if="i > 0"> and </template
@@ -761,6 +775,7 @@
                 >
                 ({{ deckCountText(selected.franchiseEffect.into.deckCount) }}). Franchise pages and study decks built from them will change.</template
               ><template v-else>.</template>
+              </template>
             </div>
 
             <div

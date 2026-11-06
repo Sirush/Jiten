@@ -8,6 +8,7 @@
     type CharacterNameCheck,
     type EditableDeck,
     type EditablePendingEdit,
+    type MetadataFranchisePick,
     type SubmitConflictField,
     type SubmitMetadataEditResult,
   } from '~/types/metadataEdits';
@@ -285,6 +286,39 @@
     original.value?.relationships.some(
       (o) => o.sourceDeckId === r.sourceDeckId && o.targetDeckId === r.targetDeckId && o.relationshipType === r.relationshipType
     ) ?? false;
+
+  const currentFranchise = computed(() => editable.value?.franchise ?? null);
+  const franchisePickId = ref<number | null>(null);
+  const franchiseLooking = ref(false);
+  const franchiseErrorText = ref<string | null>(null);
+  let franchiseRequest = 0;
+
+  async function onFranchiseDeckSelect(suggestion: MediaSuggestion | null) {
+    franchiseErrorText.value = null;
+    if (!suggestion || !draft.value) return;
+    if (suggestion.deckId === deckId) {
+      franchiseErrorText.value = 'Pick another deck from the franchise.';
+      return;
+    }
+    const request = ++franchiseRequest;
+    franchiseLooking.value = true;
+    try {
+      const pick = await $api<MetadataFranchisePick>(`media-deck/${suggestion.deckId}/franchise-ref`);
+      if (request !== franchiseRequest || !draft.value) return;
+      draft.value.franchise = {
+        franchiseId: pick.franchiseId,
+        originalTitle: pick.originalTitle,
+        romajiTitle: pick.romajiTitle,
+        englishTitle: pick.englishTitle,
+        withDeckId: pick.deckId,
+      };
+      franchisePickId.value = null;
+    } catch (err) {
+      if (request === franchiseRequest) franchiseErrorText.value = apiErrorMessage(err, "That deck's franchise didn't load. Try again.");
+    } finally {
+      if (request === franchiseRequest) franchiseLooking.value = false;
+    }
+  }
 
   const newName = ref('');
   const nameCheck = ref<CharacterNameCheck | null>(null);
@@ -775,6 +809,56 @@
                 </p>
                 <p v-if="relationErrorText" class="m-0 mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{{ relationErrorText }}</p>
                 <p class="m-0 mt-1 text-xs text-muted-color">Only works in the same story: sequels, side stories, adaptations.</p>
+              </MetadataEditField>
+
+              <MetadataEditField label="Franchise" v-bind="fieldBindings(MetadataField.Franchise)">
+                <p v-if="currentFranchise" class="m-0 text-sm">
+                  In
+                  <NuxtLink
+                    :to="`/franchise/${currentFranchise.franchiseId}`"
+                    class="font-medium"
+                    v-bind="japaneseTextAttrs(localiseTitle(currentFranchise))"
+                    >{{ localiseTitle(currentFranchise) }}</NuxtLink
+                  >
+                  <span class="text-muted-color"> ({{ currentFranchise.deckCount }} {{ currentFranchise.deckCount === 1 ? 'deck' : 'decks' }})</span>.
+                  Related decks decide its franchise.
+                </p>
+                <template v-else>
+                  <div v-if="draft.franchise" :class="[chipClass, 'justify-between w-full py-1 !border-dashed !border-primary-500']">
+                    <span class="min-w-0 [overflow-wrap:anywhere]">
+                      <template v-if="draft.franchise.franchiseId == null">New franchise with </template>
+                      <NuxtLink
+                        :to="draft.franchise.franchiseId != null ? `/franchise/${draft.franchise.franchiseId}` : `/decks/media/${draft.franchise.withDeckId}/detail`"
+                        class="text-color"
+                        v-bind="japaneseTextAttrs(localiseTitle(draft.franchise))"
+                      >
+                        {{ localiseTitle(draft.franchise) }}
+                      </NuxtLink>
+                    </span>
+                    <button
+                      type="button"
+                      :class="chipRemoveClass"
+                      :aria-label="`Remove ${localiseTitle(draft.franchise)}`"
+                      @click="draft.franchise = null"
+                    >
+                      <i class="pi pi-times text-[10px]" aria-hidden="true" />
+                    </button>
+                  </div>
+                  <div v-else class="flex items-center gap-2">
+                    <MediaDeckPicker
+                      v-model="franchisePickId"
+                      :allow-raw-id="false"
+                      placeholder="Search a deck from the franchise..."
+                      class="w-full"
+                      @select="onFranchiseDeckSelect"
+                    />
+                    <i v-if="franchiseLooking" class="pi pi-spin pi-spinner text-muted-color" aria-hidden="true" />
+                  </div>
+                  <p v-if="franchiseErrorText" class="m-0 mt-1 text-xs text-red-600 dark:text-red-400" role="alert">{{ franchiseErrorText }}</p>
+                  <p class="m-0 mt-1 text-xs text-muted-color">
+                    For works from the same franchise that are not directly related, or if there's a missing link in the database between them.
+                  </p>
+                </template>
               </MetadataEditField>
             </div>
           </section>

@@ -44,7 +44,16 @@ public class ReviewRollupJob(
             if (!await ReviewRollupHelper.TryClaimDirty(ctx, userId))
                 return;
 
-            await Rebuild(ctx, userId);
+            try
+            {
+                await Rebuild(ctx, userId);
+            }
+            catch
+            {
+                ctx.ChangeTracker.Clear();
+                await ReviewRollupHelper.MarkDirty(ctx, userId);
+                throw;
+            }
         }
         finally
         {

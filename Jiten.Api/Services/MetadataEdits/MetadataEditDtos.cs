@@ -8,6 +8,8 @@ public sealed class SubmitMetadataEditRequest : SubmitMetadataEditBase
 {
     public List<string>? AddCharacterNames { get; init; }
     public List<string>? RemoveCharacterNames { get; init; }
+    /// <summary>Joins this deck's franchise, or starts one with it when it has none.</summary>
+    public int? FranchiseDeckId { get; init; }
     public List<string> Sources { get; init; } = [];
     public string? Note { get; init; }
 
@@ -125,6 +127,10 @@ public sealed class EditableDeckDto
     public List<EditableLinkDto> Links { get; init; } = [];
     public List<EditableRelationshipDto> Relationships { get; init; } = [];
     public List<string> CharacterNames { get; init; } = [];
+
+    /// <summary>The deck's derived franchise, however it got there; only a deck without one can be added to a franchise.</summary>
+    public FranchiseRefDto? Franchise { get; init; }
+
     public int HistoryCount { get; init; }
     public List<EditablePendingDto> Pending { get; init; } = [];
     public EditableViewerDto Viewer { get; init; } = null!;
@@ -150,10 +156,14 @@ public sealed record QueueCheckDto(string DisplayName, int Verdict, int? Reason,
 
 public sealed record ConflictDto(int Field, JsonElement EditBefore, JsonElement Current, JsonElement EditAfter);
 
+/// <summary>A null id means the picked deck has no franchise yet, so the edit will start one with it; titles are then the deck's.</summary>
+public sealed record FranchisePickDto(int? FranchiseId, int DeckId, string OriginalTitle, string? RomajiTitle, string? EnglishTitle, int DeckCount);
+
 public sealed record FranchiseRefDto(int FranchiseId, string OriginalTitle, string? RomajiTitle, string? EnglishTitle, int DeckCount);
 
 /// <summary>Into is null when the deck has no franchise yet and joins the others; otherwise they merge into it.</summary>
-public sealed record FranchiseEffectDto(List<FranchiseRefDto> Joining, FranchiseRefDto? Into);
+/// <summary><paramref name="AddedDeckTitle"/> is set when the edited deck joined <paramref name="Into"/> after the edit was made, so approving adds the picked deck instead.</summary>
+public sealed record FranchiseEffectDto(List<FranchiseRefDto> Joining, FranchiseRefDto? Into, string? AddedDeckTitle = null);
 
 /// <summary>A relationship as stored in an edit, plus the other deck's current media type and year, since titles repeat across a franchise; both are null once that deck is gone.</summary>
 public sealed record RelationshipChangeValueDto(int SourceDeckId, int TargetDeckId, DeckRelationshipType RelationshipType, int OtherDeckId, string OtherDeckTitle,

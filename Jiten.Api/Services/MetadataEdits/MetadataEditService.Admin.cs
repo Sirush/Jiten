@@ -227,19 +227,16 @@ public sealed partial class MetadataEditService
         }
 
         foreach (var (deckId, fields) in touched)
-            await AfterApplyAsync(deckId, fields & ~MetadataField.Relationships, ct);
-        if (touched.Values.Any(f => f.HasFlag(MetadataField.Relationships)))
+            await AfterApplyAsync(deckId, fields & ~MetadataFields.FranchiseShaping, ct);
+        if (touched.Values.Any(f => (f & MetadataFields.FranchiseShaping) != 0))
             await franchiseSync.RunAsync(ct);
 
-        var pending = await db.MetadataEdits.Where(e => e.UserId == userId && e.Status == MetadataEditStatus.Pending).ToListAsync(ct);
-        foreach (var edit in pending)
-        {
-            edit.Status = MetadataEditStatus.Rejected;
-            edit.ReviewedAt = DateTime.UtcNow;
-            edit.ReviewedByUserId = adminId;
-            edit.ReviewNote = "Removed during a cleanup.";
-        }
-        await db.SaveChangesAsync(ct);
+        var now = DateTime.UtcNow;
+        await db.MetadataEdits.Where(e => e.UserId == userId && e.Status == MetadataEditStatus.Pending)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.Status, MetadataEditStatus.Rejected)
+                                          .SetProperty(e => e.ReviewedAt, now)
+                                          .SetProperty(e => e.ReviewedByUserId, adminId)
+                                          .SetProperty(e => e.ReviewNote, "Removed during a cleanup."), ct);
 
         return ServiceResult<RevertAllResultDto>.Ok(new RevertAllResultDto(reverted, partial));
     }

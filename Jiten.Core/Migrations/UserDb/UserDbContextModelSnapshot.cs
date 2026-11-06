@@ -721,6 +721,49 @@ namespace Jiten.Core.Migrations.UserDb
                     b.ToTable("UserReviewDailies", "user");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.User.FsrsParameterHistory", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<DateTime>("CreatedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double?>("Loss")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("ParametersJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<double?>("PreviousLoss")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTime?>("RevertedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ReviewCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Source")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("Version")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "CreatedAtUtc");
+
+                    b.ToTable("FsrsParameterHistories", "user");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.User.UserCardMedia", b =>
                 {
                     b.Property<long>("Id")
@@ -869,15 +912,36 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<Guid>("UserId")
                         .HasColumnType("uuid");
 
+                    b.Property<bool>("AutoOptimise")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("AutoOptimiseAttemptedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("AutoOptimiseAttemptedReviewCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("AutoOptimiseLastOutcome")
+                        .HasColumnType("integer");
+
                     b.Property<double?>("DesiredRetention")
                         .HasColumnType("double precision");
 
                     b.Property<int?>("NewCardCursorStudyDeckId")
                         .HasColumnType("integer");
 
+                    b.Property<DateTime?>("ParametersFittedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ParametersFittedReviewCount")
+                        .HasColumnType("integer");
+
                     b.Property<string>("ParametersJson")
                         .IsRequired()
                         .HasColumnType("jsonb");
+
+                    b.Property<int>("ParametersSource")
+                        .HasColumnType("integer");
 
                     b.Property<string>("PreviousParametersJson")
                         .HasColumnType("jsonb");
@@ -1718,6 +1782,15 @@ namespace Jiten.Core.Migrations.UserDb
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.FSRS.UserReviewDaily", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.User.FsrsParameterHistory", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Authentication.User", null)
                         .WithMany()

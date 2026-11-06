@@ -77,20 +77,20 @@ public class SrsController(
 
         var undoSettings = await LoadUserSettings(userId);
 
-        if (remainingLogs.Count == 0)
+        var keepTerminalState = IsSetAfterLastReview(card.State);
+
+        if (remainingLogs.Count == 0 && !keepTerminalState)
         {
             // Not archived: undoing the only review leaves no history to keep, and the card itself was
             // created by that review.
             userContext.FsrsCards.Remove(card);
             cardDeleted = true;
         }
-        else
+        else if (remainingLogs.Count > 0)
         {
             var scheduler = FsrsSettingsHelper.CreateScheduler(undoSettings, enableFuzzing: false);
 
-            // Undo restores the state the card had before the undone review, so a terminal state set by that
-            // review must not be preserved.
-            FsrsReplay.Recompute(card, remainingLogs, scheduler, scheduler, preserveTerminalState: false);
+            FsrsReplay.Recompute(card, remainingLogs, scheduler, scheduler, preserveTerminalState: keepTerminalState);
         }
 
         // Undo is the one erasure at the granularity where erasing an activity record is meaningful: it takes
@@ -544,6 +544,10 @@ public class SrsController(
     private static bool IsTerminalState(FsrsState state)
         => state is FsrsState.Suspended or FsrsState.Mastered or FsrsState.Blacklisted;
 
+    /// <summary>Reviews are refused in these states, so they came from an explicit action that undo must keep; Suspended can come from the undone review's leech check.</summary>
+    private static bool IsSetAfterLastReview(FsrsState state)
+        => state is FsrsState.Mastered or FsrsState.Blacklisted;
+
     /// <summary>The scheduler has no transition out of New; a first grade is a learning step 0 review.</summary>
     private static void PromoteNewToLearning(FsrsCard card)
     {
@@ -663,27 +667,15 @@ public class SrsController(
         }
 
         var userSettings = await LoadUserSettings(userId);
-        var (parameters, version) = FsrsSettingsHelper.ResolveParameters(userSettings);
-        var desiredRetention = GetDesiredRetention(userSettings);
-        var isDefault = IsSettingsDefault(parameters, desiredRetention);
         var liveReviewCount = await userContext.FsrsReviewLogs.CountAsync(r => r.Card.UserId == userId);
         // Counts archived history too, so the "N of M reviews" gate matches the corpus the optimizer trains on.
         var archivedReviewCount = await userContext.FsrsCardArchives
                                                    .Where(a => a.UserId == userId)
                                                    .SumAsync(a => (int?)a.ReviewCount) ?? 0;
-        var reviewCount = liveReviewCount + archivedReviewCount;
 
-        var response = new FsrsParametersResponse
-        {
-            Parameters = SerializeParametersCsv(parameters),
-            IsDefault = isDefault,
-            DesiredRetention = desiredRetention,
-            ReviewCount = reviewCount,
-            MinimumReviewsForOptimize = FsrsOptimizer.MinimumReviews,
-            Version = (int)version,
-            DefaultParameters = FsrsVersions.DefaultParameters(version)
-        };
-
+        var response = await BuildParametersResponseAsync<FsrsParametersResponse>(userSettings, userId);
+        response.ReviewCount = liveReviewCount + archivedReviewCount;
+        response.MinimumReviewsForOptimize = FsrsOptimizer.MinimumReviews;
         return Results.Ok(response);
     }
 
@@ -702,6 +694,7 @@ public class SrsController(
         }
 
         var settings = await userContext.UserFsrsSettings.FirstOrDefaultAsync(s => s.UserId == userId);
+        var previous = FsrsParameterProvenance.Capture(settings);
         var (currentParameters, currentVersion) = FsrsSettingsHelper.ResolveParameters(settings);
         var currentDesiredRetention = GetDesiredRetention(settings);
 
@@ -734,50 +727,45 @@ public class SrsController(
             nextDesiredRetention = request.DesiredRetention.Value;
         }
 
+        var parametersChanged = request.Parameters != null && !SameDisplayedParameters(nextParameters, currentParameters);
+        if (!parametersChanged)
+            nextParameters = currentParameters;
+
         var parametersAreDefault = AreParametersDefault(nextParameters);
         var desiredRetentionIsDefault = IsDesiredRetentionDefault(nextDesiredRetention);
         var nextVersion = parametersAreDefault ? FsrsVersions.Unoptimised : FsrsVersions.FromParameterCount(nextParameters.Length) ?? currentVersion;
         var switchesModel = nextVersion != currentVersion;
-        var shouldRemoveSettings = parametersAreDefault && desiredRetentionIsDefault && !switchesModel;
+        var needsRow = !(parametersAreDefault && desiredRetentionIsDefault && !switchesModel) || request.AutoOptimise == false;
 
-        if (shouldRemoveSettings)
+        if (settings == null && needsRow)
         {
-            if (settings != null)
-            {
-                settings.Parameters = Array.Empty<double>();
-                settings.DesiredRetention = null;
-                await userContext.SaveChangesAsync();
-            }
+            settings = new UserFsrsSettings { UserId = userId };
+            userContext.UserFsrsSettings.Add(settings);
         }
-        else
-        {
-            if (settings == null)
-            {
-                settings = new UserFsrsSettings { UserId = userId };
-                userContext.UserFsrsSettings.Add(settings);
-            }
 
+        if (settings != null)
+        {
             if (switchesModel)
                 settings.PreviousParametersJson = JsonSerializer.Serialize(currentParameters);
 
-            // Stored empty so default users follow FsrsVersions.Unoptimised instead of pinning today's defaults.
             settings.Parameters = parametersAreDefault ? [] : nextParameters;
             settings.DesiredRetention = desiredRetentionIsDefault ? null : nextDesiredRetention;
+
+            if (parametersChanged)
+                await FsrsParameterProvenance.RecordManualChangeAsync(userContext, settings, previous,
+                                                                      parametersAreDefault ? FsrsParametersSource.Default : FsrsParametersSource.Edited);
+
+            if (request.AutoOptimise.HasValue)
+                settings.AutoOptimise = request.AutoOptimise.Value;
+
             await userContext.SaveChangesAsync();
         }
 
-        var (resolvedParameters, resolvedVersion) = FsrsSettingsHelper.ResolveParameters(settings);
         if (switchesModel)
             await recomputeJob.RecomputeMemoryStates(userId);
-        await sessionService.BumpStudyOverviewVersion(userId);
-        return Results.Ok(new FsrsParametersResponse
-        {
-            Parameters = SerializeParametersCsv(resolvedParameters),
-            IsDefault = parametersAreDefault && desiredRetentionIsDefault,
-            DesiredRetention = nextDesiredRetention,
-            Version = (int)resolvedVersion,
-            DefaultParameters = FsrsVersions.DefaultParameters(resolvedVersion)
-        });
+        if (parametersChanged || nextDesiredRetention != currentDesiredRetention)
+            await sessionService.BumpStudyOverviewVersion(userId);
+        return Results.Ok(await BuildParametersResponseAsync<FsrsParametersResponse>(settings, userId));
     }
 
     [HttpPost("settings/optimize")]
@@ -899,18 +887,11 @@ public class SrsController(
                 return Results.Conflict(new { error = "Your memory model changed since this preview. Please optimise again." });
         }
 
-        await SaveAndReschedule(userId, settings, request.Parameters, request.DesiredRetention, request.Reschedule);
+        settings = await SaveAndReschedule(userId, settings, request.Parameters, request.DesiredRetention, request.Reschedule);
 
-        var (parameters, version) = FsrsSettingsHelper.ResolveParameters(await LoadUserSettings(userId));
-        return Results.Ok(new
-        {
-            parameters = SerializeParametersCsv(parameters),
-            isDefault = IsSettingsDefault(parameters, request.DesiredRetention),
-            desiredRetention = request.DesiredRetention,
-            version = (int)version,
-            defaultParameters = FsrsVersions.DefaultParameters(version),
-            rescheduled = request.Reschedule
-        });
+        var response = await BuildParametersResponseAsync<FsrsApplyResponse>(settings, userId);
+        response.Rescheduled = request.Reschedule;
+        return Results.Ok(response);
     }
 
     private Func<List<(int WordId, byte ReadingIndex)>, Task<HashSet<long>>>? ReviewScopeFor(string userId, UserFsrsSettings? settings)
@@ -940,69 +921,43 @@ public class SrsController(
 
     private async Task<(IResult? Error, FsrsOptimizationResult? Result)> RunOptimizer(string userId, FsrsVersion version)
     {
-        // An archived row is a complete per-card interval chain, which is exactly the shape the optimizer
-        // trains on, so removing a card no longer shrinks the training corpus.
-        var reviewLogs = await CardArchiveService.LoadAllReviewsAsync(userContext, userId);
-
-        var totalReviews = reviewLogs.Count;
-        if (totalReviews < FsrsOptimizer.MinimumReviews)
-            return (Results.BadRequest(new
-            {
-                error = $"At least {FsrsOptimizer.MinimumReviews} reviews are required to optimise parameters. You have {totalReviews}."
-            }), null);
-
-        var grouped = reviewLogs
-            .GroupBy(r => r.CardId)
-            .Where(g => g.Count() >= 2)
-            .ToList();
-
-        var items = new List<FsrsTrainingItem>();
-        foreach (var group in grouped)
-        {
-            var logs = group.ToList();
-            var reviews = new FsrsTrainingReview[logs.Count];
-            reviews[0] = new FsrsTrainingReview((int)logs[0].Rating, 0);
-            for (var i = 1; i < logs.Count; i++)
-            {
-                var deltaT = Math.Max(0, (logs[i].ReviewUtc - logs[i - 1].ReviewUtc).TotalDays);
-                reviews[i] = new FsrsTrainingReview((int)logs[i].Rating, deltaT);
-            }
-            items.Add(new FsrsTrainingItem(reviews, logs[^1].ReviewUtc.Ticks));
-        }
-
-        if (items.Count == 0)
-            return (Results.BadRequest(new { error = "Not enough review data to optimise." }), null);
-
-        return (null, version == FsrsVersion.V7 ? FsrsOptimizerV7.Optimize(items) : FsrsOptimizer.Optimize(items));
+        var (error, result) = await FsrsOptimisationService.OptimiseAsync(userContext, userId, version);
+        return error != null ? (Results.BadRequest(new { error }), null) : (null, result);
     }
 
     /// <param name="settings">The tracked settings row, or null when the user has none yet.</param>
-    /// <param name="parameters">Null keeps the stored parameters.</param>
-    private async Task SaveAndReschedule(string userId, UserFsrsSettings? settings, double[]? parameters, double desiredRetention, bool reschedule)
+    /// <param name="parameters">Optimiser output; null keeps the stored parameters.</param>
+    /// <returns>The saved settings row.</returns>
+    /// <remarks>Without a reschedule, memory states are still rebuilt: they only mean something under the parameters that produced them.</remarks>
+    private async Task<UserFsrsSettings> SaveAndReschedule(string userId, UserFsrsSettings? settings, double[]? parameters, double desiredRetention, bool reschedule)
     {
+        var previous = FsrsParameterProvenance.Capture(settings);
         if (settings == null)
         {
             settings = new UserFsrsSettings { UserId = userId };
             userContext.UserFsrsSettings.Add(settings);
         }
         if (parameters != null)
+        {
             settings.Parameters = parameters;
+            await FsrsParameterProvenance.RecordManualChangeAsync(userContext, settings, previous, FsrsParametersSource.Optimised);
+        }
         settings.DesiredRetention = IsDesiredRetentionDefault(desiredRetention) ? null : desiredRetention;
         await userContext.SaveChangesAsync();
 
-        var (resolvedParameters, version) = FsrsSettingsHelper.ResolveParameters(settings);
+        var (resolvedParameters, _) = FsrsSettingsHelper.ResolveParameters(settings);
         if (reschedule)
         {
             var studySettings = GetStudySettings(settings);
             await recomputeJob.RecomputeUserSrs(userId, resolvedParameters, desiredRetention,
                                                 studySettings.LoadBalancing, BuildEasyDaysPolicy(studySettings));
         }
-        else if (parameters != null && version == FsrsVersion.V7)
+        else if (parameters != null)
         {
-            // FSRS-7 states only mean something under the parameters that produced them; due dates still wait for a reschedule.
             await recomputeJob.RecomputeMemoryStates(userId);
         }
         await sessionService.BumpStudyOverviewVersion(userId);
+        return settings;
     }
 
     [HttpPost("settings/model")]
@@ -1032,13 +987,18 @@ public class SrsController(
                 userContext.UserFsrsSettings.Add(settings);
             }
 
+            var snapshot = FsrsParameterProvenance.Capture(settings);
             var previous = ParseStoredParameters(settings.PreviousParametersJson);
-            var next = previous != null && FsrsVersions.FromParameterCount(previous.Length) == target
-                ? previous
-                : FsrsVersions.DefaultParameters(target);
+            var restoresPrevious = previous != null && FsrsVersions.FromParameterCount(previous.Length) == target;
+            var next = restoresPrevious ? previous! : FsrsVersions.DefaultParameters(target);
 
             settings.PreviousParametersJson = JsonSerializer.Serialize(currentParameters);
             settings.Parameters = FsrsVersions.FollowsUnoptimised(next) ? [] : next;
+
+            await FsrsParameterProvenance.RecordManualChangeAsync(userContext, settings, snapshot,
+                                                                  restoresPrevious && !FsrsVersions.IsDefaultFor(next, target)
+                                                                      ? FsrsParametersSource.Legacy
+                                                                      : FsrsParametersSource.Default);
             await userContext.SaveChangesAsync();
 
             logger.LogInformation("User {UserId} switched FSRS model {From} -> {To}", userId, (int)currentVersion, (int)target);
@@ -1046,16 +1006,7 @@ public class SrsController(
             await sessionService.BumpStudyOverviewVersion(userId);
         }
 
-        var (parameters, version) = FsrsSettingsHelper.ResolveParameters(settings);
-        var desiredRetention = GetDesiredRetention(settings);
-        return Results.Ok(new FsrsParametersResponse
-        {
-            Parameters = SerializeParametersCsv(parameters),
-            IsDefault = IsSettingsDefault(parameters, desiredRetention),
-            DesiredRetention = desiredRetention,
-            Version = (int)version,
-            DefaultParameters = FsrsVersions.DefaultParameters(version)
-        });
+        return Results.Ok(await BuildParametersResponseAsync<FsrsParametersResponse>(settings, userId));
     }
 
     private static double[]? ParseStoredParameters(string? json)
@@ -1074,6 +1025,119 @@ public class SrsController(
         }
     }
 
+    [HttpGet("settings/history")]
+    [SwaggerOperation(Summary = "FSRS parameter history",
+                      Description = "The user's last parameter sets, newest first, with where each came from.")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    public async Task<IResult> GetParameterHistory()
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null)
+            return Results.Unauthorized();
+
+        var rows = await FsrsParameterProvenance.Ordered(userContext, userId).AsNoTracking().ToListAsync();
+        var current = FsrsParameterProvenance.Current(rows);
+        var history = Enumerable.Reverse(rows).Select(h => new FsrsParameterHistoryDto
+        {
+            Id = h.Id,
+            Parameters = SerializeParametersCsv(FsrsSettingsHelper.ResolveStoredJson(h.ParametersJson).Parameters ?? []),
+            Version = h.Version,
+            Source = h.Source,
+            Loss = h.Loss,
+            PreviousLoss = h.PreviousLoss,
+            ReviewCount = h.ReviewCount,
+            CreatedAtUtc = h.CreatedAtUtc,
+            RevertedAtUtc = h.RevertedAtUtc,
+            IsCurrent = ReferenceEquals(h, current)
+        }).ToList();
+
+        return Results.Ok(history);
+    }
+
+    [HttpPost("settings/history/{id:long}/restore")]
+    [EnableRateLimiting("compute")]
+    [SwaggerOperation(Summary = "Restore FSRS parameters from history",
+                      Description = "Puts an earlier parameter set back in force and rebuilds memory states. Due dates do not move.")]
+    [ProducesResponseType(StatusCodes.Status401Unauthorized)]
+    [ProducesResponseType(StatusCodes.Status200OK)]
+    [ProducesResponseType(StatusCodes.Status400BadRequest)]
+    [ProducesResponseType(StatusCodes.Status404NotFound)]
+    public async Task<IResult> RestoreParameters(long id)
+    {
+        var userId = currentUserService.UserId;
+        if (userId == null)
+            return Results.Unauthorized();
+
+        var rows = await FsrsParameterProvenance.Ordered(userContext, userId).ToListAsync();
+        var target = rows.FirstOrDefault(h => h.Id == id);
+        if (target == null)
+            return Results.NotFound();
+        if (ReferenceEquals(target, FsrsParameterProvenance.Current(rows)))
+            return Results.BadRequest(new { error = "These parameters are already in use." });
+        if (FsrsSettingsHelper.ResolveStoredJson(target.ParametersJson).Parameters is not { } restored)
+            return Results.BadRequest(new { error = "These parameters can no longer be restored." });
+
+        var settings = await userContext.UserFsrsSettings.FirstOrDefaultAsync(s => s.UserId == userId);
+        if (settings == null)
+        {
+            settings = new UserFsrsSettings { UserId = userId };
+            userContext.UserFsrsSettings.Add(settings);
+        }
+
+        var (currentParameters, currentVersion) = FsrsSettingsHelper.ResolveParameters(settings);
+        if (FsrsVersions.FromParameterCount(restored.Length) != currentVersion)
+            settings.PreviousParametersJson = JsonSerializer.Serialize(currentParameters);
+        settings.Parameters = FsrsVersions.FollowsUnoptimised(restored) ? [] : restored;
+
+        FsrsParameterProvenance.SetSource(settings, target.Source, target.ReviewCount, target.CreatedAtUtc);
+
+        var now = DateTime.UtcNow;
+        FsrsParameterProvenance.StampAttempt(settings, now, await FsrsOptimisationService.LifetimeReviewTotalAsync(userContext, userId),
+                                             FsrsAutoOptimiseOutcome.None);
+        FsrsParameterProvenance.MarkRestored(rows, target, now);
+        await userContext.SaveChangesAsync();
+
+        logger.LogInformation("User {UserId} restored FSRS parameters from history row {HistoryId} ({Source})", userId, id, target.Source);
+        await recomputeJob.RecomputeMemoryStates(userId);
+        await sessionService.BumpStudyOverviewVersion(userId);
+
+        return Results.Ok(await BuildParametersResponseAsync<FsrsParametersResponse>(settings, userId));
+    }
+
+    private async Task<T> BuildParametersResponseAsync<T>(UserFsrsSettings? settings, string userId) where T : FsrsParametersResponse, new()
+    {
+        var (parameters, version) = FsrsSettingsHelper.ResolveParameters(settings);
+        var desiredRetention = GetDesiredRetention(settings);
+        var rows = await FsrsParameterProvenance.Ordered(userContext, userId).AsNoTracking().ToListAsync();
+        return new T
+        {
+            Parameters = SerializeParametersCsv(parameters),
+            IsDefault = IsSettingsDefault(parameters, desiredRetention),
+            DesiredRetention = desiredRetention,
+            Version = (int)version,
+            DefaultParameters = FsrsVersions.DefaultParameters(version),
+            Source = settings?.ParametersSource ?? FsrsParametersSource.Default,
+            FittedAtUtc = settings?.ParametersFittedAtUtc,
+            FittedReviewCount = settings?.ParametersFittedReviewCount ?? 0,
+            AutoOptimise = settings?.AutoOptimise ?? true,
+            UndoHistoryId = FsrsParameterProvenance.UndoTarget(rows)?.Id
+        };
+    }
+
+    /// <summary>Compares at the precision the settings page shows, since every save echoes back the rounded CSV it was served.</summary>
+    private static bool SameDisplayedParameters(double[] next, double[] current)
+        => SerializeParametersCsv(next.Length == 0 ? FsrsVersions.DefaultParameters(FsrsVersions.Unoptimised) : next) == SerializeParametersCsv(current);
+
+    /// <summary>Corrected grades are a new history, so the nightly refit may run on them without waiting for growth. Does not save.</summary>
+    private async Task ResetAutoOptimiseClock(string userId)
+    {
+        var settings = await userContext.UserFsrsSettings.FirstOrDefaultAsync(s => s.UserId == userId);
+        if (settings == null)
+            return;
+        FsrsParameterProvenance.StampAttempt(settings, null, 0, FsrsAutoOptimiseOutcome.None);
+    }
+
     [HttpGet("settings/health")]
     [SwaggerOperation(Summary = "FSRS review-history health check",
                       Description = "Pre-optimize sanity report: review count, grade distribution, same-day reviews, "
@@ -1090,50 +1154,7 @@ public class SrsController(
         // across Postgres and the SQLite integration harness. Health reads the user's whole grading
         // history, so removed cards' reviews count too.
         var logs = await CardArchiveService.LoadAllReviewsAsync(userContext, userId);
-
-        var total = logs.Count;
-        var ratingCounts = new int[4];
-        var sameDay = 0;
-        long prevCardId = -1;
-        var prevDay = default(DateTime);
-
-        foreach (var log in logs)
-        {
-            var idx = (int)log.Rating - 1;
-            if (idx >= 0 && idx < 4)
-                ratingCounts[idx]++;
-
-            var day = log.ReviewUtc.Date;
-            if (log.CardId == prevCardId && day == prevDay)
-                sameDay++;
-            prevCardId = log.CardId;
-            prevDay = day;
-        }
-
-        var min = FsrsOptimizer.MinimumReviews;
-        var hard = ratingCounts[1];
-        var easy = ratingCounts[3];
-        var again = ratingCounts[0];
-
-        // "Hard as fail": only flag once there is enough graded history, when Hard is used heavily yet
-        // Again is used almost never — the tell-tale of a user pressing Hard for cards they actually failed.
-        var likelyHardAsFail = total >= min
-                               && hard >= total * 0.18
-                               && again <= total * 0.02;
-
-        var response = new FsrsHealthResponse
-        {
-            TotalReviews = total,
-            RatingCounts = ratingCounts,
-            SameDayReviews = sameDay,
-            MinimumReviewsForOptimize = min,
-            MeetsMinimum = total >= min,
-            NeverUsesHard = total >= min && hard == 0,
-            NeverUsesEasy = total >= min && easy == 0,
-            LikelyHardAsFail = likelyHardAsFail,
-        };
-
-        return Results.Ok(response);
+        return Results.Ok(FsrsOptimisationService.ComputeHealth(logs));
     }
 
     [HttpPost("settings/remap-hard")]
@@ -1172,7 +1193,10 @@ public class SrsController(
         var remappedArchived = await RemapArchivedHardReviews(userId, request.From, request.To);
 
         if (toRemap.Count > 0 || remappedArchived > 0)
+        {
+            await ResetAutoOptimiseClock(userId);
             await userContext.SaveChangesAsync();
+        }
 
         if (request.Reschedule && toRemap.Count > 0)
         {

@@ -16,7 +16,8 @@ public enum MetadataField
     Tags = 256,
     Links = 512,
     Relationships = 1024,
-    CharacterNames = 2048
+    CharacterNames = 2048,
+    Franchise = 4096
 }
 
 /// <summary>Risk tier that decides who may apply an edit without review.</summary>
@@ -37,8 +38,12 @@ public static class MetadataFields
     [
         MetadataField.OriginalTitle, MetadataField.RomajiTitle, MetadataField.EnglishTitle, MetadataField.Aliases,
         MetadataField.ReleaseDate, MetadataField.Description, MetadataField.MediaType, MetadataField.Genres,
-        MetadataField.Tags, MetadataField.Links, MetadataField.Relationships, MetadataField.CharacterNames
+        MetadataField.Tags, MetadataField.Links, MetadataField.Relationships, MetadataField.CharacterNames,
+        MetadataField.Franchise
     ];
+
+    /// <summary>Fields that change franchise membership, so applying them reruns the franchise sync.</summary>
+    public const MetadataField FranchiseShaping = MetadataField.Relationships | MetadataField.Franchise;
 
     public static MetadataRiskTier Tier(MetadataField field) => field switch
     {

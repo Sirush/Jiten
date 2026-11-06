@@ -980,6 +980,41 @@ public class StudyTests(JitenWebApplicationFactory factory)
         logs.Should().HaveCount(1);
     }
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public async Task UndoReview_KeepsAMasteredStateSetAfterTheReview(int reviewCount)
+    {
+        for (var i = 0; i < reviewCount; i++)
+        {
+            await _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/srs/review")
+                                    .WithUser(TestUsers.UserA)
+                                    .WithJsonContent(new { wordId = 3, readingIndex = 0, rating = 3 }));
+        }
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            var reviewed = await userDb.FsrsCards.SingleAsync(c => c.WordId == 3 && c.UserId == TestUsers.UserA);
+            reviewed.State = FsrsState.Mastered;
+            await userDb.SaveChangesAsync();
+        }
+
+        var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/srs/undo-review")
+                                               .WithUser(TestUsers.UserA)
+                                               .WithJsonContent(new { wordId = 3, readingIndex = 0 }));
+
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var body = await response.Content.ReadFromJsonAsync<JsonElement>();
+        body.GetProperty("cardDeleted").GetBoolean().Should().BeFalse();
+
+        using var verify = factory.Services.CreateScope();
+        var db = verify.ServiceProvider.GetRequiredService<UserDbContext>();
+        var card = await db.FsrsCards.AsNoTracking().SingleAsync(c => c.WordId == 3 && c.UserId == TestUsers.UserA);
+        card.State.Should().Be(FsrsState.Mastered);
+        (await db.FsrsReviewLogs.CountAsync(l => l.CardId == card.CardId)).Should().Be(reviewCount - 1);
+    }
+
     [Fact]
     public async Task UndoReview_NonexistentCardReturns404()
     {
