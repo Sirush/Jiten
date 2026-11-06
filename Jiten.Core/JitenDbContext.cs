@@ -625,11 +625,13 @@ public class JitenDbContext : DbContext
             {
                 entity.Property(e => e.Priorities).HasColumnType("text[]").IsRequired(false);
                 entity.Property(e => e.InfoTags).HasColumnType("text[]").IsRequired(false);
+                entity.Property(e => e.PitchAccents).HasColumnType("int[]").IsRequired(false);
             }
             else
             {
                 entity.Property(e => e.Priorities).IsRequired(false);
                 entity.Property(e => e.InfoTags).IsRequired(false);
+                entity.Property(e => e.PitchAccents).IsRequired(false);
             }
 
             entity.HasIndex(e => new { e.WordId, e.FormType, e.Text })

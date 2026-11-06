@@ -124,7 +124,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                           {
                               WordId = word.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
                               Definitions = word.Definitions.ToDefinitionDtos(xrefs.ToXrefsBySense(xrefTargetForms)), PartsOfSpeech = word.PartsOfSpeech,
-                              PitchAccents = word.PitchAccents, KnownStates = await knownStatesTask,
+                              PitchAccents = PitchAccentResolver.For(word, mainForm), KnownStates = await knownStatesTask,
                               ComposedOf = await composedOfTask,
                               UsedIn = usedInTask.Result.Items,
                               UsedInTotal = usedInTask.Result.Total,
@@ -196,7 +196,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
                           {
                               WordId = word.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
                               Definitions = word.Definitions.ToDefinitionDtos(xrefs.ToXrefsBySense(xrefTargetForms)), PartsOfSpeech = word.PartsOfSpeech,
-                              PitchAccents = word.PitchAccents, ComposedOf = await composedOfTask,
+                              PitchAccents = PitchAccentResolver.For(word, mainForm), ComposedOf = await composedOfTask,
                               UsedIn = usedInTask.Result.Items,
                               UsedInTotal = usedInTask.Result.Total,
                               LanguageSources = word.LanguageSources.ToDto(),

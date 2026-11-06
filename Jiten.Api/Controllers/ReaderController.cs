@@ -123,7 +123,7 @@ public class ReaderController(
                                          IsFrequencyFallback = rdrFormFreq.IsFallback ? true : null,
                                          KnownState = knownState ?? [KnownState.New],
                                          IsLeech = leechKeys.Contains((word.WordId, word.ReadingIndex)) ? true : null,
-                                         PitchAccents = jmdictWord.PitchAccents ?? new(),
+                                         PitchAccents = PitchAccentResolver.For(jmdictWord, rdrForm) ?? new(),
                                          StudyDeckIds = studyDeckIds ?? new(),
                                      };
                     allWords.Add(readerWord);

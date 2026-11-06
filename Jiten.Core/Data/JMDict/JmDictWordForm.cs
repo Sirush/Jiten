@@ -13,4 +13,5 @@ public class JmDictWordForm
     public bool IsObsolete { get; set; }
     public bool IsNoKanji { get; set; }
     public bool IsSearchOnly { get; set; }
+    public List<int>? PitchAccents { get; set; }
 }

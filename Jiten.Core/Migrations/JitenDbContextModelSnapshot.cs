@@ -1526,6 +1526,9 @@ namespace Jiten.Core.Migrations
                     b.Property<bool>("IsSearchOnly")
                         .HasColumnType("boolean");
 
+                    b.PrimitiveCollection<List<int>>("PitchAccents")
+                        .HasColumnType("int[]");
+
                     b.PrimitiveCollection<List<string>>("Priorities")
                         .HasColumnType("text[]");
 

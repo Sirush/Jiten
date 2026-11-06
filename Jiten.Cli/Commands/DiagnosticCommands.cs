@@ -1132,6 +1132,7 @@ public class DiagnosticCommands(CliContext context)
         Console.WriteLine($"FormTypes: [{string.Join(", ", orderedForms.Select(f => f.FormType))}]");
         Console.WriteLine($"PartsOfSpeech: [{string.Join(", ", word.PartsOfSpeech)}]");
         Console.WriteLine($"PitchAccents: [{string.Join(", ", word.PitchAccents ?? [])}]");
+        Console.WriteLine($"FormPitchAccents: [{string.Join(", ", orderedForms.Select(f => f.PitchAccents == null ? "-" : $"[{string.Join(",", f.PitchAccents)}]"))}]");
         Console.WriteLine($"Priorities: [{string.Join(", ", word.Priorities ?? [])}]");
         Console.WriteLine($"Origin: {word.Origin}");
 

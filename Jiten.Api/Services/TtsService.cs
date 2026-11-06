@@ -114,7 +114,17 @@ public class TtsService(
             .Select(f => JapaneseTextHelper.ToHiragana(f.Text))
             .Distinct()
             .Count();
-        if (distinctReadings == 1)
+        if (wordForms.Any(f => f.PitchAccents != null))
+        {
+            var readingAccents = wordForms
+                .Where(f => f.PitchAccents is { Count: > 0 }
+                            && JapaneseTextHelper.ToHiragana(RubyTextHelper.FormReading(f, wordForms)) == readingKana)
+                .OrderBy(f => f.ReadingIndex == ri ? 0 : 1).ThenBy(f => f.ReadingIndex)
+                .Select(f => f.PitchAccents!)
+                .FirstOrDefault();
+            if (readingAccents != null) pitchPosition = readingAccents[0];
+        }
+        else if (distinctReadings == 1)
         {
             var pitches = await db.JMDictWords.AsNoTracking()
                 .Where(w => w.WordId == wordId)

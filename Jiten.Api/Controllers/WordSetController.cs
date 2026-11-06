@@ -212,7 +212,7 @@ public class WordSetController(
                     AlternativeReadings = [],
                     Definitions = word.Definitions.ToDefinitionDtos(),
                     PartsOfSpeech = word.PartsOfSpeech,
-                    PitchAccents = word.PitchAccents,
+                    PitchAccents = PitchAccentResolver.For(word, form),
                     KnownStates = knownWordStates.GetValueOrDefault((p.WordId, readingIndex), [KnownState.New])
                 };
             })

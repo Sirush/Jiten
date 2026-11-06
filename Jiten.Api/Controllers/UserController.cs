@@ -3298,7 +3298,7 @@ public partial class UserController(
                              WordId = jmWord.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
                              PartsOfSpeech = jmWord.PartsOfSpeech.ToHumanReadablePartsOfSpeech(),
                              Definitions = jmWord.Definitions.ToDefinitionDtos(), Occurrences = pw.TotalOccurrences,
-                             PitchAccents = jmWord.PitchAccents
+                             PitchAccents = PitchAccentResolver.For(jmWord, mainForm)
                          });
         }
 
@@ -3800,7 +3800,7 @@ public partial class UserController(
                              WordId = jmWord.WordId, MainReading = mainReading, AlternativeReadings = alternativeReadings,
                              PartsOfSpeech = jmWord.PartsOfSpeech.ToHumanReadablePartsOfSpeech(),
                              Definitions = jmWord.Definitions.ToDefinitionDtos(), Occurrences = pw.TotalOccurrences,
-                             PitchAccents = jmWord.PitchAccents
+                             PitchAccents = PitchAccentResolver.For(jmWord, mainForm)
                          });
         }
 
