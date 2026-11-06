@@ -19,6 +19,22 @@ public class UserFsrsSettings
     /// <summary>Study deck that supplies the next new card under round-robin gathering; null or a vanished deck restarts at the top.</summary>
     public int? NewCardCursorStudyDeckId { get; set; }
 
+    public FsrsParametersSource ParametersSource { get; set; }
+
+    public DateTime? ParametersFittedAtUtc { get; set; }
+
+    /// <summary>Lifetime review total (UserReviewDaily) when the stored parameters were fitted; 0 means never fitted.</summary>
+    public int ParametersFittedReviewCount { get; set; }
+
+    public bool AutoOptimise { get; set; } = true;
+
+    public DateTime? AutoOptimiseAttemptedAtUtc { get; set; }
+
+    /// <summary>Lifetime review total at the last automatic attempt or manual change, so the nightly sweep waits for new reviews.</summary>
+    public int AutoOptimiseAttemptedReviewCount { get; set; }
+
+    public FsrsAutoOptimiseOutcome AutoOptimiseLastOutcome { get; set; }
+
     [NotMapped]
     private double[]? _cachedParameters;
 

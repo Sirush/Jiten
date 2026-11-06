@@ -1,6 +1,7 @@
 import type { FranchiseSeries, FranchiseSetting, SeriesRef } from './series';
 import type { FranchiseLine, MediaGroupKind, MediaGroupTitles } from './mediaGroup';
 import type { AvatarStyle } from '~/utils/profileAppearance';
+import type { FsrsParametersSource } from '~/utils/fsrsProvenance';
 import type {
   ComparisonOutcome,
   CommunityListStatus,
@@ -504,6 +505,24 @@ export interface FsrsParametersResponse {
   minimumReviewsForOptimize: number;
   version: number;
   defaultParameters: number[];
+  source: FsrsParametersSource;
+  fittedAtUtc: string | null;
+  fittedReviewCount: number;
+  autoOptimise: boolean;
+  undoHistoryId: number | null;
+}
+
+export interface FsrsParameterHistoryEntry {
+  id: number;
+  parameters: string;
+  version: number;
+  source: FsrsParametersSource;
+  loss: number | null;
+  previousLoss: number | null;
+  reviewCount: number;
+  createdAtUtc: string;
+  revertedAtUtc: string | null;
+  isCurrent: boolean;
 }
 
 export interface ReschedulePreviewOption {

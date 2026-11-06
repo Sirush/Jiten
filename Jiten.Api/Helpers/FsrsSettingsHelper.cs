@@ -53,6 +53,15 @@ public static class FsrsSettingsHelper
         return true;
     }
 
+    /// <summary>A stored parameter set in force form: empty resolves to the unoptimised defaults; null parameters when unusable.</summary>
+    public static (double[]? Parameters, FsrsVersion Version) ResolveStoredJson(string parametersJson)
+    {
+        var settings = new UserFsrsSettings { ParametersJson = parametersJson };
+        if (settings.GetParametersOnce().Length == 0)
+            return (FsrsVersions.DefaultParameters(FsrsVersions.Unoptimised), FsrsVersions.Unoptimised);
+        return TryGetStoredParameters(settings, out var parameters, out var version) ? (parameters, version) : (null, FsrsVersions.Unoptimised);
+    }
+
     public static StudySettingsDto GetStudySettings(UserFsrsSettings? settings)
     {
         if (settings?.SettingsJson is { Length: > 2 } json)

@@ -4,7 +4,10 @@
   import { Line } from 'vue-chartjs';
   import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip as ChartTooltip, type ChartOptions, type ChartData } from 'chart.js';
   import { extractApiError } from '~/utils/toast';
+  import { formatDateLong, formatDateOmitCurrentYear } from '~/utils/dateFormat';
+  import { fsrsHistoryDetails, fsrsProvenanceLine, fsrsSourceLabel } from '~/utils/fsrsProvenance';
   import type {
+    FsrsParameterHistoryEntry,
     FsrsParametersResponse,
     FsrsWorkloadCurveResponse,
     WorkloadCurvePoint,
@@ -38,6 +41,38 @@
   const minimumReviews = ref(50);
   const version = ref(6);
   const isSwitchingModel = ref(false);
+  const provenance = ref<Pick<FsrsParametersResponse, 'source' | 'fittedAtUtc' | 'fittedReviewCount' | 'autoOptimise' | 'undoHistoryId'>>({
+    source: 'default',
+    fittedAtUtc: null,
+    fittedReviewCount: 0,
+    autoOptimise: true,
+    undoHistoryId: null,
+  });
+  const isTogglingAuto = ref(false);
+  const isRestoring = ref(false);
+  const showHistory = ref(false);
+  const history = ref<FsrsParameterHistoryEntry[] | null>(null);
+  const historyFailed = ref(false);
+
+  const provenanceLine = computed(() => fsrsProvenanceLine(provenance.value.source, provenance.value.fittedAtUtc, provenance.value.fittedReviewCount));
+  const usesEditedParameters = computed(() => provenance.value.source === 'edited');
+  const historyRows = computed(() => (history.value ?? []).map((entry) => ({ entry, details: fsrsHistoryDetails(entry) })));
+
+  const applyProvenance = ({ source, fittedAtUtc, fittedReviewCount, autoOptimise, undoHistoryId }: FsrsParametersResponse) => {
+    provenance.value = { source, fittedAtUtc, fittedReviewCount, autoOptimise, undoHistoryId };
+  };
+
+  const applySettingsResponse = (result: FsrsParametersResponse) => {
+    parametersCsv.value = result.parameters;
+    isDefault.value = result.isDefault;
+    version.value = result.version;
+    defaultParameters.value = result.defaultParameters;
+    desiredRetention.value = result.desiredRetention;
+    hasUserEdited.value = false;
+    applyProvenance(result);
+    if (showHistory.value) void loadHistory();
+    if (workloadCurve.value) void loadWorkloadCurve();
+  };
   const modelOptions = [
     { label: 'FSRS-7', value: 7 },
     { label: 'FSRS-6', value: 6 },
@@ -177,6 +212,7 @@
       desiredRetention.value = result.desiredRetention ?? defaultDesiredRetention;
       reviewCount.value = result.reviewCount ?? 0;
       minimumReviews.value = result.minimumReviewsForOptimize ?? 50;
+      applyProvenance(result);
     } catch {
       toast.add({
         severity: 'error',
@@ -211,14 +247,7 @@
         method: 'PUT',
         body: { parameters: parametersCsv.value, desiredRetention: desiredRetention.value },
       });
-      parametersCsv.value = result.parameters;
-      isDefault.value = result.isDefault;
-      version.value = result.version ?? version.value;
-      defaultParameters.value = result.defaultParameters ?? defaultParameters.value;
-      desiredRetention.value = result.desiredRetention ?? defaultDesiredRetention;
-      hasUserEdited.value = false;
-      // Re-anchor the workload curve (baseline multipliers + recommendation) to the saved settings.
-      if (workloadCurve.value) void loadWorkloadCurve();
+      applySettingsResponse(result);
       toast.add({
         severity: 'success',
         summary: 'Saved',
@@ -264,13 +293,7 @@
         method: 'PUT',
         body: { parameters: '', desiredRetention: defaultDesiredRetention },
       });
-      parametersCsv.value = result.parameters;
-      isDefault.value = result.isDefault;
-      version.value = result.version ?? version.value;
-      defaultParameters.value = result.defaultParameters ?? defaultParameters.value;
-      desiredRetention.value = result.desiredRetention ?? defaultDesiredRetention;
-      hasUserEdited.value = false;
-      if (workloadCurve.value) void loadWorkloadCurve();
+      applySettingsResponse(result);
       toast.add({
         severity: 'success',
         summary: 'Reset to default',
@@ -338,14 +361,8 @@
           reschedule: choice.reschedule,
         },
       });
-      parametersCsv.value = result.parameters;
-      isDefault.value = result.isDefault;
-      version.value = result.version ?? version.value;
-      defaultParameters.value = result.defaultParameters ?? defaultParameters.value;
-      desiredRetention.value = result.desiredRetention;
-      hasUserEdited.value = false;
+      applySettingsResponse(result);
       previewVisible.value = false;
-      if (workloadCurve.value) void loadWorkloadCurve();
 
       const retentionText = `Desired retention set to ${Math.round(result.desiredRetention * 1000) / 10}%.`;
       const detail = optimised
@@ -398,14 +415,8 @@
         method: 'POST',
         body: { version: target },
       });
-      parametersCsv.value = result.parameters;
-      isDefault.value = result.isDefault;
-      version.value = result.version;
-      defaultParameters.value = result.defaultParameters;
-      desiredRetention.value = result.desiredRetention;
-      hasUserEdited.value = false;
+      applySettingsResponse(result);
       showBreakdown.value = false;
-      if (workloadCurve.value) void loadWorkloadCurve();
       toast.add({
         severity: 'success',
         summary: `Switched to FSRS-${result.version}`,
@@ -449,6 +460,63 @@
       });
     } finally {
       isOptimising.value = false;
+    }
+  };
+
+  const setAutoOptimise = async (value: boolean) => {
+    const previous = provenance.value.autoOptimise;
+    provenance.value.autoOptimise = value;
+    try {
+      isTogglingAuto.value = true;
+      applyProvenance(await $api<FsrsParametersResponse>('srs/settings', { method: 'PUT', body: { autoOptimise: value } }));
+    } catch (error: unknown) {
+      provenance.value.autoOptimise = previous;
+      toast.add({
+        severity: 'error',
+        summary: 'Error',
+        detail: extractApiError(error, 'Could not save this setting. Please try again.'),
+        life: 5000,
+      });
+    } finally {
+      isTogglingAuto.value = false;
+    }
+  };
+
+  const loadHistory = async () => {
+    try {
+      history.value = await $api<FsrsParameterHistoryEntry[]>('srs/settings/history');
+      historyFailed.value = false;
+    } catch {
+      historyFailed.value = history.value == null;
+    }
+  };
+
+  const toggleHistory = () => {
+    showHistory.value = !showHistory.value;
+    if (showHistory.value) void loadHistory();
+  };
+
+  const restoreHistory = async (id: number) => {
+    try {
+      isRestoring.value = true;
+      const result = await $api<FsrsParametersResponse>(`srs/settings/history/${id}/restore`, { method: 'POST' });
+      applySettingsResponse(result);
+      showBreakdown.value = false;
+      toast.add({
+        severity: 'success',
+        summary: 'Parameters restored',
+        detail: 'Your earlier parameters are back in use. Due dates have not moved.',
+        life: 5000,
+      });
+    } catch (error: unknown) {
+      toast.add({
+        severity: 'error',
+        summary: 'Restore failed',
+        detail: extractApiError(error, 'These parameters could not be restored. Please try again.'),
+        life: 5000,
+      });
+    } finally {
+      isRestoring.value = false;
     }
   };
 
@@ -873,8 +941,9 @@
         <h4 class="text-md font-semibold mb-1">Optimise parameters</h4>
         <p class="text-sm text-gray-600 dark:text-gray-300 mb-2">
           Analyse your review history to find the optimal FSRS-{{ version }} parameters for your memory patterns. <br />
-          The more reviews you have, the more accurate the optimisation will be. It is recommended to optimise every time your number of reviews doubles.
-          <br />You currently have {{ reviewCount }} reviews.
+          The more reviews you have, the more accurate the optimisation will be.<template v-if="!provenance.autoOptimise">
+            It is recommended to optimise every time your number of reviews doubles.</template>
+          <br />You currently have {{ reviewCount.toLocaleString('en-US') }} reviews.
         </p>
 
         <!-- Review-history health check: a quick read on whether the history is fit to train on -->
@@ -891,7 +960,7 @@
           <div class="mt-3">
             <div class="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 mb-1">
               <span>Button usage</span>
-              <span class="tabular-nums">{{ health.totalReviews }} reviews · {{ Math.round(sameDayPct) }}% same-day</span>
+              <span class="tabular-nums">{{ health.totalReviews.toLocaleString('en-US') }} reviews · {{ Math.round(sameDayPct) }}% same-day</span>
             </div>
             <div class="flex h-3 w-full overflow-hidden rounded-full bg-surface-200 dark:bg-surface-700">
               <div
@@ -948,11 +1017,86 @@
           @click="optimiseParameters"
         />
         <p v-if="!canOptimise && !isLoading" class="text-sm text-surface-500 dark:text-surface-400 mt-2">
-          You have {{ reviewCount }} of {{ minimumReviews }} reviews needed. Keep studying to unlock optimisation.
+          You have {{ reviewCount.toLocaleString('en-US') }} of {{ minimumReviews }} reviews needed. Keep studying to unlock optimisation.
         </p>
         <Message v-if="optimiseError" key="optimise-error" severity="error" :closable="false" class="mt-2">
           {{ optimiseError }}
         </Message>
+
+        <div
+          class="mt-4 rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-50 dark:bg-surface-800/40 p-3"
+          :class="{ invisible: isLoading }"
+        >
+          <div class="flex items-center gap-2">
+            <ToggleSwitch
+              :model-value="provenance.autoOptimise && !usesEditedParameters"
+              input-id="autoOptimise"
+              :disabled="isLoading || isTogglingAuto || usesEditedParameters"
+              @update:model-value="setAutoOptimise"
+            />
+            <label for="autoOptimise" class="text-sm font-medium text-gray-700 dark:text-gray-200" :class="usesEditedParameters ? 'cursor-default' : 'cursor-pointer'">
+              Update parameters automatically
+            </label>
+          </div>
+          <p class="text-xs text-gray-500 dark:text-gray-400 mt-1.5">
+            <template v-if="usesEditedParameters">Off while you use parameters you edited. Optimise or reset them to turn it back on.</template>
+            <template v-else>
+              Jiten automatically optimises your parameters as your review history grows for the best learning experience. Cards are not rescheduled, due dates stay where they are. Recommended to leave on unless you want to change parameters manually.
+            </template>
+          </p>
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-1 mt-3 text-sm text-gray-600 dark:text-gray-300">
+            <span class="flex items-center gap-1.5">
+              <i class="pi pi-history text-xs text-gray-400" aria-hidden="true" />
+              {{ provenanceLine }}
+            </span>
+            <button
+              v-if="provenance.undoHistoryId != null"
+              type="button"
+              class="text-primary underline cursor-pointer disabled:opacity-60 disabled:cursor-wait"
+              :disabled="isRestoring"
+              @click="restoreHistory(provenance.undoHistoryId)"
+            >
+              Undo
+            </button>
+            <button type="button" class="text-primary underline cursor-pointer" :aria-expanded="showHistory" @click="toggleHistory">
+              {{ showHistory ? 'Hide history' : 'History' }}
+            </button>
+          </div>
+
+          <div v-if="showHistory" class="mt-3">
+            <p v-if="historyFailed" class="text-sm text-gray-500 dark:text-gray-400">History could not be loaded. Close and reopen it to try again.</p>
+            <ul v-else-if="history == null" class="flex flex-col gap-2" aria-busy="true">
+              <li v-for="n in 3" :key="n" class="h-10 rounded bg-surface-100 dark:bg-surface-800 animate-pulse" />
+            </ul>
+            <p v-else-if="history.length === 0" class="text-sm text-gray-500 dark:text-gray-400">
+              No changes yet. Optimising, editing or an automatic update will add an entry here.
+            </p>
+            <ul v-else class="divide-y divide-surface-200 dark:divide-surface-700 rounded border border-surface-200 dark:border-surface-700">
+              <li v-for="{ entry, details } in historyRows" :key="entry.id" class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2">
+                <div class="min-w-0">
+                  <div
+                    class="flex flex-wrap items-baseline gap-x-2 text-sm"
+                    :class="entry.revertedAtUtc ? 'text-gray-400 dark:text-gray-500' : 'text-gray-700 dark:text-gray-200'"
+                  >
+                    <Tooltip :content="formatDateLong(entry.createdAtUtc)">
+                      <span class="tabular-nums font-medium">{{ formatDateOmitCurrentYear(entry.createdAtUtc) }}</span>
+                    </Tooltip>
+                    <span>{{ fsrsSourceLabel(entry.source) }}</span>
+                    <span class="text-xs text-gray-400">FSRS-{{ entry.version }}</span>
+                  </div>
+                  <div v-if="details.length" class="flex flex-wrap gap-x-3 text-xs text-gray-500 dark:text-gray-400">
+                    <span v-for="detail in details" :key="detail">{{ detail }}</span>
+                  </div>
+                </div>
+                <span v-if="entry.isCurrent" class="text-xs font-medium text-green-700 dark:text-green-400">In use</span>
+                <div v-else class="flex items-center gap-2">
+                  <span v-if="entry.revertedAtUtc" class="text-xs text-gray-400 dark:text-gray-500">Undone</span>
+                  <Button label="Restore" size="small" severity="secondary" outlined :disabled="isRestoring" @click="restoreHistory(entry.id)" />
+                </div>
+              </li>
+            </ul>
+          </div>
+        </div>
       </div>
 
       <div class="border-t border-surface-200 dark:border-surface-700 pt-4">

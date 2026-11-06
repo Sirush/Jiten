@@ -138,6 +138,15 @@ public class FsrsOptimizer
         return new FsrsOptimizationResult(bestParameters, bestLoss, totalReviews, config.Epochs);
     }
 
+    /// <summary>Recency-weighted mean log loss over the items <see cref="Optimize"/> would train on, so two parameter sets compare like for like.</summary>
+    public static double EvaluateLoss(List<FsrsTrainingItem> items, double[] parameters)
+    {
+        var sorted = items.Where(i => i.Reviews.Length <= MAX_SEQUENCE_LENGTH && HasLongTermReview(i))
+                          .OrderBy(i => i.LastReviewTicks)
+                          .ToList();
+        return ComputeLoss(sorted, parameters, ComputeRecencyWeights(sorted.Count));
+    }
+
     private static bool HasLongTermReview(FsrsTrainingItem item) => CountLongTermReviews(item) > 0;
 
     private static int CountLongTermReviews(FsrsTrainingItem item)
