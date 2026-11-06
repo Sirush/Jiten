@@ -117,6 +117,22 @@ public class RefreshTokenTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Refresh_RejectsATokenSpentInsideTheGraceWindowOnceSessionsAreRevoked()
+    {
+        var issued = await IssueAsync(TestUsers.UserA);
+        (await RefreshAsync(issued.AccessToken, issued.RefreshToken)).StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var revoke = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/auth/revoke-token")
+                                             .WithUser(TestUsers.UserA)
+                                             .WithJsonContent(new { keepCurrent = false }));
+        revoke.StatusCode.Should().Be(HttpStatusCode.OK);
+
+        var replay = await RefreshAsync(issued.AccessToken, issued.RefreshToken);
+
+        replay.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
     public async Task Refresh_RejectsARevokedToken()
     {
         var issued = await IssueAsync(TestUsers.UserA);

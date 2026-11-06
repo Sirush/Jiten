@@ -77,20 +77,20 @@ public class SrsController(
 
         var undoSettings = await LoadUserSettings(userId);
 
-        if (remainingLogs.Count == 0)
+        var keepTerminalState = IsSetAfterLastReview(card.State);
+
+        if (remainingLogs.Count == 0 && !keepTerminalState)
         {
             // Not archived: undoing the only review leaves no history to keep, and the card itself was
             // created by that review.
             userContext.FsrsCards.Remove(card);
             cardDeleted = true;
         }
-        else
+        else if (remainingLogs.Count > 0)
         {
             var scheduler = FsrsSettingsHelper.CreateScheduler(undoSettings, enableFuzzing: false);
 
-            // Undo restores the state the card had before the undone review, so a terminal state set by that
-            // review must not be preserved.
-            FsrsReplay.Recompute(card, remainingLogs, scheduler, scheduler, preserveTerminalState: false);
+            FsrsReplay.Recompute(card, remainingLogs, scheduler, scheduler, preserveTerminalState: keepTerminalState);
         }
 
         // Undo is the one erasure at the granularity where erasing an activity record is meaningful: it takes
@@ -543,6 +543,10 @@ public class SrsController(
 
     private static bool IsTerminalState(FsrsState state)
         => state is FsrsState.Suspended or FsrsState.Mastered or FsrsState.Blacklisted;
+
+    /// <summary>Reviews are refused in these states, so they came from an explicit action that undo must keep; Suspended can come from the undone review's leech check.</summary>
+    private static bool IsSetAfterLastReview(FsrsState state)
+        => state is FsrsState.Mastered or FsrsState.Blacklisted;
 
     /// <summary>The scheduler has no transition out of New; a first grade is a learning step 0 review.</summary>
     private static void PromoteNewToLearning(FsrsCard card)

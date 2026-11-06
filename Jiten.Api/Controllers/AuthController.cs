@@ -274,9 +274,13 @@ public class AuthController : ControllerBase
         // window don't slide it forward.
         if (!oldRefreshToken.IsUsed)
         {
-            oldRefreshToken.IsUsed = true;
-            oldRefreshToken.UsedAt = DateTime.UtcNow;
-            _context.RefreshTokens.Update(oldRefreshToken);
+            var usedAt = DateTime.UtcNow;
+            var marked = await _context.RefreshTokens
+                                       .Where(rt => rt.Token == oldRefreshToken.Token && !rt.IsUsed && !rt.IsRevoked)
+                                       .ExecuteUpdateAsync(s => s.SetProperty(rt => rt.IsUsed, true)
+                                                                 .SetProperty(rt => rt.UsedAt, usedAt));
+            if (marked == 0 && await _context.RefreshTokens.AnyAsync(rt => rt.Token == oldRefreshToken.Token && rt.IsRevoked))
+                return BadRequest(new { message = "Invalid or expired refresh token." });
         }
 
         var newTokens = await _tokenService.GenerateTokens(user);
@@ -367,7 +371,7 @@ public class AuthController : ControllerBase
             await _userManager.SetLockoutEndDateAsync(user, null);
 
             var userRefreshTokens = await _context.RefreshTokens
-                                                  .Where(rt => rt.UserId == user.Id && !rt.IsRevoked && !rt.IsUsed)
+                                                  .Where(rt => rt.UserId == user.Id && !rt.IsRevoked)
                                                   .ToListAsync();
             foreach (var rt in userRefreshTokens) rt.IsRevoked = true;
             _context.RefreshTokens.UpdateRange(userRefreshTokens);
@@ -389,7 +393,7 @@ public class AuthController : ControllerBase
         if (string.IsNullOrEmpty(userId)) return Unauthorized();
 
         var query = _context.RefreshTokens
-                            .Where(rt => rt.UserId == userId && !rt.IsRevoked && !rt.IsUsed);
+                            .Where(rt => rt.UserId == userId && !rt.IsRevoked);
 
         if (model?.KeepCurrent == true)
         {

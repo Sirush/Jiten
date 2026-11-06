@@ -191,7 +191,10 @@ public sealed partial class MetadataEditService(
     /// <summary>A pending edit whose every field already holds its proposed value has nothing left to do.</summary>
     private async Task SupersedePendingAsync(int deckId, CancellationToken ct, DeckMetadataSnapshot? current = null)
     {
-        var pending = await db.MetadataEdits.Where(e => e.DeckId == deckId && e.Status == MetadataEditStatus.Pending).ToListAsync(ct);
+        var pending = await db.MetadataEdits.AsNoTracking()
+                              .Where(e => e.DeckId == deckId && e.Status == MetadataEditStatus.Pending)
+                              .Select(e => new { e.Id, e.ChangesJson })
+                              .ToListAsync(ct);
         if (pending.Count == 0)
             return;
 
@@ -199,20 +202,20 @@ public sealed partial class MetadataEditService(
         if (current == null)
             return;
 
-        var changed = false;
-        foreach (var edit in pending)
-        {
-            var changes = ParseChanges(edit.ChangesJson);
-            if (changes.Count > 0 && changes.All(c => Merge(c.Field, c.Before, c.After, current.Value(c.Field), preferEdit: false) is { Changes: false, Clash: false }))
-            {
-                edit.Status = MetadataEditStatus.Superseded;
-                edit.ReviewedAt = DateTime.UtcNow;
-                changed = true;
-            }
-        }
+        var supersededIds = pending.Where(edit =>
+                                   {
+                                       var changes = ParseChanges(edit.ChangesJson);
+                                       return changes.Count > 0 && changes.All(c => Merge(c.Field, c.Before, c.After, current.Value(c.Field), preferEdit: false) is { Changes: false, Clash: false });
+                                   })
+                                   .Select(edit => edit.Id)
+                                   .ToList();
+        if (supersededIds.Count == 0)
+            return;
 
-        if (changed)
-            await db.SaveChangesAsync(ct);
+        var now = DateTime.UtcNow;
+        await db.MetadataEdits.Where(e => supersededIds.Contains(e.Id) && e.Status == MetadataEditStatus.Pending)
+                .ExecuteUpdateAsync(s => s.SetProperty(e => e.Status, MetadataEditStatus.Superseded)
+                                          .SetProperty(e => e.ReviewedAt, now), ct);
     }
 
     /// <summary>Logs a direct admin/dashboard write as an approved edit by that person.</summary>

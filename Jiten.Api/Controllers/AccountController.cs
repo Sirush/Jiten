@@ -95,7 +95,7 @@ public class AccountController : ControllerBase
         }
 
         var userRefreshTokens = await _context.RefreshTokens
-                                              .Where(rt => rt.UserId == user.Id && !rt.IsRevoked && !rt.IsUsed)
+                                              .Where(rt => rt.UserId == user.Id && !rt.IsRevoked)
                                               .ToListAsync();
         foreach (var rt in userRefreshTokens) rt.IsRevoked = true;
         _context.RefreshTokens.UpdateRange(userRefreshTokens);
@@ -212,7 +212,7 @@ public class AccountController : ControllerBase
         }
 
         var userRefreshTokens = await _context.RefreshTokens
-                                              .Where(rt => rt.UserId == user.Id && !rt.IsRevoked && !rt.IsUsed)
+                                              .Where(rt => rt.UserId == user.Id && !rt.IsRevoked)
                                               .ToListAsync();
         foreach (var rt in userRefreshTokens) rt.IsRevoked = true;
         _context.RefreshTokens.UpdateRange(userRefreshTokens);

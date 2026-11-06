@@ -470,14 +470,18 @@ public static class JitenHelper
                                             .Where(d => d.ParentDeckId == existingDeck.DeckId)
                                             .ToListAsync();
 
-        var existingChildrenDict = existingChildren.ToDictionary(c => c.OriginalTitle);
+        var unmatchedByTitle = existingChildren.OrderBy(c => c.DeckOrder).ThenBy(c => c.DeckId)
+                                               .GroupBy(c => c.OriginalTitle)
+                                               .ToDictionary(g => g.Key, g => new Queue<Deck>(g));
+        var matchedIds = new HashSet<int>();
 
-        foreach (var child in children)
+        foreach (var child in children.OrderBy(c => c.DeckOrder))
         {
             var key = child.OriginalTitle;
 
-            if (existingChildrenDict.TryGetValue(key, out var existingChild))
+            if (unmatchedByTitle.TryGetValue(key, out var sameTitle) && sameTitle.TryDequeue(out var existingChild))
             {
+                matchedIds.Add(existingChild.DeckId);
                 try
                 {
                     await context.Entry(existingChild)
@@ -530,7 +534,7 @@ public static class JitenHelper
 
         // Bulk delete removed children
         var childrenToDelete = existingChildren
-                               .Where(ec => children.All(c => c.OriginalTitle != ec.OriginalTitle))
+                               .Where(ec => !matchedIds.Contains(ec.DeckId))
                                .Select(c => c.DeckId)
                                .ToList();
 
