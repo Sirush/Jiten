@@ -91,18 +91,19 @@ function sendLeave(): void {
 function sendVitals(): void {
   if (vitalsSent || !firstViewId) return;
   vitalsSent = true;
-  const v = firstViewId;
+  const base = { t: 'vital', v: firstViewId, p: firstViewPath, r: firstViewRoute };
   const nav = performance.getEntriesByType('navigation')[0] as PerformanceNavigationTiming | undefined;
-  if (nav && nav.responseStart > 0) push({ t: 'vital', n: 'TTFB', val: Math.round(nav.responseStart), v, p: firstViewPath });
-  if (vitals.fcp !== null && vitals.fcp < firstHiddenTime) push({ t: 'vital', n: 'FCP', val: Math.round(vitals.fcp), v, p: firstViewPath });
-  if (vitals.lcp !== null && vitals.lcp < firstHiddenTime) push({ t: 'vital', n: 'LCP', val: Math.round(vitals.lcp), v, p: firstViewPath });
-  push({ t: 'vital', n: 'CLS', val: Math.round(vitals.cls * 1000) / 1000, v, p: firstViewPath });
-  if (vitals.inp !== null) push({ t: 'vital', n: 'INP', val: Math.round(vitals.inp), v, p: firstViewPath });
+  if (nav && nav.responseStart > 0) push({ ...base, n: 'TTFB', val: Math.round(nav.responseStart) });
+  if (vitals.fcp !== null && vitals.fcp < firstHiddenTime) push({ ...base, n: 'FCP', val: Math.round(vitals.fcp) });
+  if (vitals.lcp !== null && vitals.lcp < firstHiddenTime) push({ ...base, n: 'LCP', val: Math.round(vitals.lcp) });
+  push({ ...base, n: 'CLS', val: Math.round(vitals.cls * 1000) / 1000 });
+  if (vitals.inp !== null) push({ ...base, n: 'INP', val: Math.round(vitals.inp) });
 }
 
 const vitals = { lcp: null as number | null, cls: 0, inp: null as number | null, fcp: null as number | null };
 let firstViewId = '';
 let firstViewPath = '';
+let firstViewRoute = '';
 let firstHiddenTime = Infinity;
 
 function observeVitals(): void {
@@ -217,6 +218,7 @@ export function beatView(info: ViewInfo): void {
     firstView = false;
     firstViewId = viewId;
     firstViewPath = info.path;
+    firstViewRoute = info.route;
     item.ref = document.referrer || '';
     if (navigator.webdriver) item.d = { hl: '1' };
   }
@@ -225,7 +227,7 @@ export function beatView(info: ViewInfo): void {
 
 export function beatEvent(name: string, data?: Record<string, string | number | boolean>): void {
   if (!enabled) return;
-  const item: Payload = { t: 'event', n: name, p: viewPath, v: viewId };
+  const item: Payload = { t: 'event', n: name, p: viewPath || location.pathname, v: viewId };
   if (data) item.d = data;
   const u = userIdSource();
   if (u) item.u = u;
