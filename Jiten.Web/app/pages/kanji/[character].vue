@@ -168,11 +168,16 @@
   // Two meanings keeps the title inside Google's display width; the h1 carries the fuller list.
   const titleMeaning = computed(() => kanji.value?.meanings.slice(0, 2).join(', ') ?? '');
 
+  /** Uppercase percent-encoding, the form the sitemap lists; the module default lowercases it into a second URL. */
+  const canonicalUrl = computed(() => `https://jiten.moe/kanji/${encodeURIComponent(character.value)}`);
+
   useSeoMeta({
     title: () => (titleMeaning.value ? `${character.value} Kanji: ${titleMeaning.value} - Readings and Common Words` : `${character.value} - Kanji`),
     description: metaDescription,
     ogDescription: metaDescription,
+    ogUrl: () => canonicalUrl.value,
   });
+  useHead(() => ({ link: [{ rel: 'canonical', href: canonicalUrl.value }] }));
 </script>
 
 <template>

@@ -37,7 +37,7 @@ export function stripPrimevueStyles(head: (string | undefined)[]): [string, stri
 // The link goes exactly where the first inline tag sat so cascade order against Tailwind and
 // other head stylesheets is unchanged.
 export function insertStylesheetLink(head: (string | undefined)[], href: string): void {
-  const link = `<link rel="stylesheet" href="${href}">`;
+  const link = `<link rel="stylesheet" href="${href}"${/^https?:/.test(href) ? ' crossorigin="anonymous"' : ''}>`;
   for (let i = 0; i < head.length; i++) {
     const chunk = head[i];
     const markerIdx = chunk?.indexOf(STYLE_MARKER) ?? -1;
@@ -46,6 +46,12 @@ export function insertStylesheetLink(head: (string | undefined)[], href: string)
     head[i] = chunk!.slice(0, styleStart) + link + chunk!.slice(styleStart);
     return;
   }
+}
+
+/** Served from the asset CDN when one is configured; the `crossorigin` link reuses the head's anonymous preconnect to it. */
+export function primevueStylesheetHref(hash: string, cdnUrl: string | undefined): string {
+  const path = `/pv-styles/${hash}.css`;
+  return cdnUrl ? cdnUrl.replace(/\/+$/, '') + path : path;
 }
 
 export function mergePrimevueStyles(entries: Iterable<readonly [string, string]>): void {

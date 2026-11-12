@@ -6,12 +6,14 @@ export default defineNitroPlugin((nitroApp) => {
   // Prerendered HTML would link a hash no runtime server is guaranteed to have on boot.
   if (import.meta.prerender || process.env.PV_STYLE_EXTRACT === 'off') return;
 
+  const cdnUrl = useRuntimeConfig().app.cdnURL || undefined;
+
   nitroApp.hooks.hook('render:html', async (html) => {
     const extracted = stripPrimevueStyles(html.head);
     if (extracted.length === 0) return;
     mergePrimevueStyles(extracted);
     const { hash } = currentPrimevueStylesheet();
     await primevueStylesheetPersisted();
-    insertStylesheetLink(html.head, `/pv-styles/${hash}.css`);
+    insertStylesheetLink(html.head, primevueStylesheetHref(hash, cdnUrl));
   });
 });
