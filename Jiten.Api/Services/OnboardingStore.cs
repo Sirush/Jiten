@@ -101,7 +101,7 @@ public sealed class OnboardingStore(
         => new(settings.Level, settings.OpenedAt, settings.WordCheckDoneAt, settings.WordCheckWords, settings.WordCheckBatchId, settings.ReadingCheck,
                facts.GrammarMissing, facts.KnownWords, shouldPrompt, showStrip);
 
-    /// <summary>A grammar word counts as known when its form resolves to a learned state, as the vocabulary pages read it; the word total is the vocabulary page's, without derivations.</summary>
+    /// <summary>A grammar word counts as marked when its form resolves to a known state, blacklisted included; the word total is the vocabulary page's, without derivations.</summary>
     private async Task<SetUpFacts> LoadSetUpFacts(string userId)
     {
         var setId = await jitenContext.WordSets.AsNoTracking().Where(s => s.Slug == BasicGrammarSlug).Select(s => (int?)s.SetId).FirstOrDefaultAsync();
@@ -111,7 +111,7 @@ public sealed class OnboardingStore(
         if (grammar.Count > 0)
         {
             var states = await currentUserService.GetKnownWordsState(grammar.Select(WordFormHelper.DecodeWordKey));
-            grammarMissing = grammar.Count(k => !(states.TryGetValue(WordFormHelper.DecodeWordKey(k), out var tiers) && tiers.Any(KnownWordRules.IsLearned)));
+            grammarMissing = grammar.Count(k => !(states.TryGetValue(WordFormHelper.DecodeWordKey(k), out var tiers) && tiers.Any(KnownWordRules.IsKnown)));
         }
 
         var amounts = await knownWordAmounts.ComputeAsync(userId, includeDerivations: false);

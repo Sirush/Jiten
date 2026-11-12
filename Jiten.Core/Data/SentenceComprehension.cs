@@ -2,10 +2,7 @@ namespace Jiten.Core.Data;
 
 public static class SentenceComprehension
 {
-    /// <summary>Learning cards (Due with no review) and plain New do not count; a blacklisted word is one the user chose not to learn.</summary>
-    public static bool IsKnown(IReadOnlyCollection<KnownState> states) =>
-        states.Any(s => s is KnownState.Young or KnownState.Mature or KnownState.Mastered
-                             or KnownState.Redundant or KnownState.Blacklisted);
+    public static bool IsKnown(IReadOnlyCollection<KnownState> states) => states.Any(KnownWordRules.IsKnown);
 
     public const int NameEntryFloor = 5_000_000;
     public const int NameEntryCeiling = 8_000_000;

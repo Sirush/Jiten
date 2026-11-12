@@ -342,6 +342,29 @@ public class WordCheckTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task BlacklistedGrammarSet_CountsAsMarked()
+    {
+        using (var scope = factory.Services.CreateScope())
+        {
+            var setId = await scope.ServiceProvider.GetRequiredService<JitenDbContext>().WordSets
+                                   .Where(s => s.Slug == OnboardingStore.BasicGrammarSlug).Select(s => s.SetId).SingleAsync();
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            userDb.UserWordSetStates.Add(new UserWordSetState
+            {
+                UserId = TestUsers.UserB, SetId = setId, State = WordSetStateType.Blacklisted, CreatedAt = DateTime.UtcNow
+            });
+            await userDb.SaveChangesAsync();
+        }
+
+        await AddMasteredCards(TestUsers.UserB, Enumerable.Range(200_000, OnboardingStore.SetUpKnownWords).ToList());
+
+        var state = await GetOnboarding(TestUsers.UserB);
+
+        state.BasicGrammarMissing.Should().Be(0);
+        state.ShowSetupStrip.Should().BeFalse();
+    }
+
+    [Fact]
     public async Task ReadingCheck_ListsFinishedVolumesAndRefusesTooFewUnits()
     {
         int parentId;
