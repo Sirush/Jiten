@@ -436,13 +436,11 @@ public sealed partial class MetadataEditService
 
         if (!Enum.IsDefined(request.Verdict))
             return ServiceResult<object>.Fail(400, "Pick confirm or doesn't look right.");
-        if (request.Verdict == MetadataEditVerdict.Doubt && (request.Reason == null || !Enum.IsDefined(request.Reason.Value)))
-            return ServiceResult<object>.Fail(400, "Pick what looks wrong.");
         var note = request.Note?.Trim();
         if (request.Verdict == MetadataEditVerdict.Doubt && string.IsNullOrEmpty(note))
             return ServiceResult<object>.Fail(400, "Say what looks wrong so editors can check it.");
-        if (note is { Length: > 300 })
-            return ServiceResult<object>.Fail(400, "Keep the details under 300 characters.");
+        if (note is { Length: > MaxNoteLength })
+            return ServiceResult<object>.Fail(400, $"Keep the details under {MaxNoteLength} characters.");
         var sourceUrl = request.SourceUrl?.Trim();
         if (!string.IsNullOrEmpty(sourceUrl) && (sourceUrl.Length > 500 || !IsHttpUrl(sourceUrl)))
             return ServiceResult<object>.Fail(400, "Sources need to be links starting with http:// or https://.");
@@ -459,7 +457,6 @@ public sealed partial class MetadataEditService
             : MetadataField.None;
         existing.Verdict = request.Verdict;
         existing.Fields = doubted == edit.Fields ? MetadataField.None : doubted;
-        existing.Reason = request.Verdict == MetadataEditVerdict.Doubt ? request.Reason : null;
         existing.Note = string.IsNullOrEmpty(note) ? null : note;
         existing.SourceUrl = string.IsNullOrEmpty(sourceUrl) ? null : sourceUrl;
         existing.CreatedAt = DateTime.UtcNow;

@@ -2,7 +2,6 @@
   import { useToast } from 'primevue/usetoast';
   import {
     MetadataEditVerdict,
-    type MetadataEditDoubtReason,
     MetadataField,
     type MetadataNamePreview,
     type MetadataQueueConflict,
@@ -24,12 +23,12 @@
     contributorLevelLabel,
     conflictClashes,
     describeValue,
-    doubtReasonLabel,
     fieldLabel,
     fieldPhrase,
     fieldsFromFlags,
     isListField,
     leftOutPhrase,
+    noteHasReason,
     queueMode,
     queueShortcut,
     queueTabFromQuery,
@@ -38,6 +37,7 @@
     sortChanges,
     tierLabel,
     toggleChipClass,
+    toggleNoteReason,
     type ApprovalExclusion,
     type ConflictClash,
     type QueueTab,
@@ -158,7 +158,6 @@
   watch([sort, tier, deckFilter, tab], () => load());
 
   const panel = ref<'doubt' | 'reject' | null>(null);
-  const doubtReason = ref<MetadataEditDoubtReason | null>(null);
   const doubtNote = ref('');
   const doubtFields = ref<number[]>([]);
   const rejectNote = ref('');
@@ -172,7 +171,6 @@
     () => selected.value?.id,
     () => {
       panel.value = null;
-      doubtReason.value = null;
       doubtNote.value = '';
       doubtFields.value = selected.value?.changes.map((c) => c.field) ?? [];
       rejectNote.value = '';
@@ -221,13 +219,13 @@
   /** Every queue outcome shows in the same bottom toast; only reversible ones get an Undo button. */
   const notify = (summary: string, run?: () => Promise<unknown>) => showUndoToast(toast, summary, run);
 
-  async function putCheck(item: MetadataQueueItem, verdict: MetadataEditVerdict, reason?: MetadataEditDoubtReason, note?: string, fields?: number[]) {
+  async function putCheck(item: MetadataQueueItem, verdict: MetadataEditVerdict, note?: string, fields?: number[]) {
     const result = await $api<{ confirmCount: number }>(`metadata-edits/${item.id}/check`, {
       method: 'PUT',
-      body: { verdict, reason, note: note?.trim() || undefined, fields },
+      body: { verdict, note: note?.trim() || undefined, fields },
     });
     const flags = verdict === MetadataEditVerdict.Doubt && fields?.length ? fields.reduce((a, f) => a | f, 0) : 0;
-    item.myCheck = { verdict, reason: reason ?? null, note: note?.trim() || null, fields: flags === item.fields ? 0 : flags };
+    item.myCheck = { verdict, note: note?.trim() || null, fields: flags === item.fields ? 0 : flags };
     item.confirmCount = result.confirmCount;
   }
 
@@ -277,12 +275,11 @@
 
   function sendDoubt() {
     const item = selected.value;
-    const reason = doubtReason.value;
-    if (!item || !reason || !doubtNote.value.trim() || !doubtFields.value.length) return;
+    if (!item || !doubtNote.value.trim() || !doubtFields.value.length) return;
     const fields = doubtFields.value.length === item.changes.length ? undefined : [...doubtFields.value];
     runAction(async () => {
       const next = nextAfter(item);
-      await putCheck(item, MetadataEditVerdict.Doubt, reason, doubtNote.value, fields);
+      await putCheck(item, MetadataEditVerdict.Doubt, doubtNote.value, fields);
       panel.value = null;
       selectedId.value = next?.id ?? null;
       notify('Sent to editors. Thanks for checking.', () => deleteCheck(item));
@@ -296,7 +293,7 @@
     runAction(async () => {
       await deleteCheck(item);
       const fields = previous.fields ? fieldsFromFlags(previous.fields) : undefined;
-      notify('Check withdrawn.', () => putCheck(item, previous.verdict, previous.reason ?? undefined, previous.note ?? undefined, fields));
+      notify('Check withdrawn.', () => putCheck(item, previous.verdict, previous.note ?? undefined, fields));
     }, "Your check wasn't withdrawn. Try again in a moment.");
   }
 
@@ -720,8 +717,9 @@
                     v-for="reason in REJECT_REASONS"
                     :key="reason"
                     type="button"
-                    :class="toggleChipClass(excludeNote === reason)"
-                    @click="excludeNote = reason"
+                    :class="toggleChipClass(noteHasReason(excludeNote, reason))"
+                    :aria-pressed="noteHasReason(excludeNote, reason)"
+                    @click="excludeNote = toggleNoteReason(excludeNote, reason)"
                   >
                     {{ reason }}
                   </button>
@@ -934,14 +932,9 @@
                       </span>
                     </span>
                     <template v-if="check.verdict === MetadataEditVerdict.Doubt">
-                      <span class="flex flex-wrap items-center gap-1.5 mt-0.5">
-                        <span class="rounded px-1.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-900 dark:bg-amber-800/50 dark:text-amber-100">
-                          {{ doubtReasonLabel(check.reason) }}
-                        </span>
-                        <span v-if="check.fields" class="text-xs text-amber-900 dark:text-amber-200"
-                          >On: {{ fieldPhrase(fieldsFromFlags(check.fields)).toLowerCase() }}</span
-                        >
-                      </span>
+                      <span v-if="check.fields" class="mt-0.5 text-xs text-amber-900 dark:text-amber-200"
+                        >On: {{ fieldPhrase(fieldsFromFlags(check.fields)).toLowerCase() }}</span
+                      >
                       <p
                         v-if="check.note"
                         class="m-0 border-l-2 border-amber-300 dark:border-amber-700 pl-2 text-sm [overflow-wrap:anywhere] whitespace-pre-line"
@@ -977,27 +970,27 @@
             <div class="flex flex-wrap gap-1.5" role="group" aria-labelledby="doubt-label">
               <button
                 v-for="reason in DOUBT_REASONS"
-                :key="reason.value"
+                :key="reason"
                 type="button"
                 data-doubt-reason
-                :class="toggleChipClass(doubtReason === reason.value)"
-                :aria-pressed="doubtReason === reason.value"
-                @click="doubtReason = reason.value"
+                :class="toggleChipClass(noteHasReason(doubtNote, reason))"
+                :aria-pressed="noteHasReason(doubtNote, reason)"
+                @click="doubtNote = toggleNoteReason(doubtNote, reason)"
               >
-                {{ reason.label }}
+                {{ reason }}
               </button>
             </div>
             <label for="doubt-note" class="text-xs font-semibold text-muted-color">What did you find? (only editors see this)</label>
             <InputText
               id="doubt-note"
               v-model="doubtNote"
-              maxlength="300"
+              maxlength="500"
               placeholder="For example, the VNDB page lists a different date"
               class="w-full"
               @keydown.enter.prevent="sendDoubt"
             />
             <div class="flex flex-wrap gap-2">
-              <Button label="Send to editors" :disabled="!doubtReason || !doubtNote.trim() || !doubtFields.length" :loading="busy" @click="sendDoubt" />
+              <Button label="Send to editors" :disabled="!doubtNote.trim() || !doubtFields.length" :loading="busy" @click="sendDoubt" />
               <Button label="Cancel" severity="secondary" text @click="panel = null" />
             </div>
             <p class="m-0 text-xs text-muted-color">The author won't see who sent it.</p>
@@ -1006,7 +999,14 @@
           <div v-if="panel === 'reject'" class="px-5 sm:px-6 py-4 border-t border-surface-200 dark:border-surface-700 flex flex-col gap-2">
             <label for="reject-note" class="text-xs font-semibold text-muted-color">Reason, sent to {{ selected.author.displayName }}</label>
             <div class="flex flex-wrap gap-1.5">
-              <button v-for="reason in REJECT_REASONS" :key="reason" type="button" :class="toggleChipClass(rejectNote === reason)" @click="rejectNote = reason">
+              <button
+                v-for="reason in REJECT_REASONS"
+                :key="reason"
+                type="button"
+                :class="toggleChipClass(noteHasReason(rejectNote, reason))"
+                :aria-pressed="noteHasReason(rejectNote, reason)"
+                @click="rejectNote = toggleNoteReason(rejectNote, reason)"
+              >
                 {{ reason }}
               </button>
             </div>

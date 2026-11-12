@@ -37,13 +37,6 @@ export enum MetadataEditVerdict {
   Doubt = 2,
 }
 
-export enum MetadataEditDoubtReason {
-  SourceDoesNotMatch = 1,
-  WrongValue = 2,
-  NoSource = 3,
-  Other = 4,
-}
-
 export enum MetadataEditActor {
   User = 1,
   Provider = 2,
@@ -196,7 +189,6 @@ export interface SubmitMetadataEditResult {
 export interface MetadataQueueCheck {
   displayName: string;
   verdict: MetadataEditVerdict;
-  reason: MetadataEditDoubtReason | null;
   note: string | null;
   level: string;
   accepted: number;
@@ -249,7 +241,7 @@ export interface MetadataQueueItem {
   sources: string[];
   note: string | null;
   confirmCount: number;
-  myCheck: { verdict: MetadataEditVerdict; reason: MetadataEditDoubtReason | null; note: string | null; fields: number } | null;
+  myCheck: { verdict: MetadataEditVerdict; note: string | null; fields: number } | null;
   canCheck: boolean;
   checkBlockedReason: string | null;
   characterNameChecks: CharacterNameSurface[] | null;

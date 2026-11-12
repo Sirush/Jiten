@@ -44,7 +44,6 @@ public sealed class CheckNamesRequest
 public sealed class MetadataEditCheckRequest
 {
     public MetadataEditVerdict Verdict { get; init; }
-    public MetadataEditDoubtReason? Reason { get; init; }
     public string? Note { get; init; }
     public string? SourceUrl { get; init; }
 
@@ -157,11 +156,11 @@ public sealed record DisplayNameDto(string DisplayName);
 
 public sealed record QueueAuthorDto(string DisplayName, bool IsYou);
 
-public sealed record MyCheckDto(int Verdict, int? Reason, string? Note, int Fields);
+public sealed record MyCheckDto(int Verdict, string? Note, int Fields);
 
 public sealed record AuthorRecordDto(string Level, int Accepted, int Reverted);
 
-public sealed record QueueCheckDto(string DisplayName, int Verdict, int? Reason, string? Note, string Level, int Accepted, DateTime CreatedAt, int Matched, int Missed,
+public sealed record QueueCheckDto(string DisplayName, int Verdict, string? Note, string Level, int Accepted, DateTime CreatedAt, int Matched, int Missed,
                                    int Fields);
 
 public sealed record ConflictDto(int Field, JsonElement EditBefore, JsonElement Current, JsonElement EditAfter);

@@ -1,6 +1,5 @@
 import { LinkType, type DeckRelationshipType, type Genre, type MediaType } from '~/types/enums';
 import {
-  MetadataEditDoubtReason,
   MetadataEditStatus,
   MetadataField,
   type EditableDeck,
@@ -968,16 +967,7 @@ export function tierLabel(tier: number | null | undefined): string {
   return tier == null ? '' : (TIER_LABELS[tier] ?? '');
 }
 
-export const DOUBT_REASONS: { value: MetadataEditDoubtReason; label: string }[] = [
-  { value: MetadataEditDoubtReason.SourceDoesNotMatch, label: "Source doesn't match" },
-  { value: MetadataEditDoubtReason.WrongValue, label: 'Wrong value' },
-  { value: MetadataEditDoubtReason.NoSource, label: 'No source' },
-  { value: MetadataEditDoubtReason.Other, label: 'Something else' },
-];
-
-export function doubtReasonLabel(reason: number | null | undefined): string {
-  return DOUBT_REASONS.find((r) => r.value === reason)?.label ?? '';
-}
+export const DOUBT_REASONS = ["Source doesn't match", 'Wrong value', 'No source'];
 
 export function contributorLevelLabel(level: string | null | undefined): string {
   if (!level) return '';
@@ -992,6 +982,19 @@ const TOGGLE_CHIP_OFF = 'bg-surface-0 dark:bg-surface-900 border-surface-300 dar
 /** Classes for a pressable filter or choice chip; pair with aria-pressed. */
 export function toggleChipClass(on: boolean): string[] {
   return [TOGGLE_CHIP_CLASS, on ? TOGGLE_CHIP_ON : TOGGLE_CHIP_OFF];
+}
+
+const REASON_SEPARATOR = '. ';
+const noteReasons = (note: string) => note.split(REASON_SEPARATOR).map((part) => part.trim()).filter(Boolean);
+
+export function noteHasReason(note: string, reason: string): boolean {
+  return noteReasons(note).includes(reason);
+}
+
+/** Adds the preset reason to the note or takes it back out, keeping anything typed by hand. */
+export function toggleNoteReason(note: string, reason: string): string {
+  const reasons = noteReasons(note);
+  return (reasons.includes(reason) ? reasons.filter((r) => r !== reason) : [...reasons, reason]).join(REASON_SEPARATOR);
 }
 
 export function lookedRightText(count: number): string {

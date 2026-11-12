@@ -136,8 +136,11 @@ public class MetadataEditWorkflowTests(JitenWebApplicationFactory factory)
         var edit = EditId(await SubmitOkAsync(Users.Author, new { releaseDate = "2007-03-29", genres = new[] { (int)Genre.Action, (int)Genre.Comedy },
                                                                    sources = new[] { Source } }));
 
+        (await ErrorAsync(SendAsync(HttpMethod.Put, $"/api/metadata-edits/{edit}/check", Users.Checker, new { verdict = 2, note = new string('x', 501) }),
+                          HttpStatusCode.BadRequest)).Should().Be("Keep the details under 500 characters.");
+
         await OkAsync(SendAsync(HttpMethod.Put, $"/api/metadata-edits/{edit}/check", Users.Checker,
-                                new { verdict = 2, reason = 2, note = "Not a comedy", fields = new[] { (int)MetadataField.Genres } }));
+                                new { verdict = 2, note = "Not a comedy", fields = new[] { (int)MetadataField.Genres } }));
 
         var queue = await OkAsync(SendAsync(HttpMethod.Get, "/api/metadata-edits/pending", Users.Editor));
         queue["items"]![0]!["checks"]![0]!["fields"]!.GetValue<int>().Should().Be((int)MetadataField.Genres);

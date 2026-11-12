@@ -145,7 +145,7 @@ public sealed partial class MetadataEditService
                       .Select(c =>
                       {
                           var checker = records.GetValueOrDefault(c.UserId);
-                          return new QueueCheckDto(names.GetValueOrDefault(c.UserId, UnnamedContributor), (int)c.Verdict, (int?)c.Reason, c.Note,
+                          return new QueueCheckDto(names.GetValueOrDefault(c.UserId, UnnamedContributor), (int)c.Verdict, c.Note,
                                                    checker?.LevelName ?? "new", checker?.Accepted ?? 0, c.CreatedAt,
                                                    checker?.CheckStats.Matched ?? 0, checker?.CheckStats.Missed ?? 0, (int)c.Fields);
                       })
@@ -166,7 +166,7 @@ public sealed partial class MetadataEditService
                 Sources = ParseSources(edit.SourcesJson),
                 Note = edit.EditNote,
                 ConfirmCount = edit.Checks.Count(c => c.Verdict == MetadataEditVerdict.Confirm),
-                MyCheck = myCheck == null ? null : new MyCheckDto((int)myCheck.Verdict, (int?)myCheck.Reason, myCheck.Note, (int)myCheck.Fields),
+                MyCheck = myCheck == null ? null : new MyCheckDto((int)myCheck.Verdict, myCheck.Note, (int)myCheck.Fields),
                 CanCheck = blockedReason == null,
                 CheckBlockedReason = blockedReason,
                 CharacterNameChecks = nameResults,

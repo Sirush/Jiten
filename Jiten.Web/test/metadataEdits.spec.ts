@@ -3,6 +3,8 @@ import { DeckRelationshipType, Genre, LinkType, MediaType } from '../app/types/e
 import { MetadataEditStatus, MetadataField, type EditableDeck } from '../app/types/metadataEdits';
 import {
   aliasError,
+  noteHasReason,
+  toggleNoteReason,
   approvalExclusion,
   leftOutPhrase,
   buildSubmission,
@@ -467,6 +469,15 @@ describe('approvalExclusion', () => {
       leftOut: 5,
     });
     expect(leftOutPhrase(exclusion)).toBe('the release date and aliases and part of the genres');
+  });
+});
+
+describe('review reasons', () => {
+  it('adds and removes preset reasons around a hand-written note', () => {
+    const note = toggleNoteReason(toggleNoteReason('Wrong edition', 'No source'), 'Already correct');
+    expect(note).toBe('Wrong edition. No source. Already correct');
+    expect(noteHasReason(note, 'No source')).toBe(true);
+    expect(toggleNoteReason(note, 'No source')).toBe('Wrong edition. Already correct');
   });
 });
 

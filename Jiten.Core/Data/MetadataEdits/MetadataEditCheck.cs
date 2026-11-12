@@ -17,9 +17,7 @@ public class MetadataEditCheck
     public MetadataField Fields { get; set; }
 
     /// <summary>Required for Doubt; shown to editors only.</summary>
-    public MetadataEditDoubtReason? Reason { get; set; }
-
-    [MaxLength(300)]
+    [MaxLength(500)]
     public string? Note { get; set; }
 
     [MaxLength(500)]
@@ -37,12 +35,4 @@ public enum MetadataEditVerdict
 {
     Confirm = 1,
     Doubt = 2
-}
-
-public enum MetadataEditDoubtReason
-{
-    SourceDoesNotMatch = 1,
-    WrongValue = 2,
-    NoSource = 3,
-    Other = 4
 }
