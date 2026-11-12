@@ -205,7 +205,7 @@ public static class FsrsHelperV7
         w[23] = ClampSafe(w[23], 0.01, 0.25);
         w[24] = ClampSafe(w[24], 0.01, 0.95);
         w[25] = ClampSafe(w[25], 0.2, 0.85);
-        w[26] = ClampSafe(w[26], w[25], 0.99);
+        w[26] = ClampSafe(w[26], Math.Max(w[25], 0.5), 0.99);
         w[27] = ClampSafe(w[27], 0.01, 1.0);
         w[28] = ClampSafe(w[28], 0.1, 1.0);
         w[29] = ClampSafe(w[29], 0.0, 0.9);

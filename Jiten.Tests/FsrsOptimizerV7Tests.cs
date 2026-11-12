@@ -90,44 +90,25 @@ public class FsrsOptimizerV7Tests
         trained.Should().BeLessThan(untrained);
     }
 
-    private static FsrsTrainingItem Item(long lastReviewTicks, params (int Rating, double DeltaT)[] reviews)
-        => new(reviews.Select(r => new FsrsTrainingReview(r.Rating, r.DeltaT)).ToArray(), lastReviewTicks);
-
-    [Fact]
-    public void FilterOutliers_CutsRareAndLongFirstGapsBackToTheirSameDayReviews()
+    [Theory]
+    [InlineData(2)]
+    [InlineData(12)]
+    public void Optimize_FallsBackToDefaultsWithTooFewReviews(int cards)
     {
-        const long end = 1_000 * TimeSpan.TicksPerDay;
-        var common = Enumerable.Range(0, 200).Select(_ => Item(end, (3, 0), (3, 3.2), (3, 10))).ToList();
-        var sameDayAfter = Enumerable.Range(0, 30).Select(_ => Item(end, (3, 0), (3, 0.01), (3, 7.5), (3, 0.02))).ToList();
-        var rare = Enumerable.Range(0, 3).Select(_ => Item(end, (3, 0), (3, 0.02), (3, 50.5), (3, 5))).ToList();
-        var longGap = Enumerable.Range(0, 30).Select(_ => Item(end, (3, 0), (3, 150), (3, 20))).ToList();
-        var sameDayOnly = Item(end, (3, 0), (3, 0.01));
-        var items = common.Concat(sameDayAfter).Concat(rare).Concat(longGap).Append(sameDayOnly).ToList();
+        var result = FsrsOptimizerV7.Optimize(SampleItems(cards, 3));
 
-        var filtered = FsrsOptimizerV7.FilterOutliers(items);
-
-        filtered.Should().HaveCount(items.Count);
-        filtered.Take(230).Should().Equal(common.Concat(sameDayAfter));
-        filtered.Skip(230).Take(3).Should().AllSatisfy(i =>
-        {
-            i.Reviews.Should().Equal(new FsrsTrainingReview(3, 0), new FsrsTrainingReview(3, 0.02));
-            i.LastReviewTicks.Should().Be(end - (long)(55.5 * TimeSpan.TicksPerDay));
-        });
-        filtered.Skip(233).Take(30).Should().AllSatisfy(i => i.Reviews.Should().Equal(new FsrsTrainingReview(3, 0)));
-        filtered[^1].Should().Be(sameDayOnly);
+        result.ReviewCount.Should().BeLessThan(64);
+        result.Parameters.Should().Equal(FsrsConstants.DefaultParametersV7);
     }
 
     [Fact]
-    public void FilterOutliers_KeepsEasyGapsUpToAYear()
+    public void Optimize_FallsBackToDefaultsWhenEveryTargetIsAFirstLongTermReview()
     {
-        var items = Enumerable.Range(0, 100).Select(_ => Item(0, (4, 0), (4, 5)))
-                              .Concat(Enumerable.Range(0, 30).Select(_ => Item(0, (4, 0), (4, 200))))
+        var items = Enumerable.Range(0, 200)
+                              .Select(c => new FsrsTrainingItem([new FsrsTrainingReview(3, 0), new FsrsTrainingReview(c % 5 == 0 ? 1 : 3, 1 + c % 9)],
+                                                                (1_000L + c) * TimeSpan.TicksPerDay))
                               .ToList();
 
-        FsrsOptimizerV7.FilterOutliers(items).Should().Equal(items);
+        FsrsOptimizerV7.Optimize(items).Parameters.Should().Equal(FsrsConstants.DefaultParametersV7);
     }
-
-    [Fact]
-    public void Optimize_FallsBackToDefaultsWithTooFewReviews()
-        => FsrsOptimizerV7.Optimize(SampleItems(2, 3)).Parameters.Should().Equal(FsrsConstants.DefaultParametersV7);
 }

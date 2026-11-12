@@ -75,13 +75,6 @@ internal sealed class AdTape
 
     internal double Value(int i) => _values[i];
 
-    /// <summary>Replaces a node's forward value while keeping its gradient path (implicit-function lifts).</summary>
-    internal Var WithValue(Var v, double value)
-    {
-        _values[v.Index] = value;
-        return v;
-    }
-
     internal Var Binary(AdOp op, Var a, Var b, double value) =>
         new(Push(value, op, a.Index, b.Index), this);
 
