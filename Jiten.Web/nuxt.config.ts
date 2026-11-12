@@ -81,6 +81,11 @@ export default defineNuxtConfig({
     // so the CDN serves stale chunks that inject a previous build's entry CSS over the current one.
     entryImportMap: false,
   },
+  icon: {
+    clientBundle: {
+      scan: { globInclude: ['app/components/AppHeader*.vue'] },
+    },
+  },
   primevue: {
     // Build-time theme import; putting the preset in `options.theme` instead would serialise
     // ~134KB of design tokens into __NUXT__.config on every SSR response.
