@@ -1,9 +1,8 @@
 <script setup lang="ts">
   import type { ProfileOverview } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
-  import { formatCompact } from '~/utils/siteStats';
 
-  const { isOwner, canSee, viewAs, viewAsQuery, apiPath, name } = useProfileContext();
+  const { header, isOwner, canSee, viewAs, viewAsQuery, apiPath, name } = useProfileContext();
   const auth = useAuthStore();
 
   const {
@@ -11,22 +10,17 @@
     status,
     error,
     refresh: refreshOverview,
+    ready: overviewReady,
   } = await useApiFetch<ProfileOverview>(() => apiPath('overview'), { query: viewAsQuery.value });
 
   const pinPickerOpen = ref(false);
 
-  const snapshot = computed(() => {
-    const s = overview.value?.snapshot;
-    if (!s) return [];
-    return [
-      { label: 'Words known', value: s.wordsKnown },
-      { label: 'Kanji known', value: s.kanjiKnown },
-      { label: 'Characters', value: s.characters },
-      { label: 'Titles finished', value: s.titlesFinished },
-    ]
-      .filter((x): x is { label: string; value: number } => !!x.value)
-      .map((x) => ({ label: x.label, value: formatCompact(x.value) }));
-  });
+  const snapshot = computed(() => profileSnapshotTiles(overview.value?.snapshot));
+
+  if (import.meta.server) {
+    await Promise.all([useProfileHeaderReady(), overviewReady]);
+    if (header.value?.displayName && overview.value) defineOgImage('ProfileOgImage', profileOgImageProps(header.value, overview.value));
+  }
 </script>
 
 <template>
