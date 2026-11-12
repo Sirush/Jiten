@@ -46,6 +46,9 @@ public class CommunityListController(
     /// <summary>Above the Full item cap so a whole selected library tab fits in one check.</summary>
     private const int MaxMembershipDecks = 5000;
     private const string CoverageSort = "coverage";
+    private const string DifficultySort = "difficulty";
+    private const string LengthSort = "length";
+    private const string DateSort = "date";
 
     /// <summary>Advisory lock namespace for per-owner list creation; distinct from every other two-key lock class.</summary>
     private const int OwnerLockClass = 0x434C53;
@@ -180,7 +183,7 @@ public class CommunityListController(
     [HttpGet("{id:int}/items")]
     [AllowAnonymous]
     [SwaggerOperation(Summary = "Get a page of a community list's items",
-                      Description = "Curator order by default; sort=coverage puts the viewer's best-covered titles first. q keeps only titles whose name or alias contains it; positions stay the curator's.")]
+                      Description = "Curator order by default; sort=coverage puts the viewer's best-covered titles first. sort=difficulty, length or date order ascending, with a -desc suffix to reverse. q keeps only titles whose name or alias contains it; positions stay the curator's.")]
     public async Task<IResult> GetItems(int id, [FromQuery] int offset = 0, [FromQuery] int limit = DefaultItemPageSize, [FromQuery] string? sort = null,
                                         [FromQuery] string? q = null)
     {
@@ -939,7 +942,8 @@ public class CommunityListController(
     private async Task<List<RankedItem>> ArrangeMatchingAsync(int listId, List<ListItemRow> curatorOrder, string? sort, string? q,
                                                               Dictionary<int, float>? coverage)
     {
-        var arranged = Arrange(curatorOrder, sort, coverage);
+        var deckSort = DeckSort.Parse(sort);
+        var arranged = Arrange(curatorOrder, sort, coverage, deckSort, deckSort != null ? await LoadDeckSortKeysAsync(listId) : null);
         if (string.IsNullOrWhiteSpace(q))
             return arranged;
 
@@ -966,13 +970,66 @@ public class CommunityListController(
         return matches.ToHashSet();
     }
 
-    /// <summary>Ties in coverage keep curator order.</summary>
-    private static List<RankedItem> Arrange(List<ListItemRow> curatorOrder, string? sort, Dictionary<int, float>? coverage)
+    private sealed record DeckSort(string Key, bool Descending)
+    {
+        private const string DescendingSuffix = "-desc";
+
+        public static DeckSort? Parse(string? sort)
+        {
+            if (sort == null)
+                return null;
+
+            var descending = sort.EndsWith(DescendingSuffix, StringComparison.Ordinal);
+            var key = descending ? sort[..^DescendingSuffix.Length] : sort;
+            return key is DifficultySort or LengthSort or DateSort ? new DeckSort(key, descending) : null;
+        }
+    }
+
+    /// <summary>A null value marks a deck with nothing to sort on: unrated, empty or undated.</summary>
+    private sealed record DeckSortKeys(float? Difficulty, int? Length, DateOnly? ReleaseDate);
+
+    private async Task<Dictionary<int, DeckSortKeys>> LoadDeckSortKeysAsync(int listId)
+    {
+        var listDeckIds = context.CommunityListItems.Where(i => i.ListId == listId).Select(i => i.DeckId);
+        var rows = await context.Decks.AsNoTracking()
+                                .Where(d => listDeckIds.Contains(d.DeckId))
+                                .Select(d => new
+                                {
+                                    d.DeckId,
+                                    Difficulty = d.DifficultyOverride > -1 ? d.DifficultyOverride : d.Difficulty,
+                                    Adjustment = d.DeckDifficulty != null ? d.DeckDifficulty.UserAdjustment : 0,
+                                    d.CharacterCount,
+                                    d.ReleaseDate
+                                })
+                                .ToListAsync();
+
+        return rows.ToDictionary(r => r.DeckId,
+                                 r => new DeckSortKeys(r.Difficulty > -1 ? r.Difficulty + (float)r.Adjustment : null,
+                                                       r.CharacterCount > 0 ? r.CharacterCount : null,
+                                                       r.ReleaseDate != default ? r.ReleaseDate : null));
+    }
+
+    /// <summary>Ties keep curator order; decks with nothing to sort on go last in either direction.</summary>
+    private static List<RankedItem> Arrange(List<ListItemRow> curatorOrder, string? sort, Dictionary<int, float>? coverage,
+                                            DeckSort? deckSort, Dictionary<int, DeckSortKeys>? deckSortKeys)
     {
         var ranked = curatorOrder.Select((item, i) => new RankedItem(item.DeckId, i + 1, item.Note));
         if (sort == CoverageSort && coverage != null)
             ranked = ranked.OrderByDescending(r => coverage.GetValueOrDefault(r.DeckId)).ThenBy(r => r.Rank);
+        else if (deckSort != null && deckSortKeys != null)
+            ranked = deckSort.Key switch
+            {
+                DifficultySort => OrderByDeckKey(ranked, deckSort.Descending, r => deckSortKeys.GetValueOrDefault(r.DeckId)?.Difficulty),
+                LengthSort => OrderByDeckKey(ranked, deckSort.Descending, r => deckSortKeys.GetValueOrDefault(r.DeckId)?.Length),
+                _ => OrderByDeckKey(ranked, deckSort.Descending, r => deckSortKeys.GetValueOrDefault(r.DeckId)?.ReleaseDate)
+            };
         return ranked.ToList();
+    }
+
+    private static IEnumerable<RankedItem> OrderByDeckKey<T>(IEnumerable<RankedItem> ranked, bool descending, Func<RankedItem, T?> key) where T : struct
+    {
+        var missingLast = ranked.OrderBy(r => key(r) == null);
+        return (descending ? missingLast.ThenByDescending(key) : missingLast.ThenBy(key)).ThenBy(r => r.Rank);
     }
 
     private async Task<CommunityListCoverageSummaryDto> BuildCoverageSummaryAsync(List<int> deckIds, Dictionary<int, float> coverage)

@@ -11,6 +11,7 @@ public enum CardArchiveReason : byte
     BulkForget = 5,
     MassAction = 6,
     WordReplacementMerge = 7,
+    ImportUndo = 8,
 }
 
 public static class CardArchiveReasonExtensions

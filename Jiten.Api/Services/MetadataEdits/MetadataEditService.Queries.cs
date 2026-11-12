@@ -33,7 +33,7 @@ public sealed partial class MetadataEditService
     private static bool HidesContent(MetadataEditStatus status, string? authorId, string? viewerId, bool canReview) =>
         status == MetadataEditStatus.Reverted && !canReview && authorId != viewerId;
 
-    private sealed record RelatedDeckInfo(int MediaType, int? ReleaseYear);
+    private sealed record RelatedDeckInfo(int MediaType, int? ReleaseYear, string? RomajiTitle, string? EnglishTitle);
 
     private static List<SnapshotRelationship> RelationshipValues(JsonElement value) =>
         value.ValueKind == JsonValueKind.Array ? value.Deserialize<List<SnapshotRelationship>>(DeckMetadataSnapshot.Json) ?? [] : [];
@@ -46,8 +46,9 @@ public sealed partial class MetadataEditService
         if (ids.Count == 0)
             return new Dictionary<int, RelatedDeckInfo>();
 
-        var rows = await db.Decks.AsNoTracking().Where(d => ids.Contains(d.DeckId)).Select(d => new { d.DeckId, d.MediaType, d.ReleaseDate }).ToListAsync(ct);
-        return rows.ToDictionary(d => d.DeckId, d => new RelatedDeckInfo((int)d.MediaType, d.ReleaseDate == default ? null : d.ReleaseDate.Year));
+        var rows = await db.Decks.AsNoTracking().Where(d => ids.Contains(d.DeckId)).Select(d => new { d.DeckId, d.MediaType, d.ReleaseDate, d.RomajiTitle, d.EnglishTitle }).ToListAsync(ct);
+        return rows.ToDictionary(d => d.DeckId, d => new RelatedDeckInfo((int)d.MediaType, d.ReleaseDate == default ? null : d.ReleaseDate.Year,
+                                                                         d.RomajiTitle, d.EnglishTitle));
     }
 
     private static JsonElement WithRelatedDeckInfo(JsonElement value, Dictionary<int, RelatedDeckInfo> related)
@@ -58,7 +59,8 @@ public sealed partial class MetadataEditService
         var enriched = RelationshipValues(value).Select(r =>
         {
             var info = related.GetValueOrDefault(r.OtherDeckId);
-            return new RelationshipChangeValueDto(r.SourceDeckId, r.TargetDeckId, r.RelationshipType, r.OtherDeckId, r.OtherDeckTitle, info?.MediaType, info?.ReleaseYear);
+            return new RelationshipChangeValueDto(r.SourceDeckId, r.TargetDeckId, r.RelationshipType, r.OtherDeckId, r.OtherDeckTitle, info?.MediaType, info?.ReleaseYear,
+                                                  info?.RomajiTitle, info?.EnglishTitle);
         });
         return JsonSerializer.SerializeToElement(enriched, DeckMetadataSnapshot.Json);
     }
@@ -145,7 +147,7 @@ public sealed partial class MetadataEditService
                       .Select(c =>
                       {
                           var checker = records.GetValueOrDefault(c.UserId);
-                          return new QueueCheckDto(names.GetValueOrDefault(c.UserId, UnnamedContributor), (int)c.Verdict, (int?)c.Reason, c.Note,
+                          return new QueueCheckDto(names.GetValueOrDefault(c.UserId, UnnamedContributor), (int)c.Verdict, c.Note,
                                                    checker?.LevelName ?? "new", checker?.Accepted ?? 0, c.CreatedAt,
                                                    checker?.CheckStats.Matched ?? 0, checker?.CheckStats.Missed ?? 0, (int)c.Fields);
                       })
@@ -166,7 +168,7 @@ public sealed partial class MetadataEditService
                 Sources = ParseSources(edit.SourcesJson),
                 Note = edit.EditNote,
                 ConfirmCount = edit.Checks.Count(c => c.Verdict == MetadataEditVerdict.Confirm),
-                MyCheck = myCheck == null ? null : new MyCheckDto((int)myCheck.Verdict, (int?)myCheck.Reason, myCheck.Note, (int)myCheck.Fields),
+                MyCheck = myCheck == null ? null : new MyCheckDto((int)myCheck.Verdict, myCheck.Note, (int)myCheck.Fields),
                 CanCheck = blockedReason == null,
                 CheckBlockedReason = blockedReason,
                 CharacterNameChecks = nameResults,
@@ -202,7 +204,7 @@ public sealed partial class MetadataEditService
                                                  .Select(d => d.FranchiseId!.Value).Distinct().ToListAsync(ct));
         }
 
-        string? addedDeckTitle = null;
+        string? addedDeckTitle = null, addedDeckRomajiTitle = null, addedDeckEnglishTitle = null;
         if (changes.FirstOrDefault(c => c.Field == MetadataField.Franchise) is { After.ValueKind: JsonValueKind.Object } pin)
         {
             if (!IsUnresolvedFranchise(pin.After))
@@ -211,11 +213,11 @@ public sealed partial class MetadataEditService
             {
                 var withDeckId = pin.After.GetProperty("withDeckId").GetInt32();
                 var picked = await db.Decks.AsNoTracking().Where(d => d.DeckId == withDeckId)
-                                     .Select(d => new { d.FranchiseId, d.OriginalTitle }).FirstOrDefaultAsync(ct);
+                                     .Select(d => new { d.FranchiseId, d.OriginalTitle, d.RomajiTitle, d.EnglishTitle }).FirstOrDefaultAsync(ct);
                 if (picked?.FranchiseId is { } pickedFranchise && franchiseId == null)
                     otherFranchises.Add(pickedFranchise);
                 else if (picked is { FranchiseId: null } && franchiseId != null)
-                    addedDeckTitle = picked.OriginalTitle;
+                    (addedDeckTitle, addedDeckRomajiTitle, addedDeckEnglishTitle) = (picked.OriginalTitle, picked.RomajiTitle, picked.EnglishTitle);
             }
         }
 
@@ -238,7 +240,7 @@ public sealed partial class MetadataEditService
         var joining = involved.Select(Ref).OfType<FranchiseRefDto>().ToList();
         var into = franchiseId.HasValue ? Ref(franchiseId.Value) : null;
         if (addedDeckTitle != null && into != null)
-            return new FranchiseEffectDto(joining, into, addedDeckTitle);
+            return new FranchiseEffectDto(joining, into, addedDeckTitle, addedDeckRomajiTitle, addedDeckEnglishTitle);
         return joining.Count == 0 ? null : new FranchiseEffectDto(joining, into);
     }
 

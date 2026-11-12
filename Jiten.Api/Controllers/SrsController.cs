@@ -32,6 +32,7 @@ public class SrsController(
     IStudyDeckReviewScope studyDeckReviewScope,
     IFrequencySourceResolver frequencySource,
     IBackgroundJobClient backgroundJobs,
+    ICardBatchService cardBatches,
     ILogger<SrsController> logger) : ControllerBase
 {
     [HttpPost("undo-review")]
@@ -212,7 +213,7 @@ public class SrsController(
                                                            loadBalancer, easyDays);
         if (card == null)
         {
-            card = new FsrsCard(userId, request.WordId, request.ReadingIndex);
+            card = new FsrsCard(userId, request.WordId, request.ReadingIndex) { Source = CardSource.Review };
         }
         else if (IsTerminalState(card.State))
         {
@@ -455,7 +456,7 @@ public class SrsController(
             var isNew = card == null;
             if (isNew || !reviewedBefore.Contains(card!.CardId))
                 firstReviews++;
-            card ??= new FsrsCard(userId, key.WordId, key.ReadingIndex);
+            card ??= new FsrsCard(userId, key.WordId, key.ReadingIndex) { Source = CardSource.Review };
             PromoteNewToLearning(card);
 
             var previousState = card.State;
@@ -1342,7 +1343,7 @@ public class SrsController(
                     card = new FsrsCard(userId, request.WordId, request.ReadingIndex,
                                         due: DateTime.UtcNow,
                                         lastReview: DateTime.UtcNow,
-                                        state: FsrsState.Mastered);
+                                        state: FsrsState.Mastered) { Source = CardSource.ManualSingle };
                     await userContext.FsrsCards.AddAsync(card);
                 }
                 else
@@ -1363,7 +1364,7 @@ public class SrsController(
                 if (card == null)
                 {
                     card = new FsrsCard(userId, request.WordId, request.ReadingIndex,
-                                        state: FsrsState.Blacklisted);
+                                        state: FsrsState.Blacklisted) { Source = CardSource.ManualSingle };
                     await userContext.FsrsCards.AddAsync(card);
                 }
                 else
@@ -1396,7 +1397,7 @@ public class SrsController(
                     {
                         // Create FsrsCard to override set blacklist
                         card = new FsrsCard(userId, request.WordId, request.ReadingIndex,
-                                            state: FsrsState.Learning);
+                                            state: FsrsState.Learning) { Source = CardSource.ManualSingle };
                         await userContext.FsrsCards.AddAsync(card);
                     }
                 }
@@ -1415,7 +1416,7 @@ public class SrsController(
                 if (card == null)
                 {
                     card = new FsrsCard(userId, request.WordId, request.ReadingIndex,
-                                        state: FsrsState.Suspended);
+                                        state: FsrsState.Suspended) { Source = CardSource.ManualSingle };
                     await userContext.FsrsCards.AddAsync(card);
                 }
                 else if (card.State != FsrsState.Suspended)
@@ -1596,6 +1597,7 @@ public class SrsController(
                         ? new FsrsCard(userId, item.WordId, item.ReadingIndex,
                                        due: DateTime.UtcNow, lastReview: DateTime.UtcNow, state: target)
                         : new FsrsCard(userId, item.WordId, item.ReadingIndex, state: target);
+                    created.Source = CardSource.MassAction;
                     createdCards.Add(created);
                 }
 
@@ -1929,6 +1931,11 @@ public class SrsController(
             .ToListAsync();
         var existingDict = existing.ToDictionary(c => (c.WordId, c.ReadingIndex));
 
+        var batch = await cardBatches.BeginAsync(userId,
+                                                 CardBatchDetails.Of(request.Direction == "components-to-compound"
+                                                                         ? CardBatchKind.CompoundsOfKnown
+                                                                         : CardBatchKind.PartsOfKnown),
+                                                 target);
         var now = DateTime.UtcNow;
         var affected = 0;
         foreach (var (wid, ri) in pairs)
@@ -1948,6 +1955,7 @@ public class SrsController(
                 card = target == FsrsState.Mastered
                     ? new FsrsCard(userId, wid, ri, due: now, lastReview: now, state: FsrsState.Mastered)
                     : new FsrsCard(userId, wid, ri, state: FsrsState.Blacklisted);
+                batch.Stamp([card]);
                 await userContext.FsrsCards.AddAsync(card);
             }
 
@@ -1960,6 +1968,7 @@ public class SrsController(
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
+        await cardBatches.CompleteAsync(batch);
         await sessionService.BumpStudyOverviewVersion(userId);
 
         logger.LogInformation("User executed composition inference: Direction={Direction}, Target={Target}, Affected={Count}",
@@ -1984,13 +1993,13 @@ public class SrsController(
                 .Select(c => new { c.WordId, c.ReadingIndex, c.ComponentWordId, c.ComponentReadingIndex })
                 .ToListAsync();
 
-            return raw
+            return await ExcludeSettledForms(raw
                 .Where(r => known.Contains((r.WordId, (byte)r.ReadingIndex)))
                 .Select(r => (WordId: r.ComponentWordId, ReadingIndex: (byte)r.ComponentReadingIndex))
                 .Distinct()
                 .Where(p => !blocked.Contains(p))
                 .OrderBy(p => p.WordId).ThenBy(p => p.ReadingIndex)
-                .ToList();
+                .ToList());
         }
 
         if (direction == "components-to-compound")
@@ -2016,7 +2025,7 @@ public class SrsController(
                 .Select(c => new { c.WordId, c.ReadingIndex, c.ComponentWordId, c.ComponentReadingIndex })
                 .ToListAsync();
 
-            return allRows
+            return await ExcludeSettledForms(allRows
                 .Where(r => candidateSet.Contains((r.WordId, r.ReadingIndex)))
                 .GroupBy(r => (r.WordId, r.ReadingIndex))
                 .Where(g => g.Count() >= 2
@@ -2024,10 +2033,22 @@ public class SrsController(
                 .Select(g => (WordId: g.Key.WordId, ReadingIndex: (byte)g.Key.ReadingIndex))
                 .Where(p => !blocked.Contains(p))
                 .OrderBy(p => p.WordId).ThenBy(p => p.ReadingIndex)
-                .ToList();
+                .ToList());
         }
 
         return null;
+    }
+
+    /// <summary>Word-set states and redundant forms carry no card of their own, so the card-based blocked set misses them.</summary>
+    private async Task<List<(int WordId, byte ReadingIndex)>> ExcludeSettledForms(List<(int WordId, byte ReadingIndex)> pairs)
+    {
+        if (pairs.Count == 0) return pairs;
+
+        var states = await currentUserService.GetKnownWordsState(pairs);
+        return pairs
+            .Where(p => !states.TryGetValue(p, out var s)
+                        || !s.Any(x => x is KnownState.Mastered or KnownState.Blacklisted or KnownState.Redundant))
+            .ToList();
     }
 
     private async Task<(List<(int WordId, byte ReadingIndex, string Category)> Items, (int New, int Learning, int Mature) Counts)>

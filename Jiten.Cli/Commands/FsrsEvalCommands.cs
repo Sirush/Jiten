@@ -114,8 +114,7 @@ public class FsrsEvalCommands
         Console.WriteLine($"Loaded {users.Count} users, {users.Sum(u => u.Cards.Sum(c => c.Length)):N0} reviews, {users.Sum(u => u.Cards.Count):N0} cards");
 
         IEvalModel[] models = [new ConstantPassRate(), new Fsrs6Defaults(), new Fsrs6Optimised(), new Fsrs7Defaults(), new Fsrs7Optimised("fsrs7-optimised", new FsrsOptimizerV7Config()),
-            new Fsrs7Optimised("fsrs7-opt-nopenalty", new FsrsOptimizerV7Config { SchedulePenalties = false }),
-            new Fsrs7Optimised("fsrs7-opt-nooutlier", new FsrsOptimizerV7Config { FilterOutliers = false })];
+            new Fsrs7Optimised("fsrs7-opt-nopenalty", new FsrsOptimizerV7Config { SchedulePenalties = false })];
         var perUser = new List<object>();
         var pooled = models.ToDictionary(m => m.Name, _ => new List<Prediction>());
         var perUserMetrics = models.ToDictionary(m => m.Name, _ => new List<(Metrics Inter, Metrics Same, int ParamCount)>());

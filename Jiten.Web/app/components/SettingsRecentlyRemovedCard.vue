@@ -90,6 +90,7 @@
     { label: 'Bulk forget', value: CardArchiveReason.BulkForget },
     { label: 'Mass action delete', value: CardArchiveReason.MassAction },
     { label: 'Merged into another dictionary entry', value: CardArchiveReason.WordReplacementMerge },
+    { label: 'Import undone', value: CardArchiveReason.ImportUndo },
   ];
 
   function reasonText(row: ArchivedCard): string {
@@ -107,6 +108,8 @@
         return 'Deleted by a mass action';
       case CardArchiveReason.WordReplacementMerge:
         return 'Merged into another dictionary entry';
+      case CardArchiveReason.ImportUndo:
+        return 'Removed when you undid an import';
       default:
         return 'Removed';
     }
@@ -253,32 +256,27 @@
 </script>
 
 <template>
-  <Card>
-    <template #title>
-      <h2 class="text-xl font-bold">Recently Removed</h2>
-    </template>
-    <template #content>
-      <p class="text-sm text-muted-color mb-4">
-        Cards that left your collection keep their review history here, whether you removed them yourself or they were replaced automatically with another form
-        of the same word. Restoring one brings its schedule and every review back. You can also restore them individually on vocabulary pages.
-      </p>
-
-      <div class="flex flex-wrap items-center gap-3">
-        <Button
-          label="Show removed cards"
-          icon="pi pi-history"
-          severity="secondary"
-          :loading="loading"
-          :disabled="!countLoading && archivedCount === 0"
-          @click="load(0)"
-        />
-        <Skeleton v-if="countLoading" width="7rem" height="1.2rem" />
-        <span v-else-if="archivedCount === 0" class="text-sm text-muted-color italic">Nothing has been removed.</span>
-        <span v-else class="text-sm text-muted-color">
-          <strong>{{ archivedCount.toLocaleString() }}</strong>
-          card{{ archivedCount === 1 ? '' : 's' }} kept here
-        </span>
-      </div>
+  <SettingsListItem
+    title="Recently Removed"
+    description="Cards that left your collection keep their review history here, whether you removed them yourself or they were replaced automatically with another form of the same word. Restoring one brings its schedule and every review back. You can also restore them individually on vocabulary pages."
+  >
+    <template #action>
+      <Skeleton v-if="countLoading" width="7rem" height="1.2rem" />
+      <span v-else-if="archivedCount === 0" class="text-sm text-muted-color italic">Nothing has been removed.</span>
+      <span v-else class="text-sm text-muted-color">
+        <strong>{{ archivedCount.toLocaleString() }}</strong>
+        card{{ archivedCount === 1 ? '' : 's' }} kept
+      </span>
+      <Button
+        label="Show Removed Cards"
+        icon="pi pi-history"
+        severity="secondary"
+        outlined
+        size="small"
+        :loading="loading"
+        :disabled="!countLoading && archivedCount === 0"
+        @click="load(0)"
+      />
 
       <Dialog
         v-model:visible="showDialog"
@@ -440,5 +438,5 @@
         </template>
       </Dialog>
     </template>
-  </Card>
+  </SettingsListItem>
 </template>

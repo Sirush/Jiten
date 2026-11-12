@@ -7,6 +7,7 @@
     /** Global rank from the cached word payload, shown until the per-source ranks arrive. */
     fallbackRank: number;
     listsLoading?: boolean;
+    loadGuestRanks?: () => Promise<void>;
     align?: 'left' | 'right';
   }>();
 
@@ -49,9 +50,22 @@
 
   const currentValue = computed(() => frequencySourceValue(resolved.value));
 
-  function toggle(event: Event) {
-    if (!props.ranks?.lists && authStore.isAuthenticated) emit('requestLists');
-    op.value?.toggle(event);
+  const loadingGuestRanks = ref(false);
+
+  async function toggle(event: Event) {
+    const target = event.currentTarget;
+    if (authStore.isAuthenticated) {
+      if (!props.ranks?.lists) emit('requestLists');
+    } else if (!props.ranks && props.loadGuestRanks) {
+      if (loadingGuestRanks.value) return;
+      loadingGuestRanks.value = true;
+      try {
+        await props.loadGuestRanks();
+      } finally {
+        loadingGuestRanks.value = false;
+      }
+    }
+    op.value?.toggle(event, target);
   }
 
   function labelFor(value: number) {

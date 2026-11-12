@@ -40,6 +40,15 @@ public class FsrsCardExportDto
     [JsonPropertyName("ca")]
     public long CreatedAt { get; set; }
 
+    /// <summary>Absent in backups taken before provenance was recorded; import files those under one fresh restore batch.</summary>
+    [JsonPropertyName("src")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public CardSource? Source { get; set; }
+
+    [JsonPropertyName("b")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public Guid? SourceBatchId { get; set; }
+
     [JsonPropertyName("l")]
     public List<FsrsReviewLogExportDto> ReviewLogs { get; set; } = [];
 

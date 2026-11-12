@@ -21,13 +21,10 @@ export default defineNuxtPlugin((nuxtApp) => {
   nuxtApp.hook('page:finish', () => {
     if (route.path === lastPath) return;
     lastPath = route.path;
+    const path = route.path;
+    const pattern = routePattern();
     window.setTimeout(() => {
-      beatView({
-        path: route.path,
-        route: routePattern(),
-        title: document.title,
-        search: location.search,
-      });
+      beatView({ path, route: pattern, title: document.title, search: location.search });
     }, 150);
   });
 

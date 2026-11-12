@@ -11,11 +11,9 @@ export default defineEventHandler(async (event) => {
     return css;
   }
 
-  // Unknown hash (stale HTML linking a pre-restart stylesheet): the current superset covers every
-  // page this server has rendered, which includes the page that made this request. Short cache so
-  // the placeholder content never gets pinned under a foreign hash.
-  const fallback = currentPrimevueStylesheet().css;
-  // An empty superset (worker that hasn't rendered yet) must never be cached as the answer.
-  setHeader(event, 'Cache-Control', fallback ? 'public, max-age=300' : 'no-store');
-  return fallback;
+  /** An unknown hash redirects to the current stylesheet and is never answered in place: the CDN keeps every 200 for a year, and this server can link that same content-derived hash again later. */
+  setHeader(event, 'Cache-Control', 'no-store');
+  const { css: fallback, hash } = currentPrimevueStylesheet();
+  if (!fallback) throw createError({ statusCode: 503 });
+  return sendRedirect(event, `/pv-styles/${hash}.css`, 307);
 });

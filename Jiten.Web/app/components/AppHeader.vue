@@ -25,7 +25,10 @@
   const route = useRoute();
   const isAuthPage = computed(() => ['/login', '/register', '/google-registration', '/confirm-email'].includes(route.path));
   const { authLink } = useGuestPrompt();
-  const registerLink = computed(() => (isAuthPage.value ? { path: '/register' } : authLink('/register')));
+  const isMounted = ref(false);
+  onMounted(() => (isMounted.value = true));
+  /** The redirect stays out of server HTML: crawlers lift the encoded path from the query and request it double-encoded. */
+  const registerLink = computed(() => (isAuthPage.value || !isMounted.value ? { path: '/register' } : authLink('/register')));
   watch(
     () => route.fullPath,
     () => {

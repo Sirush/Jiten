@@ -75,7 +75,7 @@
     <VocabularyDetail
       :word-id="wordId"
       :reading-index="readingIndex"
-      guest-prompt
+      guest-study-action
       @reading-selected="onReadingSelected"
       @main-reading-text-changed="onMainReadingTextChanged"
     />

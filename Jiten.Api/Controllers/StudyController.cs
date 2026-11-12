@@ -57,6 +57,7 @@ public partial class StudyController(
     StackExchange.Redis.IConnectionMultiplexer redis,
     ISentenceUnlockOrder sentenceUnlockOrder,
     IJitenPlusService jitenPlusService,
+    ICardBatchService cardBatches,
     ILogger<StudyController> logger) : ControllerBase
 {
     private static readonly Regex SentenceMarkerRegex =
@@ -4885,12 +4886,7 @@ public partial class StudyController(
                     .ToList();
         }
 
-        var applied = (state == "mastered"
-            ? await currentUserService.AddKnownWords(resolvedWords, countAsNewlyLearned: request.CountAsNewlyLearned)
-            : await currentUserService.BlacklistWords(resolvedWords)).Inserted;
-
-        await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
-        await userContext.SaveChangesAsync();
+        var applied = await cardBatches.LearnDeckWordsAsync(resolvedWords, state == "mastered", CardBatchDetails.Of(CardBatchKind.StudyDeck, studyDeck.Name), request.CountAsNewlyLearned);
 
         logger.LogInformation(
             "User applied learn to study deck: StudyDeckId={StudyDeckId}, DeckType={DeckType}, State={State}, WordCount={WordCount}",

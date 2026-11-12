@@ -3,6 +3,8 @@ import type { FranchiseLine, MediaGroupKind, MediaGroupTitles } from './mediaGro
 import type { AvatarStyle } from '~/utils/profileAppearance';
 import type { FsrsParametersSource } from '~/utils/fsrsProvenance';
 import type {
+  CardBatchKind,
+  CardSource,
   ComparisonOutcome,
   CommunityListStatus,
   ForumDiscussionStatus,
@@ -306,6 +308,7 @@ export interface DeckMetadataPatch {
   romajiTitle?: string;
   englishTitle?: string;
   description?: string;
+  mediaType?: MediaType;
   hideDialoguePercentage?: boolean;
   hideAverageSentenceLength?: boolean;
   genres?: Genre[];
@@ -319,6 +322,7 @@ export interface DeckMetadataPatchResult {
   romajiTitle: string;
   englishTitle: string;
   description: string;
+  mediaType: MediaType;
   hideDialoguePercentage: boolean;
   hideAverageSentenceLength: boolean;
   genres: Genre[];
@@ -472,6 +476,41 @@ export interface Definition {
   senseInfo?: string[];
   glossTypes?: string[];
   crossReferences?: CrossReference[];
+}
+
+export interface CardBatchDetails {
+  kind: CardBatchKind;
+  deckId?: number;
+  name?: string;
+  minRank?: number;
+  maxRank?: number;
+  units?: number;
+  listStatus?: DeckStatus;
+}
+
+export interface CardBatchDeck {
+  deckId: number;
+  originalTitle: string;
+  romajiTitle: string | null;
+  englishTitle: string | null;
+}
+
+export interface CardBatch {
+  batchId: string;
+  source: CardSource;
+  details: CardBatchDetails;
+  deck: CardBatchDeck | null;
+  createdAt: string;
+  cardCount: number;
+  wordCount: number;
+  removableCount: number;
+  undone: boolean;
+}
+
+export interface CardBatchUndoResult {
+  removed: number;
+  kept: number;
+  alreadyUndone: boolean;
 }
 
 export interface PaginatedResponse<T> {
@@ -1009,6 +1048,14 @@ export interface ProfileFavouriteWord {
   text: string;
   reading: string | null;
   meaning: string;
+  senseIndex: number | null;
+  /** Only on the owner's own list in settings. */
+  senses?: ProfileWordSense[];
+}
+
+export interface ProfileWordSense {
+  index: number;
+  meaning: string;
 }
 
 export type MilestoneTier = 'ema' | 'zeni' | 'ichibu' | 'koban' | 'jade' | 'crystal' | 'lacquer' | 'shimenawa';
@@ -1327,8 +1374,8 @@ export interface DictionaryEntry {
   rubyText: string;
   primaryKanjiText?: string;
   partsOfSpeech: string[];
-  /** First sense only; the one-line summary. */
   meanings: string[];
+  matchedSenseIndex?: number;
   senses?: DictionarySense[];
   frequencyRank: number;
 }

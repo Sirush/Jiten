@@ -186,7 +186,7 @@ public class MetadataEditTrustTests(JitenWebApplicationFactory factory)
 
         Task CheckAsync(long id, int verdict) =>
             OkAsync(SendAsync(HttpMethod.Put, $"/api/metadata-edits/{id}/check", Users.Checker,
-                              verdict == 1 ? new { verdict, reason = (int?)null, note = (string?)null } : new { verdict, reason = (int?)2, note = (string?)"Not this" }));
+                              verdict == 1 ? new { verdict, note = (string?)null } : new { verdict, note = (string?)"Not this" }));
         await CheckAsync(confirmedApproved, 1);
         await CheckAsync(confirmedRejected, 1);
         await CheckAsync(doubtedApproved, 2);

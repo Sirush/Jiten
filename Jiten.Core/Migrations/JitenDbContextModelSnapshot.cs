@@ -2445,11 +2445,8 @@ namespace Jiten.Core.Migrations
                         .HasColumnType("bigint");
 
                     b.Property<string>("Note")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<int?>("Reason")
-                        .HasColumnType("integer");
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
 
                     b.Property<string>("SourceUrl")
                         .HasMaxLength(500)

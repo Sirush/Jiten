@@ -2,8 +2,8 @@
   import { useToast } from 'primevue/usetoast';
   import {
     MetadataEditVerdict,
-    type MetadataEditDoubtReason,
     MetadataField,
+    type MetadataFranchiseEffect,
     type MetadataNamePreview,
     type MetadataQueueConflict,
     type MetadataQueueItem,
@@ -20,27 +20,30 @@
   import {
     DOUBT_REASONS,
     TIER_LABELS,
+    approvalExclusion,
     contributorLevelLabel,
     conflictClashes,
     describeValue,
-    doubtReasonLabel,
     fieldLabel,
     fieldPhrase,
     fieldsFromFlags,
     isListField,
-    isTypingTarget,
+    leftOutPhrase,
+    noteHasReason,
     queueMode,
     queueShortcut,
     queueTabFromQuery,
     revertSummary,
     lookedRightText,
     sortChanges,
-    sortFields,
     tierLabel,
     toggleChipClass,
+    toggleNoteReason,
+    type ApprovalExclusion,
     type ConflictClash,
     type QueueTab,
   } from '~/utils/metadataEdits';
+  import { isTypingTarget } from '~/utils/keyboard';
 
   definePageMeta({ middleware: ['auth'] });
   useHead({ title: 'Review queue' });
@@ -51,12 +54,15 @@
   const PAGE_SIZE = 20;
   const CONFLICT_OPTIONS = ['current', 'edit'] as const;
   const REJECT_REASONS = ["The source doesn't support this", 'No source', 'Already correct', 'Belongs on a different deck'];
+  const FLAGGED_NAMES_NOTE = 'The automatic check flagged these names.';
 
   const route = useRoute();
   const router = useRouter();
   const { $api } = useNuxtApp();
   const toast = useToast();
   const localiseTitle = useLocaliseTitle();
+  const addedDeckTitle = (effect: MetadataFranchiseEffect) =>
+    localiseTitle({ originalTitle: effect.addedDeckTitle ?? '', romajiTitle: effect.addedDeckRomajiTitle, englishTitle: effect.addedDeckEnglishTitle });
   const deckCountText = (count: number) => `${count} ${count === 1 ? 'deck' : 'decks'}`;
 
   const deckFilter = computed(() => {
@@ -87,19 +93,25 @@
   const isDone = (item: MetadataQueueItem) => item.author.isYou || (mode.value === 'check' && !!item.myCheck);
   const doneCount = computed(() => items.value.filter(isDone).length);
 
-  /** Edits to the same deck sit together; each one is still approved, rejected or checked on its own. */
+  const pageOf = new Map<number, number>();
+  let lastPage = 0;
+
+  /** Edits to the same deck sit together within a loaded page only, so a later page never inserts ahead of the selection. */
   const groups = computed(() => {
-    const byDeck = new Map<number, { deckId: number; deck: MetadataQueueItem['deck']; items: MetadataQueueItem[] }>();
+    const byKey = new Map<string, { key: string; deckId: number; deck: MetadataQueueItem['deck']; items: MetadataQueueItem[] }>();
     for (const item of items.value) {
       if (!showDone.value && isDone(item)) continue;
-      const group = byDeck.get(item.deckId) ?? { deckId: item.deckId, deck: item.deck, items: [] };
+      const key = `${pageOf.get(item.id) ?? 0}:${item.deckId}`;
+      const group = byKey.get(key) ?? { key, deckId: item.deckId, deck: item.deck, items: [] };
       group.items.push(item);
-      byDeck.set(item.deckId, group);
+      byKey.set(key, group);
     }
-    return [...byDeck.values()];
+    return [...byKey.values()];
   });
   const ordered = computed(() => groups.value.flatMap((g) => g.items));
   const selected = computed(() => ordered.value.find((i) => i.id === selectedId.value) ?? ordered.value[0] ?? null);
+  const position = computed(() => (selected.value ? ordered.value.indexOf(selected.value) + 1 : 0));
+  const reachableTotal = computed(() => total.value - (items.value.length - ordered.value.length));
 
   const queueQuery = (state: QueueTab, offset: number, limit: number) => ({
     state,
@@ -126,8 +138,13 @@
       counts.value = { ...counts.value, [state]: response.total };
       if (append) {
         const seen = new Set(items.value.map((i) => i.id));
-        items.value.push(...response.items.filter((i) => !seen.has(i.id)));
+        const fresh = response.items.filter((i) => !seen.has(i.id));
+        lastPage += 1;
+        for (const item of fresh) pageOf.set(item.id, lastPage);
+        items.value.push(...fresh);
       } else {
+        pageOf.clear();
+        lastPage = 0;
         items.value = response.items;
         const focused = !loaded.value && focusEditId ? response.items.find((i) => i.id === focusEditId) : undefined;
         if (focused && isDone(focused)) showDone.value = true;
@@ -155,11 +172,11 @@
   watch([sort, tier, deckFilter, tab], () => load());
 
   const panel = ref<'doubt' | 'reject' | null>(null);
-  const doubtReason = ref<MetadataEditDoubtReason | null>(null);
   const doubtNote = ref('');
   const doubtFields = ref<number[]>([]);
   const rejectNote = ref('');
   const excludedFields = ref<Record<number, number>>({});
+  const excludedItems = ref<Record<number, Record<number, string[]>>>({});
   const excludeNote = ref('');
   const busy = ref(false);
   const actionError = ref<string | null>(null);
@@ -168,7 +185,6 @@
     () => selected.value?.id,
     () => {
       panel.value = null;
-      doubtReason.value = null;
       doubtNote.value = '';
       doubtFields.value = selected.value?.changes.map((c) => c.field) ?? [];
       rejectNote.value = '';
@@ -178,34 +194,99 @@
     { immediate: true }
   );
 
+  const detailRef = ref<HTMLElement | null>(null);
+
+  watch(
+    () => selected.value?.id,
+    (id, previous) => {
+      const detail = detailRef.value;
+      if (id == null || previous == null || !detail) return;
+      const top = detail.getBoundingClientRect().top;
+      if (top < 0 || top > window.innerHeight / 2) detail.scrollIntoView({ block: 'start' });
+    },
+    { flush: 'post' }
+  );
+
+  const actionBarRef = ref<HTMLElement | null>(null);
+  const actionBarHeight = ref(0);
+  watch(actionBarRef, (el, _, onCleanup) => {
+    if (!el) {
+      actionBarHeight.value = 0;
+      return;
+    }
+    const observer = new ResizeObserver(([entry]) => (actionBarHeight.value = entry?.borderBoxSize[0]?.blockSize ?? 0));
+    observer.observe(el);
+    onCleanup(() => observer.disconnect());
+  });
+  useHead({ htmlAttrs: { style: computed(() => (actionBarHeight.value ? `--undo-toast-bottom: ${actionBarHeight.value + 12}px` : undefined)) } });
+
+  const stepLabel = computed(() => (mode.value === 'check' && (selected.value?.myCheck || !selected.value?.canCheck) ? 'Next' : 'Skip'));
+
   function select(item: MetadataQueueItem) {
     selectedId.value = item.id;
   }
 
-  function move(step: number) {
+  const hasMore = computed(() => items.value.length < total.value);
+  let nextVisible: Promise<MetadataQueueItem | null> | null = null;
+
+  async function appendUntilVisible(): Promise<MetadataQueueItem | null> {
+    const known = new Set(ordered.value.map((i) => i.id));
+    while (hasMore.value) {
+      const before = items.value.length;
+      await load(true);
+      const fresh = ordered.value.find((i) => !known.has(i.id));
+      if (fresh) return fresh;
+      if (items.value.length === before) break;
+    }
+    return null;
+  }
+
+  /** A page can hold only hidden edits, so this keeps loading until one shows; concurrent callers share one run. */
+  function loadNextVisible(): Promise<MetadataQueueItem | null> {
+    nextVisible ??= appendUntilVisible().finally(() => (nextVisible = null));
+    return nextVisible;
+  }
+
+  async function move(step: number) {
+    const index = selected.value ? ordered.value.indexOf(selected.value) : -1;
+    if (step < 0 && index <= 0) return;
+    if (step > 0 && index === ordered.value.length - 1) {
+      const fresh = await loadNextVisible();
+      if (fresh) {
+        selectedId.value = fresh.id;
+        return;
+      }
+    }
     const list = ordered.value;
     if (!list.length) return;
-    const index = selected.value ? list.indexOf(selected.value) : -1;
     selectedId.value = list[(index + step + list.length) % list.length]!.id;
   }
 
-  /** The item to show after this one is handled; read before the list changes, since a handled item may drop out of view. */
-  function nextAfter(item: MetadataQueueItem): MetadataQueueItem | null {
+  /** Call before the item is handled, since it may then drop out of view; the returned function resolves the item to show next. */
+  function planNext(item: MetadataQueueItem): () => Promise<MetadataQueueItem | null> {
     const list = ordered.value;
     const index = list.indexOf(item);
-    return list[index + 1] ?? list[index - 1] ?? null;
+    const forward = list[index + 1] ?? null;
+    const back = list[index - 1] ?? null;
+    return async () => forward ?? (await loadNextVisible()) ?? back;
   }
 
-  function removeItem(item: MetadataQueueItem) {
+  async function removeItem(item: MetadataQueueItem) {
     const index = items.value.indexOf(item);
     if (index === -1) return;
-    const next = nextAfter(item);
+    const next = planNext(item);
     items.value.splice(index, 1);
     total.value = Math.max(0, total.value - 1);
     counts.value = { ...counts.value, [tab.value]: total.value };
-    selectedId.value = next?.id ?? null;
-    if (!items.value.length && total.value > 0) load();
+    selectedId.value = (await next())?.id ?? null;
   }
+
+  watch(
+    () => loaded.value && !ordered.value.length && hasMore.value && !loading.value && !loadFailed.value,
+    (stranded) => {
+      if (stranded) loadNextVisible();
+    }
+  );
 
   function restoreItem(item: MetadataQueueItem, index: number) {
     items.value.splice(Math.min(index, items.value.length), 0, item);
@@ -217,13 +298,13 @@
   /** Every queue outcome shows in the same bottom toast; only reversible ones get an Undo button. */
   const notify = (summary: string, run?: () => Promise<unknown>) => showUndoToast(toast, summary, run);
 
-  async function putCheck(item: MetadataQueueItem, verdict: MetadataEditVerdict, reason?: MetadataEditDoubtReason, note?: string, fields?: number[]) {
+  async function putCheck(item: MetadataQueueItem, verdict: MetadataEditVerdict, note?: string, fields?: number[]) {
     const result = await $api<{ confirmCount: number }>(`metadata-edits/${item.id}/check`, {
       method: 'PUT',
-      body: { verdict, reason, note: note?.trim() || undefined, fields },
+      body: { verdict, note: note?.trim() || undefined, fields },
     });
     const flags = verdict === MetadataEditVerdict.Doubt && fields?.length ? fields.reduce((a, f) => a | f, 0) : 0;
-    item.myCheck = { verdict, reason: reason ?? null, note: note?.trim() || null, fields: flags === item.fields ? 0 : flags };
+    item.myCheck = { verdict, note: note?.trim() || null, fields: flags === item.fields ? 0 : flags };
     item.confirmCount = result.confirmCount;
   }
 
@@ -254,9 +335,9 @@
     const item = selected.value;
     if (!item || !canCheckItem(item)) return;
     runAction(async () => {
-      const next = nextAfter(item);
+      const next = planNext(item);
       await putCheck(item, MetadataEditVerdict.Confirm);
-      selectedId.value = next?.id ?? null;
+      selectedId.value = (await next())?.id ?? null;
       notify('Thanks. Editors will see your answer when they review this.', () => deleteCheck(item));
     }, "Your check wasn't saved. Try again in a moment.");
   }
@@ -273,14 +354,13 @@
 
   function sendDoubt() {
     const item = selected.value;
-    const reason = doubtReason.value;
-    if (!item || !reason || !doubtNote.value.trim() || !doubtFields.value.length) return;
+    if (!item || !doubtNote.value.trim() || !doubtFields.value.length) return;
     const fields = doubtFields.value.length === item.changes.length ? undefined : [...doubtFields.value];
     runAction(async () => {
-      const next = nextAfter(item);
-      await putCheck(item, MetadataEditVerdict.Doubt, reason, doubtNote.value, fields);
+      const next = planNext(item);
+      await putCheck(item, MetadataEditVerdict.Doubt, doubtNote.value, fields);
       panel.value = null;
-      selectedId.value = next?.id ?? null;
+      selectedId.value = (await next())?.id ?? null;
       notify('Sent to editors. Thanks for checking.', () => deleteCheck(item));
     }, "Your check wasn't saved. Try again in a moment.");
   }
@@ -292,7 +372,7 @@
     runAction(async () => {
       await deleteCheck(item);
       const fields = previous.fields ? fieldsFromFlags(previous.fields) : undefined;
-      notify('Check withdrawn.', () => putCheck(item, previous.verdict, previous.reason ?? undefined, previous.note ?? undefined, fields));
+      notify('Check withdrawn.', () => putCheck(item, previous.verdict, previous.note ?? undefined, fields));
     }, "Your check wasn't withdrawn. Try again in a moment.");
   }
 
@@ -307,7 +387,7 @@
     const clashes = conflictClashes(conflict);
     if (clashes.length) return clashes;
     return [
-      { label: fieldLabel(conflict.field), current: describeValue(conflict.field, conflict.current), edit: describeValue(conflict.field, conflict.editAfter) },
+      { label: fieldLabel(conflict.field), current: describeValue(conflict.field, conflict.current, localiseTitle), edit: describeValue(conflict.field, conflict.editAfter, localiseTitle) },
     ];
   }
 
@@ -321,28 +401,42 @@
     excludedFields.value = { ...excludedFields.value, [item.id]: (excludedFields.value[item.id] ?? 0) ^ field };
   }
 
-  const leftOut = computed(() => (selected.value ? sortFields(selected.value.changes.map((c) => c.field)).filter((f) => !isIncluded(selected.value!, f)) : []));
+  function toggleItem(item: MetadataQueueItem, field: number, key: string) {
+    const keys = excludedItems.value[item.id]?.[field] ?? [];
+    const next = keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key];
+    excludedItems.value = { ...excludedItems.value, [item.id]: { ...excludedItems.value[item.id], [field]: next } };
+  }
+
+  function exclusionFor(item: MetadataQueueItem, flaggedNames: string[] = []): ApprovalExclusion {
+    const items = excludedItems.value[item.id] ?? {};
+    const names = [...(items[MetadataField.CharacterNames] ?? []), ...flaggedNames];
+    return approvalExclusion(item.changes, excludedFields.value[item.id] ?? 0, { ...items, [MetadataField.CharacterNames]: names });
+  }
+
+  const emptyExclusion: ApprovalExclusion = { wholeFields: [], items: [], total: 0, leftOut: 0 };
+  const exclusion = computed(() => (selected.value ? exclusionFor(selected.value) : emptyExclusion));
   const orderedChanges = computed(() => (selected.value ? sortChanges(selected.value.changes) : []));
-  const choosesChanges = computed(() => mode.value === 'review' && !!selected.value?.canApprove && (selected.value?.changes.length ?? 0) > 1);
+  const canChoose = computed(() => mode.value === 'review' && !!selected.value?.canApprove);
+  const choosesChanges = computed(() => canChoose.value && (selected.value?.changes.length ?? 0) > 1);
   const approveLabel = computed(() => {
-    const count = selected.value?.changes.length ?? 0;
-    return leftOut.value.length ? `Approve ${count - leftOut.value.length} of ${count} changes` : 'Approve';
+    const { total, leftOut } = exclusion.value;
+    return leftOut ? `Approve ${total - leftOut} of ${total} changes` : 'Approve';
   });
   const canApproveSelection = computed(
-    () => !!selected.value && leftOut.value.length < selected.value.changes.length && (!leftOut.value.length || !!excludeNote.value.trim())
+    () => !!selected.value && exclusion.value.wholeFields.length < selected.value.changes.length && (!exclusion.value.leftOut || !!excludeNote.value.trim())
   );
 
-  async function approveItem(item: MetadataQueueItem, excludeCharacterNames?: string[]) {
+  async function approveItem(item: MetadataQueueItem, flaggedNames: string[] = []) {
     const resolutionList = (item.conflicts ?? []).map((c) => ({ field: c.field, keep: resolutionFor(item, c) }));
-    const excluded = item.id === selected.value?.id ? leftOut.value : [];
+    const excluded = exclusionFor(item, flaggedNames);
     try {
       await $api(`metadata-edits/${item.id}/approve`, {
         method: 'POST',
         body: {
           resolutions: resolutionList.length ? resolutionList : undefined,
-          excludeCharacterNames,
-          excludeFields: excluded.length ? excluded : undefined,
-          excludeNote: excluded.length ? excludeNote.value.trim() : undefined,
+          excludeFields: excluded.wholeFields.length ? excluded.wholeFields : undefined,
+          excludeItems: excluded.items.length ? excluded.items : undefined,
+          excludeNote: excluded.leftOut ? excludeNote.value.trim() || FLAGGED_NAMES_NOTE : undefined,
         },
       });
     } catch (err) {
@@ -354,13 +448,13 @@
     }
   }
 
-  function approve(excludeCharacterNames?: string[]) {
+  function approve(flaggedNames: string[] = []) {
     const item = selected.value;
     if (!item || mode.value !== 'review' || !item.canApprove || !canApproveSelection.value) return;
-    const partial = leftOut.value.length > 0;
+    const partial = exclusionFor(item, flaggedNames).leftOut > 0;
     runAction(async () => {
-      await approveItem(item, excludeCharacterNames);
-      removeItem(item);
+      await approveItem(item, flaggedNames);
+      await removeItem(item);
       notify(
         partial
           ? `Approved in part. ${item.author.displayName} will get your reason for the rest.`
@@ -382,7 +476,7 @@
     runAction(async () => {
       await $api(`metadata-edits/${item.id}/reject`, { method: 'POST', body: { note } });
       const index = items.value.indexOf(item);
-      removeItem(item);
+      await removeItem(item);
       notify(`Rejected. ${item.author.displayName} will get your reason.`, async () => {
         try {
           await $api(`metadata-edits/${item.id}/reopen`, { method: 'POST' });
@@ -399,7 +493,7 @@
     if (!item || mode.value !== 'unreviewed' || !item.canMarkReviewed) return;
     runAction(async () => {
       await $api(`metadata-edits/${item.id}/confirm-applied`, { method: 'POST' });
-      removeItem(item);
+      await removeItem(item);
       notify('Marked as reviewed. The edit stays live.');
     }, "The edit wasn't marked as reviewed. Try again in a moment.");
   }
@@ -409,7 +503,7 @@
     if (!item || mode.value !== 'unreviewed' || !item.canRevert) return;
     runAction(async () => {
       const result = await $api<MetadataRevertResult>(`metadata-edits/${item.id}/revert`, { method: 'POST' });
-      removeItem(item);
+      await removeItem(item);
       notify(revertSummary(result.revertedFields, result.skippedFields));
     }, "The edit wasn't reverted. Try again in a moment.");
   }
@@ -499,7 +593,7 @@
       <div class="flex flex-col gap-1 max-w-3xl">
         <h1 class="m-0 text-xl md:text-2xl font-bold">Review queue</h1>
         <p class="m-0 text-sm text-muted-color">
-          Suggested edits waiting for an editor approval. You can help by checking them and vouching for their accuracy. <br/>
+          Suggested edits waiting for an editor approval. You can help by checking them and vouching for their accuracy. <br />
           You can find every edit in <NuxtLink to="/changes">Recent changes</NuxtLink>.
         </p>
       </div>
@@ -581,12 +675,15 @@
                 : 'Nothing is waiting for review.'
           }}
         </p>
+        <div v-else-if="!ordered.length && hasMore && !loadFailed" class="p-3 flex flex-col gap-2" aria-busy="true">
+          <Skeleton v-for="i in 5" :key="i" height="3.5rem" />
+        </div>
         <div v-else-if="!ordered.length" class="p-6 flex flex-col items-center gap-2 text-center text-sm">
           <span class="text-muted-color">{{ mode === 'check' ? "You've checked everything waiting here." : 'Only your own edits are waiting.' }}</span>
           <Button label="Show them anyway" size="small" severity="secondary" text @click="showDone = true" />
         </div>
-        <ul v-else class="list-none m-0 p-0 max-h-[70vh] overflow-y-auto" aria-label="Pending edits">
-          <li v-for="group in groups" :key="group.deckId" class="border-t border-surface-200 dark:border-surface-700 first:border-t-0">
+        <ul v-else class="list-none m-0 p-0 lg:max-h-[70vh] lg:overflow-y-auto" aria-label="Pending edits">
+          <li v-for="group in groups" :key="group.key" class="border-t border-surface-200 dark:border-surface-700 first:border-t-0">
             <div class="flex items-center gap-2.5 px-3 pt-2.5 pb-1">
               <img :src="coverUrl(group.deck.coverName, 'xs')" alt="" class="w-7 h-10 object-cover rounded shrink-0" loading="lazy" />
               <span class="min-w-0 flex-1 font-medium text-sm truncate" v-bind="japaneseTextAttrs(localiseTitle(group.deck))">{{
@@ -627,7 +724,7 @@
         </ul>
       </div>
 
-      <div :class="[cardClass, 'order-1 lg:order-2 min-w-0']">
+      <div ref="detailRef" :class="[cardClass, 'order-1 lg:order-2 min-w-0 scroll-mt-4 flex flex-col', selected ? 'max-lg:min-h-dvh' : '']">
         <div v-if="!loaded && !loadFailed" class="p-4 flex flex-col gap-3" aria-busy="true">
           <Skeleton height="5rem" />
           <Skeleton height="10rem" />
@@ -676,22 +773,32 @@
                     @update:model-value="toggleIncluded(selected, change.field)"
                   />
                   <div class="min-w-0 flex-1" :class="isIncluded(selected, change.field) ? '' : 'opacity-50'">
-                    <MetadataChangeList :changes="[change]" />
+                    <MetadataChangeList
+                      :changes="[change]"
+                      :excluded-items="isIncluded(selected, change.field) ? (excludedItems[selected.id] ?? {}) : undefined"
+                      @toggle-item="(field, key) => toggleItem(selected!, field, key)"
+                    />
                   </div>
                 </div>
               </div>
-              <MetadataChangeList v-else :changes="selected.changes" />
-              <div v-if="choosesChanges && leftOut.length" class="flex flex-col gap-1.5 mt-1">
+              <MetadataChangeList
+                v-else
+                :changes="selected.changes"
+                :excluded-items="canChoose ? (excludedItems[selected.id] ?? {}) : undefined"
+                @toggle-item="(field, key) => toggleItem(selected!, field, key)"
+              />
+              <div v-if="canChoose && exclusion.leftOut" class="flex flex-col gap-1.5 mt-1">
                 <label for="exclude-note" class="text-xs font-semibold text-muted-color">
-                  Reason for leaving out the {{ fieldPhrase(leftOut).toLowerCase() }}, sent to {{ selected.author.displayName }}
+                  Reason for leaving out {{ leftOutPhrase(exclusion) }}, sent to {{ selected.author.displayName }}
                 </label>
                 <div class="flex flex-wrap gap-1.5">
                   <button
                     v-for="reason in REJECT_REASONS"
                     :key="reason"
                     type="button"
-                    :class="toggleChipClass(excludeNote === reason)"
-                    @click="excludeNote = reason"
+                    :class="toggleChipClass(noteHasReason(excludeNote, reason))"
+                    :aria-pressed="noteHasReason(excludeNote, reason)"
+                    @click="excludeNote = toggleNoteReason(excludeNote, reason)"
                   >
                     {{ reason }}
                   </button>
@@ -738,7 +845,7 @@
             </template>
 
             <div v-if="selected.franchiseEffect" class="rounded-md px-3 py-2 text-sm bg-amber-50 text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
-              <strong>Franchise effect.</strong>
+              <strong>Franchise effect.</strong>{{ ' ' }}
               <template v-if="selected.franchiseEffect.addedDeckTitle && selected.franchiseEffect.into">
                 This deck already joined
                 <NuxtLink
@@ -749,32 +856,34 @@
                   >{{ localiseTitle(selected.franchiseEffect.into) }}</NuxtLink
                 >
                 ({{ deckCountText(selected.franchiseEffect.into.deckCount) }}), so approving will add
-                <span class="font-medium" v-bind="japaneseTextAttrs(selected.franchiseEffect.addedDeckTitle)">{{ selected.franchiseEffect.addedDeckTitle }}</span>
+                <span class="font-medium" v-bind="japaneseTextAttrs(addedDeckTitle(selected.franchiseEffect))">{{
+                  addedDeckTitle(selected.franchiseEffect)
+                }}</span>
                 to it instead. The edit will move to that deck's history.
               </template>
               <template v-else>
-              {{ selected.franchiseEffect.into ? 'Will merge the franchise' : 'Will add this deck to the franchise' }}
-              <template v-for="(franchise, i) in selected.franchiseEffect.joining" :key="franchise.franchiseId"
-                ><template v-if="i > 0"> and </template
-                ><NuxtLink
-                  :to="`/franchise/${franchise.franchiseId}`"
-                  target="_blank"
-                  class="!text-inherit font-medium underline decoration-1 underline-offset-2 hover:decoration-2"
-                  v-bind="japaneseTextAttrs(localiseTitle(franchise))"
-                  >{{ localiseTitle(franchise) }}</NuxtLink
-                >
-                ({{ deckCountText(franchise.deckCount) }})</template
-              ><template v-if="selected.franchiseEffect.into">
-                into
-                <NuxtLink
-                  :to="`/franchise/${selected.franchiseEffect.into.franchiseId}`"
-                  target="_blank"
-                  class="!text-inherit font-medium underline decoration-1 underline-offset-2 hover:decoration-2"
-                  v-bind="japaneseTextAttrs(localiseTitle(selected.franchiseEffect.into))"
-                  >{{ localiseTitle(selected.franchiseEffect.into) }}</NuxtLink
-                >
-                ({{ deckCountText(selected.franchiseEffect.into.deckCount) }}). Franchise pages and study decks built from them will change.</template
-              ><template v-else>.</template>
+                {{ selected.franchiseEffect.into ? 'Will merge the franchise' : 'Will add this deck to the franchise' }}
+                <template v-for="(franchise, i) in selected.franchiseEffect.joining" :key="franchise.franchiseId"
+                  ><template v-if="i > 0"> and </template
+                  ><NuxtLink
+                    :to="`/franchise/${franchise.franchiseId}`"
+                    target="_blank"
+                    class="!text-inherit font-medium underline decoration-1 underline-offset-2 hover:decoration-2"
+                    v-bind="japaneseTextAttrs(localiseTitle(franchise))"
+                    >{{ localiseTitle(franchise) }}</NuxtLink
+                  >
+                  ({{ deckCountText(franchise.deckCount) }})</template
+                ><template v-if="selected.franchiseEffect.into">
+                  into
+                  <NuxtLink
+                    :to="`/franchise/${selected.franchiseEffect.into.franchiseId}`"
+                    target="_blank"
+                    class="!text-inherit font-medium underline decoration-1 underline-offset-2 hover:decoration-2"
+                    v-bind="japaneseTextAttrs(localiseTitle(selected.franchiseEffect.into))"
+                    >{{ localiseTitle(selected.franchiseEffect.into) }}</NuxtLink
+                  >
+                  ({{ deckCountText(selected.franchiseEffect.into.deckCount) }}). Franchise pages and study decks built from them will change.</template
+                ><template v-else>.</template>
               </template>
             </div>
 
@@ -825,8 +934,8 @@
                     @update:model-value="setResolution(selected, conflict.field, option)"
                   />
                   <span class="min-w-0 [overflow-wrap:anywhere]">
-                    <b v-bind="japaneseTextAttrs(describeValue(conflict.field, option === 'current' ? conflict.current : conflict.editAfter))">{{
-                      describeValue(conflict.field, option === 'current' ? conflict.current : conflict.editAfter)
+                    <b v-bind="japaneseTextAttrs(describeValue(conflict.field, option === 'current' ? conflict.current : conflict.editAfter, localiseTitle))">{{
+                      describeValue(conflict.field, option === 'current' ? conflict.current : conflict.editAfter, localiseTitle)
                     }}</b>
                     <span class="text-xs text-muted-color ml-1">{{ option === 'current' ? 'current value' : 'this edit' }}</span>
                   </span>
@@ -904,14 +1013,9 @@
                       </span>
                     </span>
                     <template v-if="check.verdict === MetadataEditVerdict.Doubt">
-                      <span class="flex flex-wrap items-center gap-1.5 mt-0.5">
-                        <span class="rounded px-1.5 py-0.5 text-xs font-medium bg-amber-100 text-amber-900 dark:bg-amber-800/50 dark:text-amber-100">
-                          {{ doubtReasonLabel(check.reason) }}
-                        </span>
-                        <span v-if="check.fields" class="text-xs text-amber-900 dark:text-amber-200"
-                          >On: {{ fieldPhrase(fieldsFromFlags(check.fields)).toLowerCase() }}</span
-                        >
-                      </span>
+                      <span v-if="check.fields" class="mt-0.5 text-xs text-amber-900 dark:text-amber-200"
+                        >On: {{ fieldPhrase(fieldsFromFlags(check.fields)).toLowerCase() }}</span
+                      >
                       <p
                         v-if="check.note"
                         class="m-0 border-l-2 border-amber-300 dark:border-amber-700 pl-2 text-sm [overflow-wrap:anywhere] whitespace-pre-line"
@@ -947,27 +1051,27 @@
             <div class="flex flex-wrap gap-1.5" role="group" aria-labelledby="doubt-label">
               <button
                 v-for="reason in DOUBT_REASONS"
-                :key="reason.value"
+                :key="reason"
                 type="button"
                 data-doubt-reason
-                :class="toggleChipClass(doubtReason === reason.value)"
-                :aria-pressed="doubtReason === reason.value"
-                @click="doubtReason = reason.value"
+                :class="toggleChipClass(noteHasReason(doubtNote, reason))"
+                :aria-pressed="noteHasReason(doubtNote, reason)"
+                @click="doubtNote = toggleNoteReason(doubtNote, reason)"
               >
-                {{ reason.label }}
+                {{ reason }}
               </button>
             </div>
             <label for="doubt-note" class="text-xs font-semibold text-muted-color">What did you find? (only editors see this)</label>
             <InputText
               id="doubt-note"
               v-model="doubtNote"
-              maxlength="300"
+              maxlength="500"
               placeholder="For example, the VNDB page lists a different date"
               class="w-full"
               @keydown.enter.prevent="sendDoubt"
             />
             <div class="flex flex-wrap gap-2">
-              <Button label="Send to editors" :disabled="!doubtReason || !doubtNote.trim() || !doubtFields.length" :loading="busy" @click="sendDoubt" />
+              <Button label="Send to editors" :disabled="!doubtNote.trim() || !doubtFields.length" :loading="busy" @click="sendDoubt" />
               <Button label="Cancel" severity="secondary" text @click="panel = null" />
             </div>
             <p class="m-0 text-xs text-muted-color">The author won't see who sent it.</p>
@@ -976,7 +1080,14 @@
           <div v-if="panel === 'reject'" class="px-5 sm:px-6 py-4 border-t border-surface-200 dark:border-surface-700 flex flex-col gap-2">
             <label for="reject-note" class="text-xs font-semibold text-muted-color">Reason, sent to {{ selected.author.displayName }}</label>
             <div class="flex flex-wrap gap-1.5">
-              <button v-for="reason in REJECT_REASONS" :key="reason" type="button" :class="toggleChipClass(rejectNote === reason)" @click="rejectNote = reason">
+              <button
+                v-for="reason in REJECT_REASONS"
+                :key="reason"
+                type="button"
+                :class="toggleChipClass(noteHasReason(rejectNote, reason))"
+                :aria-pressed="noteHasReason(rejectNote, reason)"
+                @click="rejectNote = toggleNoteReason(rejectNote, reason)"
+              >
                 {{ reason }}
               </button>
             </div>
@@ -987,50 +1098,54 @@
             </div>
           </div>
 
-          <p v-if="actionError" class="m-0 px-5 sm:px-6 pb-2 text-sm text-red-600 dark:text-red-400" role="alert">{{ actionError }}</p>
+          <p v-if="actionError && panel" class="m-0 px-5 sm:px-6 pb-2 text-sm text-red-600 dark:text-red-400" role="alert">{{ actionError }}</p>
 
           <div
-            v-if="panel !== 'doubt' && panel !== 'reject'"
-            class="flex flex-wrap items-center gap-2 px-5 sm:px-6 py-4 border-t border-surface-200 dark:border-surface-700"
+            v-if="!panel"
+            ref="actionBarRef"
+            class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-b-lg border-t border-surface-200 bg-surface-0 px-5 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:px-6 dark:border-surface-700 dark:bg-surface-900"
           >
-            <template v-if="mode === 'unreviewed'">
-              <Button v-if="selected.canMarkReviewed" :loading="busy" @click="markReviewed">Mark reviewed <kbd :class="kbdClass">M</kbd></Button>
-              <span v-else-if="selected.author.isYou" class="text-sm text-muted-color">You can't mark your own edit as reviewed.</span>
-              <Button v-if="selected.canRevert" severity="danger" outlined :disabled="busy" @click="revert">Revert <kbd :class="kbdClass">R</kbd></Button>
-              <Button severity="secondary" text @click="move(1)">Skip <kbd :class="kbdClass">S</kbd></Button>
-            </template>
-            <template v-else-if="isReviewer">
-              <template v-if="selected.canApprove">
-                <Button :loading="busy" :disabled="!canApproveSelection" @click="approve()">{{ approveLabel }} <kbd :class="kbdClass">A</kbd></Button>
-                <Button v-if="flaggedSurfaces.length" severity="secondary" :disabled="busy || !canApproveSelection" @click="approve(flaggedSurfaces)">
-                  <span
-                    >Approve without <span lang="ja" class="ja-general">{{ flaggedSurfaces.join(', ') }}</span></span
-                  >
-                </Button>
-                <Button severity="danger" outlined :disabled="busy" @click="openReject">Reject <kbd :class="kbdClass">R</kbd></Button>
+            <p v-if="actionError" class="m-0 text-sm text-red-600 dark:text-red-400" role="alert">{{ actionError }}</p>
+            <div class="flex flex-wrap items-center gap-2">
+              <template v-if="mode === 'unreviewed'">
+                <Button v-if="selected.canMarkReviewed" :loading="busy" @click="markReviewed">Mark reviewed <kbd :class="kbdClass">M</kbd></Button>
+                <span v-else-if="selected.author.isYou" class="text-sm text-muted-color">You can't mark your own edit as reviewed.</span>
+                <Button v-if="selected.canRevert" severity="danger" outlined :disabled="busy" @click="revert">Revert <kbd :class="kbdClass">R</kbd></Button>
               </template>
-              <span v-else-if="selected.author.isYou" class="text-sm text-muted-color">Someone else has to review your own edit.</span>
-              <span v-else class="text-sm text-muted-color">Only editors can approve this kind of change.</span>
-              <Button severity="secondary" text @click="move(1)">Skip <kbd :class="kbdClass">S</kbd></Button>
-            </template>
-            <template v-else-if="selected.myCheck">
-              <Tag
-                :value="selected.myCheck.verdict === MetadataEditVerdict.Confirm ? 'You said it looks right' : 'You said it doesn\'t look right'"
-                :severity="selected.myCheck.verdict === MetadataEditVerdict.Confirm ? 'success' : 'warn'"
-              />
-              <Button label="Withdraw" severity="secondary" text :loading="busy" @click="withdrawCheck" />
-              <Button severity="secondary" text @click="move(1)">Next <kbd :class="kbdClass">S</kbd></Button>
-            </template>
-            <template v-else-if="selected.canCheck">
-              <p class="m-0 w-full text-xs text-muted-color">Help the editors decide by checking the edits against their sources.</p>
-              <Button severity="success" outlined :loading="busy" @click="confirmEdit">Looks right <kbd :class="kbdClass">L</kbd></Button>
-              <Button severity="secondary" outlined :disabled="busy" @click="openDoubt">Doesn't look right <kbd :class="kbdClass">D</kbd></Button>
-              <Button severity="secondary" text @click="move(1)">Skip <kbd :class="kbdClass">S</kbd></Button>
-            </template>
-            <template v-else>
-              <span class="text-sm text-muted-color">{{ selected.checkBlockedReason ?? "You can't check this edit." }}</span>
-              <Button severity="secondary" text @click="move(1)">Next <kbd :class="kbdClass">S</kbd></Button>
-            </template>
+              <template v-else-if="isReviewer">
+                <template v-if="selected.canApprove">
+                  <Button :loading="busy" :disabled="!canApproveSelection" @click="approve()">{{ approveLabel }} <kbd :class="kbdClass">A</kbd></Button>
+                  <Button v-if="flaggedSurfaces.length" severity="secondary" :disabled="busy || !canApproveSelection" @click="approve(flaggedSurfaces)">
+                    <span
+                      >Approve without <span lang="ja" class="ja-general">{{ flaggedSurfaces.join(', ') }}</span></span
+                    >
+                  </Button>
+                  <Button severity="danger" outlined :disabled="busy" @click="openReject">Reject <kbd :class="kbdClass">R</kbd></Button>
+                </template>
+                <span v-else-if="selected.author.isYou" class="text-sm text-muted-color">Someone else has to review your own edit.</span>
+                <span v-else class="text-sm text-muted-color">Only editors can approve this kind of change.</span>
+              </template>
+              <template v-else-if="selected.myCheck">
+                <Tag
+                  :value="selected.myCheck.verdict === MetadataEditVerdict.Confirm ? 'You said it looks right' : 'You said it doesn\'t look right'"
+                  :severity="selected.myCheck.verdict === MetadataEditVerdict.Confirm ? 'success' : 'warn'"
+                />
+                <Button label="Withdraw" severity="secondary" text :loading="busy" @click="withdrawCheck" />
+              </template>
+              <template v-else-if="selected.canCheck">
+                <p class="m-0 w-full text-xs text-muted-color">Help the editors decide by checking the edits against their sources.</p>
+                <Button severity="success" outlined :loading="busy" @click="confirmEdit">Looks right <kbd :class="kbdClass">L</kbd></Button>
+                <Button severity="secondary" outlined :disabled="busy" @click="openDoubt">Doesn't look right <kbd :class="kbdClass">D</kbd></Button>
+              </template>
+              <template v-else>
+                <span class="text-sm text-muted-color">{{ selected.checkBlockedReason ?? "You can't check this edit." }}</span>
+              </template>
+            </div>
+            <div class="flex items-center gap-2">
+              <Button severity="secondary" text :disabled="position <= 1" @click="move(-1)">Previous <kbd :class="kbdClass">K</kbd></Button>
+              <span class="text-xs tabular-nums text-muted-color">{{ position }} of {{ reachableTotal }}</span>
+              <Button severity="secondary" text class="ml-auto" @click="move(1)">{{ stepLabel }} <kbd :class="kbdClass">S</kbd></Button>
+            </div>
           </div>
         </template>
       </div>

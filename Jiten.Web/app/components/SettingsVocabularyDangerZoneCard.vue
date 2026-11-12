@@ -2,18 +2,11 @@
   import { useConfirm } from 'primevue/useconfirm';
   import { formatDateShort } from '~/utils/dateFormat';
 
-  const emit = defineEmits<{ changed: [] }>();
+  const emit = defineEmits<{ changed: []; backup: [] }>();
 
   const { $api } = useNuxtApp();
   const toast = useToast();
   const confirm = useConfirm();
-  const router = useRouter();
-
-  async function goToFullBackup() {
-    await router.replace({ query: { mode: 'export', option: 'complete-vocabulary' } });
-    await nextTick();
-    document.getElementById('vocabulary-transfer-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  }
 
   const showPurgeDialog = ref(false);
   const purgeBusy = ref(false);
@@ -142,88 +135,87 @@
 </script>
 
 <template>
-  <Card>
-    <template #title>
-      <h2 class="text-xl font-bold">Danger Zone</h2>
-    </template>
-    <template #content>
-      <Message severity="warn" :closable="false" class="mb-4">
-        <div class="flex flex-col sm:flex-row sm:items-center gap-3">
-          <span class="flex-1">
-            Every button leads to irreversible changes. Before you press any of them, export a complete backup and keep it somewhere safe. It is the only way to
-            get your vocabulary back if the result is not what you expected. Use them at your own risk.
-          </span>
-          <Button
-            label="Export a full backup"
-            icon="pi pi-database"
-            severity="warn"
-            size="small"
-            class="shrink-0 self-start sm:self-auto"
-            @click="goToFullBackup"
-          />
-        </div>
-      </Message>
+  <div class="flex flex-col gap-4">
+    <Message severity="warn" :closable="false">
+      <div class="flex flex-col sm:flex-row sm:items-center gap-3">
+        <span class="flex-1">
+          Every button leads to irreversible changes. Before you press any of them, export a complete backup and keep it somewhere safe. It is the only way to
+          get your vocabulary back if the result is not what you expected. Use them at your own risk.
+        </span>
+        <Button
+          label="Export a full backup"
+          icon="pi pi-database"
+          severity="warn"
+          size="small"
+          class="shrink-0 self-start sm:self-auto"
+          @click="emit('backup')"
+        />
+      </div>
+    </Message>
 
-      <p class="mb-3">
-        Clicking this button will <b>delete ALL your known words</b>. This action cannot be undone, and unlike removing individual cards, nothing is kept under
+    <SettingsListItem title="Clear All Known Words" danger>
+      <template #description>
+        Clicking this button will <b>delete ALL your known words.</b> This action cannot be undone, and unlike removing individual cards, nothing is kept under
         Recently Removed.
-      </p>
-      <div class="flex">
+      </template>
+      <template #action>
         <Button severity="danger" icon="pi pi-trash" label="Clear All Known Words" @click="clearKnownWords" />
-      </div>
+      </template>
+    </SettingsListItem>
 
-      <Divider />
-
-      <p class="mb-3">
+    <SettingsListItem title="Rebuild Activity History">
+      <template #description>
         Recalculates your heatmap, streaks and activity totals from your existing reviews. Use it if a day or a streak looks wrong. Your reviews and cards are
-        untouched, but the recalculated days will be under your <b>current</b> study timezone, so they can look different from your historical stats if you've
-        changed timezone in-between.
-      </p>
-      <div class="flex">
+        untouched, but the recalculated days will be under your
+        <b>current</b>
+        study timezone, so they can look different from your historical stats if you've changed timezone in-between.
+      </template>
+      <template #action>
         <Button severity="danger" outlined icon="pi pi-refresh" label="Rebuild Activity History" :loading="rebuildBusy" @click="confirmRebuildActivity" />
-      </div>
+      </template>
+    </SettingsListItem>
 
-      <Divider />
-
-      <p class="mb-3">
-        Deletes <b>all of your reviews</b> in a selected period of time, including the ones in your history (Recently Removed). They disappear from your
-        heatmap, streaks and retention. Cards that keep part of their history are rescheduled from what is left; cards left with no review at all are removed,
-        since a card without history is a word you have never studied. Words you marked as known, blacklisted or suspended are not affected. This cannot be
-        undone.
-      </p>
-      <div class="flex">
+    <SettingsListItem title="Erase Review History">
+      <template #description>
+        Deletes
+        <b>all of your reviews</b>
+        in a selected period of time, including the ones in your history (Recently Removed). They disappear from your heatmap, streaks and retention. Cards that
+        keep part of their history are rescheduled from what is left; cards left with no review at all are removed, since a card without history is a word you
+        have never studied. Words you marked as known, blacklisted or suspended are not affected. This cannot be undone.
+      </template>
+      <template #action>
         <Button severity="danger" outlined icon="pi pi-calendar-times" label="Erase Review History" @click="showPurgeDialog = true" />
+      </template>
+    </SettingsListItem>
+
+    <Dialog v-model:visible="showPurgeDialog" modal header="Erase review history" :style="{ width: '520px', maxWidth: '95vw' }">
+      <p class="text-sm text-muted-color mb-4">Leave both dates empty to erase your whole history, or pick a range to erase only the reviews done in it.</p>
+
+      <div class="flex flex-col sm:flex-row gap-3">
+        <div class="flex-1">
+          <label class="block text-sm font-medium mb-1">From</label>
+          <DatePicker v-model="purgeSince" date-format="yy-mm-dd" show-icon fluid placeholder="The beginning" />
+        </div>
+        <div class="flex-1">
+          <label class="block text-sm font-medium mb-1">To</label>
+          <DatePicker v-model="purgeUntil" date-format="yy-mm-dd" show-icon fluid placeholder="Now" />
+        </div>
       </div>
 
-      <Dialog v-model:visible="showPurgeDialog" modal header="Erase review history" :style="{ width: '520px', maxWidth: '95vw' }">
-        <p class="text-sm text-muted-color mb-4">Leave both dates empty to erase your whole history, or pick a range to erase only the reviews done in it.</p>
+      <div class="flex items-start gap-2 mt-4">
+        <Checkbox v-model="purgeDropEmptyArchives" input-id="purge-drop-archives" binary />
+        <label for="purge-drop-archives" class="text-sm cursor-pointer">
+          Also delete removed cards left with no reviews
+          <span class="block text-xs text-muted-color mt-0.5">They will leave Recently Removed and can no longer be restored.</span>
+        </label>
+      </div>
 
-        <div class="flex flex-col sm:flex-row gap-3">
-          <div class="flex-1">
-            <label class="block text-sm font-medium mb-1">From</label>
-            <DatePicker v-model="purgeSince" date-format="yy-mm-dd" show-icon fluid placeholder="The beginning" />
-          </div>
-          <div class="flex-1">
-            <label class="block text-sm font-medium mb-1">To</label>
-            <DatePicker v-model="purgeUntil" date-format="yy-mm-dd" show-icon fluid placeholder="Now" />
-          </div>
+      <template #footer>
+        <div class="flex justify-end gap-2">
+          <Button label="Cancel" severity="secondary" @click="showPurgeDialog = false" />
+          <Button label="Erase history" icon="pi pi-trash" severity="danger" :loading="purgeBusy" @click="confirmPurge" />
         </div>
-
-        <div class="flex items-start gap-2 mt-4">
-          <Checkbox v-model="purgeDropEmptyArchives" input-id="purge-drop-archives" binary />
-          <label for="purge-drop-archives" class="text-sm cursor-pointer">
-            Also delete removed cards left with no reviews
-            <span class="block text-xs text-muted-color mt-0.5">They will leave Recently Removed and can no longer be restored.</span>
-          </label>
-        </div>
-
-        <template #footer>
-          <div class="flex justify-end gap-2">
-            <Button label="Cancel" severity="secondary" @click="showPurgeDialog = false" />
-            <Button label="Erase history" icon="pi pi-trash" severity="danger" :loading="purgeBusy" @click="confirmPurge" />
-          </div>
-        </template>
-      </Dialog>
-    </template>
-  </Card>
+      </template>
+    </Dialog>
+  </div>
 </template>

@@ -1,5 +1,4 @@
 @import '@fontsource-variable/noto-sans-jp';
-@import './fonts/klee-one.css';
 @import 'tailwindcss';
 @import 'tailwindcss-primeui';
 @import 'primeicons/primeicons.css';
@@ -248,17 +247,6 @@ a:not(.p-button) {
 
 .dark-mode a:not(.p-button) {
   @apply text-blue-300 hover:underline;
-}
-
-:root {
-  visibility: hidden;
-  opacity: 0;
-  transition: opacity 0.2s ease-in-out;
-}
-
-:root.loaded {
-  visibility: visible;
-  opacity: 1;
 }
 
 .fade-enter-active,
@@ -642,7 +630,7 @@ html.dark-mode .prose .shiki span {
   .p-toast-bottom-right,
   .p-toast-bottom-left,
   .p-toast-bottom-center {
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem) !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + var(--undo-toast-bottom, 0.75rem)) !important;
   }
 }
 

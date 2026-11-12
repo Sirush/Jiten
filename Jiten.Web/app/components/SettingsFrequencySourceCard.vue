@@ -71,16 +71,12 @@
 </script>
 
 <template>
-  <Card>
-    <template #title>
-      <h2 class="text-xl font-bold">Frequency Source</h2>
+  <SettingsListItem title="Frequency Source">
+    <template #description>
+      By default, the frequency ranks are shown from the global corpus, which is an average of the frequency across the whole catalogue. You can choose a media
+      type you often immerse in or one of your saved frequency lists (Jiten+ feature) to rank words in the way that matters the most for your learning.
     </template>
-    <template #content>
-      <div class="text-sm text-muted-color mb-4">
-        By default, the frequency ranks are shown from the global corpus, which is an average of the frequency across the whole catalogue. You can choose a
-        media type you often immerse in or one of your saved frequency lists (Jiten+ feature) to rank words in the way that matters the most for your learning.
-      </div>
-
+    <template #default>
       <Skeleton v-if="loading" height="2.6rem" class="md:!w-72" />
       <FrequencySourceSelect
         v-else
@@ -98,5 +94,5 @@
         you delete it, your rank will go back to the Global one by default.
       </p>
     </template>
-  </Card>
+  </SettingsListItem>
 </template>

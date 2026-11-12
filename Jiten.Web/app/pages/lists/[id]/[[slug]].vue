@@ -10,6 +10,7 @@
     COMMUNITY_LIST_MAX_REPORT,
     type CommunityListItemSort,
     communityListItemAnchor,
+    parseCommunityListItemSort,
     communityListPath,
     unlistConfirmation,
   } from '~/composables/useCommunityLists';
@@ -41,7 +42,8 @@
   const localiseTitle = useLocaliseTitle();
 
   const listId = Number(route.params.id);
-  const itemSort = ref<CommunityListItemSort>(route.query.sort === 'coverage' ? 'coverage' : 'curator');
+  const itemSort = ref<CommunityListItemSort>(parseCommunityListItemSort(route.query.sort));
+  const sortQuery = (sort: CommunityListItemSort) => (sort === 'curator' ? undefined : sort);
   const searchQuery = ref(typeof route.query.q === 'string' ? route.query.q : '');
   const appliedSearch = ref(searchQuery.value.trim());
   const {
@@ -49,7 +51,7 @@
     error,
     ready,
   } = useApiFetch<CommunityListDetail>(`lists/${listId}`, {
-    query: { sort: itemSort.value === 'coverage' ? 'coverage' : undefined, q: appliedSearch.value || undefined },
+    query: { sort: sortQuery(itemSort.value), q: appliedSearch.value || undefined },
   });
   await ready;
 
@@ -100,15 +102,19 @@
     }, 300)
   );
 
-  const SORT_OPTIONS: { value: CommunityListItemSort; label: string; shortLabel: string }[] = [
-    { value: 'curator', label: 'List order', shortLabel: 'List order' },
-    { value: 'coverage', label: 'Highest coverage first', shortLabel: 'Coverage' },
-  ];
+  const sortOptions = computed(() => {
+    const options: { value: CommunityListItemSort; label: string }[] = [
+      { value: 'curator', label: 'List order' },
+      { value: 'difficulty', label: 'Easiest' },
+    ];
+    if (canSortByCoverage.value || itemSort.value === 'coverage') options.push({ value: 'coverage', label: 'Coverage' });
+    return options;
+  });
 
   function setSort(sort: CommunityListItemSort) {
     if (sort === itemSort.value) return;
     itemSort.value = sort;
-    router.replace({ query: { ...route.query, sort: sort === 'coverage' ? 'coverage' : undefined, page: undefined } });
+    router.replace({ query: { ...route.query, sort: sortQuery(sort), page: undefined } });
     loadPage(0);
   }
 
@@ -539,21 +545,16 @@
       </span>
       <div class="ml-auto flex shrink-0 items-center gap-2">
         <SelectButton
-          v-if="canSortByCoverage"
+          v-if="list.itemCount > 1"
           :model-value="itemSort"
-          :options="SORT_OPTIONS"
+          :options="sortOptions"
           option-label="label"
           option-value="value"
           data-key="value"
           :allow-empty="false"
           aria-label="Order"
           @update:model-value="setSort"
-        >
-          <template #option="{ option }">
-            <span class="sm:hidden">{{ option.shortLabel }}</span
-            ><span class="hidden sm:inline">{{ option.label }}</span>
-          </template>
-        </SelectButton>
+        />
         <SelectButton v-model="displayMode" :options="DISPLAY_OPTIONS" option-value="value" data-key="value" :allow-empty="false" aria-label="Display">
           <template #option="{ option }">
             <Tooltip :content="option.label">

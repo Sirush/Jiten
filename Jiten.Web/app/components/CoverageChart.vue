@@ -75,7 +75,8 @@
             const item = context.raw as { x: number; y: number };
             const coverage = item.y;
             const formatted = coverage < 99.0 ? coverage.toFixed(0) : coverage.toFixed(1);
-            return `Coverage: ${formatted}%`;
+            const unknownRatio = formatUnknownWordRatio(coverage);
+            return unknownRatio ? [`Coverage: ${formatted}%`, unknownRatio] : `Coverage: ${formatted}%`;
           },
         },
       },

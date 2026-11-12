@@ -90,6 +90,27 @@ public class InlineDeckEditTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task MediaTypeChange_AppliesToSubdecks()
+    {
+        await SeedAsync();
+        const int subdeckId = 3;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            db.Decks.Add(new Deck { DeckId = subdeckId, ParentDeckId = MainDeckId, OriginalTitle = "Episode 1", MediaType = MediaType.Anime });
+            await db.SaveChangesAsync();
+        }
+
+        var result = await PatchOkAsync(new { mediaType = (int)MediaType.Movie });
+
+        result.MediaType.Should().Be(MediaType.Movie);
+        var types = await ReadDbAsync(factory, db => db.Decks.AsNoTracking().ToDictionaryAsync(d => d.DeckId, d => d.MediaType));
+        types[MainDeckId].Should().Be(MediaType.Movie);
+        types[subdeckId].Should().Be(MediaType.Movie);
+        types[OtherDeckId].Should().Be(MediaType.Novel);
+    }
+
+    [Fact]
     public async Task EmptyCollectionClears_NullLeavesAlone()
     {
         await SeedAsync();

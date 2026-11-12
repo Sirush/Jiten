@@ -143,6 +143,12 @@ public class FsrsV7PropertyTests
         w[25] = 0.8;
         w[26] = 0.3;
 
+        var lowBases = W.ToArray();
+        lowBases[25] = 0.25;
+        lowBases[26] = 0.3;
+        FsrsHelperV7.ClampParameters(lowBases);
+        lowBases[26].Should().Be(0.5);
+
         FsrsHelperV7.ClampParameters(w);
 
         w[5].Should().Be(0.001);

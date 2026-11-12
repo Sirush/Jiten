@@ -141,7 +141,7 @@
   onMounted(async () => {
     loadCardMediaSummary();
     if (route.query.checkout === 'success') {
-      trackEvent('checkout_completed');
+      trackEvent('checkout_completed', takePendingCheckout());
       toast.add({
         severity: 'success',
         summary: 'Welcome to Jiten+',

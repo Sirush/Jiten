@@ -4,6 +4,8 @@ declare module '#app' {
     wide?: boolean;
     /** The page lays out its own width, so a section can span the whole window. */
     fullBleed?: boolean;
+    /** Hides the site header and footer; the page renders its own minimal chrome. */
+    bare?: boolean;
   }
 }
 

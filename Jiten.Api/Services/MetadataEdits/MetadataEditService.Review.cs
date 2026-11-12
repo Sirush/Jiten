@@ -66,20 +66,34 @@ public sealed partial class MetadataEditService
         if (failure != null)
             return failure;
 
-        if (request.ExcludeCharacterNames is { Count: > 0 } excluded)
-        {
-            var nameChange = changes.FirstOrDefault(c => c.Field == MetadataField.CharacterNames);
-            if (nameChange != null)
-            {
-                var (beforeNames, afterNames) = NameLists(nameChange);
-                nameChange.After = DeckMetadataSnapshot.ToElement(afterNames.Where(n => beforeNames.Contains(n) || !excluded.Contains(n)).ToList());
-                if (DeckMetadataSnapshot.KeyEquals(MetadataField.CharacterNames, nameChange.Before, nameChange.After))
-                    changes.Remove(nameChange);
-            }
-        }
-
         var excludedFlags = MetadataFields.Of((request.ExcludeFields ?? []).Select(f => (MetadataField)f));
         var leftOut = changes.Where(c => excludedFlags.HasFlag(c.Field)).ToList();
+        changes = changes.Except(leftOut).ToList();
+
+        var partlyLeftOut = new List<MetadataField>();
+        foreach (var group in (request.ExcludeItems ?? []).GroupBy(g => g.Field))
+        {
+            var change = changes.FirstOrDefault(c => c.Field == group.Key);
+            if (change == null || !IsListField(change.Field))
+                continue;
+
+            var keys = group.SelectMany(g => g.Keys).ToHashSet(StringComparer.Ordinal);
+            var (kept, rejected) = SplitListChange(change.Field, change.Before, change.After, keys);
+            if (DeckMetadataSnapshot.KeyEquals(change.Field, rejected, change.Before))
+                continue;
+
+            if (DeckMetadataSnapshot.KeyEquals(change.Field, kept, change.Before))
+            {
+                changes.Remove(change);
+                leftOut.Add(change);
+                continue;
+            }
+
+            leftOut.Add(new MetadataFieldChange { Field = change.Field, Before = change.Before, After = rejected });
+            change.After = kept;
+            partlyLeftOut.Add(change.Field);
+        }
+
         var excludeNote = request.ExcludeNote?.Trim() ?? "";
         if (leftOut.Count > 0)
         {
@@ -87,10 +101,11 @@ public sealed partial class MetadataEditService
                 return ServiceResult<object>.Fail(400, "Say why the changes you left out weren't approved.");
             if (excludeNote.Length > MaxNoteLength)
                 return ServiceResult<object>.Fail(400, $"Keep the reason under {MaxNoteLength} characters.");
-            changes = changes.Except(leftOut).ToList();
             if (changes.Count == 0)
                 return ServiceResult<object>.Fail(400, "Leave at least one change in, or reject the edit.");
         }
+
+        var leftOutText = LeftOutPhrase(leftOut, partlyLeftOut);
 
         var (move, moveError) = await FranchiseMoveAsync(edit.DeckId, changes, ct);
         if (moveError != null)
@@ -150,7 +165,7 @@ public sealed partial class MetadataEditService
                 await tx.CommitAsync(ct);
                 await AfterApplyAsync(move.DeckId, MetadataField.Franchise, ct);
                 if (edit.UserId != null)
-                    await NotifyApprovedAsync(edit.UserId, move.DeckId, leftOut, excludeNote, ct);
+                    await NotifyApprovedAsync(edit.UserId, move.DeckId, leftOutText, excludeNote, ct);
                 return ServiceResult<object>.Ok(new { status = (int)edit.Status });
             }
 
@@ -187,7 +202,7 @@ public sealed partial class MetadataEditService
             await AfterApplyAsync(move.DeckId, MetadataField.Franchise, ct);
 
         if (edit.UserId != null)
-            await NotifyApprovedAsync(edit.UserId, edit.DeckId, leftOut, excludeNote, ct);
+            await NotifyApprovedAsync(edit.UserId, edit.DeckId, leftOutText, excludeNote, ct);
 
         return ServiceResult<object>.Ok(new { status = (int)edit.Status });
     }
@@ -222,18 +237,29 @@ public sealed partial class MetadataEditService
         return (new FranchiseMove(pickedId, new MetadataFieldChange { Field = MetadataField.Franchise, Before = before, After = DeckMetadataSnapshot.ToElement(target) }), null);
     }
 
+    private static string? LeftOutPhrase(List<MetadataFieldChange> leftOut, List<MetadataField> partlyLeftOut)
+    {
+        var whole = leftOut.Select(c => c.Field).Where(f => !partlyLeftOut.Contains(f)).ToList();
+        var parts = new List<string>();
+        if (whole.Count > 0)
+            parts.Add("the " + JoinLabels(whole));
+        if (partlyLeftOut.Count > 0)
+            parts.Add("part of the " + JoinLabels(partlyLeftOut));
+        return parts.Count == 0 ? null : string.Join(" and ", parts);
+    }
+
     private const string ApprovedGroupKey = "metadata-edit-approved";
     private const string ContributionsUrl = "/requests?tab=contributions";
 
     /// <summary>Partial approvals carry the reviewer's note, so they stand alone and reach every author; plain approvals fold together and stop once the author's edits go live without review.</summary>
-    private async Task NotifyApprovedAsync(string authorId, int deckId, List<MetadataFieldChange> leftOut, string? excludeNote, CancellationToken ct)
+    private async Task NotifyApprovedAsync(string authorId, int deckId, string? leftOutText, string? excludeNote, CancellationToken ct)
     {
         var title = await DeckTitleAsync(deckId, ct);
         var deckLink = DeckHistoryUrl(deckId);
-        if (leftOut.Count > 0)
+        if (leftOutText != null)
         {
             await notifications.Notify(authorId, NotificationType.MetadataEditApproved, "Your edit was approved",
-                                       $"Your edit to {title} is now live, except the {JoinLabels(leftOut.Select(c => c.Field))}: {excludeNote}", deckLink);
+                                       $"Your edit to {title} is now live, except {leftOutText}: {excludeNote}", deckLink);
             return;
         }
 
@@ -410,13 +436,11 @@ public sealed partial class MetadataEditService
 
         if (!Enum.IsDefined(request.Verdict))
             return ServiceResult<object>.Fail(400, "Pick confirm or doesn't look right.");
-        if (request.Verdict == MetadataEditVerdict.Doubt && (request.Reason == null || !Enum.IsDefined(request.Reason.Value)))
-            return ServiceResult<object>.Fail(400, "Pick what looks wrong.");
         var note = request.Note?.Trim();
         if (request.Verdict == MetadataEditVerdict.Doubt && string.IsNullOrEmpty(note))
             return ServiceResult<object>.Fail(400, "Say what looks wrong so editors can check it.");
-        if (note is { Length: > 300 })
-            return ServiceResult<object>.Fail(400, "Keep the details under 300 characters.");
+        if (note is { Length: > MaxNoteLength })
+            return ServiceResult<object>.Fail(400, $"Keep the details under {MaxNoteLength} characters.");
         var sourceUrl = request.SourceUrl?.Trim();
         if (!string.IsNullOrEmpty(sourceUrl) && (sourceUrl.Length > 500 || !IsHttpUrl(sourceUrl)))
             return ServiceResult<object>.Fail(400, "Sources need to be links starting with http:// or https://.");
@@ -433,7 +457,6 @@ public sealed partial class MetadataEditService
             : MetadataField.None;
         existing.Verdict = request.Verdict;
         existing.Fields = doubted == edit.Fields ? MetadataField.None : doubted;
-        existing.Reason = request.Verdict == MetadataEditVerdict.Doubt ? request.Reason : null;
         existing.Note = string.IsNullOrEmpty(note) ? null : note;
         existing.SourceUrl = string.IsNullOrEmpty(sourceUrl) ? null : sourceUrl;
         existing.CreatedAt = DateTime.UtcNow;

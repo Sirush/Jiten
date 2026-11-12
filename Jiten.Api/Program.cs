@@ -475,6 +475,15 @@ builder.Services.AddScoped<Microsoft.AspNetCore.Identity.UI.Services.IEmailSende
 builder.Services.AddScoped<Jiten.Api.Services.IEmailService, Jiten.Api.Services.EmailService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUserService, CurrentUserService>();
+builder.Services.AddScoped<ICardBatchService, CardBatchService>();
+builder.Services.AddScoped<IKnownWordAmountService, KnownWordAmountService>();
+builder.Services.AddScoped<IOnboardingStore, OnboardingStore>();
+builder.Services.AddSingleton<Jiten.Api.Services.WordCheck.IWordCheckPool, Jiten.Api.Services.WordCheck.WordCheckPool>();
+builder.Services.AddSingleton<CheckSessionStore>();
+builder.Services.AddScoped<Jiten.Api.Services.WordCheck.IWordCheckService, Jiten.Api.Services.WordCheck.WordCheckService>();
+builder.Services.AddScoped<Jiten.Api.Services.ReadingCheck.IReadingCheckData, Jiten.Api.Services.ReadingCheck.ReadingCheckData>();
+builder.Services.AddScoped<Jiten.Api.Services.ReadingCheck.ReadingCheckWriter>();
+builder.Services.AddScoped<Jiten.Api.Services.ReadingCheck.IReadingCheckService, Jiten.Api.Services.ReadingCheck.ReadingCheckService>();
 builder.Services.AddScoped<IJitenPlusService, JitenPlusService>();
 builder.Services.Configure<Jiten.Core.Services.CardMediaStorageOptions>(
     builder.Configuration.GetSection(Jiten.Core.Services.CardMediaStorageOptions.SectionName));

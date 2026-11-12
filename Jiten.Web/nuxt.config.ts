@@ -1,7 +1,14 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 
 import tailwindcss from '@tailwindcss/vite';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
+
+const { devDependencies } = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf8'));
+const iconifyPackagePrefix = '@iconify-json/';
+const installedIconCollections = Object.keys(devDependencies)
+  .filter((name) => name.startsWith(iconifyPackagePrefix))
+  .map((name) => name.slice(iconifyPackagePrefix.length));
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-14',
@@ -80,6 +87,12 @@ export default defineNuxtConfig({
     // The import map keeps chunk hashes stable while their __vite__mapDeps still name the entry JS and CSS,
     // so the CDN serves stale chunks that inject a previous build's entry CSS over the current one.
     entryImportMap: false,
+  },
+  icon: {
+    serverBundle: { collections: installedIconCollections },
+    clientBundle: {
+      scan: { globInclude: ['app/components/AppHeader*.vue'] },
+    },
   },
   primevue: {
     // Build-time theme import; putting the preset in `options.theme` instead would serialise
@@ -185,7 +198,7 @@ export default defineNuxtConfig({
   fonts: {
     // Present only for nuxt-og-image's Satori renderer, which requires @nuxt/fonts for any
     // non-Inter font. Site text keeps loading through @fontsource-variable/noto-sans-jp in
-    // main.css; remote providers are disabled so the module cannot inject fonts of its own.
+    // main.css; every provider but local is disabled so the module cannot inject fonts of its own.
     providers: {
       google: false,
       googleicons: false,
@@ -193,6 +206,7 @@ export default defineNuxtConfig({
       fontshare: false,
       fontsource: false,
       adobe: false,
+      npm: false,
     },
     families: [
       {

@@ -25,7 +25,7 @@ public class WordSetMemberCache(
 
     private Generation CurrentGeneration(int setId) => _generations.GetOrAdd(setId, _ => new Generation(0, new CancellationTokenSource()));
 
-    private Task<FrozenSet<long>> GetMembersAsync(int setId)
+    public Task<FrozenSet<long>> GetMembersAsync(int setId)
         => GetOrLoad(setId, "members", () => LoadMembersAsync(setId));
 
     public Task<FrozenSet<long>> GetKanaRedundantAsync(int setId)

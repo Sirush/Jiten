@@ -319,37 +319,47 @@
   const parentDeck = computed(() => response.value?.data?.parentDeck);
   const isTopLevel = computed(() => parentDeck.value == null);
 
+  const japaneseTitle = computed(() => {
+    const d = mainDeck.value;
+    const original = d?.originalTitle?.trim();
+    return d && original && original.toLowerCase() !== localiseTitle(d).trim().toLowerCase() ? original : '';
+  });
+
+  const SEO_TITLE_TAIL = ': Japanese Vocabulary, Difficulty & Anki Deck';
+  const SEO_TITLE_MAX_LENGTH = 70;
+  const META_DESCRIPTION_MAX_LENGTH = 160;
+
+  const seoTitle = computed(() => {
+    const withJapanese = `${title.value} (${japaneseTitle.value})${SEO_TITLE_TAIL}`;
+    return japaneseTitle.value && withJapanese.length <= SEO_TITLE_MAX_LENGTH ? withJapanese : `${title.value}${SEO_TITLE_TAIL}`;
+  });
+
+  /** Fixed en-US formatting: the same text must reach every crawler, whatever the request's display preferences. */
   const metaDescription = computed(() => {
     const d = mainDeck.value;
     if (!d) return '';
-    const type = getMediaTypeText(d.mediaType);
-    const original = d.originalTitle?.trim();
-    const orig = original && original.toLowerCase() !== localiseTitle(d).trim().toLowerCase() ? ` (${original})` : '';
-    const chars = d.characterCount ? d.characterCount.toLocaleString() : '';
-    const words = d.uniqueWordCount ? d.uniqueWordCount.toLocaleString() : '';
-    const stats = chars ? ` - ${chars} chars, ${words} unique words` : '';
-    const tail = ' Difficulty, kanji & word stats on Jiten.';
-    // Keep the description within ~160 chars (search engines truncate beyond this).
-    // Drop the stats clause first, then hard-clamp the title at a word boundary.
-    const build = (s: string) => `Vocabulary list & free Anki deck for ${title.value}${orig}, a Japanese ${type}${s}.${tail}`;
-    const full = build(stats);
-    if (full.length <= 160) return full;
-    const trimmed = build('');
-    if (trimmed.length <= 160) return trimmed;
+    const type = getMediaTypeText(d.mediaType).toLowerCase();
+    const difficulty = d.difficultyRaw >= 0 ? d.difficultyRaw : d.difficulty;
+    const rating = difficulty >= 0 ? ` rated ${getDifficultyName(difficulty).toLowerCase()} on Jiten, ${Math.min(difficulty, 5).toFixed(1)} out of 5` : '';
+    const original = japaneseTitle.value ? ` (${japaneseTitle.value})` : '';
+    const words = d.uniqueWordCount ? ` of ${d.uniqueWordCount.toLocaleString('en-US')} unique words` : '';
+    const build = (orig: string, w: string) => `${title.value}${orig} is a Japanese ${type}${rating}. Vocabulary list and free Anki deck${w}.`;
+    const fitting = [build(original, words), build(original, ''), build('', '')].find((text) => text.length <= META_DESCRIPTION_MAX_LENGTH);
     return (
-      build('')
-        .slice(0, 157)
+      fitting ??
+      build('', '')
+        .slice(0, META_DESCRIPTION_MAX_LENGTH - 3)
         .replace(/\s+\S*$/, '') + '…'
     );
   });
 
   useSeoMeta({
-    title: () => `${title.value} Vocabulary List & Anki Deck`,
+    title: seoTitle,
     description: metaDescription,
-    ogTitle: () => `${title.value} — Japanese Vocabulary List & Anki Deck`,
+    ogTitle: seoTitle,
     ogDescription: metaDescription,
     ogType: 'article',
-    twitterTitle: () => `${title.value} — Vocabulary List & Anki Deck`,
+    twitterTitle: seoTitle,
     twitterDescription: metaDescription,
   });
 

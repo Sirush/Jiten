@@ -271,8 +271,14 @@
     </div>
 
     <template v-if="activeTab === 'browse'">
-      <div v-if="strips.length" class="grid grid-cols-1 gap-x-6 gap-y-4" :class="{ 'md:grid-cols-2': strips.length > 1 }">
-        <section v-for="strip in strips" :key="strip.key" :aria-labelledby="`${strip.key}-lists-heading`" class="flex min-w-0 flex-col gap-2">
+      <div v-if="strips.length" class="grid grid-cols-1 gap-y-4" :class="{ 'md:grid-cols-2': strips.length > 1 }">
+        <section
+          v-for="(strip, index) in strips"
+          :key="strip.key"
+          :aria-labelledby="`${strip.key}-lists-heading`"
+          class="flex min-w-0 flex-col gap-2"
+          :class="strips.length > 1 && (index === 0 ? 'md:pr-8' : 'border-surface-200 dark:border-surface-700 md:border-l md:pl-8')"
+        >
           <div class="flex items-baseline justify-between gap-2">
             <h2 :id="`${strip.key}-lists-heading`" class="m-0 text-base font-semibold">{{ strip.title }}</h2>
             <button
@@ -284,12 +290,7 @@
               See all
             </button>
           </div>
-          <div v-if="strip.loading" class="-mx-2 flex gap-3 overflow-hidden px-2 pb-2">
-            <CommunityListCardSkeleton v-for="n in 3" :key="n" compact />
-          </div>
-          <div v-else class="scrollbar-styled -mx-2 flex gap-3 overflow-x-auto px-2 pb-2">
-            <CommunityListCard v-for="list in strip.lists" :key="list.listId" :list="list" compact />
-          </div>
+          <CommunityListStrip :lists="strip.lists" :loading="strip.loading" />
         </section>
       </div>
 

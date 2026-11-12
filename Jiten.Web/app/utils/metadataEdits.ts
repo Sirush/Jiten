@@ -1,6 +1,5 @@
 import { LinkType, type DeckRelationshipType, type Genre, type MediaType } from '~/types/enums';
 import {
-  MetadataEditDoubtReason,
   MetadataEditStatus,
   MetadataField,
   type EditableDeck,
@@ -291,6 +290,8 @@ export function draftFromEditable(deck: EditableDeck): MetadataDraft {
       relationshipType: r.relationshipType,
       otherDeckId: r.otherDeckId,
       otherDeckTitle: r.otherDeckTitle,
+      otherDeckRomajiTitle: r.otherDeckRomajiTitle,
+      otherDeckEnglishTitle: r.otherDeckEnglishTitle,
     })),
     characterNames: [...(deck.characterNames ?? [])],
     addedNames: [],
@@ -649,36 +650,48 @@ export function submissionError({ draft, fields, sources, note }: SubmissionChec
 }
 
 export interface ListEntry {
+  /** Matches MetadataEditService.ItemKey, so a reviewer can leave single items out of an approval. */
+  key?: string;
   label: string;
   role?: string;
   href?: string;
   meta?: string[];
 }
 
+export type TitleLocaliser = (titles: { originalTitle: string; romajiTitle?: string | null; englishTitle?: string | null }) => string;
+
+const originalTitleOf: TitleLocaliser = (titles) => titles.originalTitle;
+
+export const relationshipTitles = (r: MetadataRelationshipValue) => ({
+  originalTitle: r.otherDeckTitle,
+  romajiTitle: r.otherDeckRomajiTitle,
+  englishTitle: r.otherDeckEnglishTitle,
+});
+
 /** The other deck's role, read from the deck the edit belongs to: the deck is the edge's source when the other deck is its target. */
-export function relationshipEntry(r: MetadataRelationshipValue): ListEntry {
+export function relationshipEntry(r: MetadataRelationshipValue, localise: TitleLocaliser = originalTitleOf): ListEntry {
   const type = Number(r.relationshipType) as DeckRelationshipType;
   const perspective = r.targetDeckId === r.otherDeckId ? type : getInverseRelationshipType(type);
   const meta = [r.otherDeckMediaType != null ? getMediaTypeText(r.otherDeckMediaType) : null, r.otherDeckReleaseYear ? String(r.otherDeckReleaseYear) : null];
   return {
-    label: r.otherDeckTitle,
+    label: localise(relationshipTitles(r)),
     role: getRelationshipRoleLabel(perspective),
     href: `/decks/media/${r.otherDeckId}/detail`,
     meta: meta.filter((m): m is string => m !== null),
   };
 }
 
-export function relationshipLabel(r: MetadataRelationshipValue): string {
-  const entry = relationshipEntry(r);
+export function relationshipLabel(r: MetadataRelationshipValue, localise: TitleLocaliser = originalTitleOf): string {
+  const entry = relationshipEntry(r, localise);
   return `${entry.role}: ${entry.label}`;
 }
 
 const franchiseKey = (f: MetadataFranchiseValue) => (f.franchiseId != null ? String(f.franchiseId) : `with:${f.withDeckId}`);
 
-const franchiseEntry = (f: MetadataFranchiseValue): ListEntry =>
+const franchiseEntry = (f: MetadataFranchiseValue, localise: TitleLocaliser): ListEntry =>
   f.franchiseId != null
-    ? { label: f.originalTitle, href: `/franchise/${f.franchiseId}` }
-    : { label: f.originalTitle, role: 'New franchise with', href: `/decks/media/${f.withDeckId}/detail` };
+    ? { label: localise(f), href: `/franchise/${f.franchiseId}` }
+    : { label: localise(f), role: 'New franchise with', href: `/decks/media/${f.withDeckId}/detail` };
 
 const asFranchise = (value: unknown): MetadataFranchiseValue | null =>
   value && typeof value === 'object' && 'franchiseId' in value ? (value as MetadataFranchiseValue) : null;
@@ -686,7 +699,7 @@ const asFranchise = (value: unknown): MetadataFranchiseValue | null =>
 export type ChangeView =
   | { kind: 'scalar'; before: string | null; after: string | null }
   | { kind: 'text'; before: string | null; after: string | null; delta: number }
-  | { kind: 'list'; added: ListEntry[]; removed: ListEntry[]; changed: { label: string; before: string; after: string }[] };
+  | { kind: 'list'; added: ListEntry[]; removed: ListEntry[]; changed: { key: string; label: string; before: string; after: string }[] };
 
 const asArray = <T>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
 const asText = (value: unknown): string | null => (value === null || value === undefined || value === '' ? null : String(value));
@@ -699,15 +712,16 @@ function keyedDiff<T>(
 ): { added: ListEntry[]; removed: ListEntry[] } {
   const beforeKeys = new Set(before.map(key));
   const afterKeys = new Set(after.map(key));
+  const keyed = (item: T): ListEntry => ({ ...entry(item), key: key(item) });
   return {
-    added: after.filter((i) => !beforeKeys.has(key(i))).map(entry),
-    removed: before.filter((i) => !afterKeys.has(key(i))).map(entry),
+    added: after.filter((i) => !beforeKeys.has(key(i))).map(keyed),
+    removed: before.filter((i) => !afterKeys.has(key(i))).map(keyed),
   };
 }
 
 const plainEntry = (label: string): ListEntry => ({ label });
 
-export function describeChange(change: MetadataFieldChange): ChangeView {
+export function describeChange(change: MetadataFieldChange, localise: TitleLocaliser = originalTitleOf): ChangeView {
   const { field, before, after } = change;
   switch (field) {
     case MetadataField.Description: {
@@ -742,7 +756,12 @@ export function describeChange(change: MetadataFieldChange): ChangeView {
       const beforeById = new Map(b.map((t) => [t.tagId, t]));
       const changed = a
         .filter((t) => beforeById.has(t.tagId) && beforeById.get(t.tagId)!.percentage !== t.percentage)
-        .map((t) => ({ label: t.name, before: tagWeightText(beforeById.get(t.tagId)!.percentage), after: tagWeightText(t.percentage) }));
+        .map((t) => ({
+          key: String(t.tagId),
+          label: t.name,
+          before: tagWeightText(beforeById.get(t.tagId)!.percentage),
+          after: tagWeightText(t.percentage),
+        }));
       return { kind: 'list', ...diff, changed };
     }
     case MetadataField.Links:
@@ -751,7 +770,7 @@ export function describeChange(change: MetadataFieldChange): ChangeView {
         ...keyedDiff(
           asArray<MetadataLinkValue>(before),
           asArray<MetadataLinkValue>(after),
-          (l) => `${l.linkType}|${l.url}`,
+          (l) => `${Number(l.linkType)}|${l.url}`,
           (l) => plainEntry(`${getLinkLabel({ linkType: Number(l.linkType), url: l.url })}: ${l.url}`)
         ),
         changed: [],
@@ -759,7 +778,7 @@ export function describeChange(change: MetadataFieldChange): ChangeView {
     case MetadataField.Relationships:
       return {
         kind: 'list',
-        ...keyedDiff(asArray<MetadataRelationshipValue>(before), asArray<MetadataRelationshipValue>(after), edgeId, relationshipEntry),
+        ...keyedDiff(asArray<MetadataRelationshipValue>(before), asArray<MetadataRelationshipValue>(after), edgeId, (r) => relationshipEntry(r, localise)),
         changed: [],
       };
     case MetadataField.Franchise: {
@@ -767,7 +786,7 @@ export function describeChange(change: MetadataFieldChange): ChangeView {
       const a = asFranchise(after);
       return {
         kind: 'list',
-        ...keyedDiff(b ? [b] : [], a ? [a] : [], franchiseKey, franchiseEntry),
+        ...keyedDiff(b ? [b] : [], a ? [a] : [], franchiseKey, (f) => franchiseEntry(f, localise)),
         changed: [],
       };
     }
@@ -787,6 +806,54 @@ const LIST_FIELDS = new Set<MetadataField>([
 
 export function isListField(field: MetadataField | number): boolean {
   return LIST_FIELDS.has(field as MetadataField);
+}
+
+/** Keys of the items a list change adds, removes or changes; empty for a field that is approved as a whole. */
+export function changeItemKeys(change: MetadataFieldChange): string[] {
+  if (!isListField(change.field)) return [];
+  const view = describeChange(change);
+  if (view.kind !== 'list') return [];
+  return [...view.added, ...view.removed, ...view.changed].map((entry) => entry.key).filter((key): key is string => key !== undefined);
+}
+
+export interface ApprovalExclusion {
+  wholeFields: MetadataField[];
+  items: { field: MetadataField; keys: string[] }[];
+  total: number;
+  leftOut: number;
+}
+
+/** A list field with every item left out counts as a whole field, the way the API reads it. */
+export function approvalExclusion(
+  changes: MetadataFieldChange[],
+  excludedFields: number,
+  excludedItems: Record<number, string[]> | undefined
+): ApprovalExclusion {
+  const result: ApprovalExclusion = { wholeFields: [], items: [], total: 0, leftOut: 0 };
+  for (const change of sortChanges(changes)) {
+    const keys = changeItemKeys(change);
+    const size = keys.length || 1;
+    const dropped = new Set(excludedItems?.[change.field] ?? []);
+    const excluded = keys.filter((key) => dropped.has(key));
+    result.total += size;
+    if ((excludedFields & change.field) !== 0 || (keys.length > 0 && excluded.length === keys.length)) {
+      result.wholeFields.push(change.field);
+      result.leftOut += size;
+    } else if (excluded.length) {
+      result.items.push({ field: change.field, keys: excluded });
+      result.leftOut += excluded.length;
+    }
+  }
+  return result;
+}
+
+/** "the genres and part of the tags", matching the notification the author gets. */
+export function leftOutPhrase(exclusion: ApprovalExclusion): string {
+  const labels = (fields: MetadataField[]) => joinList(fields.map((f) => fieldLabel(f).toLowerCase()));
+  const parts: string[] = [];
+  if (exclusion.wholeFields.length) parts.push(`the ${labels(exclusion.wholeFields)}`);
+  if (exclusion.items.length) parts.push(`part of the ${labels(exclusion.items.map((i) => i.field))}`);
+  return parts.join(' and ');
 }
 
 export interface ConflictClash {
@@ -841,7 +908,7 @@ export function conflictClashes(conflict: MetadataQueueConflict): ConflictClash[
   return [];
 }
 
-export function describeValue(field: MetadataField, value: unknown): string {
+export function describeValue(field: MetadataField, value: unknown, localise: TitleLocaliser = originalTitleOf): string {
   switch (field) {
     case MetadataField.MediaType:
       return value == null ? 'empty' : getMediaTypeText(Number(value) as MediaType);
@@ -867,12 +934,12 @@ export function describeValue(field: MetadataField, value: unknown): string {
           .join(', ') || 'none'
       );
     case MetadataField.Relationships:
-      return asArray<MetadataRelationshipValue>(value).map(relationshipLabel).join(', ') || 'none';
+      return asArray<MetadataRelationshipValue>(value).map((r) => relationshipLabel(r, localise)).join(', ') || 'none';
     case MetadataField.Franchise:
     {
       const franchise = asFranchise(value);
       if (!franchise) return 'none';
-      return franchise.franchiseId != null ? franchise.originalTitle : `New franchise with ${franchise.originalTitle}`;
+      return franchise.franchiseId != null ? localise(franchise) : `New franchise with ${localise(franchise)}`;
     }
     default:
       return asText(value) ?? 'empty';
@@ -912,31 +979,11 @@ export function tierLabel(tier: number | null | undefined): string {
   return tier == null ? '' : (TIER_LABELS[tier] ?? '');
 }
 
-export const DOUBT_REASONS: { value: MetadataEditDoubtReason; label: string }[] = [
-  { value: MetadataEditDoubtReason.SourceDoesNotMatch, label: "Source doesn't match" },
-  { value: MetadataEditDoubtReason.WrongValue, label: 'Wrong value' },
-  { value: MetadataEditDoubtReason.NoSource, label: 'No source' },
-  { value: MetadataEditDoubtReason.Other, label: 'Something else' },
-];
-
-export function doubtReasonLabel(reason: number | null | undefined): string {
-  return DOUBT_REASONS.find((r) => r.value === reason)?.label ?? '';
-}
+export const DOUBT_REASONS = ["Source doesn't match", 'Wrong value', 'No source'];
 
 export function contributorLevelLabel(level: string | null | undefined): string {
   if (!level) return '';
   return capitalise(level.toLowerCase());
-}
-
-/** Single-key shortcuts must never fire while the user is typing into a field or an open combobox. */
-export function isTypingTarget(target: unknown): boolean {
-  const el = target as { tagName?: string; isContentEditable?: boolean; getAttribute?: (name: string) => string | null } | null;
-  if (!el) return false;
-  if (el.isContentEditable) return true;
-  const tag = (el.tagName ?? '').toUpperCase();
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-  const role = el.getAttribute?.('role');
-  return role === 'combobox' || role === 'textbox' || role === 'spinbutton';
 }
 
 const TOGGLE_CHIP_CLASS =
@@ -947,6 +994,19 @@ const TOGGLE_CHIP_OFF = 'bg-surface-0 dark:bg-surface-900 border-surface-300 dar
 /** Classes for a pressable filter or choice chip; pair with aria-pressed. */
 export function toggleChipClass(on: boolean): string[] {
   return [TOGGLE_CHIP_CLASS, on ? TOGGLE_CHIP_ON : TOGGLE_CHIP_OFF];
+}
+
+const REASON_SEPARATOR = '. ';
+const noteReasons = (note: string) => note.split(REASON_SEPARATOR).map((part) => part.trim()).filter(Boolean);
+
+export function noteHasReason(note: string, reason: string): boolean {
+  return noteReasons(note).includes(reason);
+}
+
+/** Adds the preset reason to the note or takes it back out, keeping anything typed by hand. */
+export function toggleNoteReason(note: string, reason: string): string {
+  const reasons = noteReasons(note);
+  return (reasons.includes(reason) ? reasons.filter((r) => r !== reason) : [...reasons, reason]).join(REASON_SEPARATOR);
 }
 
 export function lookedRightText(count: number): string {

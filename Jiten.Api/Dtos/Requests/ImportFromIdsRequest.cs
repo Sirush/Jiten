@@ -1,3 +1,5 @@
+using Jiten.Core.Data.FSRS;
+
 namespace Jiten.Api.Dtos.Requests;
 
 public class ImportFromIdsRequest
@@ -6,6 +8,9 @@ public class ImportFromIdsRequest
     public List<long> BlacklistedWordIds { get; set; } = new();
     public List<long> SuspendedWordIds { get; set; } = new();
     public int? FrequencyThreshold { get; set; }
+
+    /// <summary>Recorded on the cards this call inserts; only Unknown, JpdbImport and WordListImport are accepted.</summary>
+    public CardSource Source { get; set; }
 
     /// <summary>Per-spelling cards; each marks only the form the user studied, unlike the id lists above.</summary>
     public List<ImportFromIdsCard>? Cards { get; set; }

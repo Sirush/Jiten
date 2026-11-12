@@ -384,7 +384,7 @@ public partial class UserController
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
-        return Results.Ok(await LoadFavouriteWordsAsync(userId));
+        return Results.Ok(await LoadFavouriteWordsAsync(userId, includeSenses: true));
     }
 
     [HttpPut("profile/favourite-words")]
@@ -397,7 +397,7 @@ public partial class UserController
         if (request.Words == null)
             return Results.BadRequest(new { message = "List the words to show." });
 
-        var words = request.Words.Distinct().ToList();
+        var words = request.Words.DistinctBy(w => (w.WordId, w.ReadingIndex)).ToList();
         if (words.Count > UserFavouriteWord.MaxWords)
             return Results.BadRequest(new { message = $"Pick up to {UserFavouriteWord.MaxWords} words." });
 
@@ -409,16 +409,28 @@ public partial class UserController
         if (words.Any(w => !existing.Any(e => e.WordId == w.WordId && e.ReadingIndex == w.ReadingIndex)))
             return Results.BadRequest(new { message = "Unknown word." });
 
+        var activeSenses = words.Any(w => w.SenseIndex != null)
+            ? (await jitenContext.Definitions.AsNoTracking()
+                                 .Where(d => wordIds.Contains(d.WordId) && d.IsActiveInLatestSource)
+                                 .Select(d => new { d.WordId, d.SenseIndex })
+                                 .ToListAsync())
+              .Select(d => (d.WordId, d.SenseIndex))
+              .ToHashSet()
+            : [];
+
         await using var transaction = await userContext.Database.BeginTransactionAsync();
         await userContext.UserFavouriteWords.Where(w => w.UserId == userId).ExecuteDeleteAsync();
         userContext.UserFavouriteWords.AddRange(words.Select((w, i) => new UserFavouriteWord
                                                                        {
-                                                                           UserId = userId, WordId = w.WordId, ReadingIndex = w.ReadingIndex, Position = (short)i
+                                                                           UserId = userId, WordId = w.WordId, ReadingIndex = w.ReadingIndex, Position = (short)i,
+                                                                           SenseIndex = w.SenseIndex is { } sense && activeSenses.Contains((w.WordId, sense))
+                                                                               ? sense
+                                                                               : null
                                                                        }));
         await userContext.SaveChangesAsync();
         await transaction.CommitAsync();
 
-        return Results.Ok(await LoadFavouriteWordsAsync(userId));
+        return Results.Ok(await LoadFavouriteWordsAsync(userId, includeSenses: true));
     }
 
     [HttpGet("deck-preferences/{deckId:int}/details")]
@@ -537,7 +549,7 @@ public partial class UserController
     private Task<ProfileVocabularyStatsDto> GetVocabularyStatsAsync(ProfileCacheBatch cache, string userId) =>
         cache.GetOrSetAsync(ProfileCacheKind.Vocabulary, async () =>
         {
-            var amounts = await ComputeKnownWordAmountAsync(userId, includeDerivations: false);
+            var amounts = await knownWordAmounts.ComputeAsync(userId, includeDerivations: false);
             return new ProfileVocabularyStatsDto
                    {
                        Young = amounts.Young, Mature = amounts.Mature, Mastered = amounts.Mastered, WordSetMastered = amounts.WordSetMastered
@@ -622,8 +634,10 @@ public partial class UserController
     private async Task<Dictionary<int, DeckCardDto>> LoadDeckCardsAsync(IReadOnlyCollection<int> deckIds) =>
         deckIds.Count == 0 ? [] : await CardDecks(deckIds).ToDictionaryAsync(d => d.DeckId, d => new DeckCardDto(d));
 
-    private async Task<List<ProfileFavouriteWordDto>> LoadFavouriteWordsAsync(string userId)
+    private async Task<List<ProfileFavouriteWordDto>> LoadFavouriteWordsAsync(string userId, bool includeSenses = false)
     {
+        const int glossesShown = 2;
+
         var picks = await userContext.UserFavouriteWords.AsNoTracking()
                                      .Where(w => w.UserId == userId)
                                      .OrderBy(w => w.Position)
@@ -636,13 +650,14 @@ public partial class UserController
                                       .Where(f => wordIds.Contains(f.WordId))
                                       .Select(f => new { f.WordId, f.ReadingIndex, f.Text, f.FormType })
                                       .ToListAsync();
-        var definitions = await jitenContext.Definitions.AsNoTracking()
-                                            .Where(d => wordIds.Contains(d.WordId) && d.IsActiveInLatestSource
-                                                        && d.SenseIndex == jitenContext.Definitions
-                                                                                       .Where(o => o.WordId == d.WordId && o.IsActiveInLatestSource)
-                                                                                       .Min(o => o.SenseIndex))
-                                            .Select(d => new { d.WordId, d.EnglishMeanings })
-                                            .ToListAsync();
+        var sensesByWord = (await jitenContext.Definitions.AsNoTracking()
+                                              .Where(d => wordIds.Contains(d.WordId) && d.IsActiveInLatestSource)
+                                              .Select(d => new { d.WordId, d.SenseIndex, d.EnglishMeanings })
+                                              .ToListAsync())
+                           .Where(d => d.EnglishMeanings.Count > 0)
+                           .OrderBy(d => d.SenseIndex)
+                           .ToLookup(d => d.WordId,
+                                     d => new ProfileWordSenseDto(d.SenseIndex, string.Join(", ", d.EnglishMeanings.Take(glossesShown))));
 
         return picks.Select(p =>
                     {
@@ -653,11 +668,13 @@ public partial class UserController
                                    .OrderBy(f => f.ReadingIndex)
                                    .Select(f => f.Text)
                                    .FirstOrDefault();
-                        var meaning = definitions.FirstOrDefault(d => d.WordId == p.WordId)?.EnglishMeanings.Take(2) ?? [];
+                        var senses = sensesByWord[p.WordId].ToList();
+                        var sense = senses.FirstOrDefault(s => s.Index == p.SenseIndex) ?? senses.FirstOrDefault();
                         return new ProfileFavouriteWordDto
                                {
                                    WordId = p.WordId, ReadingIndex = p.ReadingIndex, Text = form?.Text ?? "",
-                                   Reading = kana, Meaning = string.Join(", ", meaning)
+                                   Reading = kana, Meaning = sense?.Meaning ?? "", SenseIndex = sense?.Index,
+                                   Senses = includeSenses ? senses : null
                                };
                     })
                     .Where(w => w.Text.Length > 0)

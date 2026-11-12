@@ -1,14 +1,16 @@
 <script setup lang="ts">
+  const seoTitle = 'Japanese Popup Dictionary Browser Extension - Jiten Reader';
   const description =
-    'A free pop-up dictionary extension for reading Japanese online. Instant lookups, per-word knowledge tracking, ' +
-    'and a readability estimate for any page. Works with Ttsu, Asbplayer and Mokuro.';
+    'Free Japanese popup dictionary for Chrome and Firefox. Look up words on any page or in Ttsu, Asbplayer and Mokuro, ' +
+    'and track the ones you know.';
 
+  useHead({ titleTemplate: '%s' });
   useSeoMeta({
-    title: 'Jiten Reader - Browser Extension',
+    title: seoTitle,
     description,
-    ogTitle: 'Jiten Reader - Free Pop-up Japanese Dictionary Extension',
+    ogTitle: seoTitle,
     ogDescription: description,
-    twitterTitle: 'Jiten Reader - Free Pop-up Japanese Dictionary Extension',
+    twitterTitle: seoTitle,
     twitterDescription: description,
   });
 

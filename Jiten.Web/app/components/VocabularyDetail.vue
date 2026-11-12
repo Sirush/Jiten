@@ -38,7 +38,7 @@
       default: () => [],
       required: false,
     },
-    guestPrompt: {
+    guestStudyAction: {
       type: Boolean,
       required: false,
     },
@@ -72,12 +72,22 @@
   } = useApiFetch<Record<string, number>>(mediaFreqUrl, { lazy: true, ...keyedFetch(mediaFreqUrl) });
   const { data: fetchedKnownStates, refresh: refreshKnownStates } = useApiFetch<KnownState[]>(knownStateUrl, {
     lazy: true,
+    immediate: authStore.isAuthenticated,
     ...keyedFetch(knownStateUrl),
   });
   const { data: frequencyRanks, refresh: refreshFrequencyRanks } = useApiFetch<WordFrequencyRanks>(freqRanksUrl, {
     lazy: true,
+    immediate: authStore.isAuthenticated,
     ...keyedFetch(freqRanksUrl),
   });
+
+  const loadGuestFrequencyRanks = async () => {
+    const url = freqRanksUrl.value;
+    try {
+      const ranks = await $api<WordFrequencyRanks>(url);
+      if (url === freqRanksUrl.value) frequencyRanks.value = ranks;
+    } catch {}
+  };
 
   const listsLoading = ref(false);
 
@@ -205,7 +215,9 @@
     const seq = ++switchSeq;
     isTransitioning.value = true;
 
-    await Promise.all([refreshInfo(), refreshKnownStates(), refreshMediaFrequency(), refreshFrequencyRanks()]);
+    if (!authStore.isAuthenticated) frequencyRanks.value = undefined;
+    const perUserRefreshes = authStore.isAuthenticated ? [refreshKnownStates(), refreshFrequencyRanks()] : [];
+    await Promise.all([refreshInfo(), refreshMediaFrequency(), ...perUserRefreshes]);
 
     if (seq !== switchSeq) return;
 
@@ -424,11 +436,12 @@
                 :ranks="frequencyRanks"
                 :fallback-rank="word.mainReading.frequencyRank"
                 :lists-loading="listsLoading"
+                :load-guest-ranks="loadGuestFrequencyRanks"
                 align="left"
                 @request-lists="loadFrequencyLists"
                 @changed="refreshFrequencyRanks"
               />
-              <VocabularyStatus :word="word" :known-states-override="knownStatesOverride" :redundant-via="derivationCover" />
+              <VocabularyStatus :word="word" :known-states-override="knownStatesOverride" :redundant-via="derivationCover" :guest-study-action="guestStudyAction" />
             </div>
           </div>
 
@@ -472,9 +485,6 @@
               </ClientOnly>
               <HiddenDefinitionsToggle :word-id="props.wordId" class="mt-2" />
               <CustomMeaning :word-id="props.wordId" editable class="mt-2" />
-              <GuestAccountStrip v-if="props.guestPrompt" surface="word" class="mt-3">
-                Track this word and your knowledge of it in every title.
-              </GuestAccountStrip>
             </div>
           </div>
 
@@ -504,7 +514,7 @@
 
           <div v-if="authStore.isAuthenticated" class="flex flex-wrap items-center gap-x-3 gap-y-1">
             <h1 class="text-gray-500 dark:text-gray-300 text-sm">Card media</h1>
-            <CardMediaEditor
+            <LazyCardMediaEditor
               :key="`media-${wordId}-${currentReadingIndex}`"
               :word-id="wordId"
               :reading-index="currentReadingIndex"
@@ -516,12 +526,13 @@
 
         <div class="md:min-w-64">
           <div class="text-gray-500 dark:text-gray-300 text-right hidden md:block">
-            <VocabularyStatus :word="word" :known-states-override="knownStatesOverride" :redundant-via="derivationCover" />
+            <VocabularyStatus :word="word" :known-states-override="knownStatesOverride" :redundant-via="derivationCover" :guest-study-action="guestStudyAction" />
             <div class="flex justify-end">
               <VocabularyFrequencyRank
                 :ranks="frequencyRanks"
                 :fallback-rank="word.mainReading.frequencyRank"
                 :lists-loading="listsLoading"
+                :load-guest-ranks="loadGuestFrequencyRanks"
                 align="right"
                 @request-lists="loadFrequencyLists"
                 @changed="refreshFrequencyRanks"

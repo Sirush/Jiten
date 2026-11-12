@@ -4,7 +4,14 @@
   import { useToast } from 'primevue/usetoast';
   import { useAnkiImportStore, defaultImportSelection } from '~/stores/ankiImportStore';
   import { extractSentenceFromField } from '~/utils/ankiSentenceExtract';
-  import { base64ToBytes, extractAudioRef, extractImageRef } from '~/utils/ankiMediaExtract';
+  import {
+    base64ToBytes,
+    extractAudioRef,
+    extractImageRef,
+    guessMediaFieldName,
+    truncateFilenameMiddle,
+    type ExtractedMediaRef,
+  } from '~/utils/ankiMediaExtract';
   import type { MediaConflictMode, MediaKind } from '~/composables/useAnkiMediaImport';
   import { FsrsState } from '~/types/enums';
 
@@ -17,7 +24,7 @@
   const { $api } = useNuxtApp();
   const toast = useToast();
   const ankiImportStore = useAnkiImportStore();
-  const { limits: planLimits, isPlus } = useJitenPlus();
+  const { limits: planLimits, isPlus, hasFeature } = useJitenPlus();
 
   let currentStep = ref(0);
 
@@ -396,8 +403,28 @@
     }
   };
 
+  type MediaRefExtractor = (html: string) => ExtractedMediaRef | null;
+
+  const mediaCandidateNames = (extract: MediaRefExtractor) =>
+    fields.value.filter(([, info]) => extract(info.value || '') !== null).map(([name]) => name);
+
+  let audioFieldAutoGuessed = false;
+
   const onMediaSelectionChanged = (kind: MediaKind) => {
+    if (kind === 'audio') audioFieldAutoGuessed = false;
     clearMediaPreview(kind);
+    onSelectionChanged();
+  };
+
+  const onSentenceSelectionChanged = () => {
+    if (audioFieldAutoGuessed) {
+      const guessedName = guessMediaFieldName(mediaCandidateNames(extractAudioRef), selectedSentenceField.value >= 0);
+      const guessedIndex = fields.value.findIndex(([name]) => name === guessedName);
+      if (guessedIndex !== selectedAudioField.value) {
+        selectedAudioField.value = guessedIndex;
+        clearMediaPreview('audio');
+      }
+    }
     onSelectionChanged();
   };
 
@@ -490,21 +517,20 @@
   ]);
 
   // Media fields are named after what they reference, so the option shows the referenced filename.
-  const imageFieldsOptions = computed(() => [
-    { label: 'None (optional)', value: -1 },
-    ...(fields.value || []).map((entry, idx) => {
-      const ref = extractImageRef(entry[1].value || '');
-      return { label: entry[0] + (ref ? ` (${ref.filename.substring(0, 24)})` : ''), value: idx };
-    }),
-  ]);
+  const mediaFieldsOptions = (extract: MediaRefExtractor) => {
+    const options = (fields.value || []).map((entry, idx) => {
+      const mediaRef = extract(entry[1].value || '');
+      return {
+        label: entry[0] + (mediaRef ? ` (${truncateFilenameMiddle(mediaRef.filename, 24)})` : ''),
+        value: idx,
+        hasMedia: mediaRef !== null,
+      };
+    });
+    return [{ label: 'None (optional)', value: -1 }, ...options.filter((o) => o.hasMedia), ...options.filter((o) => !o.hasMedia)];
+  };
 
-  const audioFieldsOptions = computed(() => [
-    { label: 'None (optional)', value: -1 },
-    ...(fields.value || []).map((entry, idx) => {
-      const ref = extractAudioRef(entry[1].value || '');
-      return { label: entry[0] + (ref ? ` (${ref.filename.substring(0, 24)})` : ''), value: idx };
-    }),
-  ]);
+  const imageFieldsOptions = computed(() => mediaFieldsOptions(extractImageRef));
+  const audioFieldsOptions = computed(() => mediaFieldsOptions(extractAudioRef));
 
   const conflictModeOptions = [
     { label: 'Skip it', value: 'skip' },
@@ -810,7 +836,13 @@
         let wantImageName = prevImageName;
         let wantAudioName = prevAudioName;
         if (!sameDeckReload) {
-          const saved = ankiImportStore.resolveDeckSelection(selectedDeck.value, selectedDeckName.value) ?? defaultImportSelection();
+          const savedSelection = ankiImportStore.resolveDeckSelection(selectedDeck.value, selectedDeckName.value);
+          const saved = savedSelection ?? defaultImportSelection();
+          audioFieldAutoGuessed = !savedSelection && hasFeature('card-media');
+          if (audioFieldAutoGuessed) {
+            saved.imageFieldName = guessMediaFieldName(mediaCandidateNames(extractImageRef), false);
+            saved.audioFieldName = guessMediaFieldName(mediaCandidateNames(extractAudioRef), false);
+          }
           wantFieldName = saved.fieldName || undefined;
           wantReadingName = saved.readingFieldName;
           wantSentenceName = saved.sentenceFieldName;
@@ -885,6 +917,7 @@
       sentenceImport.reset();
       mediaImport.reset();
 
+      const importBatchId = crypto.randomUUID();
       const allSkippedWords: string[] = [];
       const allSkippedReadingMismatch: string[] = [];
       let skippedCountNoReviews = 0;
@@ -973,6 +1006,8 @@
               cards: chunkPayload,
               overwrite: overwriteExisting.value,
               parseWords: parseWords.value,
+              batchId: importBatchId,
+              deckName: selectedDeckName.value || undefined,
             });
             const result = await $api<any>('user/vocabulary/import-from-anki', { method: 'POST', body, headers });
             completedUploads++;
@@ -1000,6 +1035,8 @@
               cards: chunkPayload,
               overwrite: overwriteExisting.value,
               parseWords: parseWords.value,
+              batchId: importBatchId,
+              deckName: selectedDeckName.value || undefined,
             });
             const result = await $api<any>('user/vocabulary/import-from-anki', { method: 'POST', body, headers });
             uploadProgress.value = Math.round(((i + 1) / chunks.length) * 100);
@@ -1228,7 +1265,7 @@
               option-value="value"
               placeholder="None (optional)"
               class="w-full"
-              @change="onSelectionChanged"
+              @change="onSentenceSelectionChanged"
             />
             <small class="text-surface-500 dark:text-surface-400">
               The studied word will be highlighted automatically. Words that are bolded in your note type will keep that highlight. Sentences where it can't be

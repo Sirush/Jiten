@@ -22,6 +22,10 @@ public class DictionaryEntryDto
     public List<string> PartsOfSpeech { get; set; } = [];
     public List<string> Meanings { get; set; } = [];
     public List<DictionarySenseDto> Senses { get; set; } = [];
+
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? MatchedSenseIndex { get; set; }
+
     public int FrequencyRank { get; set; }
 
     /// <summary>Which ranking <see cref="FrequencyRank"/> came from; omitted while the caller is on the site-wide one.</summary>

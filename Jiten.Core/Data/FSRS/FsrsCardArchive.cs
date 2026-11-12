@@ -22,6 +22,7 @@ public class FsrsCardArchive
     public DateTime? LastReview { get; set; }
     public int Lapses { get; set; }
     public DateTime CardCreatedAt { get; set; }
+    public CardSource Source { get; set; }
 
     public int ReviewCount { get; set; }
     /// <summary>Base for every delta in <see cref="Logs"/>; null whenever <see cref="Logs"/> is.</summary>

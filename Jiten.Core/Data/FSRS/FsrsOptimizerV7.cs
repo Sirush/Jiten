@@ -10,9 +10,6 @@ public class FsrsOptimizerV7Config
     /// <summary>Interval-growth and short-interval penalties</summary>
     public bool SchedulePenalties { get; init; } = true;
 
-    /// <summary>Drops cards whose first long-term gap is rare or very long, as fsrs-rs does unless FSRS_NO_OUTLIER is set.</summary>
-    public bool FilterOutliers { get; init; } = true;
-
     public int Seed { get; init; } = 2023;
     public Action<int, int>? Progress { get; init; }
 }
@@ -20,15 +17,14 @@ public class FsrsOptimizerV7Config
 public static class FsrsOptimizerV7
 {
     private const int P = FsrsHelperV7.ParameterCount;
-    private const int MinTargetsForDefaults = 8;
     private const int MinTargetsForTraining = 64;
     private const int MaxSequenceLength = 1024;
 
     private const double AdamBeta1 = 0.70;
     private const double AdamBeta2 = 0.98;
     private const double AdamEpsilon = 1e-8;
-    private const double L2Weight = 0.5;
-    private const double BceClamp = 0.0001;
+    private const double L2Weight = 0.3333;
+    private const double BceClamp = 0.00001;
 
     private const double IntervalGrowthPenaltyWeight = 0.5;
     private const double ShortIntervalPenaltyWeight = 0.0015;
@@ -36,16 +32,16 @@ public static class FsrsOptimizerV7
     private const double PenaltyGrowthRetention = 0.90;
     private static readonly double[] PenaltyShortRetentions = [0.99];
     private const double MinIntervalDays = 1.0 / 86_400.0;
+    private const double PenaltyMaxIntervalDays = 36_500.0;
+    private const int PenaltyNewtonSteps = 7;
+
+    private const double RecencyWeightFloor = 0.0667;
+    private const double RecencyWeightExponent = 11.25;
 
     /// <summary>Intervals shorter than ten minutes are what the short-interval penalty pushes against.</summary>
     private const double ShortIntervalFloorInverse = 86_400.0 / 600.0;
 
     private const double InitialStabilityMax = 100.0;
-
-    private const int OutlierMinRemoved = 20;
-    private const int OutlierMinGroupSize = 6;
-    private const double OutlierMaxGapDays = 100;
-    private const double OutlierMaxEasyGapDays = 365;
 
     private static readonly double[] ParamsStdDev =
     [
@@ -54,27 +50,21 @@ public static class FsrsOptimizerV7
         0.2596, 0.0798, 0.0682, 0.1282, 0.1397, 0.1407, 0.1489, 0.2, 0.15, 0.15,
     ];
 
-    private static readonly double[] InitialStabilityLogAnchors = [-8.09, -3.83, -2.5, -1.0];
-
     private sealed record Card(FsrsTrainingReview[] Reviews, double[] Weights, int TargetCount);
 
     public static FsrsOptimizationResult Optimize(List<FsrsTrainingItem> items, FsrsOptimizerV7Config? config = null)
     {
         config ??= new FsrsOptimizerV7Config();
-        var cards = BuildWeightedCards(config.FilterOutliers ? FilterOutliers(items) : items);
+        var cards = BuildWeightedCards(items);
         var targetCount = cards.Sum(c => c.TargetCount);
+        var parameters = (double[])FsrsConstants.DefaultParametersV7.Clone();
 
-        if (targetCount < MinTargetsForDefaults)
-            return new FsrsOptimizationResult((double[])FsrsConstants.DefaultParametersV7.Clone(), 0, targetCount, 0);
-
-        var (parameters, initializationCount) = Pretrain(cards);
-
-        if (targetCount == initializationCount || targetCount < MinTargetsForTraining)
+        if (targetCount < MinTargetsForTraining || cards.All(HasOnlyFirstLongTermTargets))
             return new FsrsOptimizationResult(parameters, ComputeLoss(cards, parameters), targetCount, 0);
 
         var initial = (double[])parameters.Clone();
         var batches = BuildBatches(cards, config.BatchSize);
-        var totalIterations = (targetCount / config.BatchSize + 1) * config.Epochs;
+        var totalIterations = batches.Count * config.Epochs;
         var m = new double[P];
         var v = new double[P];
         var step = 0;
@@ -116,9 +106,23 @@ public static class FsrsOptimizerV7
         return new FsrsOptimizationResult(parameters, ComputeLoss(cards, parameters), targetCount, config.Epochs);
     }
 
-    /// <summary>Recency-weighted mean log loss with the outlier filter and weighting <see cref="Optimize"/> uses, so two parameter sets compare like for like.</summary>
+    /// <summary>Recency-weighted mean log loss with the weighting <see cref="Optimize"/> uses, so two parameter sets compare like for like.</summary>
     public static double EvaluateLoss(List<FsrsTrainingItem> items, double[] parameters)
-        => ComputeLoss(BuildWeightedCards(FilterOutliers(items)), parameters);
+        => ComputeLoss(BuildWeightedCards(items), parameters);
+
+    private static bool HasOnlyFirstLongTermTargets(Card card)
+    {
+        var longTerm = 0;
+        for (var i = 1; i < card.Reviews.Length; i++)
+        {
+            if (card.Reviews[i].DeltaT >= 1.0)
+                longTerm++;
+            if (longTerm != 1)
+                return false;
+        }
+
+        return true;
+    }
 
     /// <summary>Recency-weighted BCE sum over every target and its gradient, as one optimizer batch holding all the items would see it.</summary>
     public static (double Loss, double[] Gradients) WeightedLossAndGradients(List<FsrsTrainingItem> items, double[] parameters)
@@ -176,73 +180,15 @@ public static class FsrsOptimizerV7
 
         var weights = usable.Select(u => new double[u.Reviews.Length]).ToArray();
         var ranked = targets.OrderBy(t => t.Time).ToList();
-        var denominator = Math.Max(ranked.Count - 1, 1);
+        var denominator = Math.Max(ranked.Count, 1);
         for (var rank = 0; rank < ranked.Count; rank++)
         {
             var ratio = (double)rank / denominator;
-            weights[ranked[rank].Card][ranked[rank].Index] = 0.25 + 0.75 * ratio * ratio * ratio;
+            weights[ranked[rank].Card][ranked[rank].Index] = RecencyWeightFloor + (1 - RecencyWeightFloor) * Math.Pow(ratio, RecencyWeightExponent);
         }
 
         return usable.Select((u, c) => new Card(u.Reviews, weights[c], u.Reviews.Length - 1)).ToList();
     }
-
-    /// <summary>dataset.rs filter_outlier; a removed card keeps only the reviews before its first long-term gap.</summary>
-    public static List<FsrsTrainingItem> FilterOutliers(List<FsrsTrainingItem> items)
-    {
-        var firstLongTerm = new int[items.Count];
-        var groups = new Dictionary<(int Rating, double Bucket), int>();
-        for (var c = 0; c < items.Count; c++)
-        {
-            var reviews = items[c].Reviews;
-            firstLongTerm[c] = reviews.Length < 2 ? -1 : Array.FindIndex(reviews, 1, r => r.DeltaT >= 1.0);
-            if (firstLongTerm[c] < 0)
-                continue;
-
-            var secondLongTerm = firstLongTerm[c] + 1 < reviews.Length ? Array.FindIndex(reviews, firstLongTerm[c] + 1, r => r.DeltaT >= 1.0) : -1;
-            var prefixes = (secondLongTerm < 0 ? reviews.Length : secondLongTerm) - firstLongTerm[c];
-            var key = (reviews[0].Rating, OutlierBucket(reviews[firstLongTerm[c]].DeltaT));
-            groups[key] = groups.GetValueOrDefault(key) + prefixes;
-        }
-
-        var removed = new HashSet<(int Rating, double Bucket)>();
-        foreach (var byRating in groups.GroupBy(g => g.Key.Rating))
-        {
-            var total = byRating.Sum(g => g.Value);
-            var removalTarget = Math.Max(OutlierMinRemoved, total / 20);
-            var removedCount = 0;
-            foreach (var (key, count) in byRating.OrderBy(g => g.Value).ThenBy(g => g.Key.Bucket))
-            {
-                if (removedCount + count < removalTarget)
-                {
-                    removedCount += count;
-                    removed.Add(key);
-                }
-                else if (count < OutlierMinGroupSize || key.Bucket > (key.Rating == (int)FsrsRating.Easy ? OutlierMaxEasyGapDays : OutlierMaxGapDays))
-                {
-                    removed.Add(key);
-                }
-            }
-        }
-
-        var result = new List<FsrsTrainingItem>(items.Count);
-        for (var c = 0; c < items.Count; c++)
-        {
-            var item = items[c];
-            var cut = firstLongTerm[c];
-            if (cut < 0 || !removed.Contains((item.Reviews[0].Rating, OutlierBucket(item.Reviews[cut].DeltaT))))
-            {
-                result.Add(item);
-                continue;
-            }
-
-            var droppedDays = item.Reviews.Skip(cut).Sum(r => r.DeltaT);
-            result.Add(new FsrsTrainingItem(item.Reviews[..cut], item.LastReviewTicks - (long)(droppedDays * TimeSpan.TicksPerDay)));
-        }
-
-        return result;
-    }
-
-    private static double OutlierBucket(double deltaT) => double.IsFinite(deltaT) ? Math.Floor(Math.Max(deltaT, 1.0)) : 1.0;
 
     /// <summary>build_windowed_batches: cards sorted by length, packed whole until a batch would exceed its target budget.</summary>
     private static List<List<Card>> BuildBatches(List<Card> cards, int batchSize)
@@ -482,18 +428,67 @@ public static class FsrsOptimizerV7
         return count == 0 ? tape.Const(0) : sum / count;
     }
 
-    /// <summary>training_v7.rs next_interval_dual: the solver's interval, differentiated by one implicit-function Newton step.</summary>
+    /// <summary>training_v7.rs next_interval_dual: a fixed number of Newton steps on the unscaled curve, then one implicit-function step whose value is kept.</summary>
     private static Var LiftedInterval(double[] parameters, Var[] w, TapeState state, double retention)
     {
         var tape = w[0].Tape;
-        var scalar = new FsrsMemoryStateV7(state.Stability.Value, state.Difficulty.Value, state.StabilityFast.Value);
-        var interval = Math.Clamp(FsrsHelperV7.NextInterval(scalar, retention, parameters), MinIntervalDays, FsrsHelperV7.StabilityMax);
-        var residual = Curve(w, tape.Const(interval), state) - retention;
-        var (_, derivative) = FsrsHelperV7.RetrievabilityAndDerivative(interval, scalar, parameters);
-        var slope = Math.Clamp(derivative * interval, -1e9, -1e-9);
-        var lifted = Var.Exp(Var.Clamp(tape.Const(Math.Log(interval)) - residual / slope,
-                                       Math.Log(MinIntervalDays), Math.Log(FsrsHelperV7.StabilityMax)));
-        return tape.WithValue(lifted, interval);
+        var interval = PenaltyNewtonInterval(parameters, state.Stability.Value, state.StabilityFast.Value, state.Difficulty.Value, retention);
+        var (r, derivative) = PenaltyRawCurve(w, interval, state);
+        var slope = Math.Min(derivative * interval, -1e-9);
+        return Var.Exp(Var.Clamp(tape.Const(Math.Log(interval)) - (r - retention) / slope,
+                                 Math.Log(MinIntervalDays), Math.Log(PenaltyMaxIntervalDays)));
+    }
+
+    private static double PenaltyNewtonInterval(double[] w, double s, double sFast, double d, double retention)
+    {
+        var minLogT = Math.Log(MinIntervalDays);
+        var maxLogT = Math.Log(PenaltyMaxIntervalDays);
+        var decay1 = -Math.Clamp(w[23] * Math.Pow(sFast, w[33] - 0.3), 0.01, 0.95);
+        var rate1 = (Math.Exp(Math.Min(Math.Log(Math.Max(w[25], 1e-9)) / decay1, 60.0)) - 1.0) / sFast;
+        var decay2 = -Math.Clamp(w[24], 0.01, 0.95);
+        var rate2 = (Math.Pow(Math.Max(w[26], 1e-9), 1.0 / decay2) - 1.0) * Math.Exp((d - 5.0) * (w[32] - 0.3)) / s;
+        var weight1 = w[27] * Math.Pow(sFast, -w[29]);
+        var weight2 = w[28] * Math.Pow(s, w[30]) * Math.Exp((d - 5.0) * (w[31] - 0.5));
+        var weightSum = weight1 + weight2;
+
+        var logT = Math.Log(Math.Max(s, 1e-10));
+        for (var i = 0; i < PenaltyNewtonSteps; i++)
+        {
+            logT = Math.Clamp(logT, minLogT, maxLogT);
+            var t = Math.Clamp(Math.Exp(logT), MinIntervalDays, PenaltyMaxIntervalDays);
+            var inner1 = Math.Max(rate1 * t + 1.0, 1e-9);
+            var inner2 = Math.Max(rate2 * t + 1.0, 1e-9);
+            var r = (weight1 * Math.Pow(inner1, decay1) + weight2 * Math.Pow(inner2, decay2)) / weightSum;
+            var derivative = (weight1 * decay1 * Math.Pow(inner1, decay1 - 1.0) * rate1
+                              + weight2 * decay2 * Math.Pow(inner2, decay2 - 1.0) * rate2) / weightSum;
+            logT -= (r - retention) / Math.Min(derivative * t, -1e-12);
+        }
+
+        return Math.Clamp(Math.Exp(Math.Clamp(logT, minLogT, maxLogT)), MinIntervalDays, PenaltyMaxIntervalDays);
+    }
+
+    /// <summary>The two-component curve without the 1e-5 output rescale <see cref="Curve"/> applies, and the value of its time derivative.</summary>
+    private static (Var Retention, double Derivative) PenaltyRawCurve(Var[] w, double t, TapeState state)
+    {
+        var (s, d, sFast) = state;
+
+        var decay1 = -Var.Clamp(w[23] * Var.Pow(sFast, w[33] - 0.3), 0.01, 0.95);
+        var rate1 = (Var.Exp(Var.Clamp(Var.Log(w[25]) / decay1, double.NegativeInfinity, 60)) - 1.0) / sFast;
+        var inner1 = Var.Max(rate1 * t + 1.0, 1e-9);
+
+        var decay2 = -Var.Clamp(w[24], 0.01, 0.95);
+        var rate2 = (Var.Pow(w[26], 1.0 / decay2) - 1.0) * Var.Exp((d - 5.0) * (w[32] - 0.3)) / s;
+        var inner2 = Var.Max(rate2 * t + 1.0, 1e-9);
+
+        var weight1 = w[27] * Var.Pow(sFast, -w[29]);
+        var weight2 = w[28] * Var.Pow(s, w[30]) * Var.Exp((d - 5.0) * (w[31] - 0.5));
+        var weightSum = Var.Max(weight1 + weight2, 1e-9);
+        var retention = Var.Clamp((weight1 * Var.Pow(inner1, decay1) + weight2 * Var.Pow(inner2, decay2)) / weightSum, 0.0, 1.0);
+
+        var derivative1 = decay1.Value * Math.Pow(inner1.Value, decay1.Value - 1.0) * rate1.Value;
+        var derivative2 = decay2.Value * Math.Pow(inner2.Value, decay2.Value - 1.0) * rate2.Value;
+        var derivative = Math.Min((weight1.Value * derivative1 + weight2.Value * derivative2) / weightSum.Value, 0.0);
+        return (retention, derivative);
     }
 
     private static void AdamStep(double[] parameters, double[] gradients, double[] m, double[] v, int t, double lr)
@@ -508,167 +503,14 @@ public static class FsrsOptimizerV7
         }
     }
 
-    /// <summary>initialize_parameters_fsrs7: fits only w0..w3 to first long-term recall; the curve parameters stay at defaults.</summary>
-    private static (double[] Parameters, int InitializationCount) Pretrain(List<Card> cards)
-    {
-        var parameters = (double[])FsrsConstants.DefaultParametersV7.Clone();
-        var labels = 0.0;
-        var labelCount = 0;
-        var groups = new Dictionary<int, Dictionary<double, (int Recalled, int Total)>>();
-        var initializationCount = 0;
-
-        foreach (var card in cards)
-        {
-            var longTerm = 0;
-            FsrsTrainingReview? firstLongTerm = null;
-            for (var i = 1; i < card.Reviews.Length; i++)
-            {
-                var review = card.Reviews[i];
-                labels += review.Rating > 1 ? 1 : 0;
-                labelCount++;
-                if (review.DeltaT >= 1.0)
-                {
-                    longTerm++;
-                    firstLongTerm ??= review;
-                }
-
-                // Every prefix with exactly one long-term review feeds initialisation, as upstream counts them.
-                if (longTerm != 1)
-                    continue;
-
-                initializationCount++;
-                var rating = card.Reviews[0].Rating;
-                var bucket = Math.Floor(Math.Max(firstLongTerm!.DeltaT, 1.0));
-                if (!groups.TryGetValue(rating, out var byBucket))
-                    groups[rating] = byBucket = new Dictionary<double, (int, int)>();
-                var (recalled, total) = byBucket.GetValueOrDefault(bucket);
-                byBucket[bucket] = (recalled + (firstLongTerm.Rating > 1 ? 1 : 0), total + 1);
-            }
-        }
-
-        var averageRecall = labelCount > 0 ? labels / labelCount : 0;
-        var stabilities = new double?[4];
-        var counts = new int[4];
-        foreach (var (rating, byBucket) in groups)
-        {
-            var data = byBucket.OrderBy(kv => kv.Key)
-                               .Select(kv => (DeltaT: kv.Key, Recall: (kv.Value.Recalled + averageRecall) / (kv.Value.Total + 1.0), Count: (double)kv.Value.Total))
-                               .ToList();
-            stabilities[rating - 1] = SearchInitialStability(data, FsrsConstants.DefaultParametersV7[rating - 1]);
-            counts[rating - 1] = byBucket.Values.Sum(b => b.Total);
-        }
-
-        foreach (var (small, big) in new[] { (0, 1), (1, 2), (2, 3), (0, 2), (1, 3), (0, 3) })
-        {
-            if (stabilities[small] is not { } smallValue || stabilities[big] is not { } bigValue || smallValue <= bigValue)
-                continue;
-            if (counts[small] > counts[big])
-                stabilities[big] = smallValue;
-            else
-                stabilities[small] = bigValue;
-        }
-
-        var filled = FillInitialStabilities(stabilities);
-        if (filled != null)
-            Array.Copy(filled, parameters, 4);
-        return (parameters, initializationCount);
-    }
-
-    private static double SearchInitialStability(List<(double DeltaT, double Recall, double Count)> data, double defaultS0)
-    {
-        var w = FsrsConstants.DefaultParametersV7;
-        var decay1 = -w[23];
-        var decay2 = -w[24];
-        var factor1 = Math.Pow(w[25], 1 / decay1) - 1;
-        var factor2 = Math.Pow(w[26], 1 / decay2) - 1;
-
-        // loss_with_curve fits S0 with a D-free, single-S simplification of the curve: S_fast = S.
-        double Loss(double s0)
-        {
-            var weight1 = w[27] * Math.Pow(s0, -w[29]);
-            var weight2 = w[28] * Math.Pow(s0, w[30]);
-            var loss = 0.0;
-            foreach (var (deltaT, recall, count) in data)
-            {
-                var r1 = Math.Pow(deltaT / s0 * factor1 + 1, decay1);
-                var r2 = Math.Pow(deltaT / s0 * factor2 + 1, decay2);
-                var predicted = Math.Clamp((r1 * weight1 + r2 * weight2) / (weight1 + weight2), 0.0001, 0.9999);
-                loss -= (recall * Math.Log(predicted) + (1 - recall) * Math.Log(1 - predicted)) * count;
-            }
-
-            return loss + Math.Abs(s0 - defaultS0) / 16.0;
-        }
-
-        var low = FsrsHelperV7.StabilityMin;
-        var high = InitialStabilityMax;
-        var optimal = defaultS0;
-        for (var iter = 0; iter < 1000 && high - low > double.Epsilon; iter++)
-        {
-            var mid1 = low + (high - low) / 3;
-            var mid2 = high - (high - low) / 3;
-            if (Loss(mid1) < Loss(mid2))
-                high = mid2;
-            else
-                low = mid1;
-            optimal = (high + low) / 2;
-        }
-
-        return optimal;
-    }
-
-    /// <summary>fill_initial_stabilities_fsrs7; null when no rating has data.</summary>
-    private static double[]? FillInitialStabilities(double?[] stabilities)
-    {
-        var known = Enumerable.Range(0, 4).Where(i => stabilities[i].HasValue).ToList();
-        if (known.Count == 0)
-            return null;
-
-        var values = new double[4];
-        if (known.Count == 1)
-        {
-            var anchor = known[0];
-            var factor = stabilities[anchor]!.Value / FsrsConstants.DefaultParametersV7[anchor];
-            for (var i = 0; i < 4; i++)
-                values[i] = FsrsConstants.DefaultParametersV7[i] * factor;
-            Array.Sort(values);
-            return values.Select(v => Math.Clamp(v, FsrsHelperV7.StabilityMin, InitialStabilityMax)).ToArray();
-        }
-
-        var logS = new double?[4];
-        foreach (var i in known)
-            logS[i] = Math.Log(stabilities[i]!.Value);
-
-        for (var target = 0; target < 4; target++)
-        {
-            if (logS[target].HasValue)
-                continue;
-
-            int? lower = null, upper = null;
-            for (var r = target - 1; r >= 0 && lower == null; r--) if (logS[r].HasValue) lower = r;
-            for (var r = target + 1; r < 4 && upper == null; r++) if (logS[r].HasValue) upper = r;
-
-            var a = InitialStabilityLogAnchors;
-            logS[target] = (lower, upper) switch
-            {
-                ({ } lo, { } hi) => logS[lo] + (a[target] - a[lo]) / (a[hi] - a[lo]) * (logS[hi] - logS[lo]),
-                ({ } lo, null) => logS[lo] + (a[target] - a[lo]),
-                (null, { } hi) => logS[hi] + (a[target] - a[hi]),
-                _ => null,
-            };
-        }
-
-        for (var i = 0; i < 4; i++)
-            values[i] = Math.Clamp(Math.Exp(logS[i]!.Value), FsrsHelperV7.StabilityMin, InitialStabilityMax);
-        for (var i = 1; i < 4; i++)
-            values[i] = Math.Max(values[i], values[i - 1]);
-        return values;
-    }
-
     /// <summary>smooth_initial_stabilities_fsrs7: clamp w0..w3 and make them non-decreasing.</summary>
     private static void SmoothInitialStabilities(double[] parameters)
     {
-        var filled = FillInitialStabilities([parameters[0], parameters[1], parameters[2], parameters[3]]);
-        if (filled != null)
-            Array.Copy(filled, parameters, 4);
+        for (var i = 0; i < 4; i++)
+        {
+            parameters[i] = Math.Clamp(parameters[i], FsrsHelperV7.StabilityMin, InitialStabilityMax);
+            if (i > 0)
+                parameters[i] = Math.Max(parameters[i], parameters[i - 1]);
+        }
     }
 }

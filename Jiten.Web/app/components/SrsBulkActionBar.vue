@@ -200,7 +200,7 @@
           </p>
           <p>
             Restore {{ forgetCount === 1 ? 'it' : 'them' }} any time from
-            <NuxtLink to="/settings/vocabulary" class="text-blue-500 hover:underline">Recently Removed</NuxtLink>
+            <NuxtLink to="/settings/vocabulary#cards" class="text-blue-500 hover:underline">Recently Removed</NuxtLink>
             in vocabulary settings, or delete the history completely there.
           </p>
         </div>

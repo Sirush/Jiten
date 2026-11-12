@@ -252,12 +252,12 @@
   const favouriteWords = computed(() => wordsData.value ?? []);
   const wordBusy = ref(false);
 
-  async function saveWords(words: Pick<ProfileFavouriteWord, 'wordId' | 'readingIndex'>[]) {
+  async function saveWords(words: Pick<ProfileFavouriteWord, 'wordId' | 'readingIndex' | 'senseIndex'>[]) {
     wordBusy.value = true;
     try {
       wordsData.value = await $api<ProfileFavouriteWord[]>('user/profile/favourite-words', {
         method: 'PUT',
-        body: { words: words.map(({ wordId, readingIndex }) => ({ wordId, readingIndex })) },
+        body: { words: words.map(({ wordId, readingIndex, senseIndex }) => ({ wordId, readingIndex, senseIndex })) },
       });
     } catch (err: unknown) {
       showErrorToast(toast, apiErrorMessage(err, "Couldn't update your favourite words"));
@@ -271,6 +271,10 @@
     if (next) void saveWords(next);
   }
 
+  function setWordSense(index: number, senseIndex: number) {
+    void saveWords(favouriteWords.value.map((w, i) => (i === index ? { ...w, senseIndex } : w)));
+  }
+
   const wordQuery = ref('');
   const { results: searchResults, isLoading: searching, search, clearResults } = useDictionarySearch();
   const wordResults = computed(() => searchResults.value.slice(0, 8));
@@ -279,7 +283,7 @@
   async function addWord(entry: DictionaryEntry) {
     if (favouriteWords.value.length >= MAX_WORDS) return;
     if (favouriteWords.value.some((w) => w.wordId === entry.wordId && w.readingIndex === entry.readingIndex)) return;
-    await saveWords([...favouriteWords.value, entry]);
+    await saveWords([...favouriteWords.value, { wordId: entry.wordId, readingIndex: entry.readingIndex, senseIndex: entry.matchedSenseIndex ?? null }]);
     wordQuery.value = '';
     clearResults();
   }
@@ -614,7 +618,22 @@
             :key="`${word.wordId}-${word.readingIndex}`"
             class="group flex items-center gap-3 border-t border-surface-200 py-2 first:border-t-0 dark:border-surface-700"
           >
-            <ProfileFavouriteWord :word="word" />
+            <ProfileFavouriteWord :word="word">
+              <template v-if="(word.senses?.length ?? 0) > 1" #meaning>
+                <Select
+                  :model-value="word.senseIndex"
+                  :options="word.senses"
+                  option-label="meaning"
+                  option-value="index"
+                  size="small"
+                  class="mt-1 w-full max-w-md"
+                  :disabled="wordBusy"
+                  :aria-label="`Meaning shown for ${word.text}`"
+                  :pt="{ overlay: { class: 'max-w-[calc(100vw-2rem)]' }, option: { class: 'whitespace-normal' } }"
+                  @update:model-value="setWordSense(i, $event)"
+                />
+              </template>
+            </ProfileFavouriteWord>
             <ProfileReorderButtons
               :label="word.text"
               :index="i"

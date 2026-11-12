@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Jiten.Core.Data;
+using Jiten.Core.Data.FSRS;
 
 namespace Jiten.Api.Services;
 
@@ -22,9 +23,11 @@ public interface ICurrentUserService
     /// <summary>Null when the form has its own card, when no enabled derivation reaches it, or when nothing in its family is known.</summary>
     Task<DerivationCover?> GetCoveringDerivation(int wordId, byte readingIndex);
     Task<UserWordSets> GetWordSets();
-    /// <summary>countAsNewlyLearned spaces the inserted cards out so the coverage journey dates them instead of treating the batch as prior knowledge.</summary>
-    Task<VocabularyUpsertResult> AddKnownWords(IEnumerable<DeckWord> deckWords, bool overwriteExisting = true, bool countAsNewlyLearned = false);
-    Task<VocabularyUpsertResult> BlacklistWords(IEnumerable<DeckWord> deckWords, bool overwriteExisting = true);
+    /// <summary>Only inserted cards take source and batchId; countAsNewlyLearned spaces them out so the coverage journey dates them instead of treating the batch as prior knowledge.</summary>
+    Task<VocabularyUpsertResult> AddKnownWords(IEnumerable<DeckWord> deckWords, CardSource source, Guid? batchId = null,
+                                               bool overwriteExisting = true, bool countAsNewlyLearned = false);
+    Task<VocabularyUpsertResult> BlacklistWords(IEnumerable<DeckWord> deckWords, CardSource source, Guid? batchId = null,
+                                                bool overwriteExisting = true);
     Task<VocabularyUpsertResult> AddKnownWord(int wordId, byte readingIndex);
     Task RemoveKnownWord(int wordId, byte readingIndex);
 }

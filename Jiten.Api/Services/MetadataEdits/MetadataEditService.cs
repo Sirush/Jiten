@@ -247,8 +247,8 @@ public sealed partial class MetadataEditService(
         var snapshot = (await deckMetadata.LoadSnapshotAsync(deckId, ct))!;
         var viewer = await trust.GetViewerAsync(userId, ct);
         var otherIds = snapshot.Relationships.Select(r => r.OtherDeckId).Distinct().ToList();
-        var otherTypes = await db.Decks.AsNoTracking().Where(d => otherIds.Contains(d.DeckId))
-                                 .Select(d => new { d.DeckId, d.MediaType }).ToDictionaryAsync(d => d.DeckId, d => (int)d.MediaType, ct);
+        var others = await db.Decks.AsNoTracking().Where(d => otherIds.Contains(d.DeckId))
+                             .Select(d => new { d.DeckId, d.MediaType, d.RomajiTitle, d.EnglishTitle }).ToDictionaryAsync(d => d.DeckId, ct);
         var historyCount = await db.MetadataEdits.CountAsync(e => e.DeckId == deckId && e.RevertsEditId == null, ct);
         var pending = await db.MetadataEdits.AsNoTracking()
                               .Where(e => e.DeckId == deckId && e.Status == MetadataEditStatus.Pending && e.Actor == MetadataEditActor.User &&
@@ -274,8 +274,13 @@ public sealed partial class MetadataEditService(
             Tags = snapshot.Tags.Select(t => new EditableTagDto(t.TagId, t.Name, t.Percentage)).OrderByDescending(t => t.Percentage).ToList(),
             Links = snapshot.Links.Select(l => new EditableLinkDto((int)l.LinkType, l.Url)).ToList(),
             Relationships = snapshot.Relationships
-                                    .Select(r => new EditableRelationshipDto(r.SourceDeckId, r.TargetDeckId, (int)r.RelationshipType, r.OtherDeckId,
-                                                                             r.OtherDeckTitle, otherTypes.GetValueOrDefault(r.OtherDeckId)))
+                                    .Select(r =>
+                                    {
+                                        var other = others.GetValueOrDefault(r.OtherDeckId);
+                                        return new EditableRelationshipDto(r.SourceDeckId, r.TargetDeckId, (int)r.RelationshipType, r.OtherDeckId,
+                                                                           r.OtherDeckTitle, other == null ? 0 : (int)other.MediaType, other?.RomajiTitle,
+                                                                           other?.EnglishTitle);
+                                    })
                                     .ToList(),
             CharacterNames = snapshot.CharacterNames,
             Franchise = deck.FranchiseId is { } franchiseId ? await FranchiseRefAsync(franchiseId, ct) : null,

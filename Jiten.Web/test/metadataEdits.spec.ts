@@ -3,6 +3,10 @@ import { DeckRelationshipType, Genre, LinkType, MediaType } from '../app/types/e
 import { MetadataEditStatus, MetadataField, type EditableDeck } from '../app/types/metadataEdits';
 import {
   aliasError,
+  noteHasReason,
+  toggleNoteReason,
+  approvalExclusion,
+  leftOutPhrase,
   buildSubmission,
   conflictClashes,
   queueMode,
@@ -13,7 +17,6 @@ import {
   draftFromEditable,
   editStatus,
   fieldsFromFlags,
-  isTypingTarget,
   linkUrlError,
   relationshipLabel,
   revertSummary,
@@ -112,7 +115,7 @@ describe('buildSubmission', () => {
     expect(fields).toEqual([MetadataField.Franchise]);
     expect(describeChange(draftChanges(original, draft, fields)[0]!)).toEqual({
       kind: 'list',
-      added: [{ label: 'ひぐらし', href: '/franchise/7' }],
+      added: [{ key: '7', label: 'ひぐらし', href: '/franchise/7' }],
       removed: [],
       changed: [],
     });
@@ -122,7 +125,7 @@ describe('buildSubmission', () => {
     const change = { field: MetadataField.Franchise, before: null, after: { franchiseId: null, originalTitle: '解', romajiTitle: null, englishTitle: null, withDeckId: 20 } };
     expect(describeChange(change)).toEqual({
       kind: 'list',
-      added: [{ label: '解', role: 'New franchise with', href: '/decks/media/20/detail' }],
+      added: [{ key: 'with:20', label: '解', role: 'New franchise with', href: '/decks/media/20/detail' }],
       removed: [],
       changed: [],
     });
@@ -177,7 +180,7 @@ describe('buildSubmission', () => {
     const { payload, fields } = buildSubmission(original, draft);
     expect(payload.tags).toEqual([{ tagId: 1, percentage: 40 }]);
     const [change] = draftChanges(original, draft, fields);
-    expect(describeChange(change!)).toEqual({ kind: 'list', added: [], removed: [], changed: [{ label: 'Time Loop', before: '90%', after: '40%' }] });
+    expect(describeChange(change!)).toEqual({ kind: 'list', added: [], removed: [], changed: [{ key: '1', label: 'Time Loop', before: '90%', after: '40%' }] });
   });
 });
 
@@ -252,14 +255,14 @@ describe('aliasError', () => {
 
 describe('submitOutcome', () => {
   it('reports an all-live edit', () => {
-    expect(submitOutcome([MetadataField.ReleaseDate], [])).toMatchObject({ kind: 'live', title: 'Saved. Thanks for fixing this.' });
+    expect(submitOutcome([MetadataField.ReleaseDate], [])).toMatchObject({ kind: 'live', title: 'Saved. Thanks for helping improve the database.' });
   });
 
   it('reports an all-pending edit', () => {
     expect(submitOutcome([], [MetadataField.Genres])).toEqual({
       kind: 'pending',
-      title: 'Sent for review.',
-      body: "An editor will check it first. You'll get a notification either way.",
+      title: 'Sent for review. Thanks for helping improve the database.',
+      body: "An editor will check it first and you'll be notified when it has been processed.",
     });
   });
 
@@ -306,17 +309,6 @@ describe('editStatus', () => {
 describe('fieldsFromFlags', () => {
   it('returns fields in display order', () => {
     expect(fieldsFromFlags(MetadataField.Description | MetadataField.Aliases)).toEqual([MetadataField.Aliases, MetadataField.Description]);
-  });
-});
-
-describe('isTypingTarget', () => {
-  it('recognises fields and comboboxes', () => {
-    expect(isTypingTarget({ tagName: 'INPUT' })).toBe(true);
-    expect(isTypingTarget({ tagName: 'textarea' })).toBe(true);
-    expect(isTypingTarget({ tagName: 'DIV', isContentEditable: true })).toBe(true);
-    expect(isTypingTarget({ tagName: 'SPAN', getAttribute: () => 'combobox' })).toBe(true);
-    expect(isTypingTarget({ tagName: 'BUTTON', getAttribute: () => null })).toBe(false);
-    expect(isTypingTarget(null)).toBe(false);
   });
 });
 
@@ -454,6 +446,38 @@ describe('sources', () => {
     expect(normaliseSourceUrl('just words')).toBe('just words');
     expect(sourcesError([''])).toBeNull();
     expect(sourcesError(['just words'])).toBe('Sources need to be links, such as https://vndb.org/v17.');
+  });
+});
+
+describe('approvalExclusion', () => {
+  const changes = [
+    { field: MetadataField.ReleaseDate, before: null, after: '2007-03-29' },
+    { field: MetadataField.Genres, before: [1], after: [2, 3] },
+    { field: MetadataField.Aliases, before: [], after: ['one', 'two'] },
+  ];
+
+  it('counts list items one by one and other fields as a whole', () => {
+    expect(approvalExclusion(changes, 0, {})).toEqual({ wholeFields: [], items: [], total: 6, leftOut: 0 });
+  });
+
+  it('keeps single items apart from fields left out whole', () => {
+    const exclusion = approvalExclusion(changes, MetadataField.ReleaseDate, { [MetadataField.Genres]: ['1', '2'], [MetadataField.Aliases]: ['one', 'two'] });
+    expect(exclusion).toEqual({
+      wholeFields: [MetadataField.ReleaseDate, MetadataField.Aliases],
+      items: [{ field: MetadataField.Genres, keys: ['2', '1'] }],
+      total: 6,
+      leftOut: 5,
+    });
+    expect(leftOutPhrase(exclusion)).toBe('the release date and aliases and part of the genres');
+  });
+});
+
+describe('review reasons', () => {
+  it('adds and removes preset reasons around a hand-written note', () => {
+    const note = toggleNoteReason(toggleNoteReason('Wrong edition', 'No source'), 'Already correct');
+    expect(note).toBe('Wrong edition. No source. Already correct');
+    expect(noteHasReason(note, 'No source')).toBe(true);
+    expect(toggleNoteReason(note, 'No source')).toBe('Wrong edition. Already correct');
   });
 });
 

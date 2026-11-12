@@ -55,12 +55,10 @@ public class MetadataEditReviewTests(JitenWebApplicationFactory factory)
             .Should().Be("You can't check your own edit.");
         (await ErrorAsync(CheckAsync(editId, Users.NoName, new { verdict = 1 }), HttpStatusCode.BadRequest))
             .Should().Be("Set a display name before checking edits.");
-        (await ErrorAsync(CheckAsync(editId, Users.PlusFan, new { verdict = 2 }), HttpStatusCode.BadRequest))
-            .Should().Be("Pick what looks wrong.");
-        (await ErrorAsync(CheckAsync(editId, Users.PlusFan, new { verdict = 2, reason = 2, note = "  " }), HttpStatusCode.BadRequest))
+        (await ErrorAsync(CheckAsync(editId, Users.PlusFan, new { verdict = 2, note = "  " }), HttpStatusCode.BadRequest))
             .Should().Be("Say what looks wrong so editors can check it.");
 
-        (await OkAsync(CheckAsync(editId, Users.PlusFan, new { verdict = 2, reason = 2, note = "Wrong edition" })))["confirmCount"]!
+        (await OkAsync(CheckAsync(editId, Users.PlusFan, new { verdict = 2, note = "Wrong edition" })))["confirmCount"]!
             .GetValue<int>().Should().Be(1);
         (await OkAsync(CheckAsync(editId, Users.PlusFan, new { verdict = 1 })))["confirmCount"]!.GetValue<int>().Should().Be(2);
 
@@ -77,7 +75,7 @@ public class MetadataEditReviewTests(JitenWebApplicationFactory factory)
     public async Task The_queue_hides_reviewer_data_from_plain_users()
     {
         var editId = await PendingRelationshipEditAsync();
-        await OkAsync(CheckAsync(editId, Users.Checker, new { verdict = 2, reason = 2, note = "Different series" }));
+        await OkAsync(CheckAsync(editId, Users.Checker, new { verdict = 2, note = "Different series" }));
 
         var queue = await OkAsync(SendAsync(HttpMethod.Get, "/api/metadata-edits/pending", Users.PlusFan));
         queue["viewerRole"]!.GetValue<string>().Should().Be("user");
@@ -102,7 +100,7 @@ public class MetadataEditReviewTests(JitenWebApplicationFactory factory)
         full["authorRecord"]!["level"]!.GetValue<string>().Should().Be("new");
         full["doubtCount"]!.GetValue<int>().Should().Be(1);
         full["checks"]![0]!["displayName"]!.GetValue<string>().Should().Be("nekomata");
-        full["checks"]![0]!["reason"]!.GetValue<int>().Should().Be(2);
+        full["checks"]![0]!["note"]!.GetValue<string>().Should().Be("Different series");
         full["conflicts"]!.AsArray().Should().BeEmpty();
         full["canApprove"]!.GetValue<bool>().Should().BeTrue();
     }
@@ -265,11 +263,19 @@ public class MetadataEditReviewTests(JitenWebApplicationFactory factory)
     {
         var editId = EditId(await SubmitOkAsync(Users.Author, new { addCharacterNames = new[] { "前島 鹿之助" }, sources = new[] { Source } }));
 
-        await OkAsync(ApproveAsync(editId, Users.Editor, new { excludeCharacterNames = new[] { "鹿之助" } }));
+        await OkAsync(ApproveAsync(editId, Users.Editor, new
+        {
+            excludeItems = new[] { new { field = (int)MetadataField.CharacterNames, keys = new[] { "鹿之助" } } },
+            excludeNote = "Too common a word."
+        }));
 
         (await DeckAsync()).DictionaryEntries.Select(e => e.Surface).Should().BeEquivalentTo(["前島鹿之助", "前島"]);
-        var stored = MetadataEditService.ParseChanges((await EditAsync(editId)).ChangesJson).Single();
+        var approved = await EditAsync(editId);
+        var stored = MetadataEditService.ParseChanges(approved.ChangesJson).Single();
         stored.After.Deserialize<List<string>>().Should().NotContain("鹿之助");
+        var rejected = await DbAsync(db => db.MetadataEdits.AsNoTracking().SingleAsync(e => e.SubmissionId == approved.SubmissionId && e.Id != editId));
+        rejected.Status.Should().Be(MetadataEditStatus.Rejected);
+        MetadataEditService.ParseChanges(rejected.ChangesJson).Single().After.Deserialize<List<string>>().Should().Equal("鹿之助");
     }
 
     [Fact]

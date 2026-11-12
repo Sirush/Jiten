@@ -1,3 +1,4 @@
+using System.Text.Json.Serialization;
 using Jiten.Core.Data;
 
 namespace Jiten.Api.Dtos;
@@ -87,7 +88,14 @@ public class ProfileFavouriteWordDto
     public string Text { get; set; } = "";
     public string? Reading { get; set; }
     public string Meaning { get; set; } = "";
+    public int? SenseIndex { get; set; }
+
+    /// <summary>Only on the owner's own list, to choose the meaning shown.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public List<ProfileWordSenseDto>? Senses { get; set; }
 }
+
+public record ProfileWordSenseDto(int Index, string Meaning);
 
 public class ProfileMilestoneDto
 {
@@ -252,7 +260,7 @@ public class SetFavouriteWordsRequest
     public List<FavouriteWordKey> Words { get; set; } = [];
 }
 
-public record FavouriteWordKey(int WordId, byte ReadingIndex);
+public record FavouriteWordKey(int WordId, byte ReadingIndex, int? SenseIndex = null);
 
 public class UpdateDeckDetailsRequest
 {

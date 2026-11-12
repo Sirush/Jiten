@@ -4,6 +4,7 @@
   import Card from 'primevue/card';
   import Skeleton from 'primevue/skeleton';
   import Button from 'primevue/button';
+  import Checkbox from 'primevue/checkbox';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { formatDateLong } from '~/utils/dateFormat';
   import { useToast } from 'primevue/usetoast';
@@ -72,8 +73,22 @@
 
   const toast = useToast();
 
-  const generateDiscordMarkdown = (date: string, decks: Deck[]) => {
-    let markdown = `**${formatDateLong(date)}**\n\n`;
+  const selectedDates = ref<string[]>([]);
+
+  watch(offset, () => {
+    selectedDates.value = [];
+  });
+
+  const copySelectedDays = () => {
+    const dates = [...selectedDates.value].sort();
+    const decks = groupedByDay.value.filter((group) => dates.includes(group.date)).flatMap((group) => group.decks);
+    const first = formatDateLong(dates[0]);
+    const last = formatDateLong(dates[dates.length - 1]);
+    copyToClipboard(generateDiscordMarkdown(dates.length > 1 ? `${first} - ${last}` : first, decks));
+  };
+
+  const generateDiscordMarkdown = (heading: string, decks: Deck[]) => {
+    let markdown = `**${heading}**\n\n`;
 
     // Group decks by media type
     const decksByType: Record<MediaType, Deck[]> = {} as Record<MediaType, Deck[]>;
@@ -149,13 +164,22 @@
     <div v-else-if="error">Error: {{ error }}</div>
 
     <div v-else>
-      <div class="flex gap-8 pl-2 mb-4">
+      <div class="flex flex-wrap items-center gap-x-8 gap-y-2 pl-2 mb-4">
         <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 dark:text-gray-400 pointer-events-none' : ''" no-rel @click="scrollToTop">
           Previous
         </NuxtLink>
         <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 dark:text-gray-400 pointer-events-none' : ''" no-rel @click="scrollToTop">
           Next
         </NuxtLink>
+        <Button
+          class="ml-auto"
+          icon="pi pi-copy"
+          size="small"
+          severity="secondary"
+          :label="`Copy Selected Days (${selectedDates.length})`"
+          :disabled="selectedDates.length === 0"
+          @click="copySelectedDays"
+        />
       </div>
 
       <!-- Media updates grouped by day -->
@@ -165,6 +189,7 @@
             <div class="flex flex-col gap-2">
               <!-- Date header with copy button -->
               <div class="flex items-center gap-2">
+                <Checkbox v-model="selectedDates" :value="group.date" :aria-label="`Select ${formatDateLong(group.date)}`" />
                 <h2 class="text-xl font-bold">{{ formatDateLong(group.date) }}</h2>
                 <Button
                   icon="pi pi-copy"
@@ -172,7 +197,7 @@
                   text
                   aria-label="Copy day content"
                   tooltip="Copy in Discord format"
-                  @click="copyToClipboard(generateDiscordMarkdown(group.date, group.decks))"
+                  @click="copyToClipboard(generateDiscordMarkdown(formatDateLong(group.date), group.decks))"
                 />
               </div>
 
@@ -200,13 +225,22 @@
 
       <div v-else class="text-center py-8">No media updates found for this time period.</div>
 
-      <div class="flex gap-8 pl-2 mt-4">
+      <div class="flex flex-wrap items-center gap-x-8 gap-y-2 pl-2 mt-4">
         <NuxtLink :to="previousLink" :class="previousLink == null ? '!text-gray-500 dark:text-gray-400 pointer-events-none' : ''" no-rel @click="scrollToTop">
           Previous
         </NuxtLink>
         <NuxtLink :to="nextLink" :class="nextLink == null ? '!text-gray-500 dark:text-gray-400 pointer-events-none' : ''" no-rel @click="scrollToTop">
           Next
         </NuxtLink>
+        <Button
+          class="ml-auto"
+          icon="pi pi-copy"
+          size="small"
+          severity="secondary"
+          :label="`Copy Selected Days (${selectedDates.length})`"
+          :disabled="selectedDates.length === 0"
+          @click="copySelectedDays"
+        />
       </div>
     </div>
   </div>

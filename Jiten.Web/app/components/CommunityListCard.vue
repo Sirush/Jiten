@@ -29,7 +29,7 @@
   <NuxtLink
     :to="communityListPath(list)"
     class="group flex flex-col overflow-hidden rounded-lg border border-surface-200 bg-surface-0 text-inherit no-underline! transition-colors hover:border-primary-300 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500 dark:border-surface-700 dark:bg-surface-900 dark:hover:border-primary-700"
-    :class="compact ? 'w-64 shrink-0 lg:w-[calc((100%-0.75rem)/2)]' : 'w-full'"
+    :class="compact ? 'w-64 shrink-0 snap-start lg:w-[calc((100%-1.5rem)/2.4)]' : 'w-full'"
   >
     <div class="relative aspect-[2/1] overflow-hidden bg-surface-100 dark:bg-surface-800" aria-hidden="true">
       <img

@@ -115,15 +115,19 @@
   const wordDirectMatches = ref<DictionaryEntry[]>([]);
   const canLoadMoreWordResults = ref(false);
   const isLoadingWordResults = ref(false);
+  const wordSearchCache = new Map<string, DictionarySearchResult>();
 
   watch(selectedWord, async (word) => {
     directMatchesShowAll.value = false;
     if (word && !isLikelyEnglish.value) {
       isLoadingWordResults.value = true;
       try {
-        const data = await $api<DictionarySearchResult>('vocabulary/search', {
-          query: { query: word.originalText },
-        });
+        const data =
+          wordSearchCache.get(word.originalText) ??
+          (await $api<DictionarySearchResult>('vocabulary/search', {
+            query: { query: word.originalText },
+          }));
+        wordSearchCache.set(word.originalText, data);
         wordDirectMatches.value = (data.results || []).filter((r) => !(r.wordId === word.wordId && r.readingIndex === word.readingIndex));
         canLoadMoreWordResults.value = data.hasMore;
       } catch {

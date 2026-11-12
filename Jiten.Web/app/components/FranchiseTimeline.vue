@@ -358,9 +358,14 @@
               <span class="line-clamp-2 text-xs font-medium leading-tight" :title="localiseTitle(node)" v-bind="japaneseTextAttrs(localiseTitle(node))">
                 {{ localiseTitle(node) }}
               </span>
-              <div class="flex items-center justify-between gap-1 text-[11px]">
+              <div class="flex flex-wrap items-center justify-between gap-x-1 text-[11px]">
                 <span class="text-gray-500 dark:text-gray-400">{{ releaseYearOf(node.releaseDate) ?? '?' }}</span>
-                <DifficultyDisplay v-if="node.difficulty >= 0" :difficulty="node.difficulty" :difficulty-raw="node.difficultyRaw" class="text-[11px]" />
+                <DifficultyDisplay
+                  v-if="node.difficulty >= 0"
+                  :difficulty="node.difficulty"
+                  :difficulty-raw="node.difficultyRaw"
+                  class="truncate text-[11px]"
+                />
               </div>
               <span
                 v-if="!compact && derivedCaptions.has(node.deckId)"

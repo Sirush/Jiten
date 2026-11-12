@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DeckRelationshipType, Genre, LinkType } from '../app/types/enums';
+import { DeckRelationshipType, Genre, LinkType, MediaType } from '../app/types/enums';
 import { fromRole, getInverseRelationshipType, relationshipRoleOptions, toCanonicalEdge } from '../app/utils/relationshipRoles';
 import { buildDeckMetadataPatch, type DeckMetadataDraft } from '../app/utils/deckMetadataPatch';
 
@@ -10,6 +10,7 @@ const baseDraft = (): DeckMetadataDraft => ({
   romajiTitle: 'Romaji',
   englishTitle: 'English',
   description: 'A description.',
+  mediaType: MediaType.Anime,
   hideDialoguePercentage: false,
   hideAverageSentenceLength: false,
   genres: [Genre.Action, Genre.Drama],
@@ -80,6 +81,12 @@ describe('buildDeckMetadataPatch', () => {
     const draft = baseDraft();
     draft.englishTitle = 'Renamed';
     expect(buildDeckMetadataPatch(DECK_ID, baseDraft(), draft)).toEqual({ englishTitle: 'Renamed' });
+  });
+
+  it('sends a changed media type', () => {
+    const draft = { ...baseDraft(), mediaType: MediaType.Movie };
+
+    expect(buildDeckMetadataPatch(DECK_ID, baseDraft(), draft)).toEqual({ mediaType: MediaType.Movie });
   });
 
   it('ignores collection ordering', () => {

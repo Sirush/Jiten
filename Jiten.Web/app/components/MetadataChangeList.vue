@@ -5,6 +5,7 @@
     diffExcerpt,
     diffPieces,
     fieldLabel,
+    isListField,
     isRewrite,
     isWhitespaceOnlyChange,
     sortChanges,
@@ -19,11 +20,24 @@
     changes: MetadataFieldChange[];
     /** One line per field with descriptions cut down to the changed parts, for timelines and feeds. */
     compact?: boolean;
+    excludedItems?: Record<number, string[]>;
   }>();
+
+  const emit = defineEmits<{ toggleItem: [field: number, key: string] }>();
+  const localiseTitle = useLocaliseTitle();
+
+  const choosesItems = (row: { field: number; tokens: ListToken[] }) => props.excludedItems !== undefined && isListField(row.field) && row.tokens.length > 1;
+  const isLeftOut = (field: number, token: ListToken) => !!token.key && !!props.excludedItems?.[field]?.includes(token.key);
+
+  function approveItemLabel(token: ListToken): string {
+    if (token.kind === 'add') return `Approve adding ${token.label}`;
+    if (token.kind === 'remove') return `Approve removing ${token.label}`;
+    return `Approve the change to ${token.label}`;
+  }
 
   const rows = computed(() =>
     sortChanges(props.changes).map((change) => {
-      const view = describeChange(change);
+      const view = describeChange(change, localiseTitle);
       return { field: change.field, label: fieldLabel(change.field), view, tokens: listTokens(view), text: textView(view) };
     })
   );
@@ -31,7 +45,7 @@
   const BEFORE = 'text-red-700 dark:text-red-400 line-through decoration-1';
   const AFTER = 'text-green-700 dark:text-green-400';
 
-  type ListToken = ({ kind: 'add' | 'remove' } & ListEntry) | { kind: 'change'; label: string; before: string; after: string };
+  type ListToken = ({ kind: 'add' | 'remove' } & ListEntry) | { kind: 'change'; key: string; label: string; before: string; after: string };
 
   function listTokens(view: ChangeView): ListToken[] {
     if (view.kind !== 'list') return [];
@@ -123,7 +137,15 @@
 
       <template v-else>
         <span :class="compact ? '' : 'flex flex-col gap-0.5'">
-          <span v-for="(token, i) in row.tokens" :key="i" class="[overflow-wrap:anywhere]"
+          <span v-for="(token, i) in row.tokens" :key="i" :class="['[overflow-wrap:anywhere]', choosesItems(row) ? 'flex items-start gap-2' : '']"
+            ><Checkbox
+              v-if="choosesItems(row) && token.key"
+              :model-value="!isLeftOut(row.field, token)"
+              binary
+              :aria-label="approveItemLabel(token)"
+              class="mt-0.5 shrink-0"
+              @update:model-value="emit('toggleItem', row.field, token.key)"
+            /><span :class="isLeftOut(row.field, token) ? 'opacity-50' : ''"
             ><template v-if="token.kind === 'change'"
               >{{ token.label }} <span :class="[BEFORE, 'tabular-nums']">{{ token.before }}</span
               ><span class="text-muted-color px-1" aria-label="changed to">→</span><span :class="[AFTER, 'tabular-nums']">{{ token.after }}</span></template
@@ -140,6 +162,7 @@
                 ><span v-else v-bind="japaneseTextAttrs(token.label)">{{ token.label }}</span></span
               ><span v-for="m in token.meta ?? []" :key="m" class="text-xs text-muted-color ml-2 whitespace-nowrap">{{ m }}</span></template
             >{{ compact && i < row.tokens.length - 1 ? ', ' : '' }}</span
+          ></span
           >
           <span v-if="!row.tokens.length" class="text-muted-color">reordered</span>
         </span>

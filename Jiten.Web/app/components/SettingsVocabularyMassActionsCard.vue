@@ -118,13 +118,13 @@
       showPreview.value = false;
       toast.add({
         severity: 'success',
-        summary: 'Mass action completed',
+        summary: 'Bulk edit completed',
         detail: `${result.affectedCount.toLocaleString()} card${result.affectedCount === 1 ? '' : 's'} affected.`,
         life: 5000,
       });
       emit('changed');
     } catch (e) {
-      toast.add({ severity: 'error', summary: 'Execution failed', detail: extractApiError(e, 'Mass action failed.'), life: 5000 });
+      toast.add({ severity: 'error', summary: 'Execution failed', detail: extractApiError(e, 'Bulk edit failed.'), life: 5000 });
     }
   }
 
@@ -154,21 +154,11 @@
 </script>
 
 <template>
-  <Card>
-    <template #title>
-      <h2 class="text-xl font-bold">Mass Actions</h2>
-    </template>
-    <template #content>
-      <Message severity="warn" :closable="false" class="mb-4">
-        Mass actions are permanent and cannot be undone. Please make a backup before using them, and use them at your own risk.
-      </Message>
-
-      <p class="text-sm text-muted-color mb-4">
-        Bulk-manage your vocabulary cards. Select filters, choose an action, then preview the affected cards before applying.
-      </p>
+  <SettingsListItem title="Bulk Edit Cards">
+    <template #default>
+      <Message severity="warn" :closable="false" class="mb-4">Bulk edits are permanent and cannot be undone. Export a complete backup first.</Message>
 
       <div class="flex flex-col gap-4">
-        <Divider />
         <h3 class="text-sm font-semibold uppercase tracking-wider text-muted-color">Filters</h3>
 
         <div class="flex flex-col md:flex-row gap-4">
@@ -245,8 +235,8 @@
           This will reset scheduling data (stability, difficulty, lapses) and set cards back to Learning. Review history is preserved.
         </Message>
         <Message v-if="action === 'clear-lapses'" severity="info" :closable="false">
-          Clears the lapse count, so matching cards stop being flagged as leeches. Scheduling and review history are untouched. Only cards with at
-          least one lapse are affected.
+          Clears the lapse count, so matching cards stop being flagged as leeches. Scheduling and review history are untouched. Only cards with at least one
+          lapse are affected.
         </Message>
         <Message v-if="action === 'restore-state'" severity="info" :closable="false">
           This puts cards back into normal review rotation: cards with existing scheduling return to Review, cards never studied return to Learning. Stability,
@@ -272,5 +262,5 @@
         @load-range="loadRange"
       />
     </template>
-  </Card>
+  </SettingsListItem>
 </template>

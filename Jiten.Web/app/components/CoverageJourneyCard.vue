@@ -15,6 +15,7 @@
 
   const trend = computed(() => (journey.value ? journeyWindow(journey.value.points, (p) => (p as JourneyPoint).coverage) : null));
   const deltaLabel = computed(() => (trend.value ? formatJourneyDelta(trend.value) : ''));
+  const unknownRatio = computed(() => (journey.value ? formatUnknownWordRatio(journey.value.currentCoverage) : null));
   const rangeStart = computed(() => {
     const j = journey.value;
     return j?.points.length ? formatBucketDated(j.points[0]!.date, j.granularity) : '';
@@ -56,6 +57,7 @@
             <span class="text-2xl font-bold leading-none">{{ journey!.currentCoverage.toFixed(1) }}%</span>
             <span class="text-xs text-gray-500 dark:text-gray-400">coverage today</span>
           </div>
+          <div v-if="unknownRatio" class="text-xs text-gray-500 dark:text-gray-400 mt-1 tabular-nums">{{ unknownRatio }}</div>
           <div
             v-if="deltaLabel"
             class="text-xs font-medium mt-1"

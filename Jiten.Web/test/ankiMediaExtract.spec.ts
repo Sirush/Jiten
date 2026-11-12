@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { extractAudioRef, extractImageRef } from '../app/utils/ankiMediaExtract';
+import { extractAudioRef, extractImageRef, guessMediaFieldName, truncateFilenameMiddle } from '../app/utils/ankiMediaExtract';
 
 describe('extractImageRef', () => {
   it('reads a plain img source', () => {
@@ -74,5 +74,32 @@ describe('extractAudioRef', () => {
 
   it('returns null when there is no audio', () => {
     expect(extractAudioRef('これは猫です')).toBeNull();
+  });
+});
+
+describe('guessMediaFieldName', () => {
+  it('prefers word media when no sentence is mapped', () => {
+    expect(guessMediaFieldName(['Sentence Audio', 'Word Audio'], false)).toBe('Word Audio');
+  });
+
+  it('prefers sentence media when a sentence is mapped', () => {
+    expect(guessMediaFieldName(['Word Audio', 'Sentence Audio'], true)).toBe('Sentence Audio');
+  });
+
+  it('falls back to the first candidate', () => {
+    expect(guessMediaFieldName(['Picture'], true)).toBe('Picture');
+    expect(guessMediaFieldName([], false)).toBe('');
+  });
+});
+
+describe('truncateFilenameMiddle', () => {
+  it('keeps short names whole', () => {
+    expect(truncateFilenameMiddle('cat.jpg', 24)).toBe('cat.jpg');
+  });
+
+  it('keeps the extension of a long name', () => {
+    const result = truncateFilenameMiddle('JLPT_Tango_N5_0001-5e59f0c2.mp3', 24);
+    expect(result).toHaveLength(24);
+    expect(result.endsWith('.mp3')).toBe(true);
   });
 });

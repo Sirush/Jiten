@@ -76,16 +76,16 @@ Afterwards, open the **Coverage** tile in your settings and press **Refresh now*
 
 ## Filling the gaps from words you know
 
-**Mark Words as Known via Composition** sits further down the vocabulary settings page. It works in both directions: it can list the parts of compounds you know, so knowing 突っ込む suggests 突く and 込む, or list compounds whose parts you already know, so 取り and 付ける suggest 取り付ける.
+**Mark Words as Known via Composition** sits under **Related Words** on the vocabulary settings page. It works in both directions: it can list the parts of compounds you know, so knowing 突っ込む suggests 突く and 込む, or list compounds whose parts you already know, so 取り and 付ける suggest 取り付ける.
 
 Press **Preview** to see the candidates sorted by frequency, then master or blacklist them one at a time or all at once. Only new words are shown by default. Tick **Learning** or **Mature** to include words you are already studying, keeping in mind that mastering one of those resets its review schedule.
 
-## Mass actions and starting over
+## Bulk edits and starting over
 
-**Mass Actions**, on the same page, applies one operation to every card matching a filter: a state change, a due-date shift, a schedule reset, or deleting the cards outright. **Danger Zone**, at the bottom, has **Clear All Known Words**, which deletes every card and all their review history.
+**Bulk Edit Cards**, under **Edit & Restore Cards** on the same page, applies one operation to every card matching a filter: a state change, a due-date shift, a schedule reset, or deleting the cards outright. **Danger Zone**, at the bottom, has **Clear All Known Words**, which deletes every card and all their review history.
 
 ::warning
-Mass actions and **Clear All Known Words** are permanent and cannot be undone. Export a **Complete Backup** first.
+Bulk edits and **Clear All Known Words** are permanent and cannot be undone. Export a **Complete Backup** first.
 ::
 
 For finer work, **Settings → Cards** lets you filter your cards by state and edit them one by one or in a selection.

@@ -103,6 +103,20 @@
 
   const pageKey = (r: RouteLocationNormalizedLoaded) => `${String(r.name)}|${viewAs.value ?? ''}`;
 
+  const metaDescription = computed(() => {
+    const displayName = header.value?.displayName;
+    if (!displayName) return undefined;
+    const bio = header.value?.bio?.replace(/\s+/g, ' ').trim();
+    if (!bio) return `${displayName}'s Japanese reading profile on Jiten.`;
+    return bio.length <= 160 ? bio : bio.slice(0, 157).replace(/\s+\S*$/, '') + '…';
+  });
+
+  useSeoMeta({
+    description: metaDescription,
+    ogTitle: () => (header.value?.displayName ? `${header.value.displayName} on Jiten` : undefined),
+    ogDescription: metaDescription,
+  });
+
   useHead(() => ({
     title: header.value?.displayName ? `${header.value.displayName} - Profile` : 'Profile',
     meta: [{ name: 'robots', content: 'noindex' }],

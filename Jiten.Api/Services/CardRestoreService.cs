@@ -179,7 +179,8 @@ public static class CardRestoreService
                        Due = row.Due,
                        LastReview = row.LastReview,
                        Lapses = row.Lapses,
-                       CreatedAt = row.CardCreatedAt
+                       CreatedAt = row.CardCreatedAt,
+                       Source = row.Source
                    };
 
         foreach (var review in CardArchiveService.DistinctBySecond(reviews))

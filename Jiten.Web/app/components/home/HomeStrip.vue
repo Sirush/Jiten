@@ -15,7 +15,7 @@
 <template>
   <NuxtLink
     :to="to"
-    class="group flex items-start gap-3 h-full transition-colors !text-inherit !no-underline"
+    class="group @container flex items-start gap-3 h-full transition-colors !text-inherit !no-underline"
     :class="
       compact
         ? 'p-3 hover:bg-surface-50 dark:hover:bg-surface-800'
@@ -37,9 +37,10 @@
       <span class="block text-sm text-gray-700 dark:text-gray-300 mt-0.5">
         <slot />
       </span>
+      <span v-if="cta" class="block @sm:hidden mt-1 text-xs font-medium text-primary-600 dark:text-primary-300">{{ cta }}</span>
     </span>
 
-    <span v-if="cta" class="shrink-0 self-center text-xs font-medium text-primary-600 dark:text-primary-300">{{ cta }}</span>
+    <span v-if="cta" class="hidden @sm:inline shrink-0 self-center text-xs font-medium text-primary-600 dark:text-primary-300">{{ cta }}</span>
     <Icon
       name="material-symbols:chevron-right"
       class="shrink-0 self-center text-surface-300 dark:text-surface-400 transition-transform group-hover:translate-x-0.5"

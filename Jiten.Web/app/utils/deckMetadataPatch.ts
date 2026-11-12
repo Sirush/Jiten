@@ -1,4 +1,4 @@
-import type { DeckRelationshipType, Genre, LinkType } from '~/types/enums';
+import type { DeckRelationshipType, Genre, LinkType, MediaType } from '~/types/enums';
 import type { DeckMetadataPatch } from '~/types/types';
 import { isLegacyGroupRelationship, toCanonicalEdge, type PerspectiveRelationship } from '~/utils/relationshipRoles';
 
@@ -19,6 +19,7 @@ export interface DeckMetadataDraft {
   romajiTitle: string;
   englishTitle: string;
   description: string;
+  mediaType: MediaType;
   hideDialoguePercentage: boolean;
   hideAverageSentenceLength: boolean;
   genres: Genre[];
@@ -56,6 +57,7 @@ export function buildDeckMetadataPatch(deckId: number, original: DeckMetadataDra
   if (draft.romajiTitle.trim() !== original.romajiTitle.trim()) patch.romajiTitle = draft.romajiTitle.trim();
   if (draft.englishTitle.trim() !== original.englishTitle.trim()) patch.englishTitle = draft.englishTitle.trim();
   if (draft.description.trim() !== original.description.trim()) patch.description = draft.description.trim();
+  if (draft.mediaType !== original.mediaType) patch.mediaType = draft.mediaType;
   if (draft.hideDialoguePercentage !== original.hideDialoguePercentage) patch.hideDialoguePercentage = draft.hideDialoguePercentage;
   if (draft.hideAverageSentenceLength !== original.hideAverageSentenceLength) patch.hideAverageSentenceLength = draft.hideAverageSentenceLength;
 

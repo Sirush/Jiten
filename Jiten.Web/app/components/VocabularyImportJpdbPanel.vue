@@ -2,6 +2,7 @@
   import { debounce } from 'perfect-debounce';
   import type { JpdbDeck, JpdbImportSummary } from '~/composables/useJpdbApi';
   import { StudyDeckType } from '~/types';
+  import { CardSource } from '~/types/enums';
 
   const emit = defineEmits<{ changed: [] }>();
 
@@ -235,7 +236,7 @@
 
     const result: NonNullable<JpdbImportSummary['knownWords']> = await $api('user/vocabulary/import-from-ids', {
       method: 'POST',
-      body: JSON.stringify({ cards }),
+      body: JSON.stringify({ cards, source: CardSource.JpdbImport }),
       headers: { 'Content-Type': 'application/json' },
     });
 

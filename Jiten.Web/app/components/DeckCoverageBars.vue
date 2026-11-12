@@ -6,12 +6,15 @@
   const combinedCoverage = computed(() => Math.min(props.deck.coverage + props.deck.youngCoverage, 100));
   const combinedUniqueCoverage = computed(() => Math.min(props.deck.uniqueCoverage + props.deck.youngUniqueCoverage, 100));
 
-  const coverageTooltip = computed(
-    () =>
+  const coverageTooltip = computed(() => {
+    const unknownRatio = formatUnknownWordRatio(combinedCoverage.value);
+    return (
       `Mature: ${((props.deck.wordCount * props.deck.coverage) / 100).toFixed(0)} / ${props.deck.wordCount} (${props.deck.coverage.toFixed(1)}%)` +
       `\nYoung: ${((props.deck.wordCount * props.deck.youngCoverage) / 100).toFixed(0)} / ${props.deck.wordCount} (${props.deck.youngCoverage.toFixed(1)}%)` +
-      `\nTotal: ${combinedCoverage.value.toFixed(1)}%`
-  );
+      `\nTotal: ${combinedCoverage.value.toFixed(1)}%` +
+      (unknownRatio ? `\n${unknownRatio}` : '')
+    );
+  });
   const uniqueCoverageTooltip = computed(
     () =>
       `Mature: ${((props.deck.uniqueWordCount * props.deck.uniqueCoverage) / 100).toFixed(0)} / ${props.deck.uniqueWordCount} (${props.deck.uniqueCoverage.toFixed(1)}%)` +

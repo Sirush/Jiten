@@ -30,7 +30,6 @@
   interface UnitsResponse {
     status: DeckStatus;
     listEntry: MediaListEntrySummary | null;
-    allChildrenCompleted: boolean;
     volumes: { deckId: number; status: DeckStatus; listEntry: MediaListEntrySummary | null }[];
     previous: MediaListSnapshot[];
   }
@@ -41,7 +40,9 @@
 
   const { state: saveState, enqueue, latest } = useDeckSaveQueue(props.deck.deckId);
   const pickingDate = ref(false);
-  const reachedEnd = ref<'units' | 'characters' | null>(null);
+  const charactersReachedEnd = ref(false);
+  const unitsPromptDismissed = ref(false);
+  const closing = ref(false);
   const maxDate = entryMaxDate();
 
   const entry = computed(() => props.deck.listEntry ?? null);
@@ -51,6 +52,14 @@
   const unitsDraft = ref<number>(entry.value?.completedUnits ?? 0);
   let unitsTimer: ReturnType<typeof setTimeout> | undefined;
   let savingUnits = false;
+  let unitsSave: Promise<void> = Promise.resolve();
+  const allUnitsDone = computed(
+    () => tracksUnits.value && unitsDraft.value >= unitCount.value && (entry.value?.completedUnits ?? 0) >= unitCount.value
+  );
+  const reachedEnd = computed(() => {
+    if (allUnitsDone.value && !unitsPromptDismissed.value) return 'units';
+    return charactersReachedEnd.value ? 'characters' : null;
+  });
   watch(
     () => entry.value?.completedUnits,
     (value) => {
@@ -88,18 +97,44 @@
 
   async function saveCharacters(value: number | null) {
     const saved = await save({ charactersRead: value });
-    reachedEnd.value = saved && props.deck.characterCount > 0 && (value ?? 0) >= props.deck.characterCount ? 'characters' : null;
+    charactersReachedEnd.value = !!saved && props.deck.characterCount > 0 && (value ?? 0) >= props.deck.characterCount;
     return saved;
   }
 
   function onUnits(value: number | null) {
     unitsDraft.value = Math.min(Math.max(value ?? 0, 0), unitCount.value);
+    unitsPromptDismissed.value = false;
     clearTimeout(unitsTimer);
-    unitsTimer = setTimeout(saveUnits, 400);
+    unitsTimer = setTimeout(flushUnits, 400);
   }
   onBeforeUnmount(() => {
-    if (unitsTimer !== undefined) saveUnits();
+    if (unitsTimer !== undefined) flushUnits();
   });
+
+  function flushUnits() {
+    clearTimeout(unitsTimer);
+    unitsTimer = undefined;
+    if (!savingUnits) unitsSave = saveUnits();
+    return unitsSave;
+  }
+
+  function dismissReachedEnd() {
+    unitsPromptDismissed.value = true;
+    charactersReachedEnd.value = false;
+  }
+
+  async function done() {
+    if (closing.value) return;
+    const promptSeen = reachedEnd.value !== null;
+    if (unitsTimer !== undefined || savingUnits) {
+      closing.value = true;
+      await flushUnits();
+      await nextTick();
+      closing.value = false;
+    }
+    if (reachedEnd.value !== null && !promptSeen) return;
+    emit('done');
+  }
 
   async function saveUnits() {
     clearTimeout(unitsTimer);
@@ -117,7 +152,6 @@
         for (const volume of response.volumes) publishMediaListChange(volume);
         publishMediaListChange({ deckId: props.deck.deckId, status: response.status, listEntry: response.listEntry });
         offerUndo(`${unitProgressLabel(props.deck.mediaType)}: ${completed} of ${unitCount.value}`, response.previous);
-        reachedEnd.value = response.allChildrenCompleted && unitsDraft.value === completed ? 'units' : null;
         return response.listEntry;
       } catch (e) {
         unitsDraft.value = entry.value?.completedUnits ?? 0;
@@ -206,13 +240,13 @@
       @commit="saveCharacters"
     />
 
-    <ReachedEndPrompt v-if="reachedEnd" :message="reachedEndMessage" @dismiss="reachedEnd = null" @complete="emit('complete')" />
+    <ReachedEndPrompt v-if="reachedEnd" :message="reachedEndMessage" @dismiss="dismissReachedEnd" @complete="emit('complete')" />
 
     <div class="flex items-center justify-between gap-3 pt-1 border-t border-gray-200 dark:border-gray-700">
       <button type="button" class="flex items-center gap-1.5 pt-2" :class="linkClass" @click="emit('openHistory')">
         <i class="pi pi-book text-[10px]" aria-hidden="true" />Your log
       </button>
-      <Button label="Done" size="small" class="mt-2" @click="emit('done')" />
+      <Button label="Done" size="small" class="mt-2" :loading="closing" @click="done" />
     </div>
   </div>
 </template>

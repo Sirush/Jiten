@@ -57,7 +57,8 @@ public class MediaDeckController(
     IDeckActivityBuffer activityBuffer,
     ISentenceTokenService sentenceTokens,
     IJitenPlusService jitenPlusService,
-    SeriesService seriesService) : ControllerBase
+    SeriesService seriesService,
+    ICardBatchService cardBatches) : ControllerBase
 {
 
     private class DeckWithOccurrences
@@ -708,7 +709,7 @@ public class MediaDeckController(
                        "excludeGenres", "tags", "excludeTags", "coverageMin", "coverageMax", "uniqueCoverageMin",
                        "uniqueCoverageMax", "totalCoverageMin", "totalCoverageMax", "uTotalCoverageMin", "uTotalCoverageMax",
                        "speechSpeedMin", "speechSpeedMax", "speechDurationMin", "speechDurationMax", "excludeSequels",
-                       "runtimeMin", "runtimeMax", "excludeMediaTypes"
+                       "runtimeMin", "runtimeMax", "excludeMediaTypes", "limit"
                    ])]
     [SwaggerOperation(Summary = "List media decks",
                       Description =
@@ -735,7 +736,7 @@ public class MediaDeckController(
                                                                       int? speechDurationMin = null, int? speechDurationMax = null,
                                                                       bool? excludeSequels = null, bool? favourite = null,
                                                                       int? runtimeMin = null, int? runtimeMax = null,
-                                                                      string? excludeMediaTypes = null)
+                                                                      string? excludeMediaTypes = null, int? limit = null)
     {
         // Responses carry the viewer's coverage and preferences; they must not be shared from a cache.
         if (currentUserService.IsAuthenticated)
@@ -743,7 +744,7 @@ public class MediaDeckController(
             Response.Headers.CacheControl = "no-cache, no-store, must-revalidate";
         }
 
-        int pageSize = 50;
+        var pageSize = Math.Clamp(limit ?? 50, 1, 50);
         var query = context.Decks.AsNoTracking();
 
         // Use "Search then Load" pattern to preserve PGroonga ordering
@@ -1216,8 +1217,8 @@ public class MediaDeckController(
                        .OrderByDescending(d => d.CharacterCount)
                        .ThenBy(d => d.DeckId),
             "sentenceLength" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => d.CharacterCount / (d.SentenceCount + 1)).ThenBy(d => d.DeckId).Where(d => d.SentenceCount != 0 && !d.HideAverageSentenceLength)
-                : query.OrderByDescending(d => d.CharacterCount / (d.SentenceCount + 1)).ThenBy(d => d.DeckId).Where(d => d.SentenceCount != 0 && !d.HideAverageSentenceLength),
+                ? query.OrderBy(d => (double)d.CharacterCount / d.SentenceCount).ThenBy(d => d.DeckId).Where(d => d.SentenceCount > 1 && !d.HideAverageSentenceLength)
+                : query.OrderByDescending(d => (double)d.CharacterCount / d.SentenceCount).ThenBy(d => d.DeckId).Where(d => d.SentenceCount > 1 && !d.HideAverageSentenceLength),
             "dialoguePercentage" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.DialoguePercentage)
                        .ThenBy(d => d.DeckId)
@@ -1308,8 +1309,8 @@ public class MediaDeckController(
                        .OrderByDescending(p => p.Deck.CharacterCount)
                        .ThenBy(p => p.Deck.DeckId),
             "sentenceLength" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(p => p.Deck.CharacterCount / (p.Deck.SentenceCount + 1)).ThenBy(p => p.Deck.DeckId).Where(p => p.Deck.SentenceCount != 0 && !p.Deck.HideAverageSentenceLength)
-                : query.OrderByDescending(p => p.Deck.CharacterCount / (p.Deck.SentenceCount + 1)).ThenBy(p => p.Deck.DeckId).Where(p => p.Deck.SentenceCount != 0 && !p.Deck.HideAverageSentenceLength),
+                ? query.OrderBy(p => (double)p.Deck.CharacterCount / p.Deck.SentenceCount).ThenBy(p => p.Deck.DeckId).Where(p => p.Deck.SentenceCount > 1 && !p.Deck.HideAverageSentenceLength)
+                : query.OrderByDescending(p => (double)p.Deck.CharacterCount / p.Deck.SentenceCount).ThenBy(p => p.Deck.DeckId).Where(p => p.Deck.SentenceCount > 1 && !p.Deck.HideAverageSentenceLength),
             "dialoguePercentage" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(p => p.Deck.DialoguePercentage)
                        .ThenBy(p => p.Deck.DeckId)
@@ -1985,7 +1986,8 @@ public class MediaDeckController(
     [ProducesResponseType(StatusCodes.Status400BadRequest)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
     public async Task<IResult> DownloadDeck(int id, [FromBody] DeckDownloadRequest request,
-                                            [FromServices] ISentenceUnlockOrder sentenceUnlockOrder)
+                                            [FromServices] ISentenceUnlockOrder sentenceUnlockOrder,
+                                            [FromServices] StackExchange.Redis.IConnectionMultiplexer redis)
     {
         var deck = await context.Decks
                                 .AsNoTracking()
@@ -2032,13 +2034,17 @@ public class MediaDeckController(
         if (bytes == null)
             return Results.BadRequest();
 
-        await RecordDownloadAsync(id);
+        var downloadLog = loggerFactory.CreateLogger("Jiten.Events.DeckDownload");
+        var bulk = await BulkDownloadDetector.IsBulkAsync(redis, BulkDownloadDetector.SubjectFor(currentUserService.UserId, HttpContext),
+                                                          id, DateTime.UtcNow, downloadLog);
 
-        loggerFactory.CreateLogger("Jiten.Events.DeckDownload").LogInformation(
-            "User downloaded deck: DeckId={DeckId}, DeckTitle={DeckTitle}, Format={Format}, DownloadType={DownloadType}, WordCount={WordCount}, ExcludeMature={ExcludeMature}, ExcludeAllTracked={ExcludeAllTracked}, UserId={UserId}, ClientIp={ClientIp}",
+        await RecordDownloadAsync(id, bulk);
+
+        downloadLog.LogInformation(
+            "User downloaded deck: DeckId={DeckId}, DeckTitle={DeckTitle}, Format={Format}, DownloadType={DownloadType}, WordCount={WordCount}, ExcludeMature={ExcludeMature}, ExcludeAllTracked={ExcludeAllTracked}, UserId={UserId}, ClientIp={ClientIp}, Bulk={Bulk}",
             id, deck.OriginalTitle, request.Format, request.DownloadType, deckWordsRaw!.Count,
             request.ExcludeMatureMasteredBlacklisted, request.ExcludeAllTrackedWords,
-            currentUserService.UserId ?? "anonymous", ClientIp.Resolve(HttpContext));
+            currentUserService.UserId ?? "anonymous", ClientIp.Resolve(HttpContext), bulk);
 
         return request.Format switch
         {
@@ -2062,12 +2068,14 @@ public class MediaDeckController(
         return Results.NoContent();
     }
 
-    private async Task RecordDownloadAsync(int deckId)
+    /// <summary>A bulk guest download skips the guest counter, which feeds popularity; a signed-in one still records the deck as downloaded for that user.</summary>
+    private async Task RecordDownloadAsync(int deckId, bool bulk)
     {
         var userId = currentUserService.UserId;
         if (userId == null)
         {
-            activityBuffer.RecordGuestDownload(deckId);
+            if (!bulk)
+                activityBuffer.RecordGuestDownload(deckId);
             return;
         }
 
@@ -2137,12 +2145,7 @@ public class MediaDeckController(
             }).ToList();
         }
 
-        var applied = (state == "mastered"
-            ? await currentUserService.AddKnownWords(deckWordsRaw!, countAsNewlyLearned: request.CountAsNewlyLearned)
-            : await currentUserService.BlacklistWords(deckWordsRaw!)).Inserted;
-
-        await CoverageDirtyHelper.MarkCoverageDirty(userContext, currentUserService.UserId!);
-        await userContext.SaveChangesAsync();
+        var applied = await cardBatches.LearnDeckWordsAsync(deckWordsRaw!, state == "mastered", new CardBatchDetails { Kind = CardBatchKind.MediaDeck, DeckId = deck.DeckId }, request.CountAsNewlyLearned);
 
         logger.LogInformation(
                               "User applied learn to deck: DeckId={DeckId}, DeckTitle={DeckTitle}, State={State}, WordCount={WordCount}",

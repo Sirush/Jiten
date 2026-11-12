@@ -182,6 +182,46 @@ export enum CardArchiveReason {
   BulkForget = 5,
   MassAction = 6,
   WordReplacementMerge = 7,
+  ImportUndo = 8,
+}
+
+export enum CardSource {
+  Unknown = 0,
+  Review = 1,
+  ManualSingle = 2,
+  DeckLearn = 3,
+  FrequencyImport = 4,
+  AnkiImport = 5,
+  JpdbImport = 6,
+  WaniKaniImport = 7,
+  WordListImport = 8,
+  BackupRestore = 9,
+  CompositionInference = 10,
+  PlacementTest = 11,
+  ImportExtrapolation = 12,
+  KanaRedundancy = 13,
+  MassAction = 14,
+  WordSet = 15,
+  ReadingCalibration = 16,
+}
+
+export enum CardBatchKind {
+  Other = 0,
+  JpdbKnownWords = 1,
+  JpdbReviewHistory = 2,
+  WordList = 3,
+  WordIds = 4,
+  AnkiFile = 5,
+  AnkiConnect = 6,
+  CompoundsOfKnown = 7,
+  PartsOfKnown = 8,
+  FrequencyRange = 9,
+  MediaDeck = 10,
+  StudyDeck = 11,
+  MediaList = 12,
+  BackupRestore = 13,
+  WordCheck = 14,
+  ReadingCheck = 15,
 }
 
 export enum FsrsRating {
@@ -305,4 +345,16 @@ export enum ForumDiscussionStatus {
   Unavailable = 2,
   /** No topic yet; a signed-in reader creates it by starting the discussion. */
   NotStarted = 3,
+}
+
+export enum WordCheckAnswer {
+  Know = 0,
+  NotSure = 1,
+  No = 2,
+}
+
+export enum ReadingCheckAnswer {
+  Knew = 0,
+  Partly = 1,
+  DidntKnow = 2,
 }
