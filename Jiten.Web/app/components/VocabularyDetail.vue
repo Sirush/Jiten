@@ -72,12 +72,22 @@
   } = useApiFetch<Record<string, number>>(mediaFreqUrl, { lazy: true, ...keyedFetch(mediaFreqUrl) });
   const { data: fetchedKnownStates, refresh: refreshKnownStates } = useApiFetch<KnownState[]>(knownStateUrl, {
     lazy: true,
+    immediate: authStore.isAuthenticated,
     ...keyedFetch(knownStateUrl),
   });
   const { data: frequencyRanks, refresh: refreshFrequencyRanks } = useApiFetch<WordFrequencyRanks>(freqRanksUrl, {
     lazy: true,
+    immediate: authStore.isAuthenticated,
     ...keyedFetch(freqRanksUrl),
   });
+
+  const loadGuestFrequencyRanks = async () => {
+    const url = freqRanksUrl.value;
+    try {
+      const ranks = await $api<WordFrequencyRanks>(url);
+      if (url === freqRanksUrl.value) frequencyRanks.value = ranks;
+    } catch {}
+  };
 
   const listsLoading = ref(false);
 
@@ -205,7 +215,9 @@
     const seq = ++switchSeq;
     isTransitioning.value = true;
 
-    await Promise.all([refreshInfo(), refreshKnownStates(), refreshMediaFrequency(), refreshFrequencyRanks()]);
+    if (!authStore.isAuthenticated) frequencyRanks.value = undefined;
+    const perUserRefreshes = authStore.isAuthenticated ? [refreshKnownStates(), refreshFrequencyRanks()] : [];
+    await Promise.all([refreshInfo(), refreshMediaFrequency(), ...perUserRefreshes]);
 
     if (seq !== switchSeq) return;
 
@@ -424,6 +436,7 @@
                 :ranks="frequencyRanks"
                 :fallback-rank="word.mainReading.frequencyRank"
                 :lists-loading="listsLoading"
+                :load-guest-ranks="loadGuestFrequencyRanks"
                 align="left"
                 @request-lists="loadFrequencyLists"
                 @changed="refreshFrequencyRanks"
@@ -519,6 +532,7 @@
                 :ranks="frequencyRanks"
                 :fallback-rank="word.mainReading.frequencyRank"
                 :lists-loading="listsLoading"
+                :load-guest-ranks="loadGuestFrequencyRanks"
                 align="right"
                 @request-lists="loadFrequencyLists"
                 @changed="refreshFrequencyRanks"

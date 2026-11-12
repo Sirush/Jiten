@@ -374,6 +374,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
     [SwaggerOperation(Summary = "Get kanji breakdown for word", Description = "Returns the kanji characters in a word reading with their metadata (stroke count, JLPT, meanings, frequency).")]
     [ProducesResponseType(typeof(List<KanjiListDto>), StatusCodes.Status200OK)]
     [ProducesResponseType(StatusCodes.Status404NotFound)]
+    [ResponseCache(Duration = 3600)]
     public async Task<IResult> GetWordKanji([FromRoute] int wordId, [FromRoute] short readingIndex)
     {
         var wordKanjis = await context.WordKanjis
