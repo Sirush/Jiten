@@ -4,7 +4,13 @@
   const props = withDefaults(defineProps<{ deck: DeckCard; stacked?: boolean }>(), { stacked: false });
 
   const combined = computed(() => Math.min(props.deck.coverage + props.deck.youngCoverage, 100));
-  const tooltip = computed(() => `Words in this title you know\nMature: ${props.deck.coverage.toFixed(1)}%\nWith young cards: ${combined.value.toFixed(1)}%`);
+  const tooltip = computed(() => {
+    const unknownRatio = formatUnknownWordRatio(combined.value);
+    return (
+      `Words in this title you know\nMature: ${props.deck.coverage.toFixed(1)}%\nWith young cards: ${combined.value.toFixed(1)}%` +
+      (unknownRatio ? `\n${unknownRatio}` : '')
+    );
+  });
 </script>
 
 <template>

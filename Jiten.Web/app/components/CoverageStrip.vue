@@ -11,7 +11,10 @@
   const combinedCoverage = computed(() => Math.min(props.coverage + props.youngCoverage, 100));
   const fillColour = computed(() => getCoverageColour(combinedCoverage.value));
   const youngColour = computed(() => getCoverageColour(combinedCoverage.value, 0.45));
-  const tooltipContent = computed(() => `You know or are learning ${combinedCoverage.value.toFixed(1)}% of the words in this media`);
+  const tooltipContent = computed(() => {
+    const unknownRatio = formatUnknownWordRatio(combinedCoverage.value);
+    return `You know or are learning ${combinedCoverage.value.toFixed(1)}% of the words in this media` + (unknownRatio ? `\n${unknownRatio}` : '');
+  });
 </script>
 
 <template>

@@ -197,6 +197,11 @@
             return point ? formatBucketLong(point.date, props.granularity) : '';
           },
           label: (ctx) => `${ctx.dataset.label}: ${formatValue(rawValue(ctx.dataset.label, ctx.dataIndex))}`,
+          footer: (items) => {
+            if (props.compact || isCount.value || isUnique.value) return [];
+            const unknownRatio = formatUnknownWordRatio(combinedValues.value[items[0]?.dataIndex ?? 0] ?? 0);
+            return unknownRatio ? [unknownRatio] : [];
+          },
         },
       },
     },
