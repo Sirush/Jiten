@@ -146,7 +146,10 @@ public sealed class DeckMetadataService(JitenDbContext dbContext)
         if (patch.ReleaseDate != null)
             SetLocked(deck, MetadataField.ReleaseDate, deck.ReleaseDate, ParseDate(patch.ReleaseDate)!.Value, v => deck.ReleaseDate = v);
         if (patch.MediaType.HasValue)
+        {
             SetLocked(deck, MetadataField.MediaType, deck.MediaType, patch.MediaType.Value, v => deck.MediaType = v);
+            await AlignSubdeckMediaTypesAsync(deck, ct);
+        }
         if (patch.HideDialoguePercentage.HasValue)
             deck.HideDialoguePercentage = patch.HideDialoguePercentage.Value;
         if (patch.HideAverageSentenceLength.HasValue)
@@ -179,6 +182,13 @@ public sealed class DeckMetadataService(JitenDbContext dbContext)
     }
 
     /// <summary>A person's change to a scalar locks it, so provider imports leave it alone.</summary>
+    private async Task AlignSubdeckMediaTypesAsync(Deck deck, CancellationToken ct)
+    {
+        var subdecks = await dbContext.Decks.Where(d => d.ParentDeckId == deck.DeckId && d.MediaType != deck.MediaType).ToListAsync(ct);
+        foreach (var subdeck in subdecks)
+            subdeck.MediaType = deck.MediaType;
+    }
+
     private static void SetLocked<T>(Deck deck, MetadataField field, T current, T value, Action<T> set)
     {
         if (EqualityComparer<T>.Default.Equals(current, value))
@@ -271,6 +281,7 @@ public sealed class DeckMetadataService(JitenDbContext dbContext)
                    RomajiTitle = deck.RomajiTitle ?? "",
                    EnglishTitle = deck.EnglishTitle ?? "",
                    Description = deck.Description ?? "",
+                   MediaType = deck.MediaType,
                    HideDialoguePercentage = deck.HideDialoguePercentage,
                    HideAverageSentenceLength = deck.HideAverageSentenceLength,
                    Genres = deck.DeckGenres.Select(dg => dg.Genre).OrderBy(g => g.ToString()).ToList(),

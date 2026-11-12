@@ -12,6 +12,7 @@ public sealed class DeckMetadataPatchResultDto
     public string RomajiTitle { get; set; } = "";
     public string EnglishTitle { get; set; } = "";
     public string Description { get; set; } = "";
+    public MediaType MediaType { get; set; }
     public bool HideDialoguePercentage { get; set; }
     public bool HideAverageSentenceLength { get; set; }
     public List<Genre> Genres { get; set; } = new();

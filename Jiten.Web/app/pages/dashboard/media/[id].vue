@@ -9,8 +9,8 @@
   import DataTable from 'primevue/datatable';
   import Column from 'primevue/column';
   import { useToast } from 'primevue/usetoast';
-  import { LinkType } from '~/types';
-  import type { Deck, DeckDetail, DeckRelationship, DeckRelationshipType, Link, MediaType, MediaSuggestion, Tag, Genre } from '~/types';
+  import { LinkType, MediaType } from '~/types';
+  import type { Deck, DeckDetail, DeckRelationship, DeckRelationshipType, Link, MediaSuggestion, Tag, Genre } from '~/types';
   import type { MediaRequestUploadAdminDto } from '~/types/types';
   import Message from 'primevue/message';
   import { coverUrl } from '~/utils/coverImage';
@@ -52,6 +52,7 @@
   });
 
   const selectedMediaType = ref<MediaType | null>(null);
+  const mediaTypeOptions = getEnumOptions(MediaType, getMediaTypeText);
   const toast = useToast();
   const { $api } = useNuxtApp();
   const localiseTitle = useLocaliseTitle();
@@ -1106,6 +1107,17 @@
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">English Title</label>
                   <InputText v-model="englishTitle" class="w-full" />
+                </div>
+                <div class="mb-4">
+                  <label class="block text-sm font-medium mb-1" for="media-type">Media type</label>
+                  <Select
+                    v-model="selectedMediaType"
+                    input-id="media-type"
+                    :options="mediaTypeOptions"
+                    option-label="label"
+                    option-value="value"
+                    class="w-full"
+                  />
                 </div>
                 <div class="mb-4">
                   <label class="block text-sm font-medium mb-1">Release Date</label>

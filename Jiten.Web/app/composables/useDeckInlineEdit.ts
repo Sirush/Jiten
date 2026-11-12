@@ -24,6 +24,7 @@ export function useDeckInlineEdit(getDeck: () => Deck) {
       romajiTitle: deck.romajiTitle ?? '',
       englishTitle: deck.englishTitle ?? '',
       description: deck.description ?? '',
+      mediaType: deck.mediaType,
       hideDialoguePercentage: deck.hideDialoguePercentage ?? false,
       hideAverageSentenceLength: deck.hideAverageSentenceLength ?? false,
       genres: [...(deck.genres ?? [])],

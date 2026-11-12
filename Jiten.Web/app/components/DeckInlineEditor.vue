@@ -2,8 +2,9 @@
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
   import type { Deck, DeckMetadataPatchResult, MediaSuggestion, Tag } from '~/types';
-  import { LinkType } from '~/types';
+  import { LinkType, MediaType } from '~/types';
   import { getAllGenres, getGenreText } from '~/utils/genreMapper';
+  import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getLinkLabel, getLinkTypeText, resolveLinkType } from '~/utils/linkTypeMapper';
   import {
     getRelationshipRoleLabel,
@@ -54,6 +55,7 @@
   const showLinkDialog = ref(false);
 
   const genreOptions = getAllGenres();
+  const mediaTypeOptions = getEnumOptions(MediaType, getMediaTypeText);
 
   const tagSearchQuery = ref('');
   const filteredTags = computed(() => searchTags(tagVocabulary.value, tagSearchQuery.value));
@@ -241,7 +243,19 @@
       <Textarea id="inline-description" v-model="draft.description" rows="2" class="w-full resize-y" />
     </div>
 
-    <div class="flex flex-wrap gap-x-6 gap-y-2">
+    <div class="flex flex-wrap items-center gap-x-6 gap-y-2">
+      <div class="flex items-center gap-2">
+        <label class="text-sm" for="inline-media-type">Media type</label>
+        <Select
+          v-model="draft.mediaType"
+          input-id="inline-media-type"
+          :options="mediaTypeOptions"
+          option-label="label"
+          option-value="value"
+          size="small"
+          class="w-44"
+        />
+      </div>
       <div class="flex items-center gap-2">
         <Checkbox v-model="draft.hideDialoguePercentage" input-id="inline-hide-dialogue" binary />
         <label class="text-sm" for="inline-hide-dialogue">Hide dialogue percentage</label>

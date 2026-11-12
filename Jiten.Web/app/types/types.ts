@@ -308,6 +308,7 @@ export interface DeckMetadataPatch {
   romajiTitle?: string;
   englishTitle?: string;
   description?: string;
+  mediaType?: MediaType;
   hideDialoguePercentage?: boolean;
   hideAverageSentenceLength?: boolean;
   genres?: Genre[];
@@ -321,6 +322,7 @@ export interface DeckMetadataPatchResult {
   romajiTitle: string;
   englishTitle: string;
   description: string;
+  mediaType: MediaType;
   hideDialoguePercentage: boolean;
   hideAverageSentenceLength: boolean;
   genres: Genre[];
