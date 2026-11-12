@@ -781,6 +781,7 @@ public class VocabularyController(JitenDbContext context, IDbContextFactory<Jite
         {
             if (!byWord.TryGetValue(hit.WordId, out var entry)) continue;
             entry.Meanings = hit.Meanings;
+            entry.MatchedSenseIndex = hit.SenseIndex;
             result.Add(entry);
         }
         return result;

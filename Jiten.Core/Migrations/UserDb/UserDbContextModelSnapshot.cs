@@ -1377,6 +1377,9 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<short>("Position")
                         .HasColumnType("smallint");
 
+                    b.Property<int?>("SenseIndex")
+                        .HasColumnType("integer");
+
                     b.HasKey("UserId", "WordId", "ReadingIndex");
 
                     b.ToTable("UserFavouriteWords", "user");

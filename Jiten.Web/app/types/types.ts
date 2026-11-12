@@ -1046,6 +1046,14 @@ export interface ProfileFavouriteWord {
   text: string;
   reading: string | null;
   meaning: string;
+  senseIndex: number | null;
+  /** Only on the owner's own list in settings. */
+  senses?: ProfileWordSense[];
+}
+
+export interface ProfileWordSense {
+  index: number;
+  meaning: string;
 }
 
 export type MilestoneTier = 'ema' | 'zeni' | 'ichibu' | 'koban' | 'jade' | 'crystal' | 'lacquer' | 'shimenawa';
@@ -1364,8 +1372,8 @@ export interface DictionaryEntry {
   rubyText: string;
   primaryKanjiText?: string;
   partsOfSpeech: string[];
-  /** First sense only; the one-line summary. */
   meanings: string[];
+  matchedSenseIndex?: number;
   senses?: DictionarySense[];
   frequencyRank: number;
 }

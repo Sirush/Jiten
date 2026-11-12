@@ -1041,6 +1041,47 @@ public class ProfileTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task FavouriteWordShowsTheChosenSenseAndFallsBackToTheFirst()
+    {
+        const int wordId = 9310;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            if (!await jitenDb.WordForms.AnyAsync(f => f.WordId == wordId))
+            {
+                jitenDb.JMDictWords.Add(new JmDictWord { WordId = wordId, PartsOfSpeech = ["noun"] });
+                jitenDb.WordForms.Add(new JmDictWordForm { WordId = wordId, ReadingIndex = 0, Text = "重宝", RubyText = "重宝[ちょうほう]", FormType = JmDictFormType.KanjiForm });
+                jitenDb.Definitions.Add(new JmDictDefinition { WordId = wordId, SenseIndex = 0, EnglishMeanings = ["convenient", "useful", "handy"], PartsOfSpeech = ["noun"] });
+                jitenDb.Definitions.Add(new JmDictDefinition { WordId = wordId, SenseIndex = 1, EnglishMeanings = ["(priceless) treasure"], PartsOfSpeech = ["noun"] });
+                await jitenDb.SaveChangesAsync();
+            }
+        }
+        await factory.ConfigureProfileAsync(TestUsers.UserA, isPublic: true);
+
+        async Task<JsonElement> Save(int? senseIndex) =>
+            (await (await Send(HttpMethod.Put, "/api/user/profile/favourite-words", TestUsers.UserA,
+                               new { words = new[] { new { wordId, readingIndex = 0, senseIndex } } }))
+                   .Content.ReadFromJsonAsync<JsonElement>())[0];
+
+        var chosen = await Save(1);
+        chosen.GetProperty("meaning").GetString().Should().Be("(priceless) treasure");
+        chosen.GetProperty("senseIndex").GetInt32().Should().Be(1);
+        chosen.GetProperty("senses").GetArrayLength().Should().Be(2);
+
+        var overview = await (await Get($"/api/user/profile/{TestUsers.UserA}/overview", TestUsers.UserB)).Content.ReadFromJsonAsync<JsonElement>();
+        var shown = overview.GetProperty("favouriteWords")[0];
+        shown.GetProperty("meaning").GetString().Should().Be("(priceless) treasure");
+        shown.TryGetProperty("senses", out _).Should().BeFalse();
+
+        foreach (var unpinned in new int?[] { null, 7 })
+        {
+            var fallback = await Save(unpinned);
+            fallback.GetProperty("meaning").GetString().Should().Be("convenient, useful");
+            fallback.GetProperty("senseIndex").GetInt32().Should().Be(0);
+        }
+    }
+
+    [Fact]
     public async Task DeckPageCarriesTheViewersDetailsFromTheMainEntry()
     {
         var series = await SeedDeck("Series");

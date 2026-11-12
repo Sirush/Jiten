@@ -8,4 +8,7 @@ public class UserFavouriteWord
     public int WordId { get; set; }
     public byte ReadingIndex { get; set; }
     public short Position { get; set; }
+
+    /// <summary>Null, or a sense no longer active, shows the word's first sense.</summary>
+    public int? SenseIndex { get; set; }
 }
