@@ -30,6 +30,14 @@ describe('primevue style extraction', () => {
     expect(extracted).toEqual([['global-style', '.a{\n b:2;\n}']]);
   });
 
+  it('drops the stringified object PrimeVue appends, which would void the next rule', () => {
+    const head = [tag('base', '.p-a{x:1}[object Object]') + tag('primitive-variables', ':root{--p-purple-100:#f3e8ff}')];
+    expect(stripPrimevueStyles(head)).toEqual([
+      ['base', '.p-a{x:1}'],
+      ['primitive-variables', ':root{--p-purple-100:#f3e8ff}'],
+    ]);
+  });
+
   it('inserts the link exactly before the first stub', () => {
     const head = [`<link rel="preload" href="x">${tag('base', '')}${tag('badge-style', '')}`];
     stripPrimevueStyles(head);

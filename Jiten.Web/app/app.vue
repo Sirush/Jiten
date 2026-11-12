@@ -59,12 +59,6 @@
   });
 
   provide('studyHeaderVisible', studyHeaderVisible);
-
-  onMounted(() => {
-    // Trick from https://github.com/primefaces/primevue/issues/5899#issuecomment-2585781190
-    // TODO remove after primevue fix
-    document.documentElement.classList.add('loaded');
-  });
 </script>
 
 <template>

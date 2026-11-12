@@ -22,12 +22,6 @@
     title: () => heading.value,
     robots: 'noindex, follow',
   });
-
-  // main.css hides :root until .loaded is set, and this page replaces app.vue rather than nesting in
-  // it, so without repeating the hook the whole error page renders invisible.
-  onMounted(() => {
-    document.documentElement.classList.add('loaded');
-  });
 </script>
 
 <template>

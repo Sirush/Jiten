@@ -20,6 +20,7 @@
     word: Word;
     knownStatesOverride?: KnownState[];
     redundantVia?: DerivationCoverDto | null;
+    guestStudyAction?: boolean;
   }>();
 
   const emit = defineEmits<{
@@ -196,13 +197,20 @@
   const deckOp = ref();
   const loadingDecks = ref(false);
 
-  const guestPopoverActive = ref(false);
-  const guestPopover = ref<{ show: (event: Event, target?: HTMLElement) => void } | null>(null);
+  const GUEST_CONTROL_MESSAGES = {
+    mark_known: 'Mark the words you know and Jiten shows your coverage (how much you know) on every media.',
+    add_to_study: 'Add words to a study list and Jiten schedules their reviews.',
+  };
+  type GuestControl = keyof typeof GUEST_CONTROL_MESSAGES;
 
-  const onGuestPlusClick = async (e: MouseEvent) => {
+  const guestControl = ref<GuestControl | null>(null);
+  const guestPopover = ref<{ show: (event: Event, target?: HTMLElement) => void; hide: () => void } | null>(null);
+
+  const onGuestControlClick = async (control: GuestControl, e: MouseEvent) => {
     const target = e.currentTarget as HTMLElement;
-    trackEvent('guest_locked_control_clicked', { control: 'mark_known' });
-    guestPopoverActive.value = true;
+    trackEvent('guest_locked_control_clicked', { control });
+    guestPopover.value?.hide();
+    guestControl.value = control;
     await nextTick();
     guestPopover.value?.show({ currentTarget: target } as unknown as Event, target);
   };
@@ -473,14 +481,18 @@
       </template>
       <template v-else>
         <Tooltip content="Mark as known (free account)">
-          <Button icon="pi pi-plus" size="small" text severity="success" aria-label="Mark as known" @click="onGuestPlusClick" />
+          <Button icon="pi pi-plus" size="small" text severity="success" aria-label="Mark as known" @click="onGuestControlClick('mark_known', $event)" />
         </Tooltip>
-        <GuestAccountPopover
-          v-if="guestPopoverActive"
-          ref="guestPopover"
-          message="Mark the words you know and Jiten shows your coverage (how much you know) on every media."
-          prompt="mark_known"
+        <Button
+          v-if="guestStudyAction"
+          icon="pi pi-list"
+          label="Add to Study List"
+          size="small"
+          outlined
+          severity="secondary"
+          @click="onGuestControlClick('add_to_study', $event)"
         />
+        <GuestAccountPopover v-if="guestControl" ref="guestPopover" :message="GUEST_CONTROL_MESSAGES[guestControl]" :prompt="guestControl" />
       </template>
     </span>
     <template #fallback>

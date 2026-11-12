@@ -15,6 +15,9 @@ const STORE_DIR = join(tmpdir(), 'jiten-pv-styles');
 const STYLE_TAG = /<style([^>]*?)data-primevue-style-id="([^"]+)"([^>]*)>([\s\S]*?)<\/style>/g;
 export const STYLE_MARKER = 'data-primevue-style-id';
 
+/** PrimeVue appends this to some style tags; once the tags are concatenated it joins the next tag's first selector and the browser drops that rule. */
+const STRINGIFIED_OBJECT = '[object Object]';
+
 // Empties the inline tags in place but keeps them (with attributes) as stubs: the client style
 // runtime finds an element with its style-id and skips re-inserting, so hydration neither
 // duplicates styles nor reorders the cascade.
@@ -24,7 +27,7 @@ export function stripPrimevueStyles(head: (string | undefined)[]): [string, stri
     const chunk = head[i];
     if (!chunk || !chunk.includes(STYLE_MARKER)) continue;
     head[i] = chunk.replace(STYLE_TAG, (_match, pre, name, post, css) => {
-      extracted.push([name, css]);
+      extracted.push([name, css.replaceAll(STRINGIFIED_OBJECT, '')]);
       return `<style${pre}${STYLE_MARKER}="${name}"${post}></style>`;
     });
   }

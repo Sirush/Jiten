@@ -11,7 +11,6 @@
     members: FranchiseNode[];
     /** Sent to the API only. */
     mediaTypes: MediaType[];
-    uniqueWordCount: number | null;
   }>();
 
   const route = useRoute();
@@ -103,9 +102,6 @@
 
 <template>
   <div class="flex flex-col gap-2">
-    <GuestAccountStrip v-if="uniqueWordCount" surface="franchise_vocabulary">
-      {{ uniqueWordCount.toLocaleString() }} words in this {{ kindWord.toLowerCase() }}. You can find the ones you don't know with an account.
-    </GuestAccountStrip>
     <VocabularyFilters
       v-model:sort-by="sortBy"
       v-model:sort-descending="sortDescending"

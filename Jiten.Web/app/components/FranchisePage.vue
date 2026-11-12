@@ -129,7 +129,6 @@
         :label="groupName"
         :members="selectedNodes"
         :media-types="mediaTypes"
-        :unique-word-count="statsStatus === 'ready' ? (stats?.uniqueWordCount ?? null) : null"
       />
       <FranchiseWeb v-else-if="view === 'web'" :franchise="franchise" :current-deck-id="currentDeckId" :scope-deck-ids="highlightDeckIds" />
       <FranchiseSeriesView v-else-if="view === 'series'" :franchise="franchise" :current-deck-id="currentDeckId" :scope-deck-ids="highlightDeckIds" />

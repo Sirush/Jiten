@@ -190,7 +190,7 @@ export default defineNuxtConfig({
   fonts: {
     // Present only for nuxt-og-image's Satori renderer, which requires @nuxt/fonts for any
     // non-Inter font. Site text keeps loading through @fontsource-variable/noto-sans-jp in
-    // main.css; remote providers are disabled so the module cannot inject fonts of its own.
+    // main.css; every provider but local is disabled so the module cannot inject fonts of its own.
     providers: {
       google: false,
       googleicons: false,
@@ -198,6 +198,7 @@ export default defineNuxtConfig({
       fontshare: false,
       fontsource: false,
       adobe: false,
+      npm: false,
     },
     families: [
       {
