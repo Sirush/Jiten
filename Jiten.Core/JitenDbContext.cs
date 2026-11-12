@@ -626,6 +626,10 @@ public class JitenDbContext : DbContext
                 entity.Property(e => e.Priorities).HasColumnType("text[]").IsRequired(false);
                 entity.Property(e => e.InfoTags).HasColumnType("text[]").IsRequired(false);
                 entity.Property(e => e.PitchAccents).HasColumnType("int[]").IsRequired(false);
+
+                entity.HasIndex(e => e.Text)
+                      .HasFilter("\"IsActiveInLatestSource\" AND \"Priorities\" IS NOT NULL")
+                      .HasDatabaseName("IX_WordForms_Text_ActivePriority");
             }
             else
             {

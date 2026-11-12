@@ -1542,6 +1542,10 @@ namespace Jiten.Core.Migrations
 
                     b.HasKey("WordId", "ReadingIndex");
 
+                    b.HasIndex("Text")
+                        .HasDatabaseName("IX_WordForms_Text_ActivePriority")
+                        .HasFilter("\"IsActiveInLatestSource\" AND \"Priorities\" IS NOT NULL");
+
                     b.HasIndex("WordId")
                         .HasDatabaseName("IX_WordForms_WordId");
 
