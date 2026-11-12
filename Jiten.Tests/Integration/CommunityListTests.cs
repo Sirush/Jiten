@@ -681,6 +681,47 @@ public class CommunityListTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task DeckSorts_OrderBothWaysAndKeepUnsortableTitlesLast()
+    {
+        var decks = await SeedDecks(4);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            var seeded = await db.Decks.Where(d => decks.Contains(d.DeckId)).ToDictionaryAsync(d => d.DeckId);
+            foreach (var deck in seeded.Values)
+                deck.DifficultyOverride = -1;
+            (seeded[decks[0]].Difficulty, seeded[decks[0]].CharacterCount, seeded[decks[0]].ReleaseDate) = (3.5f, 900, new DateOnly(2020, 1, 1));
+            (seeded[decks[1]].Difficulty, seeded[decks[1]].CharacterCount, seeded[decks[1]].ReleaseDate) = (-1f, 0, default);
+            (seeded[decks[2]].Difficulty, seeded[decks[2]].CharacterCount, seeded[decks[2]].ReleaseDate) = (1.5f, 300, new DateOnly(2024, 1, 1));
+            (seeded[decks[3]].Difficulty, seeded[decks[3]].CharacterCount, seeded[decks[3]].ReleaseDate) = (4f, 600, new DateOnly(2022, 1, 1));
+            seeded[decks[3]].DifficultyOverride = 2.5f;
+            await db.SaveChangesAsync();
+        }
+
+        var listId = await CreatePublicList(TestUsers.UserA, "Sortable", decks);
+
+        async Task<List<JsonElement>> Items(string sort) =>
+            (await (await Send(HttpMethod.Get, $"/api/lists/{listId}/items?sort={sort}")).Content.ReadFromJsonAsync<JsonElement>())
+            .GetProperty("data").EnumerateArray().ToList();
+
+        static IEnumerable<int> DeckIds(List<JsonElement> items) => items.Select(i => i.GetProperty("deck").GetProperty("deckId").GetInt32());
+
+        var easiest = await Items("difficulty");
+        DeckIds(easiest).Should().Equal(decks[2], decks[3], decks[0], decks[1]);
+        easiest.Select(i => i.GetProperty("position").GetInt32()).Should().Equal(3, 4, 1, 2);
+
+        DeckIds(await Items("difficulty-desc")).Should().Equal(decks[0], decks[3], decks[2], decks[1]);
+        DeckIds(await Items("length")).Should().Equal(decks[2], decks[3], decks[0], decks[1]);
+        DeckIds(await Items("length-desc")).Should().Equal(decks[0], decks[3], decks[2], decks[1]);
+        DeckIds(await Items("date")).Should().Equal(decks[0], decks[3], decks[2], decks[1]);
+        DeckIds(await Items("date-desc")).Should().Equal(decks[2], decks[3], decks[0], decks[1]);
+        DeckIds(await Items("unknown")).Should().Equal(decks);
+
+        var detail = await (await Send(HttpMethod.Get, $"/api/lists/{listId}?sort=difficulty")).Content.ReadFromJsonAsync<JsonElement>();
+        DeckIds(detail.GetProperty("items").GetProperty("data").EnumerateArray().ToList()).Should().Equal(decks[2], decks[3], decks[0], decks[1]);
+    }
+
+    [Fact]
     public async Task SentenceCoverage_OnlyReachesJitenPlusViewers()
     {
         var decks = await SeedDecks(1);

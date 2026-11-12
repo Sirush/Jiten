@@ -10,7 +10,12 @@ import type {
 } from '~/types/types';
 
 export type CommunityListSort = 'top' | 'popular' | 'newest' | 'updated' | 'random';
-export type CommunityListItemSort = 'curator' | 'coverage';
+export const COMMUNITY_LIST_ITEM_SORTS = ['curator', 'difficulty', 'coverage'] as const;
+export type CommunityListItemSort = (typeof COMMUNITY_LIST_ITEM_SORTS)[number];
+
+export function parseCommunityListItemSort(value: unknown): CommunityListItemSort {
+  return COMMUNITY_LIST_ITEM_SORTS.find((sort) => sort === value) ?? 'curator';
+}
 
 export interface CommunityListFilterQuery {
   q?: string;
@@ -83,7 +88,7 @@ export function useCommunityLists() {
     facets: (query: CommunityListFilterQuery) => $api<CommunityListFacets>('lists/facets', { query: filterQuery(query) }),
     items: (listId: number, offset: number, sort?: CommunityListItemSort, q?: string, limit = COMMUNITY_LIST_ITEM_PAGE_SIZE) =>
       $api<PaginatedResponse<CommunityListItem[]>>(`lists/${listId}/items`, {
-        query: { offset, limit, sort: sort === 'coverage' ? sort : undefined, q: q?.trim() || undefined },
+        query: { offset, limit, sort: sort && sort !== 'curator' ? sort : undefined, q: q?.trim() || undefined },
       }),
     mine: () => $api<{ lists: CommunityListSummary[]; quota: CommunityListQuota }>('lists/mine'),
     quota: () => $api<CommunityListQuota>('lists/quota'),
