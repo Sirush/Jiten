@@ -90,6 +90,25 @@ export function extractAudioRef(html: string): ExtractedMediaRef | null {
   return first ? { filename: first, extraRefs: count - 1 } : null;
 }
 
+const SENTENCE_FIELD_NAME = /sentence|example|例文|文/i;
+
+/**
+ * Picks the default media field among the fields that carry a reference, given in note order. Sentence
+ * media is preferred only when the import also maps a sentence; otherwise word media is.
+ */
+export function guessMediaFieldName(candidates: string[], preferSentence: boolean): string {
+  const preferred = candidates.find((name) => SENTENCE_FIELD_NAME.test(name) === preferSentence);
+  return preferred ?? candidates[0] ?? '';
+}
+
+const TRUNCATED_TAIL_LENGTH = 8;
+
+export function truncateFilenameMiddle(filename: string, maxLength: number): string {
+  if (filename.length <= maxLength) return filename;
+  const headLength = maxLength - TRUNCATED_TAIL_LENGTH - 1;
+  return `${filename.slice(0, headLength)}…${filename.slice(-TRUNCATED_TAIL_LENGTH)}`;
+}
+
 /** AnkiConnect returns media as base64; the upload needs bytes. */
 export function base64ToBytes(base64: string): Uint8Array {
   const binary = atob(base64);
