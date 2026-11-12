@@ -523,8 +523,8 @@
         <template #title>
           <div ref="titleBoxRef" class="overflow-hidden" :class="isCompact ? 'relative leading-snug h-[2.75em]' : ''">
             <div
-              class="flex flex-row items-center gap-1 h-6 shrink-0"
-              :class="isCompact ? 'float-right ml-2' : 'justify-end mb-1 md:float-right md:ml-2 md:mb-0'"
+              class="flex flex-row items-center gap-1 shrink-0"
+              :class="isCompact ? 'h-6 float-right ml-2' : 'min-h-6 flex-wrap justify-end md:h-6 md:flex-nowrap md:float-right md:ml-2'"
             >
               <div v-if="authStore.isAuthenticated && deck.isIgnored" class="flex items-center pr-1.5">
                 <i class="pi pi-eye-slash text-gray-800 dark:text-gray-300 text-lg" />
