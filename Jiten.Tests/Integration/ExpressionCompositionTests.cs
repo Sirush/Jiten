@@ -2,7 +2,9 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using FluentAssertions;
 using Jiten.Api.Dtos;
+using Jiten.Api.Services;
 using Jiten.Core;
+using Jiten.Core.Data;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.JMDict;
 using Jiten.Parser.Tests.Integration.Infrastructure;
@@ -21,6 +23,8 @@ public class ExpressionCompositionTests(JitenWebApplicationFactory factory)
     private const int Wo = 94002;
     private const int Hanatsu = 94003;
     private const int IsaiWoHanatsu = 94004;
+    private const int Kagayaki = 94005;
+    private const int IsaiSetId = 94001;
 
     public async Task InitializeAsync()
     {
@@ -29,6 +33,7 @@ public class ExpressionCompositionTests(JitenWebApplicationFactory factory)
         using var scope = factory.Services.CreateScope();
         var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
         await userDb.FsrsCards.ExecuteDeleteAsync();
+        await userDb.UserWordSetStates.ExecuteDeleteAsync();
 
         var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
         if (!await jitenDb.WordForms.AnyAsync(wf => wf.WordId == IsaiWoHanatsu))
@@ -37,7 +42,14 @@ public class ExpressionCompositionTests(JitenWebApplicationFactory factory)
             AddWord(jitenDb, Wo, ["prt"], null, "を");
             AddWord(jitenDb, Hanatsu, ["v5t"], "放つ", "はなつ");
             AddWord(jitenDb, IsaiWoHanatsu, ["exp", "v5t"], "異彩を放つ", "いさいをはなつ");
+            jitenDb.JMDictWords.Add(new JmDictWord { WordId = Kagayaki, PartsOfSpeech = ["n"] });
+            jitenDb.WordForms.AddRange(
+                new JmDictWordForm { WordId = Kagayaki, ReadingIndex = 0, Text = "輝き", RubyText = "輝[かがや]き", FormType = JmDictFormType.KanjiForm },
+                new JmDictWordForm { WordId = Kagayaki, ReadingIndex = 1, Text = "かがやき", RubyText = "かがやき", FormType = JmDictFormType.KanaForm });
+            jitenDb.WordSets.Add(new WordSet { SetId = IsaiSetId, Slug = "composition-isai-set", Name = "Composition isai set", WordCount = 1 });
+            jitenDb.WordSetMembers.Add(new WordSetMember { SetId = IsaiSetId, WordId = Isai, ReadingIndex = 0, Position = 0 });
             await jitenDb.SaveChangesAsync();
+            scope.ServiceProvider.GetRequiredService<IWordFormSiblingCache>().Reload();
         }
 
         await jitenDb.WordCompositions.Where(c => c.WordId == IsaiWoHanatsu).ExecuteDeleteAsync();
@@ -131,5 +143,47 @@ public class ExpressionCompositionTests(JitenWebApplicationFactory factory)
         var inferred = await PreviewInference("components-to-compound");
 
         inferred.Should().Equal(IsaiWoHanatsu);
+    }
+
+    [Theory]
+    [InlineData(WordSetStateType.Blacklisted)]
+    [InlineData(WordSetStateType.Mastered)]
+    public async Task ComponentSettledByAWordSet_IsNotInferred(WordSetStateType state)
+    {
+        await MasterWords(IsaiWoHanatsu);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            userDb.UserWordSetStates.Add(new UserWordSetState { UserId = TestUsers.UserA, SetId = IsaiSetId, State = state });
+            await userDb.SaveChangesAsync();
+        }
+
+        var inferred = await PreviewInference("compound-to-components");
+
+        inferred.Should().Equal(Hanatsu);
+    }
+
+    [Fact]
+    public async Task KanaComponentCoveredByItsKanjiCard_IsNotInferred()
+    {
+        await MasterWords(IsaiWoHanatsu);
+        using (var scope = factory.Services.CreateScope())
+        {
+            var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+            jitenDb.WordCompositions.Add(new JmDictWordComposition
+            {
+                WordId = IsaiWoHanatsu, ReadingIndex = 0, Position = 3,
+                ComponentWordId = Kagayaki, ComponentReadingIndex = 1, ComponentSurface = "かがやき"
+            });
+            await jitenDb.SaveChangesAsync();
+
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            userDb.FsrsCards.Add(new FsrsCard(TestUsers.UserA, Kagayaki, 0, state: FsrsState.Learning));
+            await userDb.SaveChangesAsync();
+        }
+
+        var inferred = await PreviewInference("compound-to-components");
+
+        inferred.Should().BeEquivalentTo([Isai, Hanatsu]);
     }
 }

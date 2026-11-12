@@ -1993,13 +1993,13 @@ public class SrsController(
                 .Select(c => new { c.WordId, c.ReadingIndex, c.ComponentWordId, c.ComponentReadingIndex })
                 .ToListAsync();
 
-            return raw
+            return await ExcludeSettledForms(raw
                 .Where(r => known.Contains((r.WordId, (byte)r.ReadingIndex)))
                 .Select(r => (WordId: r.ComponentWordId, ReadingIndex: (byte)r.ComponentReadingIndex))
                 .Distinct()
                 .Where(p => !blocked.Contains(p))
                 .OrderBy(p => p.WordId).ThenBy(p => p.ReadingIndex)
-                .ToList();
+                .ToList());
         }
 
         if (direction == "components-to-compound")
@@ -2025,7 +2025,7 @@ public class SrsController(
                 .Select(c => new { c.WordId, c.ReadingIndex, c.ComponentWordId, c.ComponentReadingIndex })
                 .ToListAsync();
 
-            return allRows
+            return await ExcludeSettledForms(allRows
                 .Where(r => candidateSet.Contains((r.WordId, r.ReadingIndex)))
                 .GroupBy(r => (r.WordId, r.ReadingIndex))
                 .Where(g => g.Count() >= 2
@@ -2033,10 +2033,22 @@ public class SrsController(
                 .Select(g => (WordId: g.Key.WordId, ReadingIndex: (byte)g.Key.ReadingIndex))
                 .Where(p => !blocked.Contains(p))
                 .OrderBy(p => p.WordId).ThenBy(p => p.ReadingIndex)
-                .ToList();
+                .ToList());
         }
 
         return null;
+    }
+
+    /// <summary>Word-set states and redundant forms carry no card of their own, so the card-based blocked set misses them.</summary>
+    private async Task<List<(int WordId, byte ReadingIndex)>> ExcludeSettledForms(List<(int WordId, byte ReadingIndex)> pairs)
+    {
+        if (pairs.Count == 0) return pairs;
+
+        var states = await currentUserService.GetKnownWordsState(pairs);
+        return pairs
+            .Where(p => !states.TryGetValue(p, out var s)
+                        || !s.Any(x => x is KnownState.Mastered or KnownState.Blacklisted or KnownState.Redundant))
+            .ToList();
     }
 
     private async Task<(List<(int WordId, byte ReadingIndex, string Category)> Items, (int New, int Learning, int Mature) Counts)>
