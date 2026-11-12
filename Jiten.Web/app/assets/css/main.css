@@ -630,7 +630,7 @@ html.dark-mode .prose .shiki span {
   .p-toast-bottom-right,
   .p-toast-bottom-left,
   .p-toast-bottom-center {
-    bottom: calc(env(safe-area-inset-bottom, 0px) + 0.75rem) !important;
+    bottom: calc(env(safe-area-inset-bottom, 0px) + var(--undo-toast-bottom, 0.75rem)) !important;
   }
 }
 
