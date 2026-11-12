@@ -20,6 +20,7 @@
   import {
     DOUBT_REASONS,
     TIER_LABELS,
+    approvalExclusion,
     contributorLevelLabel,
     conflictClashes,
     describeValue,
@@ -28,15 +29,16 @@
     fieldPhrase,
     fieldsFromFlags,
     isListField,
+    leftOutPhrase,
     queueMode,
     queueShortcut,
     queueTabFromQuery,
     revertSummary,
     lookedRightText,
     sortChanges,
-    sortFields,
     tierLabel,
     toggleChipClass,
+    type ApprovalExclusion,
     type ConflictClash,
     type QueueTab,
   } from '~/utils/metadataEdits';
@@ -51,6 +53,7 @@
   const PAGE_SIZE = 20;
   const CONFLICT_OPTIONS = ['current', 'edit'] as const;
   const REJECT_REASONS = ["The source doesn't support this", 'No source', 'Already correct', 'Belongs on a different deck'];
+  const FLAGGED_NAMES_NOTE = 'The automatic check flagged these names.';
 
   const route = useRoute();
   const router = useRouter();
@@ -160,6 +163,7 @@
   const doubtFields = ref<number[]>([]);
   const rejectNote = ref('');
   const excludedFields = ref<Record<number, number>>({});
+  const excludedItems = ref<Record<number, Record<number, string[]>>>({});
   const excludeNote = ref('');
   const busy = ref(false);
   const actionError = ref<string | null>(null);
@@ -321,28 +325,45 @@
     excludedFields.value = { ...excludedFields.value, [item.id]: (excludedFields.value[item.id] ?? 0) ^ field };
   }
 
-  const leftOut = computed(() => (selected.value ? sortFields(selected.value.changes.map((c) => c.field)).filter((f) => !isIncluded(selected.value!, f)) : []));
+  function toggleItem(item: MetadataQueueItem, field: number, key: string) {
+    const keys = excludedItems.value[item.id]?.[field] ?? [];
+    const next = keys.includes(key) ? keys.filter((k) => k !== key) : [...keys, key];
+    excludedItems.value = { ...excludedItems.value, [item.id]: { ...excludedItems.value[item.id], [field]: next } };
+  }
+
+  function exclusionFor(item: MetadataQueueItem, flaggedNames: string[] = []): ApprovalExclusion {
+    const items = excludedItems.value[item.id] ?? {};
+    const names = [...(items[MetadataField.CharacterNames] ?? []), ...flaggedNames];
+    return approvalExclusion(item.changes, excludedFields.value[item.id] ?? 0, { ...items, [MetadataField.CharacterNames]: names });
+  }
+
+  const emptyExclusion: ApprovalExclusion = { wholeFields: [], items: [], total: 0, leftOut: 0 };
+  const exclusion = computed(() => (selected.value ? exclusionFor(selected.value) : emptyExclusion));
   const orderedChanges = computed(() => (selected.value ? sortChanges(selected.value.changes) : []));
-  const choosesChanges = computed(() => mode.value === 'review' && !!selected.value?.canApprove && (selected.value?.changes.length ?? 0) > 1);
+  const canChoose = computed(() => mode.value === 'review' && !!selected.value?.canApprove);
+  const choosesChanges = computed(() => canChoose.value && (selected.value?.changes.length ?? 0) > 1);
   const approveLabel = computed(() => {
-    const count = selected.value?.changes.length ?? 0;
-    return leftOut.value.length ? `Approve ${count - leftOut.value.length} of ${count} changes` : 'Approve';
+    const { total, leftOut } = exclusion.value;
+    return leftOut ? `Approve ${total - leftOut} of ${total} changes` : 'Approve';
   });
   const canApproveSelection = computed(
-    () => !!selected.value && leftOut.value.length < selected.value.changes.length && (!leftOut.value.length || !!excludeNote.value.trim())
+    () =>
+      !!selected.value &&
+      exclusion.value.wholeFields.length < selected.value.changes.length &&
+      (!exclusion.value.leftOut || !!excludeNote.value.trim())
   );
 
-  async function approveItem(item: MetadataQueueItem, excludeCharacterNames?: string[]) {
+  async function approveItem(item: MetadataQueueItem, flaggedNames: string[] = []) {
     const resolutionList = (item.conflicts ?? []).map((c) => ({ field: c.field, keep: resolutionFor(item, c) }));
-    const excluded = item.id === selected.value?.id ? leftOut.value : [];
+    const excluded = exclusionFor(item, flaggedNames);
     try {
       await $api(`metadata-edits/${item.id}/approve`, {
         method: 'POST',
         body: {
           resolutions: resolutionList.length ? resolutionList : undefined,
-          excludeCharacterNames,
-          excludeFields: excluded.length ? excluded : undefined,
-          excludeNote: excluded.length ? excludeNote.value.trim() : undefined,
+          excludeFields: excluded.wholeFields.length ? excluded.wholeFields : undefined,
+          excludeItems: excluded.items.length ? excluded.items : undefined,
+          excludeNote: excluded.leftOut ? excludeNote.value.trim() || FLAGGED_NAMES_NOTE : undefined,
         },
       });
     } catch (err) {
@@ -354,12 +375,12 @@
     }
   }
 
-  function approve(excludeCharacterNames?: string[]) {
+  function approve(flaggedNames: string[] = []) {
     const item = selected.value;
     if (!item || mode.value !== 'review' || !item.canApprove || !canApproveSelection.value) return;
-    const partial = leftOut.value.length > 0;
+    const partial = exclusionFor(item, flaggedNames).leftOut > 0;
     runAction(async () => {
-      await approveItem(item, excludeCharacterNames);
+      await approveItem(item, flaggedNames);
       removeItem(item);
       notify(
         partial
@@ -676,14 +697,23 @@
                     @update:model-value="toggleIncluded(selected, change.field)"
                   />
                   <div class="min-w-0 flex-1" :class="isIncluded(selected, change.field) ? '' : 'opacity-50'">
-                    <MetadataChangeList :changes="[change]" />
+                    <MetadataChangeList
+                      :changes="[change]"
+                      :excluded-items="isIncluded(selected, change.field) ? (excludedItems[selected.id] ?? {}) : undefined"
+                      @toggle-item="(field, key) => toggleItem(selected!, field, key)"
+                    />
                   </div>
                 </div>
               </div>
-              <MetadataChangeList v-else :changes="selected.changes" />
-              <div v-if="choosesChanges && leftOut.length" class="flex flex-col gap-1.5 mt-1">
+              <MetadataChangeList
+                v-else
+                :changes="selected.changes"
+                :excluded-items="canChoose ? (excludedItems[selected.id] ?? {}) : undefined"
+                @toggle-item="(field, key) => toggleItem(selected!, field, key)"
+              />
+              <div v-if="canChoose && exclusion.leftOut" class="flex flex-col gap-1.5 mt-1">
                 <label for="exclude-note" class="text-xs font-semibold text-muted-color">
-                  Reason for leaving out the {{ fieldPhrase(leftOut).toLowerCase() }}, sent to {{ selected.author.displayName }}
+                  Reason for leaving out {{ leftOutPhrase(exclusion) }}, sent to {{ selected.author.displayName }}
                 </label>
                 <div class="flex flex-wrap gap-1.5">
                   <button

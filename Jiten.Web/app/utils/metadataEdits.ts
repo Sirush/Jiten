@@ -649,6 +649,8 @@ export function submissionError({ draft, fields, sources, note }: SubmissionChec
 }
 
 export interface ListEntry {
+  /** Matches MetadataEditService.ItemKey, so a reviewer can leave single items out of an approval. */
+  key?: string;
   label: string;
   role?: string;
   href?: string;
@@ -686,7 +688,7 @@ const asFranchise = (value: unknown): MetadataFranchiseValue | null =>
 export type ChangeView =
   | { kind: 'scalar'; before: string | null; after: string | null }
   | { kind: 'text'; before: string | null; after: string | null; delta: number }
-  | { kind: 'list'; added: ListEntry[]; removed: ListEntry[]; changed: { label: string; before: string; after: string }[] };
+  | { kind: 'list'; added: ListEntry[]; removed: ListEntry[]; changed: { key: string; label: string; before: string; after: string }[] };
 
 const asArray = <T>(value: unknown): T[] => (Array.isArray(value) ? (value as T[]) : []);
 const asText = (value: unknown): string | null => (value === null || value === undefined || value === '' ? null : String(value));
@@ -699,9 +701,10 @@ function keyedDiff<T>(
 ): { added: ListEntry[]; removed: ListEntry[] } {
   const beforeKeys = new Set(before.map(key));
   const afterKeys = new Set(after.map(key));
+  const keyed = (item: T): ListEntry => ({ ...entry(item), key: key(item) });
   return {
-    added: after.filter((i) => !beforeKeys.has(key(i))).map(entry),
-    removed: before.filter((i) => !afterKeys.has(key(i))).map(entry),
+    added: after.filter((i) => !beforeKeys.has(key(i))).map(keyed),
+    removed: before.filter((i) => !afterKeys.has(key(i))).map(keyed),
   };
 }
 
@@ -742,7 +745,12 @@ export function describeChange(change: MetadataFieldChange): ChangeView {
       const beforeById = new Map(b.map((t) => [t.tagId, t]));
       const changed = a
         .filter((t) => beforeById.has(t.tagId) && beforeById.get(t.tagId)!.percentage !== t.percentage)
-        .map((t) => ({ label: t.name, before: tagWeightText(beforeById.get(t.tagId)!.percentage), after: tagWeightText(t.percentage) }));
+        .map((t) => ({
+          key: String(t.tagId),
+          label: t.name,
+          before: tagWeightText(beforeById.get(t.tagId)!.percentage),
+          after: tagWeightText(t.percentage),
+        }));
       return { kind: 'list', ...diff, changed };
     }
     case MetadataField.Links:
@@ -751,7 +759,7 @@ export function describeChange(change: MetadataFieldChange): ChangeView {
         ...keyedDiff(
           asArray<MetadataLinkValue>(before),
           asArray<MetadataLinkValue>(after),
-          (l) => `${l.linkType}|${l.url}`,
+          (l) => `${Number(l.linkType)}|${l.url}`,
           (l) => plainEntry(`${getLinkLabel({ linkType: Number(l.linkType), url: l.url })}: ${l.url}`)
         ),
         changed: [],
@@ -787,6 +795,54 @@ const LIST_FIELDS = new Set<MetadataField>([
 
 export function isListField(field: MetadataField | number): boolean {
   return LIST_FIELDS.has(field as MetadataField);
+}
+
+/** Keys of the items a list change adds, removes or changes; empty for a field that is approved as a whole. */
+export function changeItemKeys(change: MetadataFieldChange): string[] {
+  if (!isListField(change.field)) return [];
+  const view = describeChange(change);
+  if (view.kind !== 'list') return [];
+  return [...view.added, ...view.removed, ...view.changed].map((entry) => entry.key).filter((key): key is string => key !== undefined);
+}
+
+export interface ApprovalExclusion {
+  wholeFields: MetadataField[];
+  items: { field: MetadataField; keys: string[] }[];
+  total: number;
+  leftOut: number;
+}
+
+/** A list field with every item left out counts as a whole field, the way the API reads it. */
+export function approvalExclusion(
+  changes: MetadataFieldChange[],
+  excludedFields: number,
+  excludedItems: Record<number, string[]> | undefined
+): ApprovalExclusion {
+  const result: ApprovalExclusion = { wholeFields: [], items: [], total: 0, leftOut: 0 };
+  for (const change of sortChanges(changes)) {
+    const keys = changeItemKeys(change);
+    const size = keys.length || 1;
+    const dropped = new Set(excludedItems?.[change.field] ?? []);
+    const excluded = keys.filter((key) => dropped.has(key));
+    result.total += size;
+    if ((excludedFields & change.field) !== 0 || (keys.length > 0 && excluded.length === keys.length)) {
+      result.wholeFields.push(change.field);
+      result.leftOut += size;
+    } else if (excluded.length) {
+      result.items.push({ field: change.field, keys: excluded });
+      result.leftOut += excluded.length;
+    }
+  }
+  return result;
+}
+
+/** "the genres and part of the tags", matching the notification the author gets. */
+export function leftOutPhrase(exclusion: ApprovalExclusion): string {
+  const labels = (fields: MetadataField[]) => joinList(fields.map((f) => fieldLabel(f).toLowerCase()));
+  const parts: string[] = [];
+  if (exclusion.wholeFields.length) parts.push(`the ${labels(exclusion.wholeFields)}`);
+  if (exclusion.items.length) parts.push(`part of the ${labels(exclusion.items.map((i) => i.field))}`);
+  return parts.join(' and ');
 }
 
 export interface ConflictClash {

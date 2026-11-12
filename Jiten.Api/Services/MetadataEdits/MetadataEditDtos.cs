@@ -60,13 +60,23 @@ public sealed class ConflictResolution
     public string Keep { get; init; } = "edit";
 }
 
+public sealed class ExcludedItems
+{
+    public MetadataField Field { get; init; }
+
+    /// <summary>Keys in the form <see cref="MetadataEditService.ItemKey"/> builds.</summary>
+    public List<string> Keys { get; init; } = [];
+}
+
 public sealed class ApproveMetadataEditRequest
 {
     public List<ConflictResolution>? Resolutions { get; init; }
-    public List<string>? ExcludeCharacterNames { get; init; }
 
     /// <summary>Fields to leave out; they become a rejected part of the same submission with <see cref="ExcludeNote"/> as the reason.</summary>
     public List<int>? ExcludeFields { get; init; }
+
+    /// <summary>Single items of list fields to leave out; they join the rejected part and the rest of the field is approved.</summary>
+    public List<ExcludedItems>? ExcludeItems { get; init; }
 
     public string? ExcludeNote { get; init; }
 }

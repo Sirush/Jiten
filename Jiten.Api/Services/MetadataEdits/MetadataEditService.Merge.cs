@@ -47,6 +47,28 @@ public sealed partial class MetadataEditService
     private static List<T> ListOf<T>(JsonElement value) =>
         value.ValueKind == JsonValueKind.Array ? value.Deserialize<List<T>>(DeckMetadataSnapshot.Json) ?? [] : [];
 
+    /// <summary>Identity of one list item; the review page builds the same keys for its item toggles.</summary>
+    public static string ItemKey(MetadataField field, JsonElement item) => field switch
+    {
+        MetadataField.Tags => item.GetProperty("tagId").GetInt32().ToString(),
+        MetadataField.Links => $"{item.GetProperty("linkType").GetInt32()}|{item.GetProperty("url").GetString()}",
+        MetadataField.Relationships =>
+            $"{item.GetProperty("sourceDeckId").GetInt32()}>{item.GetProperty("targetDeckId").GetInt32()}:{item.GetProperty("relationshipType").GetInt32()}",
+        MetadataField.Genres => item.GetInt32().ToString(),
+        _ => item.GetString() ?? ""
+    };
+
+    /// <summary>Kept is the change without the excluded items, which stay as they were before; LeftOut is the change those items make alone.</summary>
+    public static (JsonElement Kept, JsonElement LeftOut) SplitListChange(MetadataField field, JsonElement before, JsonElement after,
+                                                                          IReadOnlySet<string> excludedKeys)
+    {
+        bool Excluded(JsonElement item) => excludedKeys.Contains(ItemKey(field, item));
+        var b = ListOf<JsonElement>(before);
+        var a = ListOf<JsonElement>(after);
+        return (DeckMetadataSnapshot.ToElement(a.Where(i => !Excluded(i)).Concat(b.Where(Excluded)).ToList()),
+                DeckMetadataSnapshot.ToElement(b.Where(i => !Excluded(i)).Concat(a.Where(Excluded)).ToList()));
+    }
+
     private static (JsonElement, bool) MergeSet<T>(JsonElement before, JsonElement after, JsonElement current, IEqualityComparer<T> comparer,
                                                    Func<T, string> sortKey)
     {

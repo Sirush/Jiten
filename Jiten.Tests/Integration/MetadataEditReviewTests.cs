@@ -265,11 +265,19 @@ public class MetadataEditReviewTests(JitenWebApplicationFactory factory)
     {
         var editId = EditId(await SubmitOkAsync(Users.Author, new { addCharacterNames = new[] { "前島 鹿之助" }, sources = new[] { Source } }));
 
-        await OkAsync(ApproveAsync(editId, Users.Editor, new { excludeCharacterNames = new[] { "鹿之助" } }));
+        await OkAsync(ApproveAsync(editId, Users.Editor, new
+        {
+            excludeItems = new[] { new { field = (int)MetadataField.CharacterNames, keys = new[] { "鹿之助" } } },
+            excludeNote = "Too common a word."
+        }));
 
         (await DeckAsync()).DictionaryEntries.Select(e => e.Surface).Should().BeEquivalentTo(["前島鹿之助", "前島"]);
-        var stored = MetadataEditService.ParseChanges((await EditAsync(editId)).ChangesJson).Single();
+        var approved = await EditAsync(editId);
+        var stored = MetadataEditService.ParseChanges(approved.ChangesJson).Single();
         stored.After.Deserialize<List<string>>().Should().NotContain("鹿之助");
+        var rejected = await DbAsync(db => db.MetadataEdits.AsNoTracking().SingleAsync(e => e.SubmissionId == approved.SubmissionId && e.Id != editId));
+        rejected.Status.Should().Be(MetadataEditStatus.Rejected);
+        MetadataEditService.ParseChanges(rejected.ChangesJson).Single().After.Deserialize<List<string>>().Should().Equal("鹿之助");
     }
 
     [Fact]

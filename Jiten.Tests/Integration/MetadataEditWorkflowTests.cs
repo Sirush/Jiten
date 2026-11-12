@@ -1,6 +1,8 @@
 using System.Net;
+using System.Text.Json;
 using System.Text.Json.Nodes;
 using FluentAssertions;
+using Jiten.Api.Services.MetadataEdits;
 using Jiten.Core.Data;
 using Jiten.Core.Data.MetadataEdits;
 using Jiten.Parser.Tests.Integration.Infrastructure;
@@ -95,6 +97,37 @@ public class MetadataEditWorkflowTests(JitenWebApplicationFactory factory)
 
         var message = await DbAsync(db => db.Notifications.Where(n => n.UserId == Users.Author).Select(n => n.Message).SingleAsync());
         message.Should().EndWith("except the genres: Not a comedy.");
+    }
+
+    [Fact]
+    public async Task Approving_some_items_of_a_list_rejects_the_others_with_the_reason()
+    {
+        var edit = EditId(await SubmitOkAsync(Users.Author, new { genres = new[] { (int)Genre.Comedy, (int)Genre.Drama }, sources = new[] { Source } }));
+        object Excluding(params Genre[] genres) => new
+        {
+            excludeItems = new[] { new { field = (int)MetadataField.Genres, keys = genres.Select(g => ((int)g).ToString()).ToArray() } },
+            excludeNote = "Still an action title, and not a comedy."
+        };
+
+        (await ErrorAsync(ApproveAsync(edit, Users.Editor, Excluding(Genre.Action, Genre.Comedy, Genre.Drama)), HttpStatusCode.BadRequest))
+            .Should().Be("Leave at least one change in, or reject the edit.");
+
+        await OkAsync(ApproveAsync(edit, Users.Editor, Excluding(Genre.Action, Genre.Comedy)));
+
+        (await DeckAsync()).DeckGenres.Select(g => g.Genre).Should().BeEquivalentTo([Genre.Action, Genre.Drama]);
+
+        var approved = await EditAsync(edit);
+        approved.Status.Should().Be(MetadataEditStatus.Approved);
+        approved.Fields.Should().Be(MetadataField.Genres);
+        var split = await DbAsync(db => db.MetadataEdits.AsNoTracking().SingleAsync(e => e.SubmissionId == approved.SubmissionId && e.Id != edit));
+        split.Status.Should().Be(MetadataEditStatus.Rejected);
+        split.Fields.Should().Be(MetadataField.Genres);
+        var rejected = MetadataEditService.ParseChanges(split.ChangesJson).Single();
+        rejected.Before.Deserialize<List<int>>().Should().Equal((int)Genre.Action);
+        rejected.After.Deserialize<List<int>>().Should().Equal((int)Genre.Comedy);
+
+        var message = await DbAsync(db => db.Notifications.Where(n => n.UserId == Users.Author).Select(n => n.Message).SingleAsync());
+        message.Should().EndWith("except part of the genres: Still an action title, and not a comedy.");
     }
 
     [Fact]
