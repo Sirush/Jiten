@@ -40,6 +40,9 @@ public static class KnownWordRules
     /// <summary>Learned knowledge; a blacklisted word was opted out of, not learned.</summary>
     public static bool IsLearned(KnownState tier) => tier is KnownState.Young or KnownState.Mature or KnownState.Mastered;
 
+    /// <summary>Learned, covered by a learned form, or opted out of; learning cards (Due with no review) and plain New do not count.</summary>
+    public static bool IsKnown(KnownState tier) => IsLearned(tier) || tier is KnownState.Redundant or KnownState.Blacklisted;
+
     /// <summary>A word's tier across its forms: any learned form outranks Blacklisted, which wins only over forms the user does not know.</summary>
     public static KnownState WordTier(IEnumerable<KnownState> formTiers)
     {
