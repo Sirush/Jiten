@@ -8,6 +8,9 @@ public class FsrsExportDto
     public required int TotalReviews { get; set; }
     public List<FsrsCardExportDto> Cards { get; set; } = [];
 
+    /// <summary>Bulk writes the cards' <see cref="FsrsCardExportDto.SourceBatchId"/> refer to. Absent in backups taken before provenance was recorded.</summary>
+    public List<CardBatchExportDto>? Batches { get; set; }
+
     /// <summary>Removed cards and their kept history. Absent in backups taken before the archive existed.</summary>
     public List<FsrsCardArchiveExportDto>? Archive { get; set; }
 

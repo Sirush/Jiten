@@ -409,15 +409,17 @@ public class CurrentUserService(
         return leeches;
     }
 
-    public Task<VocabularyUpsertResult> AddKnownWords(IEnumerable<DeckWord> deckWords, bool overwriteExisting = true,
-                                                      bool countAsNewlyLearned = false) =>
-        UpsertCardsWithState(deckWords, FsrsState.Mastered, overwriteExisting, countAsNewlyLearned);
+    public Task<VocabularyUpsertResult> AddKnownWords(IEnumerable<DeckWord> deckWords, CardSource source, Guid? batchId = null,
+                                                      bool overwriteExisting = true, bool countAsNewlyLearned = false) =>
+        UpsertCardsWithState(deckWords, FsrsState.Mastered, source, batchId, overwriteExisting, countAsNewlyLearned);
 
-    public Task<VocabularyUpsertResult> BlacklistWords(IEnumerable<DeckWord> deckWords, bool overwriteExisting = true) =>
-        UpsertCardsWithState(deckWords, FsrsState.Blacklisted, overwriteExisting, false);
+    public Task<VocabularyUpsertResult> BlacklistWords(IEnumerable<DeckWord> deckWords, CardSource source, Guid? batchId = null,
+                                                       bool overwriteExisting = true) =>
+        UpsertCardsWithState(deckWords, FsrsState.Blacklisted, source, batchId, overwriteExisting, false);
 
     // overwriteExisting=false leaves cards the user already has at their current state, preserving study history.
     private async Task<VocabularyUpsertResult> UpsertCardsWithState(IEnumerable<DeckWord> deckWords, FsrsState targetState,
+                                                                    CardSource source, Guid? batchId,
                                                                     bool overwriteExisting, bool countAsNewlyLearned)
     {
         if (!IsAuthenticated) return new VocabularyUpsertResult(0, 0);
@@ -462,7 +464,7 @@ public class CurrentUserService(
             if (!existingSet.TryGetValue(p, out var existingUk))
             {
                 toInsert.Add(new FsrsCard(UserId!, p.WordId, p.ReadingIndex, due: now, lastReview: now,
-                                           state: targetState));
+                                           state: targetState) { Source = source, SourceBatchId = batchId });
             }
             else if (overwriteExisting && existingUk.State != targetState)
             {
@@ -543,7 +545,7 @@ public class CurrentUserService(
 
     public Task<VocabularyUpsertResult> AddKnownWord(int wordId, byte readingIndex)
     {
-        return AddKnownWords([new DeckWord { WordId = wordId, ReadingIndex = readingIndex }]);
+        return AddKnownWords([new DeckWord { WordId = wordId, ReadingIndex = readingIndex }], CardSource.ManualSingle);
     }
 
     public async Task RemoveKnownWord(int wordId, byte readingIndex)

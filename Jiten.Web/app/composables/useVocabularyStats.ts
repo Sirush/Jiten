@@ -25,7 +25,12 @@ export function useVocabularyStats() {
   const archivedCards = ref(0);
   const hasWordSetContributions = computed(() => wordSetMasteredWords.value > 0 || wordSetBlacklistedWords.value > 0);
 
+  const vocabStatsRefreshing = ref(false);
+  let latestFetch = 0;
+
   async function fetchKnownWordsAmount() {
+    const fetchId = ++latestFetch;
+    vocabStatsRefreshing.value = true;
     try {
       const result = await $api<{
         young: number;
@@ -45,6 +50,7 @@ export function useVocabularyStats() {
         derivationCoveredForm: number;
         archivedCards: number;
       }>('user/vocabulary/known-ids/amount');
+      if (fetchId !== latestFetch) return;
       youngWordsAmount.value = result.young;
       matureWordsAmount.value = result.mature;
       masteredWordsAmount.value = result.mastered;
@@ -63,7 +69,10 @@ export function useVocabularyStats() {
       archivedCards.value = result.archivedCards ?? 0;
     } catch {
     } finally {
-      vocabStatsLoading.value = false;
+      if (fetchId === latestFetch) {
+        vocabStatsLoading.value = false;
+        vocabStatsRefreshing.value = false;
+      }
     }
   }
 
@@ -88,6 +97,7 @@ export function useVocabularyStats() {
 
   return {
     vocabStatsLoading,
+    vocabStatsRefreshing,
     youngWordsAmount,
     matureWordsAmount,
     masteredWordsAmount,

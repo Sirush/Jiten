@@ -885,6 +885,7 @@
       sentenceImport.reset();
       mediaImport.reset();
 
+      const importBatchId = crypto.randomUUID();
       const allSkippedWords: string[] = [];
       const allSkippedReadingMismatch: string[] = [];
       let skippedCountNoReviews = 0;
@@ -973,6 +974,8 @@
               cards: chunkPayload,
               overwrite: overwriteExisting.value,
               parseWords: parseWords.value,
+              batchId: importBatchId,
+              deckName: selectedDeckName.value || undefined,
             });
             const result = await $api<any>('user/vocabulary/import-from-anki', { method: 'POST', body, headers });
             completedUploads++;
@@ -1000,6 +1003,8 @@
               cards: chunkPayload,
               overwrite: overwriteExisting.value,
               parseWords: parseWords.value,
+              batchId: importBatchId,
+              deckName: selectedDeckName.value || undefined,
             });
             const result = await $api<any>('user/vocabulary/import-from-anki', { method: 'POST', body, headers });
             uploadProgress.value = Math.round(((i + 1) / chunks.length) * 100);

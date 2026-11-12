@@ -3,6 +3,8 @@ import type { FranchiseLine, MediaGroupKind, MediaGroupTitles } from './mediaGro
 import type { AvatarStyle } from '~/utils/profileAppearance';
 import type { FsrsParametersSource } from '~/utils/fsrsProvenance';
 import type {
+  CardBatchKind,
+  CardSource,
   ComparisonOutcome,
   CommunityListStatus,
   ForumDiscussionStatus,
@@ -472,6 +474,41 @@ export interface Definition {
   senseInfo?: string[];
   glossTypes?: string[];
   crossReferences?: CrossReference[];
+}
+
+export interface CardBatchDetails {
+  kind: CardBatchKind;
+  deckId?: number;
+  name?: string;
+  minRank?: number;
+  maxRank?: number;
+  units?: number;
+  listStatus?: DeckStatus;
+}
+
+export interface CardBatchDeck {
+  deckId: number;
+  originalTitle: string;
+  romajiTitle: string | null;
+  englishTitle: string | null;
+}
+
+export interface CardBatch {
+  batchId: string;
+  source: CardSource;
+  details: CardBatchDetails;
+  deck: CardBatchDeck | null;
+  createdAt: string;
+  cardCount: number;
+  wordCount: number;
+  removableCount: number;
+  undone: boolean;
+}
+
+export interface CardBatchUndoResult {
+  removed: number;
+  kept: number;
+  alreadyUndone: boolean;
 }
 
 export interface PaginatedResponse<T> {

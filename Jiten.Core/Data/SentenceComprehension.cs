@@ -7,8 +7,11 @@ public static class SentenceComprehension
         states.Any(s => s is KnownState.Young or KnownState.Mature or KnownState.Mastered
                              or KnownState.Redundant or KnownState.Blacklisted);
 
+    public const int NameEntryFloor = 5_000_000;
+    public const int NameEntryCeiling = 8_000_000;
+
     /// <summary>JMnedict entries; custom entries from 8,000,000 up are vocabulary and still count.</summary>
-    public static bool IsNameEntry(int wordId) => wordId is >= 5_000_000 and < 8_000_000;
+    public static bool IsNameEntry(int wordId) => wordId is >= NameEntryFloor and < NameEntryCeiling;
 
     /// <summary>Every occurrence of an unknown content word other than the target; particles, auxiliaries and names never count.</summary>
     public static IEnumerable<SentenceToken> UnknownTokens(IEnumerable<SentenceToken> tokens, int targetWordId, Func<int, byte, bool> isKnown) =>

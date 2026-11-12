@@ -51,6 +51,12 @@ public class FsrsCard
 
     public DateTime CreatedAt { get; set; }
 
+    /// <summary>Set once at insert; later activity never rewrites it, so the first origin wins.</summary>
+    public CardSource Source { get; set; }
+
+    /// <summary>The <see cref="CardBatch"/> that inserted the card; null for cards created one at a time.</summary>
+    public Guid? SourceBatchId { get; set; }
+
     /// <summary>
     /// Review history for this card
     /// </summary>
@@ -97,7 +103,9 @@ public class FsrsCard
         {
             Lapses = Lapses,
             CreatedAt = CreatedAt,
-            StabilityFast = StabilityFast
+            StabilityFast = StabilityFast,
+            Source = Source,
+            SourceBatchId = SourceBatchId
         };
     }
 }

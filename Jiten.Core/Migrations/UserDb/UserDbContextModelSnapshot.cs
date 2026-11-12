@@ -522,6 +522,42 @@ namespace Jiten.Core.Migrations.UserDb
                     b.ToTable("DeckDownloads", "user");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.FSRS.CardBatch", b =>
+                {
+                    b.Property<Guid>("BatchId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("CardCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("CardState")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Details")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<byte>("Source")
+                        .HasColumnType("smallint");
+
+                    b.Property<bool>("Undone")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("BatchId");
+
+                    b.HasIndex("UserId", "CreatedAt")
+                        .HasDatabaseName("IX_CardBatch_UserId_CreatedAt");
+
+                    b.ToTable("CardBatches", "user");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.FSRS.FsrsCard", b =>
                 {
                     b.Property<long>("CardId")
@@ -550,6 +586,12 @@ namespace Jiten.Core.Migrations.UserDb
                     b.Property<byte>("ReadingIndex")
                         .HasColumnType("smallint");
 
+                    b.Property<byte>("Source")
+                        .HasColumnType("smallint");
+
+                    b.Property<Guid?>("SourceBatchId")
+                        .HasColumnType("uuid");
+
                     b.Property<double?>("Stability")
                         .HasColumnType("double precision");
 
@@ -571,6 +613,10 @@ namespace Jiten.Core.Migrations.UserDb
                     b.HasKey("CardId");
 
                     b.HasIndex("UserId");
+
+                    b.HasIndex("UserId", "SourceBatchId")
+                        .HasDatabaseName("IX_FsrsCard_UserId_SourceBatchId")
+                        .HasFilter("\"SourceBatchId\" IS NOT NULL");
 
                     b.HasIndex("UserId", "State", "Due")
                         .HasDatabaseName("IX_FsrsCard_UserId_State_Due");
@@ -634,6 +680,9 @@ namespace Jiten.Core.Migrations.UserDb
 
                     b.Property<int>("ReviewCount")
                         .HasColumnType("integer");
+
+                    b.Property<byte>("Source")
+                        .HasColumnType("smallint");
 
                     b.Property<double?>("Stability")
                         .HasColumnType("double precision");
@@ -762,6 +811,55 @@ namespace Jiten.Core.Migrations.UserDb
                     b.HasIndex("UserId", "CreatedAtUtc");
 
                     b.ToTable("FsrsParameterHistories", "user");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.User.ReadingCheckRun", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("Id"));
+
+                    b.Property<double>("A")
+                        .HasColumnType("double precision");
+
+                    b.Property<string>("AnswersJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb");
+
+                    b.Property<double>("B")
+                        .HasColumnType("double precision");
+
+                    b.Property<Guid?>("BatchId")
+                        .HasColumnType("uuid");
+
+                    b.Property<double>("C")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("Candidates")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Level")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Seeded")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Units")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("UserId", "CreatedAt");
+
+                    b.ToTable("ReadingCheckRuns", "user");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.User.UserCardMedia", b =>
@@ -1526,6 +1624,12 @@ namespace Jiten.Core.Migrations.UserDb
                         .HasColumnType("jsonb")
                         .HasDefaultValue("[]");
 
+                    b.Property<string>("OnboardingJson")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("jsonb")
+                        .HasDefaultValue("{}");
+
                     b.Property<string>("SmartDeckJson")
                         .IsRequired()
                         .ValueGeneratedOnAdd()
@@ -1752,6 +1856,15 @@ namespace Jiten.Core.Migrations.UserDb
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.FSRS.CardBatch", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.FSRS.FsrsCard", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Authentication.User", null)
@@ -1791,6 +1904,15 @@ namespace Jiten.Core.Migrations.UserDb
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.User.FsrsParameterHistory", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Authentication.User", null)
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.User.ReadingCheckRun", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Authentication.User", null)
                         .WithMany()

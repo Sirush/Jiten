@@ -7,6 +7,11 @@ public class AnkiImportRequest
     public List<AnkiCardWrapper> Cards { get; set; } = new();
     public bool Overwrite { get; set; } = false;
     public bool ParseWords { get; set; } = false;
+
+    /// <summary>Client-generated id shared by every chunk of one import, so the chunks land in one undoable batch.</summary>
+    public Guid? BatchId { get; set; }
+
+    public string? DeckName { get; set; }
 }
 
 public class AnkiCardWrapper

@@ -52,7 +52,7 @@
       scanned.value = true;
       showPreview.value = true;
     } catch (e) {
-      toast.add({ severity: 'error', summary: 'Scan failed', detail: extractApiError(e, 'Could not check for redundant forms.'), life: 5000 });
+      toast.add({ severity: 'error', summary: 'Scan failed', detail: extractApiError(e, 'Could not check for duplicate spellings.'), life: 5000 });
     } finally {
       scanLoading.value = false;
     }
@@ -85,7 +85,7 @@
       });
       toast.add({
         severity: 'success',
-        summary: 'Redundant forms removed',
+        summary: 'Duplicates removed',
         detail: `Removed ${result?.removed ?? 0} form${result?.removed === 1 ? '' : 's'}.`,
         life: 5000,
       });
@@ -95,7 +95,7 @@
       showPreview.value = false;
       emit('changed');
     } catch (e) {
-      toast.add({ severity: 'error', summary: 'Removal failed', detail: extractApiError(e, 'Could not remove redundant forms.'), life: 5000 });
+      toast.add({ severity: 'error', summary: 'Removal failed', detail: extractApiError(e, 'Could not remove the duplicates.'), life: 5000 });
     } finally {
       removeLoading.value = false;
     }
@@ -103,38 +103,30 @@
 </script>
 
 <template>
-  <Card>
-    <template #title>
-      <h2 class="text-xl font-bold">Redundant Forms</h2>
-    </template>
-    <template #content>
-      <p class="text-sm text-muted-color mb-4">
-        Some older imports can leave you with separate cards for two spellings of the same word that are
-        <b>redundant</b>
-        with each other. This will list those words so you can review and clean the redundant ones you no longer need manually. Nothing is deleted until you
-        confirm and cards that are deleted will be in the archive below if they have reviews.
-      </p>
-
-      <div class="flex flex-wrap items-center gap-3">
-        <Button label="Check my vocabulary" icon="pi pi-search" :loading="scanLoading" @click="scan" />
-        <span v-if="scanned && forms.length === 0" class="text-sm text-muted-color italic">No redundant forms found.</span>
-        <Button
-          v-else-if="scanned"
-          :label="`Review ${forms.length} form${forms.length === 1 ? '' : 's'}`"
-          icon="pi pi-list"
-          severity="secondary"
-          text
-          @click="showPreview = true"
-        />
-      </div>
+  <SettingsListItem
+    title="Duplicate Spellings"
+    description="Some older imports can leave you with separate cards for two spellings of the same word that are redundant with each other. This will list those words so you can review and clean the redundant ones you no longer need manually. Nothing is deleted until you confirm and cards that are deleted will be in the archive below if they have reviews."
+  >
+    <template #action>
+      <span v-if="scanned && forms.length === 0" class="text-sm text-muted-color italic">No duplicates found.</span>
+      <Button
+        v-else-if="scanned"
+        :label="`Review ${forms.length} Duplicate${forms.length === 1 ? '' : 's'}`"
+        icon="pi pi-list"
+        severity="secondary"
+        text
+        size="small"
+        @click="showPreview = true"
+      />
+      <Button label="Find Duplicates" icon="pi pi-search" severity="secondary" outlined size="small" :loading="scanLoading" @click="scan" />
 
       <Dialog
         v-model:visible="showPreview"
         modal
-        :header="`Redundant forms — ${forms.length.toLocaleString()} form${forms.length === 1 ? '' : 's'}`"
+        :header="`Duplicate Spellings (${forms.length.toLocaleString()})`"
         :style="{ width: '720px', maxWidth: '95vw' }"
       >
-        <div v-if="forms.length === 0" class="text-sm text-muted-color italic py-4 text-center">No redundant forms found. Nothing to clean up.</div>
+        <div v-if="forms.length === 0" class="text-sm text-muted-color italic py-4 text-center">No duplicates found.</div>
 
         <template v-else>
           <p class="text-sm text-muted-color mb-3">
@@ -221,5 +213,5 @@
         </template>
       </Dialog>
     </template>
-  </Card>
+  </SettingsListItem>
 </template>

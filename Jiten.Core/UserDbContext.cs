@@ -38,6 +38,8 @@ public class UserDbContext : IdentityDbContext<User>
     public DbSet<FsrsCard> FsrsCards { get; set; }
     public DbSet<FsrsReviewLog> FsrsReviewLogs { get; set; }
     public DbSet<FsrsCardArchive> FsrsCardArchives { get; set; }
+    public DbSet<CardBatch> CardBatches { get; set; }
+    public DbSet<ReadingCheckRun> ReadingCheckRuns { get; set; }
     public DbSet<UserReviewDaily> UserReviewDailies { get; set; }
 
     public DbSet<UserAccomplishment> UserAccomplishments { get; set; }
@@ -194,6 +196,7 @@ public class UserDbContext : IdentityDbContext<User>
                 entity.Property(us => us.DismissedNoticesJson).HasColumnType("jsonb").HasDefaultValue("[]");
                 entity.Property(us => us.GrantedNoticesJson).HasColumnType("jsonb").HasDefaultValue("[]");
                 entity.Property(us => us.MutedNotificationGroupsJson).HasColumnType("jsonb").HasDefaultValue("[]");
+                entity.Property(us => us.OnboardingJson).HasColumnType("jsonb").HasDefaultValue("{}");
             }
             else
             {
@@ -203,6 +206,7 @@ public class UserDbContext : IdentityDbContext<User>
                 entity.Property(us => us.DismissedNoticesJson).HasDefaultValue("[]");
                 entity.Property(us => us.GrantedNoticesJson).HasDefaultValue("[]");
                 entity.Property(us => us.MutedNotificationGroupsJson).HasDefaultValue("[]");
+                entity.Property(us => us.OnboardingJson).HasDefaultValue("{}");
             }
 
             entity.HasOne<User>()
@@ -309,11 +313,48 @@ public class UserDbContext : IdentityDbContext<User>
             entity.HasIndex(c => new { c.UserId, c.WordId, c.ReadingIndex }).IsUnique();
             entity.HasIndex(c => c.UserId);
             entity.HasIndex(c => new { c.UserId, c.State, c.Due }).HasDatabaseName("IX_FsrsCard_UserId_State_Due");
+            entity.HasIndex(c => new { c.UserId, c.SourceBatchId })
+                  .HasDatabaseName("IX_FsrsCard_UserId_SourceBatchId")
+                  .HasFilter("\"SourceBatchId\" IS NOT NULL");
             entity.Property(c => c.CreatedAt).HasDefaultValueSql(isNpgsql ? "now() at time zone 'utc'" : "datetime('now')");
 
             entity.HasOne<User>()
                   .WithMany()
                   .HasForeignKey(c => c.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<CardBatch>(entity =>
+        {
+            entity.HasKey(b => b.BatchId);
+            if (isNpgsql)
+                entity.Property(b => b.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+            entity.Property(b => b.Details)
+                  .HasConversion(d => CardBatchDetailsJson.Write(d), json => CardBatchDetailsJson.Read(json))
+                  .IsRequired();
+            if (isNpgsql)
+                entity.Property(b => b.Details).HasColumnType("jsonb");
+            entity.HasIndex(b => new { b.UserId, b.CreatedAt }).HasDatabaseName("IX_CardBatch_UserId_CreatedAt");
+
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(b => b.UserId)
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ReadingCheckRun>(entity =>
+        {
+            entity.HasKey(r => r.Id);
+            if (isNpgsql)
+            {
+                entity.Property(r => r.UserId).HasConversion(guidToString).HasColumnType("uuid").IsRequired();
+                entity.Property(r => r.AnswersJson).HasColumnType("jsonb");
+            }
+
+            entity.HasIndex(r => new { r.UserId, r.CreatedAt });
+            entity.HasOne<User>()
+                  .WithMany()
+                  .HasForeignKey(r => r.UserId)
                   .OnDelete(DeleteBehavior.Cascade);
         });
 

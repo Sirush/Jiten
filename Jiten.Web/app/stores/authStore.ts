@@ -131,6 +131,7 @@ export const useAuthStore = defineStore('auth', () => {
     nuxtApp.runWithContext(() => {
       useJitenPlus().reset();
       useLegalStore().reset();
+      useState('onboarding-state').value = null;
     });
   }
 

@@ -44,6 +44,7 @@
 
   const route = useRoute();
   const isStudyMode = computed(() => route.path === '/srs/study');
+  const isBare = computed(() => route.meta.bare === true);
   const historyDeck = useHistoryDialogDeck();
   const pinReplaceRequest = usePinReplaceRequest();
   const ratingRequest = useRatingRequest();
@@ -75,6 +76,7 @@
     </ClientOnly>
 
     <div
+      v-if="!isBare"
       class="grid transition-[grid-template-rows] duration-300 ease-in-out"
       :style="{ gridTemplateRows: !isStudyMode || studyHeaderVisible ? '1fr' : '0fr' }"
     >
@@ -85,7 +87,7 @@
 
     <div
       :class="
-        isStudyMode
+        isStudyMode || isBare
           ? 'flex-grow flex flex-col'
           : route.meta.fullBleed
             ? 'flex-grow pb-2'
@@ -102,7 +104,7 @@
       </ClientOnly>
       <NuxtPage />
     </div>
-    <AppFooter v-if="!isStudyMode" />
+    <AppFooter v-if="!isStudyMode && !isBare" />
     <LazyGuidesSearch />
     <LazyToast />
     <LazyToast position="bottom-center" group="bottom" />

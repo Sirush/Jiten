@@ -198,15 +198,11 @@
 </script>
 
 <template>
-  <Card>
-    <template #title>
-      <h2 class="text-xl font-bold">Mark Words as Known via Composition</h2>
-    </template>
-    <template #content>
-      <p class="text-sm text-muted-color mb-4">
-        If you know a compound word, you're likely to know its parts too. Preview the results, then master or blacklist them individually or all at once.
-      </p>
-
+  <SettingsListItem
+    title="Mark Words as Known via Composition"
+    description="If you know a compound word, you're likely to know its parts too. Preview the results, then master or blacklist them individually or all at once."
+  >
+    <template #default>
       <div class="flex flex-col gap-4">
         <div>
           <label class="block text-sm font-medium mb-1">Direction</label>
@@ -362,5 +358,5 @@
         </template>
       </Dialog>
     </template>
-  </Card>
+  </SettingsListItem>
 </template>

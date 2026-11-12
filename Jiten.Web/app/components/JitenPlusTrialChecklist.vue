@@ -75,7 +75,7 @@
     </p>
 
     <template #footer>
-      <NuxtLink to="/jiten-plus" class="mr-auto">
+      <NuxtLink :to="{ path: '/jiten-plus', query: { src: 'trial_checklist' } }" class="mr-auto">
         <Button label="See plans" text />
       </NuxtLink>
       <Button label="Got it" @click="visible = false" />

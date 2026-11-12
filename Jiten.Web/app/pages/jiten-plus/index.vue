@@ -128,7 +128,7 @@
         <section v-if="!isLifetime" class="mt-14">
           <h2 class="text-2xl font-bold text-center mb-2 text-gray-900 dark:text-white">{{ upgradeHeading }}</h2>
           <p class="text-center text-gray-600 dark:text-gray-300 mb-8">{{ upgradeSubtitle }}</p>
-          <JitenPlusPricingCards :pricing="pricing" />
+          <JitenPlusPricingCards :pricing="pricing" section="member" />
         </section>
       </template>
 
@@ -203,7 +203,7 @@
             </div>
 
             <div class="mt-10">
-              <JitenPlusPricingCards :pricing="pricing" />
+              <JitenPlusPricingCards :pricing="pricing" section="marketing" />
             </div>
 
             <div class="mt-10 flex flex-col items-center gap-3 text-center">

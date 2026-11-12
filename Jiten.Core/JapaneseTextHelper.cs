@@ -128,6 +128,8 @@ public static class JapaneseTextHelper
     public static bool IsKanji(char c) =>
         c is (>= '一' and <= '鿿') or (>= '㐀' and <= '䶿') or (>= '豈' and <= '﫿');
 
+    public static bool IsKanjiOrIterationMark(char c) => IsKanji(c) || c == '々';
+
     public static bool IsKanji(Rune r)
     {
         int value = r.Value;

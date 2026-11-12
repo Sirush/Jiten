@@ -53,6 +53,9 @@ public class FsrsCardArchiveExportDto
     [JsonPropertyName("ca")]
     public long CardCreatedAt { get; set; }
 
+    [JsonPropertyName("src")]
+    public CardSource Source { get; set; }
+
     /// <summary>True total, which exceeds the exported logs when the stored history was truncated.</summary>
     [JsonPropertyName("rc")]
     public int ReviewCount { get; set; }

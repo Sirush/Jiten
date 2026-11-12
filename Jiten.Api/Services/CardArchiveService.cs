@@ -102,6 +102,7 @@ public static class CardArchiveService
             row.LastReview = card.LastReview;
             row.Lapses = card.Lapses;
             row.CardCreatedAt = card.CreatedAt;
+            row.Source = card.Source;
         }
 
         return entries.Count;
@@ -164,6 +165,7 @@ public static class CardArchiveService
         target.LastReview = source.LastReview;
         target.Lapses = source.Lapses;
         target.CardCreatedAt = source.CardCreatedAt;
+        target.Source = source.Source;
     }
 
     private static void MergeInto(FsrsCardArchive row, IEnumerable<PackedReview> incoming, int incomingMissing,

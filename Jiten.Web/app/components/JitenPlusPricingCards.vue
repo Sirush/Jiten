@@ -4,9 +4,12 @@
   import { useAuthStore } from '~/stores/authStore';
   import { useLegalStore } from '~/stores/legalStore';
   import { formatDateLong } from '~/utils/dateFormat';
+  import { referrerHost } from '~/utils/firstTouch';
+  import { markPendingCheckout, readPlusEntry, rememberPlusEntry, resolvePlusEntry, type PricingSection } from '~/utils/checkoutSource';
 
   const props = defineProps<{
     pricing: JitenPlusPricingInfo | null;
+    section: PricingSection;
   }>();
 
   const { $api } = useNuxtApp();
@@ -14,7 +17,7 @@
   const legal = useLegalStore();
   const toast = useToast();
 
-  const { isFull, sources } = useJitenPlus();
+  const { isFull, isTrial, sources } = useJitenPlus();
   const isLifetime = computed(() => !!sources.value?.isLifetime);
 
   const lifetimeAvailable = computed(() => props.pricing?.lifetimeAvailable ?? true);
@@ -39,8 +42,18 @@
   // A guest choosing a plan usually has no account yet; the register page links to login for those who do.
   const registerLink = (plan: Plan) => ({ path: '/register', query: { redirect: `/jiten-plus?plan=${plan}` } });
 
+  function recordPlusEntry(src: string | undefined) {
+    const back = (window.history.state as { back?: unknown } | null)?.back;
+    const backRoute = typeof back === 'string' ? router.resolve(back).matched.at(-1)?.path : undefined;
+    rememberPlusEntry(resolvePlusEntry({ src, backRoute, stored: readPlusEntry(), referrerHost: referrerHost(document.referrer, location.hostname) }));
+  }
+
   // Resumes a checkout intent carried through login via ?plan=; the query is cleared so a refresh doesn't restart it.
   onMounted(async () => {
+    const src = Array.isArray(route.query.src) ? route.query.src[0] : route.query.src;
+    recordPlusEntry(src ?? undefined);
+    if (src) await router.replace({ query: { ...route.query, src: undefined } });
+
     const raw = Array.isArray(route.query.plan) ? route.query.plan[0] : route.query.plan;
     if (!raw || !auth.isAuthenticated || isFull.value) return;
     const plan = (['monthly', 'yearly', 'lifetime'] as Plan[]).find((p) => p === raw);
@@ -81,12 +94,14 @@
 
   async function startCheckout(plan: Plan) {
     checkingOut.value = plan;
-    trackEvent('checkout_started', { plan });
+    const attribution = { plan, source: readPlusEntry() ?? 'direct', section: props.section };
+    trackEvent('checkout_started', { ...attribution, tier: isTrial.value ? 'trial' : 'none' });
     try {
       const result = await $api<{ url: string }>('/stripe/checkout', {
         method: 'POST',
         body: { plan },
       });
+      markPendingCheckout(attribution);
       window.location.href = result.url;
     } catch (e) {
       const error = (e as { data?: { error?: string } })?.data?.error || 'Could not start checkout. Please try again.';

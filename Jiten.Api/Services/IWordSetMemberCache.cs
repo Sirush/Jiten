@@ -6,6 +6,8 @@ namespace Jiten.Api.Services;
 
 public interface IWordSetMemberCache
 {
+    Task<FrozenSet<long>> GetMembersAsync(int setId);
+
     /// <summary>Forms outside the set that knowing its members makes kana-redundant.</summary>
     Task<FrozenSet<long>> GetKanaRedundantAsync(int setId);
 

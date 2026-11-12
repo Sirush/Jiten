@@ -13,7 +13,6 @@ import {
   draftFromEditable,
   editStatus,
   fieldsFromFlags,
-  isTypingTarget,
   linkUrlError,
   relationshipLabel,
   revertSummary,
@@ -252,14 +251,14 @@ describe('aliasError', () => {
 
 describe('submitOutcome', () => {
   it('reports an all-live edit', () => {
-    expect(submitOutcome([MetadataField.ReleaseDate], [])).toMatchObject({ kind: 'live', title: 'Saved. Thanks for fixing this.' });
+    expect(submitOutcome([MetadataField.ReleaseDate], [])).toMatchObject({ kind: 'live', title: 'Saved. Thanks for helping improve the database.' });
   });
 
   it('reports an all-pending edit', () => {
     expect(submitOutcome([], [MetadataField.Genres])).toEqual({
       kind: 'pending',
-      title: 'Sent for review.',
-      body: "An editor will check it first. You'll get a notification either way.",
+      title: 'Sent for review. Thanks for helping improve the database.',
+      body: "An editor will check it first and you'll be notified when it has been processed.",
     });
   });
 
@@ -306,17 +305,6 @@ describe('editStatus', () => {
 describe('fieldsFromFlags', () => {
   it('returns fields in display order', () => {
     expect(fieldsFromFlags(MetadataField.Description | MetadataField.Aliases)).toEqual([MetadataField.Aliases, MetadataField.Description]);
-  });
-});
-
-describe('isTypingTarget', () => {
-  it('recognises fields and comboboxes', () => {
-    expect(isTypingTarget({ tagName: 'INPUT' })).toBe(true);
-    expect(isTypingTarget({ tagName: 'textarea' })).toBe(true);
-    expect(isTypingTarget({ tagName: 'DIV', isContentEditable: true })).toBe(true);
-    expect(isTypingTarget({ tagName: 'SPAN', getAttribute: () => 'combobox' })).toBe(true);
-    expect(isTypingTarget({ tagName: 'BUTTON', getAttribute: () => null })).toBe(false);
-    expect(isTypingTarget(null)).toBe(false);
   });
 });
 

@@ -537,7 +537,7 @@ public partial class UserController
     private Task<ProfileVocabularyStatsDto> GetVocabularyStatsAsync(ProfileCacheBatch cache, string userId) =>
         cache.GetOrSetAsync(ProfileCacheKind.Vocabulary, async () =>
         {
-            var amounts = await ComputeKnownWordAmountAsync(userId, includeDerivations: false);
+            var amounts = await knownWordAmounts.ComputeAsync(userId, includeDerivations: false);
             return new ProfileVocabularyStatsDto
                    {
                        Young = amounts.Young, Mature = amounts.Mature, Mastered = amounts.Mastered, WordSetMastered = amounts.WordSetMastered

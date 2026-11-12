@@ -164,6 +164,10 @@
     return `${group.explanation}\n\n${lines.join('\n')}`;
   }
 
+  function knownWords(count: number): string {
+    return `${count.toLocaleString()} word${count === 1 ? '' : 's'} you know`;
+  }
+
   const totalEnabledPairs = computed(() => groups.value.filter((g) => enabledGroups.value[g.key]).reduce((sum, g) => sum + g.pairCount, 0));
 
   function syncFromSettings() {
@@ -229,11 +233,8 @@
 </script>
 
 <template>
-  <Card>
-    <template #title>
-      <h2 class="text-xl font-bold">Derived & Related Words</h2>
-    </template>
-    <template #content>
+  <SettingsListItem title="Derived Forms">
+    <template #default>
       <div class="text-sm text-muted-color mb-4">
         Some dictionary entries are inflection of words you know, polite forms, or other forms that you can easily guess if you know the base form. You can tick
         any category here and all the words in it will be marked as redundant to give you more accurate coverage and avoid showing up in your reviews.
@@ -279,9 +280,7 @@
                 :class="enabledGroups[group.key] ? 'text-green-600 dark:text-green-300' : 'text-primary-600 dark:text-primary-300'"
               >
                 {{
-                  enabledGroups[group.key]
-                    ? `includes ${personalByGroup[group.key]!.toLocaleString()} words you know`
-                    : `would include ${personalByGroup[group.key]!.toLocaleString()} words you know`
+                  enabledGroups[group.key] ? `includes ${knownWords(personalByGroup[group.key]!)}` : `would include ${knownWords(personalByGroup[group.key]!)}`
                 }}
               </span>
               <button type="button" class="text-blue-500 hover:underline" @click="openPreview(group)">view list</button>
@@ -293,7 +292,7 @@
       <p v-if="!loading && personalTotal > 0" class="text-xs text-muted-color mt-4">
         Your selected choices will make
         <span class="font-bold text-green-600 dark:text-green-300">{{ personalTotal.toLocaleString() }}</span>
-        words redundant.
+        {{ personalTotal === 1 ? 'word' : 'words' }} redundant.
       </p>
 
       <Dialog
@@ -433,5 +432,5 @@
         </template>
       </Dialog>
     </template>
-  </Card>
+  </SettingsListItem>
 </template>

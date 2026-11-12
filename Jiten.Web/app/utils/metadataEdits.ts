@@ -928,17 +928,6 @@ export function contributorLevelLabel(level: string | null | undefined): string 
   return capitalise(level.toLowerCase());
 }
 
-/** Single-key shortcuts must never fire while the user is typing into a field or an open combobox. */
-export function isTypingTarget(target: unknown): boolean {
-  const el = target as { tagName?: string; isContentEditable?: boolean; getAttribute?: (name: string) => string | null } | null;
-  if (!el) return false;
-  if (el.isContentEditable) return true;
-  const tag = (el.tagName ?? '').toUpperCase();
-  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return true;
-  const role = el.getAttribute?.('role');
-  return role === 'combobox' || role === 'textbox' || role === 'spinbutton';
-}
-
 const TOGGLE_CHIP_CLASS =
   'rounded-md border px-2.5 py-1 text-sm cursor-pointer transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary-500';
 const TOGGLE_CHIP_ON = 'bg-primary-50 dark:bg-primary-900/40 border-primary-400 dark:border-primary-500 text-primary-700 dark:text-primary-200';

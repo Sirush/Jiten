@@ -33,7 +33,7 @@
 
   function goToJitenPlus() {
     showUpsell.value = false;
-    navigateTo('/jiten-plus');
+    navigateTo({ path: '/jiten-plus', query: { src: `gate:${props.feature}` } });
   }
 </script>
 

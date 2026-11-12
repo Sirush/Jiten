@@ -28,7 +28,6 @@
     fieldPhrase,
     fieldsFromFlags,
     isListField,
-    isTypingTarget,
     queueMode,
     queueShortcut,
     queueTabFromQuery,
@@ -41,6 +40,7 @@
     type ConflictClash,
     type QueueTab,
   } from '~/utils/metadataEdits';
+  import { isTypingTarget } from '~/utils/keyboard';
 
   definePageMeta({ middleware: ['auth'] });
   useHead({ title: 'Review queue' });

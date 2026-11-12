@@ -19,4 +19,7 @@ public class UserSettings
 
     /// <summary>JSON array of muted <see cref="NotificationGroup"/> values.</summary>
     public string MutedNotificationGroupsJson { get; set; } = "[]";
+
+    /// <summary>First-run setup state: chosen level, word check and reading check results, path and dismissal.</summary>
+    public string OnboardingJson { get; set; } = "{}";
 }

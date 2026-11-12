@@ -19,7 +19,10 @@
         <HomeTryChips class="mt-2" />
       </div>
 
-      <div class="order-1 sm:order-2 mb-4">
+      <div class="order-1 sm:order-2 mb-4 flex flex-col gap-3">
+        <ClientOnly>
+          <HomeSetupStrip />
+        </ClientOnly>
         <HomeStudyBanner />
       </div>
 

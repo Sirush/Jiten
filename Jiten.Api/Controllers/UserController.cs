@@ -48,6 +48,8 @@ public partial class UserController(
     IProfileAccessService profileAccess,
     IProfileCacheService profileCache,
     IJitenPlusService jitenPlus,
+    ICardBatchService cardBatches,
+    IKnownWordAmountService knownWordAmounts,
     ILogger<UserController> logger) : ControllerBase
 {
     private const int MaxAnkiTxtBytes = 50 * 1024 * 1024;
@@ -77,171 +79,10 @@ public partial class UserController(
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
-        var amounts = await ComputeKnownWordAmountAsync(userId);
+        var amounts = await knownWordAmounts.ComputeAsync(userId);
         amounts.ArchivedCards = await userContext.FsrsCardArchives.AsNoTracking().CountAsync(a => a.UserId == userId);
 
         return Results.Ok(amounts);
-    }
-
-    private async Task<KnownWordAmountDto> ComputeKnownWordAmountAsync(string userId, bool includeDerivations = true)
-    {
-        var fsrsCards = await userContext.FsrsCards
-                                         .AsNoTracking()
-                                         .Where(uk => uk.UserId == userId)
-                                         .Select(uk => new { uk.WordId, uk.ReadingIndex, uk.State, uk.Due, uk.LastReview })
-                                         .ToListAsync();
-
-        // Same conductor set as new-card selection: every card plus Mastered/Blacklisted set members.
-        var derivationConductors = fsrsCards.Select(c => (c.WordId, c.ReadingIndex)).ToList();
-
-        var cardForms = new Dictionary<(int WordId, int ReadingIndex), KnownState>();
-        foreach (var c in fsrsCards)
-            cardForms[(c.WordId, c.ReadingIndex)] = KnownWordRules.CardTier(c.State, c.Due, c.LastReview);
-
-        int youngForms = 0, matureForms = 0, masteredForms = 0, blacklistedForms = 0;
-        foreach (var state in cardForms.Values)
-        {
-            switch (state)
-            {
-                case KnownState.Young: youngForms++; break;
-                case KnownState.Mature: matureForms++; break;
-                case KnownState.Mastered: masteredForms++; break;
-                case KnownState.Blacklisted: blacklistedForms++; break;
-            }
-        }
-
-        var effectiveForms = new Dictionary<(int WordId, int ReadingIndex), KnownState>(cardForms);
-        int wsMasteredForms = 0, wsBlacklistedForms = 0;
-
-        var userSetStates = await userContext.UserWordSetStates
-            .Where(uwss => uwss.UserId == userId)
-            .ToListAsync();
-
-        if (userSetStates.Count > 0)
-        {
-            var masteredSetIds = userSetStates
-                .Where(s => s.State == WordSetStateType.Mastered).Select(s => s.SetId).ToList();
-            var blacklistedSetIds = userSetStates
-                .Where(s => s.State == WordSetStateType.Blacklisted).Select(s => s.SetId).ToList();
-
-            if (masteredSetIds.Count > 0)
-            {
-                var masteredSetForms = await jitenContext.WordSetMembers
-                    .Where(wsm => masteredSetIds.Contains(wsm.SetId))
-                    .Select(wsm => new { wsm.WordId, ReadingIndex = (int)wsm.ReadingIndex })
-                    .Distinct()
-                    .ToListAsync();
-
-                foreach (var m in masteredSetForms)
-                {
-                    derivationConductors.Add((m.WordId, (byte)m.ReadingIndex));
-                    if (effectiveForms.TryAdd((m.WordId, m.ReadingIndex), KnownWordRules.WordSetTier(WordSetStateType.Mastered)))
-                        wsMasteredForms++;
-                }
-            }
-
-            if (blacklistedSetIds.Count > 0)
-            {
-                var blacklistedSetForms = await jitenContext.WordSetMembers
-                    .Where(wsm => blacklistedSetIds.Contains(wsm.SetId))
-                    .Select(wsm => new { wsm.WordId, ReadingIndex = (int)wsm.ReadingIndex })
-                    .Distinct()
-                    .ToListAsync();
-
-                foreach (var m in blacklistedSetForms)
-                {
-                    derivationConductors.Add((m.WordId, (byte)m.ReadingIndex));
-                    if (effectiveForms.TryAdd((m.WordId, m.ReadingIndex), KnownWordRules.WordSetTier(WordSetStateType.Blacklisted)))
-                        wsBlacklistedForms++;
-                }
-            }
-        }
-
-        int youngWords = 0, matureWords = 0, masteredWords = 0, blacklistedWords = 0, wsMasteredWords = 0, wsBlacklistedWords = 0;
-        foreach (var wordGroup in effectiveForms.GroupBy(kvp => kvp.Key.WordId))
-        {
-            var tier = KnownWordRules.WordTier(wordGroup.Select(kvp => kvp.Value));
-            var fromCard = wordGroup.Any(kvp => kvp.Value == tier && cardForms.ContainsKey(kvp.Key));
-            switch (tier)
-            {
-                case KnownState.Young: youngWords++; break;
-                case KnownState.Mature: matureWords++; break;
-                case KnownState.Mastered when fromCard: masteredWords++; break;
-                case KnownState.Mastered: wsMasteredWords++; break;
-                case KnownState.Blacklisted when fromCard: blacklistedWords++; break;
-                case KnownState.Blacklisted: wsBlacklistedWords++; break;
-            }
-        }
-
-        // Same conductor set as the study-batch picker: every card plus Mastered/Blacklisted set members.
-        var redundantExpansions = new Dictionary<(int, int), KnownState>();
-        foreach (var kvp in effectiveForms)
-        {
-            var kanaIndexes = wordFormCache.GetKanaIndexesForKanji(kvp.Key.WordId, (byte)kvp.Key.ReadingIndex);
-            if (kanaIndexes == null) continue;
-            foreach (var kanaIdx in kanaIndexes)
-            {
-                var kanaKey = (kvp.Key.WordId, (int)kanaIdx);
-                if (effectiveForms.ContainsKey(kanaKey)) continue;
-
-                if (!redundantExpansions.TryGetValue(kanaKey, out var existing) ||
-                    KnownWordRules.FormRank(kvp.Value) > KnownWordRules.FormRank(existing))
-                    redundantExpansions[kanaKey] = kvp.Value;
-            }
-        }
-
-        // Blacklisted covers still resolve as redundant, but they are not knowledge and would swamp the line
-        // for anyone who blacklisted the name set.
-        int redundantForms = 0;
-        foreach (var (key, state) in redundantExpansions)
-        {
-            if (effectiveForms.TryAdd(key, state) && state != KnownState.Blacklisted)
-                redundantForms++;
-        }
-
-        int derivationCoveredForms = 0;
-        var derivationCoveredWordIds = new HashSet<int>();
-        if (includeDerivations && !derivationCache.IsEmpty)
-        {
-            var derivationCategories = await DerivationSettingsHelper.GetEnabledCategories(memoryCache, userContext, userId);
-            if (derivationCategories.Count > 0)
-            {
-                var covered = new HashSet<long>();
-                WordFormHelper.ExpandDerivationRedundancyKeys(derivationCache, derivationCategories,
-                                                              derivationConductors, covered);
-
-                var knownWordIds = new HashSet<int>(effectiveForms.Keys.Select(k => k.WordId));
-                foreach (var key in covered)
-                {
-                    var wordId = (int)(key >> 8);
-                    var readingIndex = (int)(key & 0xFF);
-                    if (effectiveForms.ContainsKey((wordId, readingIndex))) continue;
-
-                    derivationCoveredForms++;
-                    if (!knownWordIds.Contains(wordId))
-                        derivationCoveredWordIds.Add(wordId);
-                }
-            }
-        }
-
-        return new KnownWordAmountDto
-               {
-                   Young = youngWords,
-                   YoungForm = youngForms,
-                   Mature = matureWords,
-                   MatureForm = matureForms,
-                   Mastered = masteredWords,
-                   MasteredForm = masteredForms,
-                   Blacklisted = blacklistedWords,
-                   BlacklistedForm = blacklistedForms,
-                   WordSetMastered = wsMasteredWords,
-                   WordSetMasteredForm = wsMasteredForms,
-                   WordSetBlacklisted = wsBlacklistedWords,
-                   WordSetBlacklistedForm = wsBlacklistedForms,
-                   RedundantForms = redundantForms,
-                   DerivationCovered = derivationCoveredWordIds.Count,
-                   DerivationCoveredForm = derivationCoveredForms
-               };
     }
 
     /// <summary>
@@ -267,7 +108,7 @@ public partial class UserController(
     /// Remove all known words for the current user.
     /// </summary>
     [HttpDelete("vocabulary/known-ids/clear")]
-    public async Task<IResult> ClearKnownWordIds()
+    public async Task<IResult> ClearKnownWordIds([FromServices] IOnboardingStore onboarding)
     {
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
@@ -283,8 +124,13 @@ public partial class UserController(
             removedCards = await userContext.FsrsCards
                                             .Where(c => c.UserId == userId)
                                             .ExecuteDeleteAsync();
+            await userContext.CardBatches
+                             .Where(b => b.UserId == userId)
+                             .ExecuteDeleteAsync();
             await transaction.CommitAsync();
         }
+
+        await onboarding.ForgetCheckResultsAsync(userId);
 
         if (removedCards == 0) return Results.Ok(new { removed = 0 });
 
@@ -308,6 +154,9 @@ public partial class UserController(
     {
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        if (request.Source is not (CardSource.Unknown or CardSource.JpdbImport or CardSource.WordListImport))
+            return Results.BadRequest("Source must be JpdbImport, WordListImport or Unknown");
 
         var knownIds = (request.WordIds ?? []).Where(id => id > 0).Distinct().ToList();
         var blacklistedIds = (request.BlacklistedWordIds ?? []).Where(id => id > 0).Distinct().ToList();
@@ -349,9 +198,7 @@ public partial class UserController(
 
         var alreadyKnown = await userContext.FsrsCards
                                             .AsNoTracking()
-                                            .Where(uk => uk.UserId == userId && jmdictWordIds.Contains(uk.WordId))
-                                            .ToListAsync();
-        var alreadyKnownSet = alreadyKnown.Select(uk => (uk.WordId, uk.ReadingIndex)).ToHashSet();
+                                            .CountAsync(uk => uk.UserId == userId && jmdictWordIds.Contains(uk.WordId));
 
         var blacklistedSet = blacklistedIds.ToHashSet();
         var suspendedSet = suspendedIds.ToHashSet();
@@ -389,41 +236,28 @@ public partial class UserController(
             AddImportTarget(targets, (wordId, readingIndex), ParseImportState(card.State)!.Value);
         }
 
-        var allImportCardKeys = targets.Keys.Concat(alreadyKnownSet).ToHashSet();
-
-        var toInsert = targets
-                       .Where(t => !alreadyKnownSet.Contains(t.Key))
-                       // A suspended card with a LastReview derives as Young and counts as known; the UI suspend path leaves it null.
-                       .Select(t => new FsrsCard(userId, t.Key.WordId, t.Key.ReadingIndex, due: DateTime.UtcNow,
-                                                 lastReview: t.Value == FsrsState.Suspended ? null : DateTime.UtcNow, state: t.Value))
-                       .ToList();
-
-        var redundantIds = await WordFormHelper.ArchiveRedundantImportCards(
-            userContext, wordFormCache, userId, toInsert, allImportCardKeys, _ => []);
-        toInsert.RemoveAll(redundantIds.Contains);
-
-        if (toInsert.Count > 0)
-        {
-            await userContext.FsrsCards.AddRangeAsync(toInsert);
-            await userContext.SaveChangesAsync();
-        }
-
-        var pruned = await WordFormHelper.PruneRedundantForms(userContext, wordFormCache, userId, jmdictWordIds);
-        if (pruned > 0)
-            await userContext.SaveChangesAsync();
-
-        await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
-        await userContext.SaveChangesAsync();
-        backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
+        var now = DateTime.UtcNow;
+        // A suspended card with a LastReview derives as Young and counts as known; the UI suspend path leaves it null.
+        var targetCards = targets.Select(t => new FsrsCard(userId, t.Key.WordId, t.Key.ReadingIndex, due: now,
+                                                           lastReview: t.Value == FsrsState.Suspended ? null : now, state: t.Value))
+                                 .ToList();
+        var seeded = await cardBatches.SeedAsync(userId, targetCards, CardBatchDetails.Of(ImportFromIdsKind(request.Source)));
 
         logger.LogInformation("User imported words from IDs: UserId={UserId}, AddedCount={AddedCount}, SkippedCount={SkippedCount}, PrunedCount={PrunedCount}",
-                              userId, toInsert.Count, alreadyKnown.Count, pruned);
+                              userId, seeded.Inserted, alreadyKnown, seeded.Pruned);
         return Results.Ok(new
                           {
-                              added = toInsert.Count, skipped = alreadyKnown.Count, pruned,
+                              added = seeded.Inserted, skipped = alreadyKnown, pruned = seeded.Pruned,
                               unmatched = unmatchedWords.Count, unmatchedWords = ImportSkippedWord.Cap(unmatchedWords)
                           });
     }
+
+    private static CardBatchKind ImportFromIdsKind(CardSource source) => source switch
+    {
+        CardSource.JpdbImport => CardBatchKind.JpdbKnownWords,
+        CardSource.WordListImport => CardBatchKind.WordList,
+        _ => CardBatchKind.WordIds
+    };
 
     /// <summary>Blacklisted beats Suspended beats Mastered when the same form arrives with several states.</summary>
     private static void AddImportTarget(Dictionary<(int WordId, byte ReadingIndex), FsrsState> targets,
@@ -568,7 +402,7 @@ public partial class UserController(
             }
             else
             {
-                card = new FsrsCard(userId, wordId, readingIndex);
+                card = new FsrsCard(userId, wordId, readingIndex) { Source = CardSource.JpdbImport };
                 cardsToAdd.Add(card);
                 existingCards[key] = card;
                 spellingByCard[card] = jpdbCard.Spelling;
@@ -631,6 +465,9 @@ public partial class UserController(
                 ? logs.Select(l => l.ReviewDateTime)
                 : []);
 
+        var batch = await cardBatches.BeginAsync(userId, CardBatchDetails.Of(CardBatchKind.JpdbReviewHistory), null);
+        batch.Stamp(cardsToAdd);
+
         if (cardsToAdd.Count > 0)
         {
             await userContext.FsrsCards.AddRangeAsync(cardsToAdd);
@@ -682,6 +519,7 @@ public partial class UserController(
         var pruned = await WordFormHelper.PruneRedundantForms(userContext, wordFormCache, userId, distinctWordIds);
         if (pruned > 0)
             await userContext.SaveChangesAsync();
+        await cardBatches.CompleteAsync(batch);
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
@@ -865,6 +703,49 @@ public partial class UserController(
         return Results.Ok(new { removed = toRemove.Count, skipped = requested.Count - toRemove.Count });
     }
 
+    /// <summary>Adds the file's batches the user lacks and maps each file id to the id its cards carry; an id another account owns gets a fresh one.</summary>
+    private async Task<Dictionary<Guid, Guid>> ImportBatchesSection(string userId, List<CardBatchExportDto>? section)
+    {
+        var map = new Dictionary<Guid, Guid>();
+        if (section is not { Count: > 0 })
+            return map;
+
+        var fileIds = section.Select(b => b.BatchId).Where(id => id != Guid.Empty).Distinct().ToList();
+        var owners = (await userContext.CardBatches
+                                       .AsNoTracking()
+                                       .Where(b => fileIds.Contains(b.BatchId))
+                                       .Select(b => new { b.BatchId, b.UserId })
+                                       .ToListAsync())
+                     .ToDictionary(b => b.BatchId, b => b.UserId);
+
+        foreach (var dto in section.Where(b => b.BatchId != Guid.Empty).DistinctBy(b => b.BatchId))
+        {
+            var owned = owners.TryGetValue(dto.BatchId, out var owner);
+            if (owned && string.Equals(owner, userId, StringComparison.OrdinalIgnoreCase))
+            {
+                map[dto.BatchId] = dto.BatchId;
+                continue;
+            }
+
+            var details = dto.Details?.Sanitised() ?? new CardBatchDetails();
+            var batch = new CardBatch
+                        {
+                            BatchId = owned ? Guid.NewGuid() : dto.BatchId,
+                            UserId = userId,
+                            Source = details.Kind.Source(),
+                            CreatedAt = dto.CreatedAt > 0 ? DateTimeOffset.FromUnixTimeSeconds(dto.CreatedAt).UtcDateTime : DateTime.UtcNow,
+                            CardCount = Math.Max(0, dto.CardCount),
+                            Details = details,
+                            CardState = dto.CardState is { } state && Enum.IsDefined(state) ? state : null,
+                            Undone = dto.Undone
+                        };
+            userContext.CardBatches.Add(batch);
+            map[dto.BatchId] = batch.BatchId;
+        }
+
+        return map;
+    }
+
     /// <summary>
     /// Restores the archive section of a backup
     /// </summary>
@@ -918,6 +799,7 @@ public partial class UserController(
                                    : null,
                                Lapses = dto.Lapses,
                                CardCreatedAt = DateTimeOffset.FromUnixTimeSeconds(dto.CardCreatedAt).UtcDateTime,
+                               Source = Enum.IsDefined(dto.Source) ? dto.Source : CardSource.Unknown,
                                ReviewCount = Math.Max(dto.ReviewCount, packed.ReviewCount),
                                HistoryMerged = dto.HistoryMerged,
                                FirstReview = packed.FirstReview,
@@ -1556,7 +1438,10 @@ public partial class UserController(
         var parsedWords = parseWords
             ? await Parser.Parser.ParseText(contextFactory, combinedText)
             : await Parser.Parser.GetWordsDirectLookup(contextFactory, validWords);
-        var result = await userService.AddKnownWords(parsedWords, overwriteExisting);
+        var batch = await cardBatches.BeginAsync(userId, CardBatchDetails.Of(CardBatchKind.AnkiFile, Path.GetFileName(file.FileName)),
+                                                 FsrsState.Mastered);
+        var result = await userService.AddKnownWords(parsedWords, batch.Source, batch.BatchId, overwriteExisting);
+        await cardBatches.CompleteAsync(batch);
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
@@ -1885,6 +1770,7 @@ public partial class UserController(
                                            )
                                {
                                    Stability = stability, Difficulty = difficulty, Step = state == FsrsState.Learning ? (byte?)0 : null,
+                                   Source = CardSource.AnkiImport
                                };
 
                 cardsToAdd.Add(fsrsCard);
@@ -1938,6 +1824,9 @@ public partial class UserController(
                 pendingReviewTimes: card => processedPairs.TryGetValue((card.WordId, card.ReadingIndex), out var processed)
                     ? processed.AllReviewLogs.Select(l => l.ReviewDateTime)
                     : []);
+
+            var batch = await cardBatches.BeginAsync(userId, CardBatchDetails.Of(CardBatchKind.AnkiConnect, request.DeckName), null, request.BatchId);
+            batch.Stamp(cardsToAdd);
 
             // Insert new cards
             if (cardsToAdd.Count > 0)
@@ -2033,6 +1922,7 @@ public partial class UserController(
             var pruned = await WordFormHelper.PruneRedundantForms(userContext, wordFormCache, userId, parsedWordIds);
             if (pruned > 0)
                 await userContext.SaveChangesAsync();
+            await cardBatches.CompleteAsync(batch);
 
             await transaction.CommitAsync();
 
@@ -2127,7 +2017,7 @@ public partial class UserController(
         var userId = userService.UserId;
         if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
 
-        await userService.BlacklistWords([new DeckWord { WordId = wordId, ReadingIndex = readingIndex }]);
+        await userService.BlacklistWords([new DeckWord { WordId = wordId, ReadingIndex = readingIndex }], CardSource.ManualSingle);
 
         await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
         await userContext.SaveChangesAsync();
@@ -2148,65 +2038,47 @@ public partial class UserController(
         if (minFrequency < 0 || maxFrequency < minFrequency || maxFrequency > 10000)
             return Results.BadRequest("Invalid frequency range");
 
-        var targetReadings = await jitenContext.WordFormFrequencies
-            .AsNoTracking()
-            .Where(wff => wff.FrequencyRank >= minFrequency && wff.FrequencyRank <= maxFrequency && wff.FrequencyRank > 0)
-            .OrderBy(wff => wff.FrequencyRank)
-            .Select(wff => new ReadingFrequencyResult(wff.WordId, wff.ReadingIndex, wff.FrequencyRank))
-            .ToListAsync();
-
-        if (targetReadings.Count == 0)
+        var (seeded, wordsInRange) = await cardBatches.SeedFrequencyRangeAsync(userId, minFrequency, maxFrequency,
+                                                                               new CardBatchDetails
+                                                                               {
+                                                                                   Kind = CardBatchKind.FrequencyRange, MinRank = Math.Max(1, minFrequency),
+                                                                                   MaxRank = maxFrequency
+                                                                               });
+        if (wordsInRange == 0)
             return Results.BadRequest("No readings found for the requested frequency range");
 
-        var targetWordIds = targetReadings.Select(r => r.WordId).Distinct().ToList();
-
-        // Determine which entries are already known (by word + reading index)
-        var alreadyKnown = await userContext.FsrsCards
-                                            .AsNoTracking()
-                                            .Where(uk => uk.UserId == userId && targetWordIds.Contains(uk.WordId))
-                                            .ToListAsync();
-
-        var alreadyKnownSet = alreadyKnown.Select(uk => (uk.WordId, (short)uk.ReadingIndex)).ToHashSet();
-
-        var allFreqCardKeys = targetReadings.Select(r => (r.WordId, (byte)r.ReadingIndex))
-            .Concat(alreadyKnown.Select(k => (k.WordId, k.ReadingIndex)))
-            .ToHashSet();
-        List<FsrsCard> toInsert = new();
-
-        foreach (var target in targetReadings)
-        {
-            if (alreadyKnownSet.Contains((target.WordId, target.ReadingIndex)))
-                continue;
-
-            toInsert.Add(new FsrsCard(userId, target.WordId, (byte)target.ReadingIndex,
-                                      due: DateTime.UtcNow, lastReview: DateTime.UtcNow,
-                                      state: FsrsState.Mastered));
-        }
-
-        var redundantFreq = await WordFormHelper.ArchiveRedundantImportCards(
-            userContext, wordFormCache, userId, toInsert, allFreqCardKeys, _ => []);
-        toInsert.RemoveAll(redundantFreq.Contains);
-
-        if (toInsert.Count > 0)
-        {
-            await userContext.FsrsCards.AddRangeAsync(toInsert);
-            await userContext.SaveChangesAsync();
-        }
-
-        var pruned = await WordFormHelper.PruneRedundantForms(userContext, wordFormCache, userId, targetWordIds);
-        if (pruned > 0)
-            await userContext.SaveChangesAsync();
-
-        await CoverageDirtyHelper.MarkCoverageDirty(userContext, userId);
-        await userContext.SaveChangesAsync();
-        backgroundJobs.Enqueue<ComputationJob>(job => job.ComputeUserCoverage(userId));
-
-        var uniqueWords = toInsert.Select(c => c.WordId).Distinct().Count();
         logger.LogInformation("User imported words from frequency range: UserId={UserId}, MinFreq={MinFrequency}, MaxFreq={MaxFrequency}, WordCount={WordCount}, FormCount={FormCount}, PrunedCount={PrunedCount}",
-                              userId, minFrequency, maxFrequency, uniqueWords, toInsert.Count, pruned);
-        return Results.Ok(new { words = uniqueWords, forms = toInsert.Count, pruned });
+                              userId, minFrequency, maxFrequency, seeded.InsertedWords, seeded.Inserted, seeded.Pruned);
+        return Results.Ok(new { words = seeded.InsertedWords, forms = seeded.Inserted, pruned = seeded.Pruned, batchId = seeded.BatchId });
     }
 
+
+    [HttpGet("vocabulary/batches")]
+    [SwaggerOperation(Summary = "List bulk card additions",
+                      Description = "Imports and other bulk additions, newest first, each with how many cards an undo would remove now.")]
+    public async Task<IResult> GetCardBatches([FromQuery] int offset = 0, [FromQuery] int limit = 20)
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        return Results.Ok(await cardBatches.ListAsync(userId, Math.Max(0, offset), Math.Clamp(limit, 1, 50)));
+    }
+
+    [HttpPost("vocabulary/batches/{batchId:guid}/undo")]
+    [SwaggerOperation(Summary = "Undo a bulk card addition",
+                      Description = "Removes the cards the batch added, keeping any reviewed or changed since. Repeating it does nothing.")]
+    public async Task<IResult> UndoCardBatch(Guid batchId)
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        var result = await cardBatches.UndoAsync(userId, batchId);
+        if (result == null) return Results.NotFound();
+
+        logger.LogInformation("User undid card batch: UserId={UserId}, BatchId={BatchId}, Removed={Removed}, Kept={Kept}, AlreadyUndone={AlreadyUndone}",
+                              userId, batchId, result.Removed, result.Kept, result.AlreadyUndone);
+        return Results.Ok(result);
+    }
 
     /// <summary>
     /// Get user metadata
@@ -2562,6 +2434,12 @@ public partial class UserController(
                                            .OrderBy(m => m.WordId)
                                            .ToListAsync();
 
+        var batchRows = await userContext.CardBatches
+                                         .AsNoTracking()
+                                         .Where(b => b.UserId == userId)
+                                         .OrderBy(b => b.CreatedAt)
+                                         .ToListAsync();
+
         Dictionary<(int, short), JmDictWordForm> wordForms = [];
         if (includeWordText)
         {
@@ -2586,6 +2464,7 @@ public partial class UserController(
                                         ? new DateTimeOffset(c.LastReview.Value).ToUnixTimeSeconds()
                                         : null,
                                     CreatedAt = new DateTimeOffset(c.CreatedAt).ToUnixTimeSeconds(),
+                                    Source = c.Source, SourceBatchId = c.SourceBatchId,
                                     ReviewLogs = c.ReviewLogs.OrderBy(r => r.ReviewDateTime)
                                                   .Select(r => new FsrsReviewLogExportDto
                                                                {
@@ -2597,6 +2476,14 @@ public partial class UserController(
                                                                }).ToList(),
                                     Text = FormText(c.WordId, c.ReadingIndex), Reading = FormReading(c.WordId, c.ReadingIndex)
                                 }).ToList(),
+                            Batches = batchRows.Select(b => new CardBatchExportDto
+                                                            {
+                                                                BatchId = b.BatchId,
+                                                                CreatedAt = new DateTimeOffset(DateTime.SpecifyKind(b.CreatedAt, DateTimeKind.Utc))
+                                                                    .ToUnixTimeSeconds(),
+                                                                CardCount = b.CardCount, Details = b.Details, CardState = b.CardState,
+                                                                Undone = b.Undone
+                                                            }).ToList(),
                             Archive = archiveRows.Select(a =>
                                 {
                                     var (reviews, _) = CardArchiveService.ReadReviews(a);
@@ -2614,6 +2501,7 @@ public partial class UserController(
                                                    : null,
                                                Lapses = a.Lapses,
                                                CardCreatedAt = new DateTimeOffset(a.CardCreatedAt).ToUnixTimeSeconds(),
+                                               Source = a.Source,
                                                ReviewCount = a.ReviewCount,
                                                HistoryMerged = a.HistoryMerged,
                                                ReviewLogs = reviews.Select(r => new FsrsReviewLogExportDto
@@ -2990,6 +2878,8 @@ public partial class UserController(
 
             var cardsToAdd = new List<FsrsCard>();
             var liveTimesByCard = new Dictionary<FsrsCard, List<DateTime>>();
+            var batchIds = await ImportBatchesSection(userId, exportDto.Batches);
+            CardBatch? restoreBatch = null;
 
             foreach (var cardDto in validCards)
             {
@@ -3064,6 +2954,21 @@ public partial class UserController(
                                                                                   }).ToList()
                                   };
 
+                    if (cardDto.Source is { } source)
+                    {
+                        newCard.Source = Enum.IsDefined(source) ? source : CardSource.Unknown;
+                        newCard.SourceBatchId = cardDto.SourceBatchId is { } fileBatchId
+                                                && batchIds.TryGetValue(fileBatchId, out var restoredBatchId)
+                            ? restoredBatchId
+                            : null;
+                    }
+                    else
+                    {
+                        restoreBatch ??= await cardBatches.BeginAsync(userId, CardBatchDetails.Of(CardBatchKind.BackupRestore), null);
+                        newCard.Source = CardSource.BackupRestore;
+                        newCard.SourceBatchId = restoreBatch.BatchId;
+                    }
+
                     FsrsReplay.AdoptMemoryModel(newCard, newCard.ReviewLogs.ToList(), lapseScheduler);
                     cardsToAdd.Add(newCard);
                     result.CardsImported++;
@@ -3092,6 +2997,8 @@ public partial class UserController(
             var pruned = await WordFormHelper.PruneRedundantForms(userContext, wordFormCache, userId, importWordIds);
             if (pruned > 0)
                 await userContext.SaveChangesAsync();
+            if (restoreBatch != null)
+                await cardBatches.CompleteAsync(restoreBatch);
 
             await transaction.CommitAsync();
 
@@ -3575,12 +3482,9 @@ public partial class UserController(
                        .Select(x => new DeckWord { WordId = x.WordId, ReadingIndex = x.ReadingIndex, Occurrences = x.Occurrences })
                        .ToList();
 
-        var applied = (state == "mastered"
-            ? await userService.AddKnownWords(entities, countAsNewlyLearned: request.CountAsNewlyLearned)
-            : await userService.BlacklistWords(entities)).Inserted;
-
-        await CoverageDirtyHelper.MarkCoverageDirty(userContext, userService.UserId!);
-        await userContext.SaveChangesAsync();
+        var applied = await cardBatches.LearnDeckWordsAsync(entities, state == "mastered",
+                                                            CardBatchDetails.Of(CardBatchKind.MediaList, username) with { ListStatus = (DeckStatus)status },
+                                                            request.CountAsNewlyLearned);
 
         return Results.Ok(new { applied, state });
     }
@@ -4033,7 +3937,6 @@ public partial class UserController(
     private const string AllKanjiCacheKey = "kanji-grid:all-kanji";
 
     private record CachedKanjiInfo(string Character, int? FrequencyRank, short? JlptLevel, short? Grade, short StrokeCount);
-    private record ReadingFrequencyResult(int WordId, short ReadingIndex, int FrequencyRank);
 
     #endregion
 
