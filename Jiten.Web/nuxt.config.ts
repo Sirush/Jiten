@@ -1,7 +1,14 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
 
 import tailwindcss from '@tailwindcss/vite';
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
+
+const { devDependencies } = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf8'));
+const iconifyPackagePrefix = '@iconify-json/';
+const installedIconCollections = Object.keys(devDependencies)
+  .filter((name) => name.startsWith(iconifyPackagePrefix))
+  .map((name) => name.slice(iconifyPackagePrefix.length));
 
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-14',
@@ -82,6 +89,7 @@ export default defineNuxtConfig({
     entryImportMap: false,
   },
   icon: {
+    serverBundle: { collections: installedIconCollections },
     clientBundle: {
       scan: { globInclude: ['app/components/AppHeader*.vue'] },
     },
