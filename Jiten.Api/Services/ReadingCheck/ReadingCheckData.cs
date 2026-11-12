@@ -404,7 +404,7 @@ public sealed class ReadingCheckData(
     }
 
     private static ReadingUnitDto Unit(DeckRow deck, bool ticked, bool inProgress)
-        => new(deck.DeckId, deck.OriginalTitle, inProgress && !ticked, ticked);
+        => new(deck.DeckId, deck.OriginalTitle, deck.RomajiTitle, deck.EnglishTitle, inProgress && !ticked, ticked);
 
     private static ReadingWorkDto Row(string key, DeckRow deck, List<ReadingUnitDto> units, bool fromMediaList = true)
         => new(key, deck.OriginalTitle, deck.RomajiTitle, deck.EnglishTitle, deck.CoverName, deck.MediaType, fromMediaList, units);

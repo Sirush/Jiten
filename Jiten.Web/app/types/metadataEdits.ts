@@ -64,6 +64,8 @@ export interface MetadataRelationshipValue {
   relationshipType: DeckRelationshipType | number;
   otherDeckId: number;
   otherDeckTitle: string;
+  otherDeckRomajiTitle?: string | null;
+  otherDeckEnglishTitle?: string | null;
   /** Sent with recorded edits; null once the other deck is gone. */
   otherDeckMediaType?: MediaType | null;
   otherDeckReleaseYear?: number | null;
@@ -220,6 +222,8 @@ export interface MetadataFranchiseEffect {
   into: MetadataFranchiseRef | null;
   /** Set when the edited deck joined `into` after the edit was made, so approving adds this picked deck instead. */
   addedDeckTitle: string | null;
+  addedDeckRomajiTitle: string | null;
+  addedDeckEnglishTitle: string | null;
 }
 
 export interface MetadataQueueItem {

@@ -49,6 +49,7 @@
     normaliseSourceUrl,
     rebaseDraft,
     relationshipLabel,
+    relationshipTitles,
     resetDraftField,
     sourcesError,
     submissionError,
@@ -242,11 +243,12 @@
 
   const relationRole = ref<RelationshipRoleOption | null>(null);
   const relationTargetId = ref<number | null>(null);
-  const relationTargetTitle = ref('');
+  const relationTarget = ref<MediaSuggestion | null>(null);
+  const relationTargetTitle = computed(() => (relationTarget.value ? localiseTitle(relationTarget.value) : ''));
   const relationErrorText = ref<string | null>(null);
 
   function onRelationSelect(suggestion: MediaSuggestion | null) {
-    relationTargetTitle.value = suggestion ? localiseTitle(suggestion) : '';
+    relationTarget.value = suggestion;
   }
 
   const relationPreview = computed(() => {
@@ -275,11 +277,13 @@
     d.relationships.push({
       ...edge,
       otherDeckId: relationTargetId.value,
-      otherDeckTitle: relationTargetTitle.value || `#${relationTargetId.value}`,
+      otherDeckTitle: relationTarget.value?.originalTitle || `#${relationTargetId.value}`,
+      otherDeckRomajiTitle: relationTarget.value?.romajiTitle,
+      otherDeckEnglishTitle: relationTarget.value?.englishTitle,
     });
     relationRole.value = null;
     relationTargetId.value = null;
-    relationTargetTitle.value = '';
+    relationTarget.value = null;
   }
 
   const isOriginalRelationship = (r: MetadataDraft['relationships'][number]) =>
@@ -770,8 +774,8 @@
                     :class="[chipClass, 'justify-between w-full py-1', !isOriginalRelationship(rel) ? '!border-dashed !border-primary-500' : '']"
                   >
                     <span class="min-w-0 [overflow-wrap:anywhere]">
-                      <NuxtLink :to="`/decks/media/${rel.otherDeckId}/detail`" class="text-color" v-bind="japaneseTextAttrs(rel.otherDeckTitle)">
-                        {{ relationshipLabel(rel) }}
+                      <NuxtLink :to="`/decks/media/${rel.otherDeckId}/detail`" class="text-color" v-bind="japaneseTextAttrs(localiseTitle(relationshipTitles(rel)))">
+                        {{ relationshipLabel(rel, localiseTitle) }}
                       </NuxtLink>
                     </span>
                     <span v-if="isLegacyGroupRelationship(rel.relationshipType)" class="text-xs text-muted-color shrink-0">Kept until it becomes a series</span>
@@ -779,7 +783,7 @@
                       v-else
                       type="button"
                       :class="chipRemoveClass"
-                      :aria-label="`Remove ${relationshipLabel(rel)}`"
+                      :aria-label="`Remove ${relationshipLabel(rel, localiseTitle)}`"
                       @click="draft.relationships.splice(index, 1)"
                     >
                       <i class="pi pi-times text-[10px]" aria-hidden="true" />

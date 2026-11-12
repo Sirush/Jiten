@@ -3,7 +3,7 @@ using Jiten.Core.Data;
 
 namespace Jiten.Api.Services.ReadingCheck;
 
-public sealed record ReadingUnitDto(int DeckId, string Title, bool InProgress, bool Ticked);
+public sealed record ReadingUnitDto(int DeckId, string OriginalTitle, string? RomajiTitle, string? EnglishTitle, bool InProgress, bool Ticked);
 
 /// <summary>One picker row: a deck with volumes, a series of separate decks, or a single work.</summary>
 public sealed record ReadingWorkDto(

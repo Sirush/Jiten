@@ -3,6 +3,7 @@
   import {
     MetadataEditVerdict,
     MetadataField,
+    type MetadataFranchiseEffect,
     type MetadataNamePreview,
     type MetadataQueueConflict,
     type MetadataQueueItem,
@@ -60,6 +61,8 @@
   const { $api } = useNuxtApp();
   const toast = useToast();
   const localiseTitle = useLocaliseTitle();
+  const addedDeckTitle = (effect: MetadataFranchiseEffect) =>
+    localiseTitle({ originalTitle: effect.addedDeckTitle ?? '', romajiTitle: effect.addedDeckRomajiTitle, englishTitle: effect.addedDeckEnglishTitle });
   const deckCountText = (count: number) => `${count} ${count === 1 ? 'deck' : 'decks'}`;
 
   const deckFilter = computed(() => {
@@ -384,7 +387,7 @@
     const clashes = conflictClashes(conflict);
     if (clashes.length) return clashes;
     return [
-      { label: fieldLabel(conflict.field), current: describeValue(conflict.field, conflict.current), edit: describeValue(conflict.field, conflict.editAfter) },
+      { label: fieldLabel(conflict.field), current: describeValue(conflict.field, conflict.current, localiseTitle), edit: describeValue(conflict.field, conflict.editAfter, localiseTitle) },
     ];
   }
 
@@ -842,7 +845,7 @@
             </template>
 
             <div v-if="selected.franchiseEffect" class="rounded-md px-3 py-2 text-sm bg-amber-50 text-amber-900 dark:bg-amber-900/20 dark:text-amber-200">
-              <strong>Franchise effect.</strong>
+              <strong>Franchise effect.</strong>{{ ' ' }}
               <template v-if="selected.franchiseEffect.addedDeckTitle && selected.franchiseEffect.into">
                 This deck already joined
                 <NuxtLink
@@ -853,8 +856,8 @@
                   >{{ localiseTitle(selected.franchiseEffect.into) }}</NuxtLink
                 >
                 ({{ deckCountText(selected.franchiseEffect.into.deckCount) }}), so approving will add
-                <span class="font-medium" v-bind="japaneseTextAttrs(selected.franchiseEffect.addedDeckTitle)">{{
-                  selected.franchiseEffect.addedDeckTitle
+                <span class="font-medium" v-bind="japaneseTextAttrs(addedDeckTitle(selected.franchiseEffect))">{{
+                  addedDeckTitle(selected.franchiseEffect)
                 }}</span>
                 to it instead. The edit will move to that deck's history.
               </template>
@@ -931,8 +934,8 @@
                     @update:model-value="setResolution(selected, conflict.field, option)"
                   />
                   <span class="min-w-0 [overflow-wrap:anywhere]">
-                    <b v-bind="japaneseTextAttrs(describeValue(conflict.field, option === 'current' ? conflict.current : conflict.editAfter))">{{
-                      describeValue(conflict.field, option === 'current' ? conflict.current : conflict.editAfter)
+                    <b v-bind="japaneseTextAttrs(describeValue(conflict.field, option === 'current' ? conflict.current : conflict.editAfter, localiseTitle))">{{
+                      describeValue(conflict.field, option === 'current' ? conflict.current : conflict.editAfter, localiseTitle)
                     }}</b>
                     <span class="text-xs text-muted-color ml-1">{{ option === 'current' ? 'current value' : 'this edit' }}</span>
                   </span>

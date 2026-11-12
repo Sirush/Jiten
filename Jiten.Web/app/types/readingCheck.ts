@@ -2,7 +2,9 @@ import type { MediaType } from '~/types';
 
 export interface ReadingUnit {
   deckId: number;
-  title: string;
+  originalTitle: string;
+  romajiTitle: string | null;
+  englishTitle: string | null;
   inProgress: boolean;
   ticked: boolean;
 }

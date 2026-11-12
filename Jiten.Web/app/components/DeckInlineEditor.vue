@@ -80,7 +80,7 @@
     const role = relationRole.value;
     const target = relationTargetTitle.value || (relationTargetId.value ? `#${relationTargetId.value}` : '');
     if (!role || !target) return '';
-    return relationshipPreviewText(role, target, draft.value.originalTitle || 'this deck');
+    return relationshipPreviewText(role, target, localiseTitle(draft.value) || 'this deck');
   });
 
   const warn = (detail: string) => toast.add({ severity: 'warn', summary: 'Validation', detail, life: 3000 });

@@ -24,6 +24,7 @@
   }>();
 
   const emit = defineEmits<{ toggleItem: [field: number, key: string] }>();
+  const localiseTitle = useLocaliseTitle();
 
   const choosesItems = (row: { field: number; tokens: ListToken[] }) => props.excludedItems !== undefined && isListField(row.field) && row.tokens.length > 1;
   const isLeftOut = (field: number, token: ListToken) => !!token.key && !!props.excludedItems?.[field]?.includes(token.key);
@@ -36,7 +37,7 @@
 
   const rows = computed(() =>
     sortChanges(props.changes).map((change) => {
-      const view = describeChange(change);
+      const view = describeChange(change, localiseTitle);
       return { field: change.field, label: fieldLabel(change.field), view, tokens: listTokens(view), text: textView(view) };
     })
   );

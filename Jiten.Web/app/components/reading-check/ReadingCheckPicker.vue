@@ -246,7 +246,7 @@
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-1">
             <label v-for="(unit, i) in row.units" :key="unit.deckId" class="flex items-center gap-2.5 text-sm min-h-8 cursor-pointer">
               <Checkbox :model-value="isTicked(row, unit.deckId)" binary @update:model-value="toggleUnit(row, unit.deckId)" />
-              <span v-bind="japaneseTextAttrs(unit.title)" class="truncate">{{ i + 1 }}. {{ unit.title }}</span>
+              <span v-bind="japaneseTextAttrs(localiseTitle(unit))" class="truncate">{{ i + 1 }}. {{ localiseTitle(unit) }}</span>
               <span v-if="unit.inProgress" class="text-xs text-orange-800 dark:text-orange-300 shrink-0">In progress</span>
             </label>
           </div>
@@ -268,7 +268,7 @@
     <AutoComplete
       v-model="searchText"
       :suggestions="suggestions"
-      option-label="originalTitle"
+      :option-label="localiseTitle"
       placeholder="Search for a title you finished"
       fluid
       :pt="{ pcInputText: { root: { 'aria-label': 'Search for a title you finished' } } }"

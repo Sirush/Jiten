@@ -290,6 +290,8 @@ export function draftFromEditable(deck: EditableDeck): MetadataDraft {
       relationshipType: r.relationshipType,
       otherDeckId: r.otherDeckId,
       otherDeckTitle: r.otherDeckTitle,
+      otherDeckRomajiTitle: r.otherDeckRomajiTitle,
+      otherDeckEnglishTitle: r.otherDeckEnglishTitle,
     })),
     characterNames: [...(deck.characterNames ?? [])],
     addedNames: [],
@@ -656,30 +658,40 @@ export interface ListEntry {
   meta?: string[];
 }
 
+export type TitleLocaliser = (titles: { originalTitle: string; romajiTitle?: string | null; englishTitle?: string | null }) => string;
+
+const originalTitleOf: TitleLocaliser = (titles) => titles.originalTitle;
+
+export const relationshipTitles = (r: MetadataRelationshipValue) => ({
+  originalTitle: r.otherDeckTitle,
+  romajiTitle: r.otherDeckRomajiTitle,
+  englishTitle: r.otherDeckEnglishTitle,
+});
+
 /** The other deck's role, read from the deck the edit belongs to: the deck is the edge's source when the other deck is its target. */
-export function relationshipEntry(r: MetadataRelationshipValue): ListEntry {
+export function relationshipEntry(r: MetadataRelationshipValue, localise: TitleLocaliser = originalTitleOf): ListEntry {
   const type = Number(r.relationshipType) as DeckRelationshipType;
   const perspective = r.targetDeckId === r.otherDeckId ? type : getInverseRelationshipType(type);
   const meta = [r.otherDeckMediaType != null ? getMediaTypeText(r.otherDeckMediaType) : null, r.otherDeckReleaseYear ? String(r.otherDeckReleaseYear) : null];
   return {
-    label: r.otherDeckTitle,
+    label: localise(relationshipTitles(r)),
     role: getRelationshipRoleLabel(perspective),
     href: `/decks/media/${r.otherDeckId}/detail`,
     meta: meta.filter((m): m is string => m !== null),
   };
 }
 
-export function relationshipLabel(r: MetadataRelationshipValue): string {
-  const entry = relationshipEntry(r);
+export function relationshipLabel(r: MetadataRelationshipValue, localise: TitleLocaliser = originalTitleOf): string {
+  const entry = relationshipEntry(r, localise);
   return `${entry.role}: ${entry.label}`;
 }
 
 const franchiseKey = (f: MetadataFranchiseValue) => (f.franchiseId != null ? String(f.franchiseId) : `with:${f.withDeckId}`);
 
-const franchiseEntry = (f: MetadataFranchiseValue): ListEntry =>
+const franchiseEntry = (f: MetadataFranchiseValue, localise: TitleLocaliser): ListEntry =>
   f.franchiseId != null
-    ? { label: f.originalTitle, href: `/franchise/${f.franchiseId}` }
-    : { label: f.originalTitle, role: 'New franchise with', href: `/decks/media/${f.withDeckId}/detail` };
+    ? { label: localise(f), href: `/franchise/${f.franchiseId}` }
+    : { label: localise(f), role: 'New franchise with', href: `/decks/media/${f.withDeckId}/detail` };
 
 const asFranchise = (value: unknown): MetadataFranchiseValue | null =>
   value && typeof value === 'object' && 'franchiseId' in value ? (value as MetadataFranchiseValue) : null;
@@ -709,7 +721,7 @@ function keyedDiff<T>(
 
 const plainEntry = (label: string): ListEntry => ({ label });
 
-export function describeChange(change: MetadataFieldChange): ChangeView {
+export function describeChange(change: MetadataFieldChange, localise: TitleLocaliser = originalTitleOf): ChangeView {
   const { field, before, after } = change;
   switch (field) {
     case MetadataField.Description: {
@@ -766,7 +778,7 @@ export function describeChange(change: MetadataFieldChange): ChangeView {
     case MetadataField.Relationships:
       return {
         kind: 'list',
-        ...keyedDiff(asArray<MetadataRelationshipValue>(before), asArray<MetadataRelationshipValue>(after), edgeId, relationshipEntry),
+        ...keyedDiff(asArray<MetadataRelationshipValue>(before), asArray<MetadataRelationshipValue>(after), edgeId, (r) => relationshipEntry(r, localise)),
         changed: [],
       };
     case MetadataField.Franchise: {
@@ -774,7 +786,7 @@ export function describeChange(change: MetadataFieldChange): ChangeView {
       const a = asFranchise(after);
       return {
         kind: 'list',
-        ...keyedDiff(b ? [b] : [], a ? [a] : [], franchiseKey, franchiseEntry),
+        ...keyedDiff(b ? [b] : [], a ? [a] : [], franchiseKey, (f) => franchiseEntry(f, localise)),
         changed: [],
       };
     }
@@ -896,7 +908,7 @@ export function conflictClashes(conflict: MetadataQueueConflict): ConflictClash[
   return [];
 }
 
-export function describeValue(field: MetadataField, value: unknown): string {
+export function describeValue(field: MetadataField, value: unknown, localise: TitleLocaliser = originalTitleOf): string {
   switch (field) {
     case MetadataField.MediaType:
       return value == null ? 'empty' : getMediaTypeText(Number(value) as MediaType);
@@ -922,12 +934,12 @@ export function describeValue(field: MetadataField, value: unknown): string {
           .join(', ') || 'none'
       );
     case MetadataField.Relationships:
-      return asArray<MetadataRelationshipValue>(value).map(relationshipLabel).join(', ') || 'none';
+      return asArray<MetadataRelationshipValue>(value).map((r) => relationshipLabel(r, localise)).join(', ') || 'none';
     case MetadataField.Franchise:
     {
       const franchise = asFranchise(value);
       if (!franchise) return 'none';
-      return franchise.franchiseId != null ? franchise.originalTitle : `New franchise with ${franchise.originalTitle}`;
+      return franchise.franchiseId != null ? localise(franchise) : `New franchise with ${localise(franchise)}`;
     }
     default:
       return asText(value) ?? 'empty';

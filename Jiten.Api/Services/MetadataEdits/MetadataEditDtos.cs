@@ -112,7 +112,8 @@ public sealed record EditableTagDto(int TagId, string Name, int Percentage);
 
 public sealed record EditableLinkDto(int LinkType, string Url);
 
-public sealed record EditableRelationshipDto(int SourceDeckId, int TargetDeckId, int RelationshipType, int OtherDeckId, string OtherDeckTitle, int OtherDeckMediaType);
+public sealed record EditableRelationshipDto(int SourceDeckId, int TargetDeckId, int RelationshipType, int OtherDeckId, string OtherDeckTitle, int OtherDeckMediaType,
+                                             string? OtherDeckRomajiTitle = null, string? OtherDeckEnglishTitle = null);
 
 public sealed record EditableViewerDto(string Role, bool HasDisplayName, bool EmailConfirmed, bool Banned);
 
@@ -172,11 +173,13 @@ public sealed record FranchiseRefDto(int FranchiseId, string OriginalTitle, stri
 
 /// <summary>Into is null when the deck has no franchise yet and joins the others; otherwise they merge into it.</summary>
 /// <summary><paramref name="AddedDeckTitle"/> is set when the edited deck joined <paramref name="Into"/> after the edit was made, so approving adds the picked deck instead.</summary>
-public sealed record FranchiseEffectDto(List<FranchiseRefDto> Joining, FranchiseRefDto? Into, string? AddedDeckTitle = null);
+public sealed record FranchiseEffectDto(List<FranchiseRefDto> Joining, FranchiseRefDto? Into, string? AddedDeckTitle = null, string? AddedDeckRomajiTitle = null,
+                                        string? AddedDeckEnglishTitle = null);
 
 /// <summary>A relationship as stored in an edit, plus the other deck's current media type and year, since titles repeat across a franchise; both are null once that deck is gone.</summary>
 public sealed record RelationshipChangeValueDto(int SourceDeckId, int TargetDeckId, DeckRelationshipType RelationshipType, int OtherDeckId, string OtherDeckTitle,
-                                                int? OtherDeckMediaType, int? OtherDeckReleaseYear);
+                                                int? OtherDeckMediaType, int? OtherDeckReleaseYear, string? OtherDeckRomajiTitle = null,
+                                                string? OtherDeckEnglishTitle = null);
 
 public sealed class QueueItemDto
 {
