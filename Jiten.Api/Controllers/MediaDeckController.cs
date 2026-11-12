@@ -1217,8 +1217,8 @@ public class MediaDeckController(
                        .OrderByDescending(d => d.CharacterCount)
                        .ThenBy(d => d.DeckId),
             "sentenceLength" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(d => d.CharacterCount / (d.SentenceCount + 1)).ThenBy(d => d.DeckId).Where(d => d.SentenceCount != 0 && !d.HideAverageSentenceLength)
-                : query.OrderByDescending(d => d.CharacterCount / (d.SentenceCount + 1)).ThenBy(d => d.DeckId).Where(d => d.SentenceCount != 0 && !d.HideAverageSentenceLength),
+                ? query.OrderBy(d => (double)d.CharacterCount / d.SentenceCount).ThenBy(d => d.DeckId).Where(d => d.SentenceCount > 1 && !d.HideAverageSentenceLength)
+                : query.OrderByDescending(d => (double)d.CharacterCount / d.SentenceCount).ThenBy(d => d.DeckId).Where(d => d.SentenceCount > 1 && !d.HideAverageSentenceLength),
             "dialoguePercentage" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(d => d.DialoguePercentage)
                        .ThenBy(d => d.DeckId)
@@ -1309,8 +1309,8 @@ public class MediaDeckController(
                        .OrderByDescending(p => p.Deck.CharacterCount)
                        .ThenBy(p => p.Deck.DeckId),
             "sentenceLength" => sortOrder == SortOrder.Ascending
-                ? query.OrderBy(p => p.Deck.CharacterCount / (p.Deck.SentenceCount + 1)).ThenBy(p => p.Deck.DeckId).Where(p => p.Deck.SentenceCount != 0 && !p.Deck.HideAverageSentenceLength)
-                : query.OrderByDescending(p => p.Deck.CharacterCount / (p.Deck.SentenceCount + 1)).ThenBy(p => p.Deck.DeckId).Where(p => p.Deck.SentenceCount != 0 && !p.Deck.HideAverageSentenceLength),
+                ? query.OrderBy(p => (double)p.Deck.CharacterCount / p.Deck.SentenceCount).ThenBy(p => p.Deck.DeckId).Where(p => p.Deck.SentenceCount > 1 && !p.Deck.HideAverageSentenceLength)
+                : query.OrderByDescending(p => (double)p.Deck.CharacterCount / p.Deck.SentenceCount).ThenBy(p => p.Deck.DeckId).Where(p => p.Deck.SentenceCount > 1 && !p.Deck.HideAverageSentenceLength),
             "dialoguePercentage" => sortOrder == SortOrder.Ascending
                 ? query.OrderBy(p => p.Deck.DialoguePercentage)
                        .ThenBy(p => p.Deck.DeckId)
