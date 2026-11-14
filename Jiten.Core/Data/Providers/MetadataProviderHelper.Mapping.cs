@@ -82,17 +82,17 @@ public static partial class MetadataProviderHelper
             deck.ReleaseDate = DateOnly.FromDateTime(metadata.ReleaseDate.Value);
 
         if (string.IsNullOrEmpty(deck.Description) && !deck.MetadataLocks.HasFlag(MetadataField.Description))
-            deck.Description = metadata.Description?.Length > 2000 ? metadata.Description[..2000] : metadata.Description;
+            deck.Description = metadata.Description?.Trim() is { Length: > 0 } description ? description[..Math.Min(description.Length, 2000)] : null;
     }
 
     internal static void MergeAliases(Deck deck, IEnumerable<string> aliases, DeckMetadataExclusionSet exclusions)
     {
-        foreach (var alias in aliases)
+        foreach (var alias in aliases.Select(a => a.Trim()))
         {
-            if (exclusions.ExcludesAlias(alias))
+            if (alias.Length == 0 || exclusions.ExcludesAlias(alias))
                 continue;
 
-            if (deck.Titles.All(t => !string.Equals(t.Title, alias, StringComparison.OrdinalIgnoreCase)))
+            if (deck.Titles.All(t => !string.Equals(t.Title.Trim(), alias, StringComparison.OrdinalIgnoreCase)))
                 deck.Titles.Add(new DeckTitle { DeckId = deck.DeckId, Title = alias, TitleType = DeckTitleType.Alias });
         }
     }

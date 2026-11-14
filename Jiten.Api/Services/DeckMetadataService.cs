@@ -241,10 +241,15 @@ public sealed class DeckMetadataService(JitenDbContext dbContext)
         var target = values.Select(v => v.Trim()).Where(v => v.Length > 0).ToHashSet(StringComparer.Ordinal);
         var current = collection.Where(inSet).ToList();
 
-        var removed = current.Where(e => !target.Contains(key(e))).ToList();
+        var removed = current.Where(e => !target.Contains(key(e).Trim())).ToList();
+        var duplicates = current.Except(removed)
+                                .GroupBy(e => key(e).Trim(), StringComparer.Ordinal)
+                                .SelectMany(g => g.OrderBy(e => key(e) == g.Key ? 0 : 1).Skip(1))
+                                .ToList();
         dbContext.RemoveRange(removed);
+        dbContext.RemoveRange(duplicates);
 
-        var present = current.Select(key).ToHashSet(StringComparer.Ordinal);
+        var present = current.Select(e => key(e).Trim()).ToHashSet(StringComparer.Ordinal);
         var added = target.Where(v => !present.Contains(v)).ToList();
         foreach (var value in added)
             collection.Add(create(value));

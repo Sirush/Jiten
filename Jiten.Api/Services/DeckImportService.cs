@@ -304,8 +304,8 @@ public partial class DeckImportService(
 
         var studyDeck = new UserStudyDeck
                         {
-                            UserId = userId, DeckType = StudyDeckType.StaticWordList, Name = request.Name,
-                            Description = request.Description, SortOrder = maxOrder + 1, Order = (int)Dtos.DeckOrder.ImportOrder,
+                            UserId = userId, DeckType = StudyDeckType.StaticWordList, Name = request.Name.Trim(),
+                            Description = request.Description?.Trim(), SortOrder = maxOrder + 1, Order = (int)Dtos.DeckOrder.ImportOrder,
                             CreatedAt = DateTime.UtcNow
                         };
         userContext.UserStudyDecks.Add(studyDeck);

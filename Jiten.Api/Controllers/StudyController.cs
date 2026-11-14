@@ -699,8 +699,8 @@ public partial class StudyController(
         {
             UserId = userId,
             DeckType = request.DeckType,
-            Name = request.Name ?? "",
-            Description = request.Description,
+            Name = request.Name?.Trim() ?? "",
+            Description = request.Description?.Trim(),
             DeckId = request.DeckType == StudyDeckType.MediaGroup ? null : request.DeckId,
             GroupKind = request.DeckType == StudyDeckType.MediaGroup ? request.GroupKind : null,
             GroupId = request.DeckType == StudyDeckType.MediaGroup ? request.GroupId : null,
@@ -767,8 +767,8 @@ public partial class StudyController(
             if (orderError != null) return orderError;
         }
 
-        if (request.Name != null) studyDeck.Name = request.Name;
-        if (request.Description != null) studyDeck.Description = request.Description;
+        if (request.Name != null) studyDeck.Name = request.Name.Trim();
+        if (request.Description != null) studyDeck.Description = request.Description.Trim();
 
         if (studyDeck.DeckType.DrawsFromDecks())
         {

@@ -62,7 +62,7 @@ public sealed class DeckMetadataSnapshot
         Description = NullIfBlank(description),
         ReleaseDate = FormatDate(releaseDate),
         MediaType = mediaType,
-        Aliases = aliases.Distinct().Order(StringComparer.Ordinal).ToList(),
+        Aliases = aliases.Select(a => a.Trim()).Where(a => a.Length > 0).Distinct().Order(StringComparer.Ordinal).ToList(),
         Genres = genres.Select(g => (int)g).Distinct().Order().ToList(),
         Tags = tags.OrderBy(t => t.TagId).ToList(),
         Links = links.OrderBy(l => l.LinkType).ThenBy(l => l.Url, StringComparer.Ordinal).ToList(),
