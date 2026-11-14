@@ -2052,6 +2052,105 @@ public partial class UserController(
         return Results.Ok(new { words = seeded.InsertedWords, forms = seeded.Inserted, pruned = seeded.Pruned, batchId = seeded.BatchId });
     }
 
+    [HttpGet("vocabulary/wanikani-levels")]
+    [SwaggerOperation(Summary = "WaniKani vocabulary size per level",
+                      Description = "Distinct words in WaniKani levels 1 to N, at index N - 1.")]
+    public IResult GetWaniKaniLevelWordCounts() => Results.Ok(WaniKaniVocabulary.CumulativeWordCounts);
+
+    [HttpPost("vocabulary/import-from-wanikani-level/{level:int}")]
+    [SwaggerOperation(Summary = "Add the vocabulary of WaniKani levels 1 to the given level as known words")]
+    public async Task<IResult> ImportWordsFromWaniKaniLevel(int level)
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        if (level < 1 || level > WaniKaniVocabulary.MaxLevel)
+            return Results.BadRequest("Invalid WaniKani level");
+
+        var now = DateTime.UtcNow;
+        var cards = WaniKaniVocabulary.FormsUpTo(level)
+                                      .Select(f => new FsrsCard(userId, f.WordId, f.ReadingIndex, due: now, lastReview: now, state: FsrsState.Mastered))
+                                      .ToList();
+        var seeded = await cardBatches.SeedAsync(userId, cards, new CardBatchDetails { Kind = CardBatchKind.WaniKaniLevels, MaxLevel = level });
+
+        logger.LogInformation("User imported WaniKani levels: UserId={UserId}, Level={Level}, WordCount={WordCount}, FormCount={FormCount}, PrunedCount={PrunedCount}",
+                              userId, level, seeded.InsertedWords, seeded.Inserted, seeded.Pruned);
+        return Results.Ok(new { words = seeded.InsertedWords, forms = seeded.Inserted, pruned = seeded.Pruned, batchId = seeded.BatchId });
+    }
+
+    [HttpPost("vocabulary/import-from-wanikani")]
+    [SwaggerOperation(Summary = "Add words studied on WaniKani as review cards",
+                      Description = "Takes the vocabulary the client read from the WaniKani API; the WaniKani token never reaches this server. Each card gets a review history rebuilt from its stage, milestone dates and answer totals; burned words are mastered.")]
+    public async Task<IResult> ImportWordsFromWaniKani([FromBody] ImportFromWaniKaniRequest request)
+    {
+        var userId = userService.UserId;
+        if (string.IsNullOrEmpty(userId)) return Results.Unauthorized();
+
+        var words = (request?.Words ?? [])
+                    .Where(w => !string.IsNullOrWhiteSpace(w.Characters) && WaniKaniCardBuilder.IsStudiedStage(w.SrsStage))
+                    .DistinctBy(w => w.Characters)
+                    .ToList();
+        if (words.Count == 0) return Results.BadRequest("No words provided");
+        if (words.Count > ImportFromWaniKaniRequest.MaxWords) return Results.BadRequest("Too many words");
+
+        var forms = new Dictionary<(int WordId, byte ReadingIndex), WaniKaniWord>();
+        var outsideList = new List<(WaniKaniWord Source, string Word, string Reading)>();
+
+        void Keep((int WordId, byte ReadingIndex) form, WaniKaniWord word)
+        {
+            if (!forms.TryGetValue(form, out var current) || word.SrsStage > current.SrsStage)
+                forms[form] = word;
+        }
+
+        var unmatched = new List<string>();
+        foreach (var word in words)
+        {
+            if (WaniKaniVocabulary.TryResolve(word.Characters, out var form))
+            {
+                Keep(form, word);
+                continue;
+            }
+
+            var bare = word.Characters.Replace("〜", "").Replace("～", "").Trim();
+            if (bare.Length == 0)
+                unmatched.Add(word.Characters);
+            else
+                outsideList.Add((word, bare, word.Reading?.Trim() ?? ""));
+        }
+
+        if (outsideList.Count > 0)
+        {
+            var lookup = await Parser.Parser.GetWordsDirectLookupByReading(
+                contextFactory, outsideList.Select(w => (w.Word, w.Reading)).Distinct().ToList());
+            foreach (var word in outsideList)
+            {
+                if (lookup.TryGetValue((word.Word, word.Reading), out var hit))
+                    Keep((hit.WordId, hit.ReadingIndex), word.Source);
+                else
+                    unmatched.Add(word.Source.Characters);
+            }
+        }
+
+        var now = DateTime.UtcNow;
+        var scheduler = await FsrsSettingsHelper.CreateSchedulerAsync(userContext, userId, enableFuzzing: false);
+        var cards = forms.Select(f => WaniKaniCardBuilder.Build(
+                                     userId, f.Key,
+                                     new WaniKaniProgress(f.Value.SrsStage, f.Value.StartedAt, f.Value.PassedAt, f.Value.BurnedAt, f.Value.AvailableAt,
+                                                          f.Value.Reviews, f.Value.Incorrect),
+                                     now, scheduler))
+                         .ToList();
+        var seeded = await cardBatches.SeedAsync(userId, cards, CardBatchDetails.Of(CardBatchKind.WaniKaniProgress));
+        if (seeded.Inserted > 0)
+            await MarkReviewRollupDirty(userId);
+
+        logger.LogInformation("User imported WaniKani progress: UserId={UserId}, Received={Received}, WordCount={WordCount}, FormCount={FormCount}, Unmatched={Unmatched}",
+                              userId, words.Count, seeded.InsertedWords, seeded.Inserted, unmatched.Count);
+        return Results.Ok(new
+                          {
+                              words = seeded.InsertedWords, forms = seeded.Inserted, matched = words.Count - unmatched.Count,
+                              unmatched = unmatched.Count, unmatchedWords = unmatched.Take(ImportSkippedWord.MaxReturned), batchId = seeded.BatchId
+                          });
+    }
 
     [HttpGet("vocabulary/batches")]
     [SwaggerOperation(Summary = "List bulk card additions",

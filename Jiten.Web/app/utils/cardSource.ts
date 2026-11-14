@@ -10,7 +10,7 @@ const CARD_SOURCE_DISPLAY: Record<CardSource, { label: string; icon: string }> =
   [CardSource.FrequencyImport]: { label: 'Frequency range', icon: 'pi pi-chart-bar' },
   [CardSource.AnkiImport]: { label: 'Anki', icon: 'pi pi-sync' },
   [CardSource.JpdbImport]: { label: 'JPDB', icon: 'pi pi-cloud-download' },
-  [CardSource.WaniKaniImport]: { label: 'WaniKani', icon: 'pi pi-cloud-download' },
+  [CardSource.WaniKaniImport]: { label: 'WaniKani', icon: 'pi pi-graduation-cap' },
   [CardSource.WordListImport]: { label: 'Word list', icon: 'pi pi-list' },
   [CardSource.BackupRestore]: { label: 'Backup', icon: 'pi pi-database' },
   [CardSource.CompositionInference]: { label: 'Composition inference', icon: 'pi pi-sitemap' },
@@ -28,7 +28,7 @@ export function cardSourceDisplay(source: CardSource): { label: string; icon: st
 
 /** The line under a batch's source label, or null when the label says it all. */
 export function batchDetail(batch: Pick<CardBatch, 'details' | 'deck'>, localiseTitle: (deck: CardBatchDeck) => string): string | null {
-  const { kind, name, minRank, maxRank, units, listStatus } = batch.details;
+  const { kind, name, minRank, maxRank, units, listStatus, maxLevel } = batch.details;
   switch (kind) {
     case CardBatchKind.JpdbKnownWords:
       return 'Known words';
@@ -57,6 +57,11 @@ export function batchDetail(batch: Pick<CardBatch, 'details' | 'deck'>, localise
     case CardBatchKind.ReadingCheck:
       if (units == null) return null;
       return units === 1 ? '1 volume or work' : `${units.toLocaleString()} volumes and works`;
+    case CardBatchKind.WaniKaniLevels:
+      if (maxLevel == null) return null;
+      return maxLevel === 1 ? 'Level 1' : `Levels 1 to ${maxLevel}`;
+    case CardBatchKind.WaniKaniProgress:
+      return 'Account progress';
     default:
       return null;
   }

@@ -486,6 +486,7 @@ export interface CardBatchDetails {
   maxRank?: number;
   units?: number;
   listStatus?: DeckStatus;
+  maxLevel?: number;
 }
 
 export interface CardBatchDeck {

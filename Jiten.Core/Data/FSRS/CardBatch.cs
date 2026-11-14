@@ -50,6 +50,8 @@ public sealed record CardBatchDetails
 
     public DeckStatus? ListStatus { get; init; }
 
+    public int? MaxLevel { get; init; }
+
     public static CardBatchDetails Of(CardBatchKind kind, string? name = null)
         => new() { Kind = kind, Name = NormaliseName(name) };
 
@@ -89,6 +91,8 @@ public enum CardBatchKind : byte
     BackupRestore = 13,
     WordCheck = 14,
     ReadingCheck = 15,
+    WaniKaniLevels = 16,
+    WaniKaniProgress = 17,
 }
 
 public static class CardBatchKinds
@@ -104,6 +108,7 @@ public static class CardBatchKinds
         CardBatchKind.BackupRestore => CardSource.BackupRestore,
         CardBatchKind.WordCheck => CardSource.PlacementTest,
         CardBatchKind.ReadingCheck => CardSource.ReadingCalibration,
+        CardBatchKind.WaniKaniLevels or CardBatchKind.WaniKaniProgress => CardSource.WaniKaniImport,
         _ => CardSource.Unknown
     };
 }

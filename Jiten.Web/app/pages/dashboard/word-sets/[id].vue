@@ -37,6 +37,7 @@
     meanings: string[];
     partsOfSpeech: string[];
     frequencyRank: number;
+    isManual: boolean;
   }
 
   interface WordForm {
@@ -70,6 +71,8 @@
   const sortBy = ref(initialSortBy);
   const sortOrder = ref(initialSortOrder);
   const selectedMembers = ref<WordSetMember[]>([]);
+  const manualOnly = ref(false);
+  const rulePanel = ref<{ refresh: () => Promise<void> } | null>(null);
 
   // Search & add
   const searchQuery = ref('');
@@ -120,6 +123,7 @@
       params.append('limit', rowsPerPage.value.toString());
       params.append('sortBy', sortBy.value);
       params.append('sortOrder', sortOrder.value);
+      if (manualOnly.value) params.append('manualOnly', 'true');
 
       const result = await $api<{ data: WordSetMember[]; totalItems: number }>(`/admin/word-sets/${setId}/members?${params.toString()}`);
       members.value = result.data.map((m) => ({ ...m, key: `${m.wordId}-${m.readingIndex}` }));
@@ -135,6 +139,18 @@
     currentPage.value = event.page;
     rowsPerPage.value = event.rows;
     loadMembers();
+  }
+
+  function onManualOnlyChange() {
+    currentPage.value = 0;
+    selectedMembers.value = [];
+    loadMembers();
+  }
+
+  async function onRuleApplied() {
+    currentPage.value = 0;
+    selectedMembers.value = [];
+    await Promise.all([loadWordSet(), loadMembers(), loadAllMemberKeys()]);
   }
 
   function onSortChange() {
@@ -256,6 +272,7 @@
         }
       }
       loadMembers(true);
+      rulePanel.value?.refresh();
     } catch (error: any) {
       toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Failed to add members'), life: 5000 });
     }
@@ -287,6 +304,7 @@
           wordSet.value = { ...wordSet.value, formCount: Math.max(0, wordSet.value.formCount - removed) };
         }
         loadMembers(true);
+        rulePanel.value?.refresh();
       }
     } catch (error: any) {
       toast.add({ severity: 'error', summary: 'Error', detail: extractApiError(error, 'Failed to remove members'), life: 5000 });
@@ -389,6 +407,8 @@
       </div>
     </div>
 
+    <WordSetRulePanel ref="rulePanel" :set-id="setId" @applied="onRuleApplied" />
+
     <!-- Search & Add Panel -->
     <div class="border rounded-lg p-4 mb-6 bg-white dark:bg-gray-900">
       <h2 class="text-lg font-semibold mb-3">Search & Add Words</h2>
@@ -443,7 +463,11 @@
     <div>
       <div class="flex items-center justify-between mb-3">
         <h2 class="text-lg font-semibold">Members</h2>
-        <div class="flex gap-2 items-center">
+        <div class="flex flex-wrap gap-2 items-center justify-end">
+          <div class="flex items-center gap-2 mr-2">
+            <Checkbox v-model="manualOnly" input-id="members-manual-only" binary @change="onManualOnlyChange" />
+            <label for="members-manual-only" class="text-sm">Added by hand only</label>
+          </div>
           <Select
             v-model="sortBy"
             :options="[
@@ -499,6 +523,7 @@
             <NuxtLink :to="`/vocabulary/${data.wordId}/${data.readingIndex}`" target="_blank" class="text-blue-500 hover:underline">
               <span class="text-lg font-bold">{{ data.text }}</span>
             </NuxtLink>
+            <Tag v-if="data.isManual" severity="secondary" class="text-xs ml-2">By hand</Tag>
             <div v-if="data.rubyText && data.text !== data.rubyText" class="text-xs text-gray-400" v-html="data.rubyText" />
           </template>
         </Column>
