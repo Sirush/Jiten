@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { Deck, DeckVocabularyPreviewWord } from '~/types';
 
   const props = defineProps<{
@@ -32,13 +33,13 @@
             {{ word.mainDefinition }}
           </span>
           <span v-else />
-          <span class="text-xs text-surface-500 dark:text-surface-400 shrink-0 tabular-nums">×{{ word.occurrences.toLocaleString('en-US') }}</span>
+          <span class="text-xs text-surface-500 dark:text-surface-400 shrink-0 tabular-nums">×{{ formatNumber(word.occurrences) }}</span>
         </NuxtLink>
       </li>
     </ul>
     <NuxtLink :to="vocabularyLink" class="inline-block pt-2 text-primary text-sm">
       See the full vocabulary list
-      <template v-if="deck.uniqueWordCount">({{ deck.uniqueWordCount.toLocaleString('en-US') }} words)</template>
+      <template v-if="deck.uniqueWordCount">({{ formatNumber(deck.uniqueWordCount) }} words)</template>
       →
     </NuxtLink>
   </details>

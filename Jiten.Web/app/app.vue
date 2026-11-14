@@ -1,4 +1,7 @@
 <script setup lang="ts">
+  import latinTextFontUrl from '@fontsource-variable/noto-sans-jp/files/noto-sans-jp-latin-wght-normal.woff2?url';
+  import iconFontUrl from 'primeicons/fonts/primeicons.woff2?url';
+
   useSeoMeta({
     title: 'Jiten',
     description: 'Vocabulary lists and anki decks for all your Japanese media.',
@@ -40,6 +43,7 @@
       return titleChunk ? `${titleChunk} - Jiten` : 'Jiten';
     },
     htmlAttrs: { class: displayClasses, style: customFontStyle },
+    link: [latinTextFontUrl, iconFontUrl].map((href) => ({ rel: 'preload', as: 'font', type: 'font/woff2', href, crossorigin: 'anonymous' })),
   });
 
   const route = useRoute();

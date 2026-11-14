@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { JpdbImportSummary, JpdbSkippedWord } from '~/composables/useJpdbApi';
 
   const visible = defineModel<boolean>('visible', { required: true });
@@ -21,7 +22,7 @@
   }
 
   function plural(n: number, one: string, many = `${one}s`) {
-    return `${n.toLocaleString()} ${n === 1 ? one : many}`;
+    return `${formatNumber(n)} ${n === 1 ? one : many}`;
   }
 </script>
 
@@ -42,15 +43,15 @@
         <h4 class="font-medium mb-1">Review history</h4>
         <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-sm">
           <dt class="text-gray-600 dark:text-gray-400">Cards in file</dt>
-          <dd class="tabular-nums">{{ summary.reviews.cardsInFile.toLocaleString() }}</dd>
+          <dd class="tabular-nums">{{ formatNumber(summary.reviews.cardsInFile) }}</dd>
           <dt class="text-gray-600 dark:text-gray-400">Cards imported</dt>
-          <dd class="tabular-nums">{{ summary.reviews.cardsProcessed.toLocaleString() }}</dd>
+          <dd class="tabular-nums">{{ formatNumber(summary.reviews.cardsProcessed) }}</dd>
           <dt class="text-gray-600 dark:text-gray-400">Reviews added</dt>
-          <dd class="tabular-nums">{{ summary.reviews.reviewsImported.toLocaleString() }}</dd>
+          <dd class="tabular-nums">{{ formatNumber(summary.reviews.reviewsImported) }}</dd>
           <dt v-if="summary.reviews.reviewsUpdated > 0" class="text-gray-600 dark:text-gray-400">Reviews updated</dt>
-          <dd v-if="summary.reviews.reviewsUpdated > 0" class="tabular-nums">{{ summary.reviews.reviewsUpdated.toLocaleString() }}</dd>
+          <dd v-if="summary.reviews.reviewsUpdated > 0" class="tabular-nums">{{ formatNumber(summary.reviews.reviewsUpdated) }}</dd>
           <dt class="text-gray-600 dark:text-gray-400">Skipped</dt>
-          <dd class="tabular-nums">{{ summary.reviews.skipped.toLocaleString() }}</dd>
+          <dd class="tabular-nums">{{ formatNumber(summary.reviews.skipped) }}</dd>
         </dl>
         <details v-for="group in groupByReason(summary.reviews.skippedWords)" :key="group.reason" class="mt-2 text-sm">
           <summary class="cursor-pointer text-primary-500 hover:underline">
@@ -67,11 +68,11 @@
         <h4 class="font-medium mb-1">Known words</h4>
         <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5 text-sm">
           <dt class="text-gray-600 dark:text-gray-400">Marked as known</dt>
-          <dd class="tabular-nums">{{ summary.knownWords.added.toLocaleString() }}</dd>
+          <dd class="tabular-nums">{{ formatNumber(summary.knownWords.added) }}</dd>
           <dt class="text-gray-600 dark:text-gray-400">Already tracked</dt>
-          <dd class="tabular-nums">{{ summary.knownWords.skipped.toLocaleString() }}</dd>
+          <dd class="tabular-nums">{{ formatNumber(summary.knownWords.skipped) }}</dd>
           <dt v-if="summary.knownWords.unmatched > 0" class="text-gray-600 dark:text-gray-400">Not in dictionary</dt>
-          <dd v-if="summary.knownWords.unmatched > 0" class="tabular-nums">{{ summary.knownWords.unmatched.toLocaleString() }}</dd>
+          <dd v-if="summary.knownWords.unmatched > 0" class="tabular-nums">{{ formatNumber(summary.knownWords.unmatched) }}</dd>
         </dl>
         <details v-if="summary.knownWords.unmatchedWords.length > 0" class="mt-2 text-sm">
           <summary class="cursor-pointer text-primary-500 hover:underline">

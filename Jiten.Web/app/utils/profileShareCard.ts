@@ -1,3 +1,4 @@
+import { formatNumber } from '~/utils/formatNumber';
 import type { KnowledgeGrowth, ProfileVocabularyStats, StudyHeatmapResponse, UserAccomplishment } from '~/types';
 import { drawCoverImage, fitCanvasText, type ExportPalette } from '~/utils/imageExport';
 import { formatBucketDated } from '~/utils/journeyFormat';
@@ -65,7 +66,7 @@ export interface ProfileShareCardOptions {
   isDark: boolean;
 }
 
-const num = (n: number) => n.toLocaleString();
+const num = (n: number) => formatNumber(n);
 
 function cardWordTotal(v: ProfileVocabularyStats) {
   return v.young + v.mature + v.mastered;

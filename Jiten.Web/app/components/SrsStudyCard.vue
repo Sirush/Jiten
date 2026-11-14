@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { CardLayoutBlock, CardMediaDto, ExampleSentenceBlockOptions, StudyCardDto, Word } from '~/types';
   import { useSrsStore } from '~/stores/srsStore';
   import { stripRubyMarkup } from '~/utils/stripRubyMarkup';
@@ -514,7 +515,7 @@
         <!-- Top bar: frequency rank + menu -->
         <div class="relative z-40 flex justify-end items-center gap-2 min-h-[1.25rem]">
           <div v-if="showFrequencyRankChrome && card.frequencyRank > 0" class="text-xs text-gray-400" :class="showBackgroundImage ? 'dark:!text-white' : undefined">
-            #{{ card.frequencyRank.toLocaleString() }}
+            #{{ formatNumber(card.frequencyRank) }}
           </div>
           <button
             v-if="showBackgroundImage"

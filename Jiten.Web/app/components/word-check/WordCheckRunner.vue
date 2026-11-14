@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { WordCheckLevel, WordCheckResult, WordCheckStep } from '~/types/wordCheck';
   import type { CheckAnswerOption } from '~/types/check';
   import { WordCheckAnswer } from '~/types/enums';
@@ -241,7 +242,7 @@
       <p class="text-sm text-gray-600 dark:text-gray-300" :class="{ 'mt-2': previous.words > 0 }">
         You took the word check on {{ formatDateShort(previous.at) }}
       </p>
-      <p v-if="previous.words > 0" class="text-4xl md:text-5xl font-bold leading-none tabular-nums">{{ previous.words.toLocaleString() }} words</p>
+      <p v-if="previous.words > 0" class="text-4xl md:text-5xl font-bold leading-none tabular-nums">{{ formatNumber(previous.words) }} words</p>
       <p v-else class="text-xl font-bold">Nothing was marked</p>
       <p class="mt-2 text-gray-700 dark:text-gray-300">Take it again if your Japanese has moved on since. Words you already have stay as they are.</p>
       <div class="flex flex-wrap items-center gap-3 mt-2">
@@ -264,12 +265,12 @@
       </template>
       <template v-else-if="result && result.wordsKnown > 0">
         <p class="mt-2 text-sm text-gray-600 dark:text-gray-300">The common words you know</p>
-        <p class="text-4xl md:text-5xl font-bold leading-none tabular-nums">{{ result.wordsKnown.toLocaleString() }} words</p>
+        <p class="text-4xl md:text-5xl font-bold leading-none tabular-nums">{{ formatNumber(result.wordsKnown) }} words</p>
         <p v-if="result.wordsMarked < result.wordsKnown" class="text-sm text-gray-600 dark:text-gray-300">
           {{
             result.wordsMarked === 0
               ? 'You had all of them marked already.'
-              : `${result.wordsMarked.toLocaleString()} of them were new. You had the rest marked already.`
+              : `${formatNumber(result.wordsMarked)} of them were new. You had the rest marked already.`
           }}
         </p>
         <p class="mt-2 text-gray-700 dark:text-gray-300">

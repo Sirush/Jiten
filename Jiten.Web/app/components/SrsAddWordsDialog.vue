@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useSrsStore } from '~/stores/srsStore';
   import { useToast } from 'primevue/usetoast';
   import { debounce } from 'perfect-debounce';
@@ -337,7 +338,7 @@
                   </div>
                 </div>
                 <div class="flex items-center gap-2 shrink-0">
-                  <span v-if="entry.frequencyRank < 2147483647" class="text-xs text-gray-400">#{{ entry.frequencyRank.toLocaleString() }}</span>
+                  <span v-if="entry.frequencyRank < 2147483647" class="text-xs text-gray-400">#{{ formatNumber(entry.frequencyRank) }}</span>
                   <Button
                     :label="isAdded(entry) ? 'Add again' : 'Add'"
                     :icon="isAdded(entry) ? undefined : 'pi pi-plus'"

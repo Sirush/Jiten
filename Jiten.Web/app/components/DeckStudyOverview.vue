@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { Deck } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { getDifficultyName } from '~/utils/difficultyColours';
@@ -19,7 +20,7 @@
 
     if (d.characterCount) {
       sentences.push(
-        `${title} is a Japanese ${type} of ${d.characterCount.toLocaleString('en-US')} characters, with ${d.uniqueWordCount.toLocaleString('en-US')} unique words and ${d.uniqueKanjiCount.toLocaleString('en-US')} different kanji.`
+        `${title} is a Japanese ${type} of ${formatNumber(d.characterCount)} characters, with ${formatNumber(d.uniqueWordCount)} unique words and ${formatNumber(d.uniqueKanjiCount)} different kanji.`
       );
     } else {
       sentences.push(`${title} is a Japanese ${type}.`);
@@ -32,7 +33,7 @@
 
     if (d.uniqueWordCount) {
       sentences.push(
-        `The full vocabulary list ranks all ${d.uniqueWordCount.toLocaleString('en-US')} words by how often they appear, and you can study them on Jiten or download them as an Anki deck.`
+        `The full vocabulary list ranks all ${formatNumber(d.uniqueWordCount)} words by how often they appear, and you can study them on Jiten or download them as an Anki deck.`
       );
     }
 

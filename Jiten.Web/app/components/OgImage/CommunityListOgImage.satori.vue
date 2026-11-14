@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { coverUrl } from '~/utils/coverImage';
 
   const props = defineProps<{
@@ -16,7 +17,7 @@
   const shownName = computed(() => clip(props.name, 60));
   const shownDescription = computed(() => (props.description ? clip(props.description.replace(/\s+/g, ' ').trim(), 140) : ''));
   const byline = computed(() => {
-    const titles = `${props.itemCount.toLocaleString('en-US')} ${props.itemCount === 1 ? 'title' : 'titles'}`;
+    const titles = `${formatNumber(props.itemCount)} ${props.itemCount === 1 ? 'title' : 'titles'}`;
     return props.ownerDisplayName ? `${titles} picked by ${props.ownerDisplayName}` : titles;
   });
   const covers = computed(() => (props.coverNames ?? []).slice(0, MAX_COVERS).map((name) => coverUrl(name, 'sm')));
@@ -61,7 +62,7 @@
             class="flex items-center justify-center font-bold"
             style="width: 112px; height: 168px; border-radius: 8px; background-color: #f3e8ff; color: #7e22ce; font-size: 2rem"
           >
-            +{{ hiddenCount.toLocaleString('en-US') }}
+            +{{ formatNumber(hiddenCount) }}
           </div>
         </div>
         <span style="font-size: 1.5rem; color: #6b7280">jiten.moe</span>

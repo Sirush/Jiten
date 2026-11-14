@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   const props = defineProps<{
     vocabStatsLoading: boolean;
     refreshing?: boolean;
@@ -35,7 +36,7 @@
   const totalRedundantForms = computed(() => props.redundantForms + props.derivationCoveredForms);
 
   function counted(count: number, noun: string): string {
-    return `${count.toLocaleString()} ${noun}${count === 1 ? '' : 's'}`;
+    return `${formatNumber(count)} ${noun}${count === 1 ? '' : 's'}`;
   }
 
   const TILE_CLASS = 'flex flex-col rounded-lg border border-surface-100 dark:border-surface-800 bg-surface-50 dark:bg-surface-800/40 p-3';
@@ -89,7 +90,7 @@
         <section class="flex flex-col gap-3">
           <h3 class="text-sm font-semibold text-muted-color">Tracked words</h3>
           <p class="flex flex-wrap items-baseline gap-x-2">
-            <span class="text-3xl font-bold tabular-nums">{{ totalWordsAmount.toLocaleString() }}</span>
+            <span class="text-3xl font-bold tabular-nums">{{ formatNumber(totalWordsAmount) }}</span>
             <span class="text-muted-color">{{ totalWordsAmount === 1 ? 'word' : 'words' }}</span>
           </p>
           <div v-if="barSegments.length > 0" class="flex gap-0.5 h-3 w-full overflow-hidden rounded-full" aria-hidden="true">
@@ -102,7 +103,7 @@
                 {{ tile.label }}
               </dt>
               <dd class="order-1 text-[clamp(1.1rem,5vw,1.4rem)] font-bold tabular-nums" :class="{ 'text-muted-color': tile.words === 0 }">
-                {{ tile.words.toLocaleString() }}
+                {{ formatNumber(tile.words) }}
               </dd>
               <dd class="order-3 text-xs text-muted-color tabular-nums mt-0.5">{{ counted(tile.forms, 'form') }}</dd>
             </div>
@@ -114,7 +115,7 @@
           <dl class="grid grid-cols-2 sm:grid-cols-4 gap-3">
             <div v-for="tile in cardlessTiles" :key="tile.key" :class="TILE_CLASS">
               <dt class="order-2 text-sm mt-0.5">{{ tile.label }}</dt>
-              <dd class="order-1 text-[clamp(1.1rem,5vw,1.4rem)] font-bold tabular-nums">{{ tile.words.toLocaleString() }}</dd>
+              <dd class="order-1 text-[clamp(1.1rem,5vw,1.4rem)] font-bold tabular-nums">{{ formatNumber(tile.words) }}</dd>
               <dd class="order-3 text-xs text-muted-color tabular-nums mt-0.5">{{ counted(tile.forms, 'form') }}</dd>
             </div>
           </dl>

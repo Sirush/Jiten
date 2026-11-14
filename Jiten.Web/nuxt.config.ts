@@ -227,6 +227,7 @@ export default defineNuxtConfig({
   devServer:
     process.env.NODE_ENV === 'development'
       ? {
+          host: 'localhost',
           https: {
             key: path.resolve(__dirname, 'localhost-key.pem'),
             cert: path.resolve(__dirname, 'localhost.pem'),

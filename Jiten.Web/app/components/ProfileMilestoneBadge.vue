@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { MilestoneTier, ProfileMilestone } from '~/types';
   import { formatCompact } from '~/utils/siteStats';
   import {
@@ -26,7 +27,7 @@
     shimenawa: '神 Kami',
   };
 
-  const amount = (n: number) => (props.milestone.kind === 'streak' || props.milestone.kind === 'studyDays' ? n.toLocaleString('en-US') : formatCompact(n));
+  const amount = (n: number) => (props.milestone.kind === 'streak' || props.milestone.kind === 'studyDays' ? formatNumber(n) : formatCompact(n));
 
   const KINDS: Record<ProfileMilestone['kind'], { glyph: string; label: (n: number) => string }> = {
     characters: { glyph: '字', label: (n) => `${amount(n)} characters` },

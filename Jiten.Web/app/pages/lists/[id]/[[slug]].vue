@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { debounce } from 'perfect-debounce';
   import { useConfirm } from 'primevue/useconfirm';
   import { useToast } from 'primevue/usetoast';
@@ -369,7 +370,7 @@
           </span>
           <span class="flex items-center gap-1.5">
             <i class="pi pi-book text-xs" aria-hidden="true" />
-            {{ list.itemCount.toLocaleString() }} {{ list.itemCount === 1 ? 'title' : 'titles' }}
+            {{ formatNumber(list.itemCount) }} {{ list.itemCount === 1 ? 'title' : 'titles' }}
           </span>
           <ClientOnly>
             <Tooltip :content="`Updated ${formatDateLong(list.updatedAt)}`">
@@ -430,11 +431,11 @@
           <span
             class="rounded-full px-1.5 text-xs font-bold leading-5 tabular-nums"
             :class="list.isFavourited ? 'bg-purple-200 dark:bg-purple-800' : 'bg-surface-200 dark:bg-surface-700'"
-            >{{ list.favouriteCount.toLocaleString() }}</span
+            >{{ formatNumber(list.favouriteCount) }}</span
           >
         </button>
         <span v-else class="flex items-center gap-1.5 px-1 text-sm text-muted-color">
-          <i class="pi pi-heart" aria-hidden="true" />{{ list.favouriteCount.toLocaleString() }}
+          <i class="pi pi-heart" aria-hidden="true" />{{ formatNumber(list.favouriteCount) }}
           {{ list.favouriteCount === 1 ? 'favourite' : 'favourites' }}
         </span>
         <ShareButton v-if="isPublic" :path="canonicalPath" :title="list.name" />

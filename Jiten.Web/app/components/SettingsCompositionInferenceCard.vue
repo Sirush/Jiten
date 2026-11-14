@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { FsrsState } from '~/types/enums';
 
   const emit = defineEmits<{ changed: [] }>();
@@ -133,8 +134,8 @@
     const verb = target === 'mastered' ? 'master' : 'blacklist';
     const label = target === 'mastered' ? 'Master all' : 'Blacklist all';
     confirm.require({
-      header: `${label} (${totalCount.value.toLocaleString()})`,
-      message: `This will ${verb} ${totalCount.value.toLocaleString()} word${totalCount.value === 1 ? '' : 's'}. Continue?`,
+      header: `${label} (${formatNumber(totalCount.value)})`,
+      message: `This will ${verb} ${formatNumber(totalCount.value)} word${totalCount.value === 1 ? '' : 's'}. Continue?`,
       icon: 'pi pi-exclamation-triangle',
       acceptLabel: label,
       rejectLabel: 'Cancel',
@@ -159,7 +160,7 @@
       toast.add({
         severity: 'success',
         summary: target === 'mastered' ? 'Mastered' : 'Blacklisted',
-        detail: `${result.affectedCount.toLocaleString()} word${result.affectedCount === 1 ? '' : 's'} updated.`,
+        detail: `${formatNumber(result.affectedCount)} word${result.affectedCount === 1 ? '' : 's'} updated.`,
         life: 5000,
       });
       showPreview.value = false;
@@ -218,7 +219,7 @@
       <Dialog
         v-model:visible="showPreview"
         modal
-        :header="`Preview — ${totalCount.toLocaleString()} word${totalCount === 1 ? '' : 's'}`"
+        :header="`Preview — ${formatNumber(totalCount)} word${totalCount === 1 ? '' : 's'}`"
         :style="{ width: '900px', maxWidth: '95vw' }"
       >
         <p class="text-sm text-muted-color mb-3 italic">{{ directionDescription }}</p>
@@ -229,21 +230,21 @@
             <Checkbox v-model="showNew" input-id="ci-new" binary />
             <label for="ci-new" class="text-sm cursor-pointer">
               New
-              <span class="text-muted-color">({{ counts.new.toLocaleString() }})</span>
+              <span class="text-muted-color">({{ formatNumber(counts.new) }})</span>
             </label>
           </div>
           <div class="flex items-center gap-2">
             <Checkbox v-model="showLearning" input-id="ci-learning" binary />
             <label for="ci-learning" class="text-sm cursor-pointer">
               Learning
-              <span class="text-muted-color">({{ counts.learning.toLocaleString() }})</span>
+              <span class="text-muted-color">({{ formatNumber(counts.learning) }})</span>
             </label>
           </div>
           <div class="flex items-center gap-2">
             <Checkbox v-model="showMature" input-id="ci-mature" binary />
             <label for="ci-mature" class="text-sm cursor-pointer">
               Mature
-              <span class="text-muted-color">({{ counts.mature.toLocaleString() }})</span>
+              <span class="text-muted-color">({{ formatNumber(counts.mature) }})</span>
             </label>
           </div>
         </div>
@@ -292,7 +293,7 @@
           <Column header="Freq" style="width: 80px">
             <template #body="{ data: card }">
               <template v-if="card">
-                <span v-if="card.frequencyRank > 0">#{{ card.frequencyRank.toLocaleString() }}</span>
+                <span v-if="card.frequencyRank > 0">#{{ formatNumber(card.frequencyRank) }}</span>
                 <span v-else class="text-muted-color">—</span>
               </template>
               <Skeleton v-else width="3rem" height="1.2rem" />

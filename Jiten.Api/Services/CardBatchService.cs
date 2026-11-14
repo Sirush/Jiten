@@ -93,7 +93,8 @@ public class CardBatchService(
         batch.Stamp(toInsert);
 
         var redundant = await WordFormHelper.ArchiveRedundantImportCards(
-            userContext, wordFormCache, userId, toInsert, requested.Concat(existing).ToHashSet(), _ => []);
+            userContext, wordFormCache, userId, toInsert, requested.Concat(existing).ToHashSet(),
+            card => card.ReviewLogs.Select(l => new PackedReview(l.Rating, l.ReviewDateTime, l.ReviewDuration, l.State)).ToList());
         toInsert.RemoveAll(redundant.Contains);
 
         if (toInsert.Count > 0)

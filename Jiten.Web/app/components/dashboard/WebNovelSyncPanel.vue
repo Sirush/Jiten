@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { ref, computed, onMounted } from 'vue';
   import Card from 'primevue/card';
   import Button from 'primevue/button';
@@ -110,7 +111,6 @@
   };
 
   const formatOptionalDateTime = (value: string | null) => (value ? formatDateTime(value) : '—');
-  const formatNumber = (value: number) => value.toLocaleString('en-US');
 
   onMounted(load);
 </script>

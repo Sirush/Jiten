@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { Line } from 'vue-chartjs';
   import { Chart as ChartJS, LinearScale, PointElement, LineElement, Tooltip, Legend, type ChartOptions, type ChartData } from 'chart.js';
   import type { SentenceProjectionPoint } from '~/types';
@@ -51,7 +52,7 @@
         backgroundColor: 'rgba(0, 0, 0, 0.8)',
         padding: 10,
         callbacks: {
-          title: (items) => `After ${Number((items[0]!.raw as { x: number }).x).toLocaleString()} new words`,
+          title: (items) => `After ${formatNumber(Number((items[0]!.raw as { x: number }).x))} new words`,
           label: (item) => `${item.dataset.label}: ${(item.raw as { y: number }).y.toFixed(0)}% readable`,
         },
       },

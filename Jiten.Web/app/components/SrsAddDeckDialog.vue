@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import {
     type FranchiseNode,
     type MediaGroupMembers,
@@ -423,7 +424,7 @@
         label: 'Media type',
         items: getListedMediaTypes().map((type) => ({
           label: mediaTypeDeckCounts.value[type]
-            ? getMediaTypeText(type) + ' - ' + mediaTypeDeckCounts.value[type]!.toLocaleString() + ' decks'
+            ? getMediaTypeText(type) + ' - ' + formatNumber(mediaTypeDeckCounts.value[type]!) + ' decks'
             : getMediaTypeText(type),
           value: 'type:' + type,
         })),
@@ -1030,9 +1031,9 @@
           </template>
           <template v-else-if="previewCount !== null">
             <span
-              >~<span class="font-bold text-gray-900 dark:text-gray-100">{{ previewCount.total.toLocaleString() }}</span> words match
+              >~<span class="font-bold text-gray-900 dark:text-gray-100">{{ formatNumber(previewCount.total) }}</span> words match
               <span v-if="previewCount.unlearned !== previewCount.total" class="text-gray-500"
-                >(<span class="font-bold text-gray-900 dark:text-gray-100">{{ previewCount.unlearned.toLocaleString() }}</span> unknown)</span
+                >(<span class="font-bold text-gray-900 dark:text-gray-100">{{ formatNumber(previewCount.unlearned) }}</span> unknown)</span
               >
             </span>
           </template>

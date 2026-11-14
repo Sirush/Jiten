@@ -140,7 +140,7 @@ public class MediaTitleSearchService(JitenDbContext context)
                                              dt."TitleNoSpaces",
                                              LENGTH(dt."Title") AS title_length
                                       FROM jiten."DeckTitles" dt
-                                      WHERE (dt."Title" &@~ {{filter.Original}} OR ({{filter.HasRomajiVariant}} AND dt."Title" &@~ {{filter.Romaji}}))
+                                      WHERE (dt."Title" &@~ pgroonga_query_escape({{filter.Original}}) OR ({{filter.HasRomajiVariant}} AND dt."Title" &@~ pgroonga_query_escape({{filter.Romaji}})))
                                         AND dt."DeckId" NOT IN (SELECT "DeckId" FROM exact_matches)
                                   ),
                                   fuzzy_nospace_matches AS (
@@ -153,7 +153,7 @@ public class MediaTitleSearchService(JitenDbContext context)
                                              LENGTH(dt."TitleNoSpaces") AS title_length
                                       FROM jiten."DeckTitles" dt
                                       WHERE dt."TitleType" IN (1, 3)
-                                        AND (dt."TitleNoSpaces" &@~ {{filter.NoSpaces}} OR ({{filter.HasRomajiVariant}} AND dt."TitleNoSpaces" &@~ {{filter.RomajiNoSpaces}}))
+                                        AND (dt."TitleNoSpaces" &@~ pgroonga_query_escape({{filter.NoSpaces}}) OR ({{filter.HasRomajiVariant}} AND dt."TitleNoSpaces" &@~ pgroonga_query_escape({{filter.RomajiNoSpaces}})))
                                         AND dt."DeckId" NOT IN (SELECT "DeckId" FROM exact_matches)
                                         AND dt."DeckId" NOT IN (SELECT "DeckId" FROM fuzzy_title_matches)
                                   ),

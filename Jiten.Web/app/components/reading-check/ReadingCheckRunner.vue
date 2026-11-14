@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { ReadingResult, ReadingStep } from '~/types/readingCheck';
   import { DeckDownloadType, DeckOrder, ReadingCheckAnswer, StudyDeckType } from '~/types/enums';
   import type { CheckAnswerOption } from '~/types/check';
@@ -55,7 +56,7 @@
   const levelsDiffer = computed(() => new Set(step.value?.levels.map((l) => l.known)).size > 1);
   const reviewSummary = computed(() => {
     const known = step.value?.known ?? 0;
-    return known === 1 ? '1 word will be marked as known.' : `${known.toLocaleString()} words will be marked as known.`;
+    return known === 1 ? '1 word will be marked as known.' : `${formatNumber(known)} words will be marked as known.`;
   });
 
   function setStep(next: ReadingStep | null) {
@@ -134,7 +135,7 @@
         result.value.studyList.map((w) => ({ wordId: w.wordId, readingIndex: w.readingIndex }))
       );
       studyDeckCreated.value = true;
-      toast.add({ severity: 'success', detail: `Added a study deck with ${result.value.studyList.length.toLocaleString()} words.`, life: 5000 });
+      toast.add({ severity: 'success', detail: `Added a study deck with ${formatNumber(result.value.studyList.length)} words.`, life: 5000 });
     } catch (error) {
       toast.add({ severity: 'error', detail: extractApiError(error, 'Something went wrong. Try again.'), life: 5000 });
     } finally {
@@ -223,10 +224,10 @@
         <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
           {{ levelsDiffer ? `${LEVEL_NAMES[chosen.level]}${chosen.level === RECOMMENDED_LEVEL ? ', recommended' : ''}` : 'Your result' }}
         </span>
-        <span class="text-4xl font-bold tabular-nums">{{ chosen.known.toLocaleString() }} words</span>
+        <span class="text-4xl font-bold tabular-nums">{{ formatNumber(chosen.known) }} words</span>
         <span class="text-sm text-gray-700 dark:text-gray-300">marked as known.</span>
         <span v-if="chosen.expectedWrong > 0" class="text-sm text-gray-600 dark:text-gray-300">
-          About {{ chosen.expectedWrong.toLocaleString() }} of the known words may be ones you don't know yet.
+          About {{ formatNumber(chosen.expectedWrong) }} of the known words may be ones you don't know yet.
         </span>
       </div>
 
@@ -254,7 +255,7 @@
       <div class="grid grid-cols-1 gap-4" :class="{ 'md:grid-cols-2': result.retentionEncounters }">
         <div class="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-5 flex flex-col gap-2">
           <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Marked as known</span>
-          <span class="text-3xl font-bold tabular-nums">{{ result.seeded.toLocaleString() }} words</span>
+          <span class="text-3xl font-bold tabular-nums">{{ formatNumber(result.seeded) }} words</span>
           <p class="text-sm text-gray-700 dark:text-gray-300">
             This is an estimate. You can reset any single word from its page, or undo the whole check anytime in Settings.
           </p>
@@ -277,7 +278,7 @@
           <div class="flex flex-col gap-0.5">
             <h3 class="font-bold">Words you met often that aren't marked yet</h3>
             <span class="text-[13px] text-gray-600 dark:text-gray-300">
-              {{ result.studyList.length.toLocaleString() }} words. Those seen across several titles come first, since they are the most likely to come up
+              {{ formatNumber(result.studyList.length) }} words. Those seen across several titles come first, since they are the most likely to come up
               again.
             </span>
           </div>
@@ -320,7 +321,7 @@
         </div>
         <div v-if="result.studyList.length > 10" class="px-4 py-3 border-t border-gray-200 dark:border-neutral-700">
           <Button
-            :label="showAllStudy ? 'Show fewer' : `Show all ${result.studyList.length.toLocaleString()}`"
+            :label="showAllStudy ? 'Show fewer' : `Show all ${formatNumber(result.studyList.length)}`"
             link
             class="!p-0 !text-sm"
             @click="showAllStudy = !showAllStudy"

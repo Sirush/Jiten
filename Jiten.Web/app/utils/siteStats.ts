@@ -1,3 +1,4 @@
+import { formatNumber } from '~/utils/formatNumber';
 import { MediaType } from '~/types/enums';
 import type { SiteStatsFrequencyBand, SiteStatsReading } from '~/types/siteStats';
 import { formatDateLong, formatMonthShort, formatMonthYear } from '~/utils/dateFormat';
@@ -5,7 +6,7 @@ import { formatDateLong, formatMonthShort, formatMonthYear } from '~/utils/dateF
 const compactFormatter = new Intl.NumberFormat('en-US', { notation: 'compact', maximumFractionDigits: 1 });
 
 export function formatCompact(value: number): string {
-  return value < 10_000 ? value.toLocaleString('en-US') : compactFormatter.format(value);
+  return value < 10_000 ? formatNumber(value) : compactFormatter.format(value);
 }
 
 const approxFormatter = new Intl.NumberFormat('en-US', { notation: 'compact', maximumSignificantDigits: 2 });

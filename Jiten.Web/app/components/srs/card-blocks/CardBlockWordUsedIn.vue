@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { CardLayoutBlock, WordUsedInBlockOptions } from '~/types';
   import { wordUsedInDefaults, resolveOptions } from './cardBlockOptions';
   import { useCardContext } from './useCardContext';
@@ -19,7 +20,7 @@
         <div v-for="(comp, i) in sample!.usedIn" :key="i" class="flex items-start gap-3 py-1 border-b border-surface-200/60 dark:border-surface-700/60">
           <span class="text-lg font-medium self-end" lang="ja" v-html="convertToRuby(comp.ruby)" />
           <div class="flex-1 min-w-0 flex flex-col">
-            <span class="text-[10px] text-surface-500 dark:text-surface-400 leading-none self-end">#{{ comp.rank.toLocaleString() }}</span>
+            <span class="text-[10px] text-surface-500 dark:text-surface-400 leading-none self-end">#{{ formatNumber(comp.rank) }}</span>
             <span class="text-surface-600 dark:text-surface-400 text-xs line-clamp-2 mt-0.5">{{ comp.def }}</span>
           </div>
         </div>

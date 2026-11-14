@@ -10,4 +10,5 @@ public class AdminWordSetMemberDto
     public List<string> Meanings { get; set; } = [];
     public List<string> PartsOfSpeech { get; set; } = [];
     public int FrequencyRank { get; set; }
+    public bool IsManual { get; set; }
 }

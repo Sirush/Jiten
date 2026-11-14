@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { WORD_CHECK_LEVEL_TITLES } from '~/types/wordCheck';
 
   const { state, refresh } = useOnboarding();
@@ -23,7 +24,7 @@
             </div>
             <div class="flex justify-between gap-3">
               <dt class="text-muted-color">{{ state.wordCheckDoneAt ? 'Words added' : 'Status' }}</dt>
-              <dd class="font-semibold tabular-nums">{{ state.wordCheckDoneAt ? (state.wordCheckWords ?? 0).toLocaleString() : 'Not taken yet' }}</dd>
+              <dd class="font-semibold tabular-nums">{{ state.wordCheckDoneAt ? formatNumber(state.wordCheckWords ?? 0) : 'Not taken yet' }}</dd>
             </div>
             <div v-if="state.wordCheckDoneAt" class="flex justify-between gap-3">
               <dt class="text-muted-color">Last taken</dt>
@@ -50,7 +51,7 @@
               </div>
               <div class="flex justify-between gap-3">
                 <dt class="text-muted-color">Words added</dt>
-                <dd class="font-semibold tabular-nums">{{ state.readingCheck.seeded.toLocaleString() }}</dd>
+                <dd class="font-semibold tabular-nums">{{ formatNumber(state.readingCheck.seeded) }}</dd>
               </div>
               <div class="flex justify-between gap-3">
                 <dt class="text-muted-color">Last taken</dt>

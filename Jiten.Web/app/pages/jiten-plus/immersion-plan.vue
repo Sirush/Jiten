@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { ref, computed, reactive, watch, onBeforeUnmount } from 'vue';
   import { debounce } from 'perfect-debounce';
   import Card from 'primevue/card';
@@ -391,7 +392,7 @@
   const previewSummary = computed(() => {
     const p = preview.value;
     if (!p || !p.hasCoverageData || previewWarning.value) return null;
-    return `${p.aboveFloor.toLocaleString()} of ${p.candidates.toLocaleString()} matching titles are at ${comprehension.value[0]}% or above for you, ${p.aboveComfort.toLocaleString()} at ${comprehension.value[1]}% or above.`;
+    return `${formatNumber(p.aboveFloor)} of ${formatNumber(p.candidates)} matching titles are at ${comprehension.value[0]}% or above for you, ${formatNumber(p.aboveComfort)} at ${comprehension.value[1]}% or above.`;
   });
 
   const creating = ref(false);
@@ -838,7 +839,7 @@
   const readingSpeedPhrase = computed(() =>
     store.readingSpeedByDifficulty
       ? 'your reading speed for each title’s difficulty'
-      : `your reading speed of ${store.readingSpeed.toLocaleString()} characters per hour`
+      : `your reading speed of ${formatNumber(store.readingSpeed)} characters per hour`
   );
 
   function stepHours(step: RoadmapStep): number {
@@ -854,7 +855,7 @@
       const minutes = Math.round((hours - whole) * 60);
       return minutes === 0 ? `${whole} h` : `${whole} h ${minutes} min`;
     }
-    return `${Math.round(hours).toLocaleString()} h`;
+    return `${formatNumber(Math.round(hours))} h`;
   }
 
   // ---- Export as image ----------------------------------------------------
@@ -971,9 +972,9 @@
       ctx.fillStyle = pal.text;
       ctx.fillText(fitCanvasText(ctx, roadmap.name, EXPORT_INNER), EXPORT_PAD, y + 44);
 
-      const totals = [`${exportSteps.length} ${exportSteps.length === 1 ? 'title' : 'titles'}`, `${payload.totalNewWords.toLocaleString()} new words`];
+      const totals = [`${exportSteps.length} ${exportSteps.length === 1 ? 'title' : 'titles'}`, `${formatNumber(payload.totalNewWords)} new words`];
       if (payload.totalGoalNewWords != null) {
-        totals.push(`${payload.totalGoalNewWords.toLocaleString()} your goal uses`);
+        totals.push(`${formatNumber(payload.totalGoalNewWords)} your goal uses`);
       }
       if (planTotals.value.hours > 0) totals.push(formatHours(planTotals.value.hours));
       ctx.font = `500 14px ${FONT}`;
@@ -1002,7 +1003,7 @@
 
         drawCoverImage(ctx, stepBitmaps[i] ?? null, EXPORT_PAD + 50, y + (EXPORT_ROW_H - EXPORT_COVER_H) / 2, EXPORT_COVER_W, EXPORT_COVER_H, pal.sub);
 
-        const wordsLabel = `+${step.newWords.toLocaleString()} words`;
+        const wordsLabel = `+${formatNumber(step.newWords)} words`;
         // Named explicitly: a bare "% known" reads as a running total of the user's own knowledge, which it
         // isn't — it is comprehension of this one title, and so moves around as the titles change.
         const knownLabel = `${(step.coverage * 100).toFixed(1)}% of this title`;
@@ -1639,7 +1640,7 @@
                 <p class="text-sm opacity-70">
                   <span v-if="activeRoadmap.mode === 'goal'">Path towards your target media</span>
                   <span v-else>Your next picks</span>
-                  <span v-if="activeRoadmap.candidateCount > 0"> · picked from {{ activeRoadmap.candidateCount.toLocaleString() }} titles</span>
+                  <span v-if="activeRoadmap.candidateCount > 0"> · picked from {{ formatNumber(activeRoadmap.candidateCount) }} titles</span>
                   <span v-if="activeRoadmap.swappedCount > 0"> · {{ activeRoadmap.swappedCount }} skipped</span>
                 </p>
               </div>
@@ -1721,13 +1722,13 @@
               <Message v-else-if="activeRoadmap.mode === 'goal' && activePayload.goalCeilingReached" severity="success" :closable="false">
                 As far as other titles can take you — you'll know
                 {{ pct(activePayload.goalCoverageFinal ?? 0) }} of {{ activePayload.goal ? goalCardTitle(activePayload.goal) : 'the title' }}. The last
-                {{ activePayload.goalUnreachableWords.toLocaleString() }} words appear only in it, so no other title can teach them — you'll pick them up by
+                {{ formatNumber(activePayload.goalUnreachableWords) }} words appear only in it, so no other title can teach them — you'll pick them up by
                 reading it.
               </Message>
 
               <Message v-else-if="activeRoadmap.mode === 'goal' && !activePayload.goalReached" severity="warn" :closable="false">
                 These get you to {{ pct(activePayload.goalCoverageFinal ?? 0) }} of the words in the title you picked, about
-                {{ (activePayload.goalWordsRemaining ?? 0).toLocaleString() }} short of your target, using all {{ activePayload.steps.length }} of the titles it
+                {{ formatNumber(activePayload.goalWordsRemaining ?? 0) }} short of your target, using all {{ activePayload.steps.length }} of the titles it
                 was allowed. Raise the title limit to let it go further. This can also happen because the frequent words of this title are very specific, in
                 which case lowering the target percentage helps more.
               </Message>
@@ -1751,16 +1752,16 @@
                       </Tooltip>
                     </div>
                     <div class="text-lg font-semibold tabular-nums text-green-600 dark:text-green-400">
-                      {{ activePayload.totalNewWords.toLocaleString() }}
+                      {{ formatNumber(activePayload.totalNewWords) }}
                     </div>
                     <div v-if="activePayload.totalGoalNewWords != null" class="text-sm font-semibold tabular-nums text-amber-600 dark:text-amber-400">
-                      {{ activePayload.totalGoalNewWords.toLocaleString() }} your goal uses
+                      {{ formatNumber(activePayload.totalGoalNewWords) }} your goal uses
                     </div>
                   </div>
                   <div v-if="planTotals.characters > 0">
                     <div class="text-xs uppercase tracking-wide text-gray-600 dark:text-gray-300">Characters</div>
                     <div class="text-lg font-semibold tabular-nums">
-                      {{ planTotals.characters.toLocaleString() }}
+                      {{ formatNumber(planTotals.characters) }}
                     </div>
                   </div>
                   <div v-if="planTotals.hours > 0">
@@ -1779,7 +1780,7 @@
                 <p class="mt-2 text-sm opacity-80">Get through all of these and that's what you'll have covered.</p>
                 <p v-if="activePayload.goalWordsAtStart" class="mt-1 text-sm opacity-80">
                   Studied on their own, the
-                  <strong class="tabular-nums">{{ activePayload.goalWordsAtStart.toLocaleString() }}</strong>
+                  <strong class="tabular-nums">{{ formatNumber(activePayload.goalWordsAtStart) }}</strong>
                   most-used words you're still missing from {{ goalTitleText }} would get you there too. No real title teaches only those, so a reading route
                   always costs more words than the bare minimum.
                 </p>
@@ -1866,7 +1867,7 @@
                     </span>
                     <span class="tabular-nums font-semibold">
                       {{ formatHours(stepHours(step)) }}
-                      <span v-if="step.characterCount > 0" class="ml-1 text-xs font-normal opacity-60"> {{ step.characterCount.toLocaleString() }} chars </span>
+                      <span v-if="step.characterCount > 0" class="ml-1 text-xs font-normal opacity-60"> {{ formatNumber(step.characterCount) }} chars </span>
                     </span>
                   </div>
 
@@ -1891,9 +1892,9 @@
                       </Tooltip>
                     </span>
                     <span class="tabular-nums font-semibold text-green-600 dark:text-green-400">
-                      {{ step.newWords.toLocaleString() }} new words
+                      {{ formatNumber(step.newWords) }} new words
                       <span v-if="step.goalNewWords != null" class="ml-1 text-xs font-normal opacity-70">
-                        ({{ step.goalNewWords.toLocaleString() }} your goal uses)
+                        ({{ formatNumber(step.goalNewWords) }} your goal uses)
                       </span>
                     </span>
                   </div>
@@ -1921,7 +1922,7 @@
                       </button>
                     </div>
                     <div class="flex h-2 overflow-hidden rounded-full">
-                      <Tooltip v-for="b in bandDefs" :key="b.key" :content="`${b.label}: ${step.frequencyBands[b.key].toLocaleString()} words`" placement="top">
+                      <Tooltip v-for="b in bandDefs" :key="b.key" :content="`${b.label}: ${formatNumber(step.frequencyBands[b.key])} words`" placement="top">
                         <div
                           v-if="step.frequencyBands[b.key] > 0"
                           :class="b.cls"
@@ -1958,12 +1959,12 @@
                             </span>
                           </span>
                           <span class="shrink-0 text-xs opacity-50">
-                            {{ w.frequencyRank > 0 ? `#${w.frequencyRank.toLocaleString()}` : 'rare' }}
+                            {{ w.frequencyRank > 0 ? `#${formatNumber(w.frequencyRank)}` : 'rare' }}
                           </span>
                         </a>
                       </div>
                       <p v-if="step.newWords > stepWords(step.index).length" class="mt-1 text-xs opacity-60">
-                        Showing the {{ stepWords(step.index).length.toLocaleString() }} most common of {{ step.newWords.toLocaleString() }}.
+                        Showing the {{ formatNumber(stepWords(step.index).length) }} most common of {{ formatNumber(step.newWords) }}.
                         <a
                           :href="`/decks/media/${step.deckId}/vocabulary?display=unknown&sortBy=deckFreq`"
                           target="_blank"
@@ -1985,7 +1986,7 @@
                 </h3>
                 <p class="mt-1 text-sm opacity-80">
                   Nothing else is easy enough for you yet. Learn
-                  <strong>{{ activePayload.drill.wordsNeeded.toLocaleString() }}</strong> more words and
+                  <strong>{{ formatNumber(activePayload.drill.wordsNeeded) }}</strong> more words and
                   <a :href="`/decks/media/${activePayload.drill.deckId}/detail`" target="_blank" rel="noopener" class="font-medium hover:underline">
                     {{ activePayload.drill.title }}
                   </a>
@@ -2077,12 +2078,12 @@
                     <i class="pi pi-check-circle mt-0.5" />
                     <span>
                       As far as other titles reach — the last
-                      {{ activePayload.goalUnreachableWords.toLocaleString() }} words appear only here, so you'll pick them up by reading it.
+                      {{ formatNumber(activePayload.goalUnreachableWords) }} words appear only here, so you'll pick them up by reading it.
                     </span>
                   </p>
                   <p v-else class="mt-2 text-sm text-gray-600 dark:text-gray-300">
                     Still about
-                    <strong>{{ activePayload.goal.wordsRemaining.toLocaleString() }}</strong> words short of your target.
+                    <strong>{{ formatNumber(activePayload.goal.wordsRemaining) }}</strong> words short of your target.
                   </p>
                 </div>
               </div>

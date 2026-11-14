@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { ref, computed, onMounted } from 'vue';
   import { useDebounceFn } from '@vueuse/core';
   import DataTable from 'primevue/datatable';
@@ -399,7 +400,7 @@
       </Column>
       <Column field="frequencyRank" header="Frequency" style="width: 120px">
         <template #body="{ data }">
-          <span v-if="data.frequencyRank" class="text-sm">{{ data.frequencyRank.toLocaleString() }}</span>
+          <span v-if="data.frequencyRank" class="text-sm">{{ formatNumber(data.frequencyRank) }}</span>
           <span v-else class="text-sm text-gray-400">—</span>
         </template>
       </Column>

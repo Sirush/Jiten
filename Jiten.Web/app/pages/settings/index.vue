@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import SettingsCoverage from '~/components/SettingsCoverage.vue';
   import SettingsApiKey from '~/components/SettingsApiKey.vue';
   import SettingsWordSets from '~/components/SettingsWordSets.vue';
@@ -14,7 +15,7 @@
 
   const vocabularyStatus = computed(() => {
     if (vocabStatsLoading.value || totalWordsAmount.value === 0) return null;
-    return `${totalWordsAmount.value.toLocaleString()} tracked word${totalWordsAmount.value === 1 ? '' : 's'}`;
+    return `${formatNumber(totalWordsAmount.value)} tracked word${totalWordsAmount.value === 1 ? '' : 's'}`;
   });
 
   onMounted(() => {

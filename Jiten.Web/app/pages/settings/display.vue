@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { storeToRefs } from 'pinia';
   import { useConfirm } from 'primevue/useconfirm';
   import { DEFAULT_DICTIONARY_FONT_SIZE, useJitenStore } from '~/stores/jitenStore';
@@ -483,8 +484,8 @@
             :min="MIN_READING_SPEED" :max="MAX_READING_SPEED" :step="100" show-buttons fluid />
           <template #preview>
             <p v-if="!readingSpeedByDifficulty" class="text-sm text-surface-600 dark:text-surface-400">
-              A {{ NOVEL_CHARACTERS.toLocaleString() }}-character novel takes about
-              <span class="font-semibold text-surface-900 dark:text-surface-0">{{ novelHours > 0 ? novelHours.toLocaleString() : '<1' }} h</span>.
+              A {{ formatNumber(NOVEL_CHARACTERS) }}-character novel takes about
+              <span class="font-semibold text-surface-900 dark:text-surface-0">{{ novelHours > 0 ? formatNumber(novelHours) : '<1' }} h</span>.
             </p>
             <button
               type="button"
@@ -506,7 +507,7 @@
         >
           <p class="text-xs text-surface-600 dark:text-surface-400">
             Customise your reading speed depending on the difficulty. Estimation are for a
-            {{ NOVEL_CHARACTERS.toLocaleString() }}-character novel.
+            {{ formatNumber(NOVEL_CHARACTERS) }}-character novel.
           </p>
           <fieldset class="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-3 lg:grid-cols-6">
             <legend class="sr-only">Reading speed for each difficulty</legend>
@@ -522,7 +523,7 @@
                 fluid
                 @update:model-value="setBandSpeed(band, $event)"
               />
-              <span class="text-xs tabular-nums text-surface-600 dark:text-surface-400">About {{ bandNovelHours(band).toLocaleString() }} h</span>
+              <span class="text-xs tabular-nums text-surface-600 dark:text-surface-400">About {{ formatNumber(bandNovelHours(band)) }} h</span>
             </div>
           </fieldset>
           <button

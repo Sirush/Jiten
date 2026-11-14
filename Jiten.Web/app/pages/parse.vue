@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useApiFetch } from '~/composables/useApiFetch';
   import type { DeckWord, DictionaryEntry, DictionarySearchResult, ParseNormalisedResult } from '~/types';
   import OmniSearch from '~/components/OmniSearch.vue';
@@ -371,7 +372,7 @@
 
     <template v-if="showParseResults">
       <GuestAccountStrip v-if="distinctWordCount >= 3" surface="parse" class="mb-3">
-        {{ distinctWordCount.toLocaleString() }} different words in this text. With an account, you can keep track of the ones you already know.
+        {{ formatNumber(distinctWordCount) }} different words in this text. With an account, you can keep track of the ones you already know.
       </GuestAccountStrip>
       <div class="flex items-center gap-0.5 flex-wrap">
         <span v-for="(word, index) in words" :key="index" class="pr-1.5 font-noto-sans" lang="ja">

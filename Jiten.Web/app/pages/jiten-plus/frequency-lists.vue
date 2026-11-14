@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { ref, computed, reactive, watch, nextTick, onMounted, onBeforeUnmount } from 'vue';
   import { debounce } from 'perfect-debounce';
   import Card from 'primevue/card';
@@ -99,11 +100,11 @@
 
   function genreLabel(value: number, label: string): string {
     const c = genreCounts.value[value];
-    return previewCount.value !== null && c != null ? `${label} (${c.toLocaleString()})` : label;
+    return previewCount.value !== null && c != null ? `${label} (${formatNumber(c)})` : label;
   }
   function tagLabel(tagId: number, name: string): string {
     const c = tagCounts.value[tagId];
-    return previewCount.value !== null && c != null ? `${name} (${c.toLocaleString()})` : name;
+    return previewCount.value !== null && c != null ? `${name} (${formatNumber(c)})` : name;
   }
 
   function toIdList(states: Record<number, TagState>, wanted: TagState): number[] {
@@ -281,6 +282,7 @@
 
   const lists = ref<FrequencyListDto[]>([]);
   const listsLoading = ref(false);
+  const hasLoadedLists = ref(false);
   const creating = ref(false);
   const busyId = ref<number | null>(null);
   let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -325,6 +327,7 @@
       lists.value = [];
     } finally {
       listsLoading.value = false;
+      hasLoadedLists.value = true;
     }
     schedulePolling();
   }
@@ -767,7 +770,7 @@
                 <div class="flex items-center gap-2 text-sm">
                   <template v-if="previewCount !== null">
                     <span :class="{ 'opacity-50 transition-opacity': previewLoading }">
-                      <b :class="previewCount < minDecks ? 'text-red-500' : 'text-primary'">{{ previewCount.toLocaleString() }}</b>
+                      <b :class="previewCount < minDecks ? 'text-red-500' : 'text-primary'">{{ formatNumber(previewCount) }}</b>
                       decks match
                     </span>
                     <ProgressSpinner v-if="previewLoading" style="width: 1rem; height: 1rem" stroke-width="6" />
@@ -836,7 +839,7 @@
               </span>
             </Tooltip>
           </div>
-          <div v-if="!lists.length" class="text-surface-400 text-sm py-4">You haven't generated any lists yet.</div>
+          <div v-if="!lists.length && hasLoadedLists" class="text-surface-400 text-sm py-4">You haven't generated any lists yet.</div>
           <template v-else>
             <!-- Mobile: stacked cards -->
             <div class="flex flex-col gap-3 sm:hidden">
@@ -846,8 +849,8 @@
                   <Tag :value="list.status" :severity="statusSeverity(list.status)" class="shrink-0" />
                 </div>
                 <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-surface-500 dark:text-surface-400">
-                  <span>{{ list.deckCount.toLocaleString() }} decks</span>
-                  <span>{{ list.wordCount.toLocaleString() }} words</span>
+                  <span>{{ formatNumber(list.deckCount) }} decks</span>
+                  <span>{{ formatNumber(list.wordCount) }} words</span>
                   <span v-if="list.status === 'expired'">regenerate to rebuild</span>
                   <span v-else-if="!list.isSaved">temporary</span>
                 </div>
@@ -892,10 +895,10 @@
                   </template>
                 </Column>
                 <Column header="Decks">
-                  <template #body="{ data }">{{ data.deckCount.toLocaleString() }}</template>
+                  <template #body="{ data }">{{ formatNumber(data.deckCount) }}</template>
                 </Column>
                 <Column header="Words">
-                  <template #body="{ data }">{{ data.wordCount.toLocaleString() }}</template>
+                  <template #body="{ data }">{{ formatNumber(data.wordCount) }}</template>
                 </Column>
                 <Column header="Actions">
                   <template #body="{ data }">

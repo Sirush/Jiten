@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { type GlobalStats, MediaType } from '~/types';
 
   const discordUrl = getDiscordLink();
@@ -98,9 +99,9 @@
       </template>
       <template #content>
         <div class="mb-3">
-          <b>{{ response.totalMojis?.toLocaleString() }}</b>
+          <b>{{ (response.totalMojis == null ? '' : formatNumber(response.totalMojis)) }}</b>
           characters in
-          <b>{{ response.totalMedia?.toLocaleString() }}</b>
+          <b>{{ (response.totalMedia == null ? '' : formatNumber(response.totalMedia)) }}</b>
           media
         </div>
 
@@ -110,7 +111,7 @@
               {{ getMediaTypeText(MediaType[mediaType]) }}
             </div>
             <div class="text-lg font-bold text-primary-600">
-              {{ amount?.toLocaleString() }}
+              {{ (amount == null ? '' : formatNumber(amount)) }}
             </div>
           </div>
         </div>

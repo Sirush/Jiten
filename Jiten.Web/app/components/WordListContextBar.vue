@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { WordListContext } from '~/composables/useWordListContext';
 
   const props = defineProps<{
@@ -103,7 +104,7 @@
         {{ context.sortLabel }}
         <Icon :name="context.sortDescending ? 'material-symbols:arrow-downward-rounded' : 'material-symbols:arrow-upward-rounded'" />
       </span>
-      <span>word {{ position.toLocaleString() }} of {{ context.totalItems.toLocaleString() }}</span>
+      <span>word {{ formatNumber(position) }} of {{ formatNumber(context.totalItems) }}</span>
       <div class="flex items-center gap-1">
         <Button
           text

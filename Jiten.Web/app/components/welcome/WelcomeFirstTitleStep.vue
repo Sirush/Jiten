@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { type Deck, SortOrder } from '~/types';
   import type { PaginatedResponse } from '~/types/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
@@ -256,7 +257,7 @@
               </span>
               <span class="flex justify-between gap-2">
                 <span class="text-gray-600 dark:text-gray-300">Unique words</span>
-                <span class="font-bold tabular-nums">{{ deck.uniqueWordCount.toLocaleString('en-US') }}</span>
+                <span class="font-bold tabular-nums">{{ formatNumber(deck.uniqueWordCount) }}</span>
               </span>
             </span>
             <span v-else-if="deck.coverage" class="mt-auto flex flex-col gap-1">

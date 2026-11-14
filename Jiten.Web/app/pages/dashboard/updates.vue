@@ -23,7 +23,7 @@
   const confirm = useConfirm();
 
   const updates = ref<AdminSiteUpdate[]>([]);
-  const loading = ref(false);
+  const loading = ref(true);
   const saving = ref(false);
   const publishingId = ref<number | null>(null);
 

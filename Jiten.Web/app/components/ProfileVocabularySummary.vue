@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { ProfileVocabularyStats } from '~/types';
 
   const { $api } = useNuxtApp();
@@ -39,7 +40,6 @@
     ].filter((segment) => segment.count > 0);
   });
 
-  const formatNumber = (num: number) => num.toLocaleString();
 
   const percent = (count: number) => (count / cardWords.value) * 100;
 </script>

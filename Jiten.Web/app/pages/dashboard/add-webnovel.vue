@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { ref, computed, watch, onBeforeUnmount, onMounted } from 'vue';
   import Button from 'primevue/button';
   import InputText from 'primevue/inputtext';
@@ -177,7 +178,6 @@
     fetchPreview();
   });
 
-  const formatNumber = (value: number) => value.toLocaleString('en-US');
   const formatDate = (value: string | null) => (value ? formatDateShort(value) : '—');
 </script>
 

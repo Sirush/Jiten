@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { KnowledgeGrowth } from '~/types';
   import { useJitenStore } from '~/stores/jitenStore';
 
@@ -41,11 +42,11 @@
     </div>
     <div class="text-xs text-gray-500 dark:text-gray-400 mb-3">
       <template v-if="hasData && hasPrior && jitenStore.separatePriorKnowledge">
-        You started with {{ baseline.toLocaleString() }} words you marked known, and have learned {{ learnedHere.toLocaleString() }} since.
+        You started with {{ formatNumber(baseline) }} words you marked known, and have learned {{ formatNumber(learnedHere) }} since.
       </template>
       <template v-else>How many words you had learned over time.</template>
       <span v-if="hasData && growth!.recentGain !== 0" class="ml-1" :class="growth!.recentGain > 0 ? 'text-green-600 dark:text-green-400 font-semibold' : 'font-semibold'">
-        {{ growth!.recentGain > 0 ? '+' : '' }}{{ growth!.recentGain.toLocaleString() }} in the last 30 days.
+        {{ growth!.recentGain > 0 ? '+' : '' }}{{ formatNumber(growth!.recentGain) }} in the last 30 days.
       </span>
     </div>
 

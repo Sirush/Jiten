@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { KnowledgeGrowth } from '~/types';
 
   const { $api } = useNuxtApp();
@@ -43,7 +44,7 @@
       <div v-else class="flex flex-col gap-3">
         <div class="flex flex-wrap items-baseline gap-x-3 gap-y-1">
           <span class="text-2xl font-bold tabular-nums text-primary-600 dark:text-primary-400">
-            {{ learned.toLocaleString() }}
+            {{ formatNumber(learned) }}
           </span>
           <span class="text-sm text-muted-color">{{ learned === 1 ? 'word learned' : 'words learned' }}</span>
           <span
@@ -51,7 +52,7 @@
             class="text-sm font-semibold"
             :class="recentGain > 0 ? 'text-green-600 dark:text-green-400' : 'text-muted-color'"
           >
-            {{ recentGain > 0 ? '+' : '' }}{{ recentGain.toLocaleString() }} in the last 30 days
+            {{ recentGain > 0 ? '+' : '' }}{{ formatNumber(recentGain) }} in the last 30 days
           </span>
         </div>
 

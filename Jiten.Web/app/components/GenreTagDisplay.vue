@@ -27,6 +27,7 @@
   const itemRefs = ref<HTMLElement[]>([]);
   const visibleCount = ref<number>(Infinity);
   const isCalculating = ref(false);
+  const hasMeasured = ref(false);
 
   const items = computed(() => {
     if (props.genres) {
@@ -102,6 +103,7 @@
     visibleCount.value = Math.max(props.minVisibleItems, Math.min(count, items.value.length));
 
     isCalculating.value = false;
+    hasMeasured.value = true;
   };
 
   let resizeObserver: ResizeObserver | null = null;
@@ -148,7 +150,13 @@
 </script>
 
 <template>
-  <div v-if="items.length > 0" ref="containerRef" class="flex flex-wrap gap-1.5 items-center w-full relative">
+  <div
+    v-if="items.length > 0"
+    ref="containerRef"
+    class="flex flex-wrap gap-1.5 items-center w-full relative min-h-[1.625rem]"
+    :class="{ 'max-h-[1.625rem] overflow-hidden': !hasMeasured }"
+    :style="hasMeasured ? undefined : { paddingRight: `${buttonBuffer}px` }"
+  >
     <span ref="labelRef" class="text-xs font-semibold text-gray-600 dark:text-gray-400 uppercase tracking-wider mr-1 shrink-0">
       {{ label }}
     </span>

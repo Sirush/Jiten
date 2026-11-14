@@ -23,7 +23,7 @@
   const confirm = useConfirm();
 
   const polls = ref<AdminPoll[]>([]);
-  const loading = ref(false);
+  const loading = ref(true);
   const saving = ref(false);
   const busyId = ref<number | null>(null);
 

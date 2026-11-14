@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import OmniSearch from '~/components/OmniSearch.vue';
   import { useApiFetch } from '~/composables/useApiFetch';
   import { type GlobalStats, MediaType } from '~/types';
@@ -132,12 +133,12 @@
           <p v-if="globalStats" class="text-sm text-gray-600 dark:text-gray-400 mb-5">
             <NuxtLink to="/stats"><b>{{ formatCharacters(globalStats.totalMojis) }}</b> characters analysed</NuxtLink>
             across
-            <b>{{ globalStats.totalMedia.toLocaleString() }}</b>
+            <b>{{ formatNumber(globalStats.totalMedia) }}</b>
             titles, including
             <template v-for="(featured, index) in featuredTypes" :key="featured.type">
               <template v-if="index > 0"> and </template>
               <NuxtLink :to="{ path: '/decks/media', query: { mediaType: featured.type } }">
-                {{ typeCount(featured.type)?.toLocaleString() }} {{ featured.label }}
+                {{ typeCount(featured.type) == null ? '' : formatNumber(typeCount(featured.type)!) }} {{ featured.label }}
               </NuxtLink>
             </template>
           </p>
@@ -166,7 +167,7 @@
               media library. Choose what you will immerse in next based on your current knowledge.
             </p>
             <NuxtLink to="/decks/media" class="font-medium">
-              {{ globalStats ? `Browse ${globalStats.totalMedia.toLocaleString()} titles` : 'Browse the library' }} →
+              {{ globalStats ? `Browse ${formatNumber(globalStats.totalMedia)} titles` : 'Browse the library' }} →
             </NuxtLink>
           </div>
           <div class="w-full max-w-xl xl:max-w-2xl shrink-0">

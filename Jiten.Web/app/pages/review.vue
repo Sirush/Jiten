@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useToast } from 'primevue/usetoast';
   import {
     MetadataEditVerdict,
@@ -619,11 +620,11 @@
       <TabList>
         <Tab value="pending" class="whitespace-nowrap">
           <span class="sm:hidden">Waiting</span><span class="hidden sm:inline">Waiting for review</span>
-          <span v-if="counts.pending != null" class="ml-1 text-xs tabular-nums text-muted-color">{{ counts.pending.toLocaleString() }}</span>
+          <span v-if="counts.pending != null" class="ml-1 text-xs tabular-nums text-muted-color">{{ formatNumber(counts.pending) }}</span>
         </Tab>
         <Tab value="unreviewed" class="whitespace-nowrap">
           <span class="sm:hidden">Unreviewed</span><span class="hidden sm:inline">Live, unreviewed</span>
-          <span v-if="counts.unreviewed != null" class="ml-1 text-xs tabular-nums text-muted-color">{{ counts.unreviewed.toLocaleString() }}</span>
+          <span v-if="counts.unreviewed != null" class="ml-1 text-xs tabular-nums text-muted-color">{{ formatNumber(counts.unreviewed) }}</span>
         </Tab>
       </TabList>
     </Tabs>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { DeckStatus } from '~/types';
   import type { CommunityListItem } from '~/types/types';
   import { communityListItemAnchor } from '~/composables/useCommunityLists';
@@ -58,7 +59,7 @@
           <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm text-muted-color">
             <span class="font-semibold text-surface-800 dark:text-surface-100">{{ getMediaTypeText(deck.mediaType) }}</span>
             <DifficultyDisplay :difficulty="deck.difficulty" :difficulty-raw="deck.difficultyRaw" class="text-sm" />
-            <span v-if="deck.characterCount > 0">{{ deck.characterCount.toLocaleString() }} characters</span>
+            <span v-if="deck.characterCount > 0">{{ formatNumber(deck.characterCount) }} characters</span>
           </div>
         </div>
         <div v-if="showViewerData" class="hidden w-36 shrink-0 flex-col gap-2 pt-0.5 sm:flex">

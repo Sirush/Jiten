@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { MediaType, type SentenceProjectionPoint } from '~/types';
   import { sentenceRubyHtml } from '~/utils/sentenceRuby';
 
@@ -107,7 +108,7 @@
         <div class="demo flex flex-col ring-2 ring-primary/40 bg-white dark:bg-gray-900">
           <span class="demo__tab bg-primary text-primary-contrast">Example</span>
           <h3 class="demo__title text-gray-900 dark:text-white">Sentence stats for every title</h3>
-          <p class="demo__lede text-gray-600 dark:text-gray-300">An anime you're watching with {{ TOTAL_SENTENCES.toLocaleString() }} sentences</p>
+          <p class="demo__lede text-gray-600 dark:text-gray-300">An anime you're watching with {{ formatNumber(TOTAL_SENTENCES) }} sentences</p>
 
           <div class="mt-4 flex flex-col gap-4">
             <SentenceReadableHeadline :readable="counts.readable" :one-unknown="counts.oneUnknown" :total="TOTAL_SENTENCES" />

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { DerivationCategoryGroupDto, DerivationPairDto, DerivationPersonalPairsDto, DerivationPersonalSummaryDto } from '~/types/types';
 
   const emit = defineEmits<{ changed: [] }>();
@@ -165,7 +166,7 @@
   }
 
   function knownWords(count: number): string {
-    return `${count.toLocaleString()} word${count === 1 ? '' : 's'} you know`;
+    return `${formatNumber(count)} word${count === 1 ? '' : 's'} you know`;
   }
 
   const totalEnabledPairs = computed(() => groups.value.filter((g) => enabledGroups.value[g.key]).reduce((sum, g) => sum + g.pairCount, 0));
@@ -274,7 +275,7 @@
             </div>
 
             <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs sm:ml-auto">
-              <span class="text-muted-color">{{ group.pairCount.toLocaleString() }} entries</span>
+              <span class="text-muted-color">{{ formatNumber(group.pairCount) }} entries</span>
               <span
                 v-if="personalLoaded && (personalByGroup[group.key] ?? 0) > 0"
                 :class="enabledGroups[group.key] ? 'text-green-600 dark:text-green-300' : 'text-primary-600 dark:text-primary-300'"
@@ -291,14 +292,14 @@
 
       <p v-if="!loading && personalTotal > 0" class="text-xs text-muted-color mt-4">
         Your selected choices will make
-        <span class="font-bold text-green-600 dark:text-green-300">{{ personalTotal.toLocaleString() }}</span>
+        <span class="font-bold text-green-600 dark:text-green-300">{{ formatNumber(personalTotal) }}</span>
         {{ personalTotal === 1 ? 'word' : 'words' }} redundant.
       </p>
 
       <Dialog
         v-model:visible="showPreview"
         modal
-        :header="previewGroup ? `${previewGroup.label} — ${previewGroup.pairCount.toLocaleString()} entries` : ''"
+        :header="previewGroup ? `${previewGroup.label} — ${formatNumber(previewGroup.pairCount)} entries` : ''"
         :style="{ width: '860px', maxWidth: '95vw' }"
       >
         <p class="text-sm text-muted-color mb-3 italic">{{ previewGroup?.explanation }}</p>
@@ -329,13 +330,13 @@
             >
               <span :class="previewFilter !== chip.key ? chip.color : ''">{{ chip.label }}</span>
               <span class="text-xs tabular-nums" :class="previewFilter === chip.key ? 'opacity-80' : 'opacity-60'">
-                {{ chip.count.toLocaleString() }}
+                {{ formatNumber(chip.count) }}
               </span>
             </button>
           </div>
 
           <p v-if="hasPersonalMarking && coveredElsewhere > 0" class="text-xs text-muted-color mb-3">
-            {{ coveredElsewhere.toLocaleString() }} further {{ coveredElsewhere === 1 ? 'entry counts' : 'entries count' }} towards this grammar point's total
+            {{ formatNumber(coveredElsewhere) }} further {{ coveredElsewhere === 1 ? 'entry counts' : 'entries count' }} towards this grammar point's total
             but {{ coveredElsewhere === 1 ? 'is' : 'are' }} reached through a chain ending in another one, so
             {{ coveredElsewhere === 1 ? 'it is' : 'they are' }} listed there instead.
           </p>
@@ -420,7 +421,7 @@
             </Column>
             <Column header="Freq" style="width: 90px">
               <template #body="{ data: pair }">
-                <span v-if="pair.frequencyRank > 0">#{{ pair.frequencyRank.toLocaleString() }}</span>
+                <span v-if="pair.frequencyRank > 0">#{{ formatNumber(pair.frequencyRank) }}</span>
                 <span v-else class="text-muted-color">—</span>
               </template>
             </Column>

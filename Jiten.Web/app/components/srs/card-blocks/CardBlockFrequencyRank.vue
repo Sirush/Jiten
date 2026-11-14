@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { CardLayoutBlock, FrequencyRankBlockOptions } from '~/types';
   import { frequencyRankDefaults, resolveOptions } from './cardBlockOptions';
   import { useCardContext } from './useCardContext';
@@ -13,5 +14,5 @@
 </script>
 
 <template>
-  <div v-if="visible" class="text-xs text-gray-400 text-right">#{{ rank.toLocaleString() }}</div>
+  <div v-if="visible" class="text-xs text-gray-400 text-right">#{{ formatNumber(rank) }}</div>
 </template>

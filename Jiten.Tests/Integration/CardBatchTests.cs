@@ -8,6 +8,7 @@ using Jiten.Api.Dtos;
 using Jiten.Api.Jobs;
 using Jiten.Api.Services;
 using Jiten.Core;
+using Jiten.Core.Data;
 using Jiten.Core.Data.FSRS;
 using Jiten.Core.Data.JMDict;
 using Jiten.Parser.Tests.Integration.Infrastructure;
@@ -140,6 +141,121 @@ public class CardBatchTests(JitenWebApplicationFactory factory)
         again.GetProperty("forms").GetInt32().Should().Be(0);
         again.GetProperty("batchId").ValueKind.Should().Be(JsonValueKind.Null);
         (await Batches()).Should().ContainSingle();
+    }
+
+    private async Task SeedWaniKaniForms()
+    {
+        var forms = WaniKaniVocabulary.FormsUpTo(2).ToList();
+        using var scope = factory.Services.CreateScope();
+        var jitenDb = scope.ServiceProvider.GetRequiredService<JitenDbContext>();
+        if (!await jitenDb.WordForms.AnyAsync(wf => wf.WordId == forms[0].WordId))
+        {
+            foreach (var wordId in forms.Select(f => f.WordId).Distinct())
+                jitenDb.JMDictWords.Add(new JmDictWord { WordId = wordId, PartsOfSpeech = ["noun"] });
+            foreach (var (wordId, readingIndex) in forms)
+                jitenDb.WordForms.Add(new JmDictWordForm { WordId = wordId, ReadingIndex = readingIndex, Text = $"{wordId}-{readingIndex}", RubyText = "", FormType = JmDictFormType.KanjiForm });
+            await jitenDb.SaveChangesAsync();
+        }
+
+        scope.ServiceProvider.GetRequiredService<IWordFormSiblingCache>().Reload();
+    }
+
+    [Fact]
+    public async Task WaniKaniLevelImport_AddsOnlyLevelsUpToTheRequestedOne()
+    {
+        var levelOne = WaniKaniVocabulary.FormsUpTo(1).ToList();
+        await SeedWaniKaniForms();
+
+        var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/user/vocabulary/import-from-wanikani-level/1").WithUser(TestUsers.UserA));
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+        result.GetProperty("forms").GetInt32().Should().Be(levelOne.Count);
+
+        var cards = await Cards();
+        cards.Select(c => (c.WordId, c.ReadingIndex)).Should().BeEquivalentTo(levelOne);
+        cards.Should().OnlyContain(c => c.Source == CardSource.WaniKaniImport && c.State == FsrsState.Mastered);
+
+        var batch = (await Batches()).Should().ContainSingle().Subject;
+        batch.Source.Should().Be(CardSource.WaniKaniImport);
+        batch.Details.Should().Be(new CardBatchDetails { Kind = CardBatchKind.WaniKaniLevels, MaxLevel = 1 });
+    }
+
+    [Fact]
+    public async Task WaniKaniProgressImport_ResolvesWordsThroughTheLevelList()
+    {
+        await SeedWaniKaniForms();
+        var nextReview = DateTime.UtcNow.Date.AddDays(3);
+        var started = nextReview.AddDays(-200);
+        var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, "/api/user/vocabulary/import-from-wanikani")
+                                               {
+                                                   Content = JsonContent.Create(new
+                                                                                {
+                                                                                    words = new[]
+                                                                                            {
+                                                                                                new { characters = "大人", reading = "おとな", srsStage = 6, availableAt = (DateTime?)nextReview, startedAt = (DateTime?)started, burnedAt = (DateTime?)null, reviews = 9, incorrect = 3 },
+                                                                                                new { characters = "〜才", reading = "さい", srsStage = 9, availableAt = (DateTime?)null, startedAt = (DateTime?)started, burnedAt = (DateTime?)started.AddDays(190), reviews = 8, incorrect = 0 },
+                                                                                                new { characters = "〜", reading = "", srsStage = 5, availableAt = (DateTime?)null, startedAt = (DateTime?)null, burnedAt = (DateTime?)null, reviews = 0, incorrect = 0 },
+                                                                                                new { characters = "二", reading = "に", srsStage = 0, availableAt = (DateTime?)null, startedAt = (DateTime?)null, burnedAt = (DateTime?)null, reviews = 0, incorrect = 0 }
+                                                                                            }
+                                                                                })
+                                               }.WithUser(TestUsers.UserA));
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var result = await response.Content.ReadFromJsonAsync<JsonElement>();
+
+        result.GetProperty("matched").GetInt32().Should().Be(2);
+        result.GetProperty("unmatchedWords").EnumerateArray().Select(w => w.GetString()).Should().Equal("〜");
+        WaniKaniVocabulary.TryResolve("大人", out var adult).Should().BeTrue();
+        adult.WordId.Should().Be(1414170);
+        WaniKaniVocabulary.TryResolve("〜才", out var yearsOld).Should().BeTrue();
+        yearsOld.WordId.Should().Be(1294940);
+
+        var cards = await Cards();
+        cards.Select(c => (c.WordId, c.ReadingIndex)).Should().BeEquivalentTo([adult, yearsOld]);
+        cards.Should().OnlyContain(c => c.Source == CardSource.WaniKaniImport);
+
+        var guru = cards.Single(c => c.WordId == adult.WordId);
+        guru.State.Should().Be(FsrsState.Review);
+        guru.LastReview.Should().Be(nextReview.AddDays(-14));
+        guru.Stability.Should().BePositive();
+        guru.Lapses.Should().BePositive();
+        var burned = cards.Single(c => c.WordId == yearsOld.WordId);
+        burned.State.Should().Be(FsrsState.Mastered);
+
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            var guruLogs = await userDb.FsrsReviewLogs.AsNoTracking().Where(l => l.CardId == guru.CardId).OrderBy(l => l.ReviewDateTime).ToListAsync();
+            guruLogs.Should().HaveCount(10);
+            guruLogs.Count(l => l.Rating == FsrsRating.Again).Should().Be(2);
+            guruLogs[0].ReviewDateTime.Should().Be(started);
+            guruLogs[^1].ReviewDateTime.Should().Be(nextReview.AddDays(-14));
+            guruLogs.Should().OnlyContain(l => l.State != null);
+            (await userDb.FsrsReviewLogs.CountAsync(l => l.CardId == burned.CardId)).Should().Be(9);
+        }
+
+        var batch = (await Batches()).Should().ContainSingle().Subject;
+        batch.Details.Kind.Should().Be(CardBatchKind.WaniKaniProgress);
+        batch.CardState.Should().BeNull();
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(61)]
+    public async Task WaniKaniLevelImport_RejectsLevelsOutsideTheCourse(int level)
+    {
+        var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Post, $"/api/user/vocabulary/import-from-wanikani-level/{level}").WithUser(TestUsers.UserA));
+        response.StatusCode.Should().Be(HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task WaniKaniLevelCounts_CoverEveryLevelAndOnlyGrow()
+    {
+        var response = await _client.SendAsync(new HttpRequestMessage(HttpMethod.Get, "/api/user/vocabulary/wanikani-levels").WithUser(TestUsers.UserA));
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var counts = (await response.Content.ReadFromJsonAsync<List<int>>())!;
+
+        counts.Should().HaveCount(WaniKaniVocabulary.MaxLevel).And.BeInAscendingOrder();
+        counts[0].Should().BePositive();
     }
 
     [Fact]

@@ -1,6 +1,8 @@
 <script setup lang="ts">
   import type { Deck, SimilarDeck, MediaType } from '~/types';
-  import { SelectButton, Select, Button } from 'primevue';
+  import SelectButton from 'primevue/selectbutton';
+  import Select from 'primevue/select';
+  import Button from 'primevue/button';
   import Skeleton from 'primevue/skeleton';
   import { useApiFetch } from '~/composables/useApiFetch';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';

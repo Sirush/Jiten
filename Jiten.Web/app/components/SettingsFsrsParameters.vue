@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
   import { Line } from 'vue-chartjs';
@@ -943,7 +944,7 @@
           Analyse your review history to find the optimal FSRS-{{ version }} parameters for your memory patterns. <br />
           The more reviews you have, the more accurate the optimisation will be.<template v-if="!provenance.autoOptimise">
             It is recommended to optimise every time your number of reviews doubles.</template>
-          <br />You currently have {{ reviewCount.toLocaleString('en-US') }} reviews.
+          <br />You currently have {{ formatNumber(reviewCount) }} reviews.
         </p>
 
         <!-- Review-history health check: a quick read on whether the history is fit to train on -->
@@ -960,7 +961,7 @@
           <div class="mt-3">
             <div class="flex items-center justify-between text-[11px] text-gray-500 dark:text-gray-400 mb-1">
               <span>Button usage</span>
-              <span class="tabular-nums">{{ health.totalReviews.toLocaleString('en-US') }} reviews · {{ Math.round(sameDayPct) }}% same-day</span>
+              <span class="tabular-nums">{{ formatNumber(health.totalReviews) }} reviews · {{ Math.round(sameDayPct) }}% same-day</span>
             </div>
             <div class="flex h-3 w-full overflow-hidden rounded-full bg-surface-200 dark:bg-surface-700">
               <div
@@ -1017,7 +1018,7 @@
           @click="optimiseParameters"
         />
         <p v-if="!canOptimise && !isLoading" class="text-sm text-surface-500 dark:text-surface-400 mt-2">
-          You have {{ reviewCount.toLocaleString('en-US') }} of {{ minimumReviews }} reviews needed. Keep studying to unlock optimisation.
+          You have {{ formatNumber(reviewCount) }} of {{ minimumReviews }} reviews needed. Keep studying to unlock optimisation.
         </p>
         <Message v-if="optimiseError" key="optimise-error" severity="error" :closable="false" class="mt-2">
           {{ optimiseError }}

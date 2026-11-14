@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { ref, computed } from 'vue';
   import { Line } from 'vue-chartjs';
   import { Chart as ChartJS, LogarithmicScale, LinearScale, PointElement, LineElement, Tooltip, Legend, type ChartOptions, type ChartData } from 'chart.js';
@@ -69,7 +70,7 @@
         callbacks: {
           title: (context) => {
             const item = context[0].raw as { x: number; y: number };
-            return `Words learned: ${item.x.toLocaleString()}`;
+            return `Words learned: ${formatNumber(item.x)}`;
           },
           label: (context) => {
             const item = context.raw as { x: number; y: number };
@@ -100,12 +101,12 @@
             if (isLogScale.value) {
               // LOG SCALE: Only show powers of 10 to prevent clutter
               if (num === 1 || num === 10 || num === 100 || num === 1000 || num === 10000 || num === 100000) {
-                return num.toLocaleString();
+                return formatNumber(num);
               }
               return '';
             } else {
               // LINEAR SCALE: ChartJS handles frequency, we just format the string
-              return num.toLocaleString();
+              return formatNumber(num);
             }
           },
         },

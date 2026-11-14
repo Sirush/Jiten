@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { DisplayStyle, MediaType } from '~/types';
   import { coverUrl } from '~/utils/coverImage';
   import { isMainEntry } from '~/utils/displayDeck';
@@ -342,7 +343,7 @@
     const difficulty = d.difficultyRaw >= 0 ? d.difficultyRaw : d.difficulty;
     const rating = difficulty >= 0 ? ` rated ${getDifficultyName(difficulty).toLowerCase()} on Jiten, ${Math.min(difficulty, 5).toFixed(1)} out of 5` : '';
     const original = japaneseTitle.value ? ` (${japaneseTitle.value})` : '';
-    const words = d.uniqueWordCount ? ` of ${d.uniqueWordCount.toLocaleString('en-US')} unique words` : '';
+    const words = d.uniqueWordCount ? ` of ${formatNumber(d.uniqueWordCount)} unique words` : '';
     const build = (orig: string, w: string) => `${title.value}${orig} is a Japanese ${type}${rating}. Vocabulary list and free Anki deck${w}.`;
     const fitting = [build(original, words), build(original, ''), build('', '')].find((text) => text.length <= META_DESCRIPTION_MAX_LENGTH);
     return (

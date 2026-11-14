@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { DictionaryEntry } from '~/types';
 
   const props = defineProps<{
@@ -66,7 +67,7 @@
           </span>
         </div>
         <div class="text-xs text-gray-400 dark:text-gray-400 shrink-0">
-          <span v-if="entry.frequencyRank < 2147483647">#{{ entry.frequencyRank.toLocaleString() }}</span>
+          <span v-if="entry.frequencyRank < 2147483647">#{{ formatNumber(entry.frequencyRank) }}</span>
         </div>
       </div>
 

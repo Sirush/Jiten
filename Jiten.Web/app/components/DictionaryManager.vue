@@ -1,5 +1,9 @@
 <script setup lang="ts">
-  import { Button, ProgressBar, Select, InputText } from 'primevue';
+  import { formatNumber } from '~/utils/formatNumber';
+  import Button from 'primevue/button';
+  import ProgressBar from 'primevue/progressbar';
+  import Select from 'primevue/select';
+  import InputText from 'primevue/inputtext';
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
   import { JMDICT_DICTIONARY_ID } from '~/composables/useYomitanDictionary';
@@ -69,7 +73,7 @@
       toast.add({
         severity: 'success',
         summary: 'Dictionary Imported',
-        detail: `${meta.name} — ${meta.entryCount.toLocaleString()} entries imported.`,
+        detail: `${meta.name} — ${formatNumber(meta.entryCount)} entries imported.`,
         life: 5000,
       });
     } catch (err: any) {
@@ -83,7 +87,7 @@
 
   function confirmRemove(dict: DictionaryMeta) {
     confirm.require({
-      message: `Remove "${dict.name}" and all its ${dict.entryCount.toLocaleString()} entries? This cannot be undone.`,
+      message: `Remove "${dict.name}" and all its ${formatNumber(dict.entryCount)} entries? This cannot be undone.`,
       header: 'Remove Dictionary',
       icon: 'pi pi-exclamation-triangle',
       rejectProps: {
@@ -289,7 +293,7 @@
             </div>
             <div class="text-xs text-gray-500 dark:text-gray-400">
               <template v-if="!isJmDict(dict)">
-                {{ dict.entryCount.toLocaleString() }} entries
+                {{ formatNumber(dict.entryCount) }} entries
                 <span v-if="dict.revision">· {{ dict.revision }}</span>
                 · Added {{ formatDate(dict.addedAt) }}
               </template>

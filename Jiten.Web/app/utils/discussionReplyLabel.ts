@@ -1,5 +1,6 @@
+import { formatNumber } from '~/utils/formatNumber';
 export function replyCountLabel(count: number): string {
-  return `${count.toLocaleString()} ${count === 1 ? 'reply' : 'replies'}`;
+  return `${formatNumber(count)} ${count === 1 ? 'reply' : 'replies'}`;
 }
 
 export function discussionReplyLabel(count: number): string {

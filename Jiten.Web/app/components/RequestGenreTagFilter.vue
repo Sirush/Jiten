@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useApiFetch } from '~/composables/useApiFetch';
   import type { Tag } from '~/types';
   import { getAllGenres } from '~/utils/genreMapper';
@@ -46,7 +47,7 @@
   const genreState = (id: number): TagState => (includeGenres.value.includes(id) ? 'include' : excludeGenres.value.includes(id) ? 'exclude' : 'neutral');
   const tagState = (id: number): TagState => (includeTags.value.includes(id) ? 'include' : excludeTags.value.includes(id) ? 'exclude' : 'neutral');
 
-  const withCount = (label: string, count: number | undefined) => (count == null ? label : `${label} (${count.toLocaleString()})`);
+  const withCount = (label: string, count: number | undefined) => (count == null ? label : `${label} (${formatNumber(count)})`);
 
   // Only values some matching item carries are offered; an active selection stays visible so it can be cleared.
   const genreEntries = computed<TagCloudEntry[]>(() =>
@@ -84,7 +85,7 @@
   };
 
   const resultLabel = computed(() =>
-    props.resultCount == null ? 'Show results' : `Show ${props.resultCount.toLocaleString()} ${props.resultCount === 1 ? props.noun : props.nounPlural}`
+    props.resultCount == null ? 'Show results' : `Show ${formatNumber(props.resultCount)} ${props.resultCount === 1 ? props.noun : props.nounPlural}`
   );
 
   const toggle = (event: Event) => {

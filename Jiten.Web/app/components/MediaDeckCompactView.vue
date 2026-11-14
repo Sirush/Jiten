@@ -3,6 +3,7 @@
 </script>
 
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { type DeckCard, type MediaListDeck, MediaType } from '~/types';
   import { coverUrl } from '~/utils/coverImage';
   import { formatScore } from '~/utils/formatScore';
@@ -93,7 +94,7 @@
             v-if="deck.selectedWordOccurrences != 0"
             class="bg-purple-500 dark:bg-purple-300 border-1 border-purple-200 dark:border-purple-800 text-white dark:text-black px-2 py-1 rounded-full text-xs font-bold"
           >
-            x{{ deck.selectedWordOccurrences.toLocaleString() }}
+            x{{ formatNumber(deck.selectedWordOccurrences) }}
           </div>
         </div>
 
@@ -113,11 +114,11 @@
             </div>
             <div v-else class="flex justify-between">
               <span>Chars:</span>
-              <span class="tabular-nums">{{ deck.characterCount.toLocaleString() }}</span>
+              <span class="tabular-nums">{{ formatNumber(deck.characterCount) }}</span>
             </div>
             <div class="flex justify-between">
               <span>Uniq words:</span>
-              <span class="tabular-nums">{{ deck.uniqueWordCount.toLocaleString() }}</span>
+              <span class="tabular-nums">{{ formatNumber(deck.uniqueWordCount) }}</span>
             </div>
             <div v-if="showCoverageStrip" class="flex justify-between">
               <span>Coverage:</span>
@@ -129,7 +130,7 @@
             </div>
             <div v-if="deck.discussionReplyCount > 0" class="flex justify-between">
               <span>Replies:</span>
-              <span class="tabular-nums">{{ deck.discussionReplyCount.toLocaleString() }}</span>
+              <span class="tabular-nums">{{ formatNumber(deck.discussionReplyCount) }}</span>
             </div>
             <div v-if="deck.difficulty != -1" class="flex justify-between">
               <span>Difficulty:</span>

@@ -64,7 +64,7 @@ export function useMediaRequests() {
 
   const requests = ref<MediaRequestDto[]>([]);
   const totalCount = ref(0);
-  const isLoading = ref(false);
+  const isLoading = ref(true);
   const error = ref<Error | null>(null);
   let fetchVersion = 0;
 

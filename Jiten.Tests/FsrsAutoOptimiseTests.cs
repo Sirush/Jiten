@@ -11,15 +11,15 @@ public class FsrsAutoOptimiseTests
     private static readonly DateTime Now = new(2026, 11, 6, 12, 0, 0, DateTimeKind.Utc);
     private static readonly FsrsAutoOptimiseOptions Options = new();
 
-    private static bool IsDue(int total, int baseline = 0, DateTime? attemptedAt = null,
-                              FsrsParametersSource source = FsrsParametersSource.Default, bool autoOptimise = true)
-        => FsrsAutoOptimiseJob.IsDue(Options, source, autoOptimise, attemptedAt, baseline, total, Now);
+    private static bool IsDue(int total, int baseline = 0, FsrsParametersSource source = FsrsParametersSource.Default,
+                              bool autoOptimise = true)
+        => FsrsAutoOptimiseJob.IsDue(Options, source, autoOptimise, baseline, total);
 
     [Fact]
     public void FirstFit_NeedsTheMinimumHistory()
     {
-        IsDue(999).Should().BeFalse();
-        IsDue(1000).Should().BeTrue();
+        IsDue(399).Should().BeFalse();
+        IsDue(400).Should().BeTrue();
     }
 
     [Fact]
@@ -30,13 +30,6 @@ public class FsrsAutoOptimiseTests
         IsDue(50_000, source: FsrsParametersSource.Legacy).Should().BeTrue();
     }
 
-    [Fact]
-    public void Attempts_AreSpacedBySevenDays()
-    {
-        IsDue(10_000, baseline: 1000, attemptedAt: Now.AddDays(-6.9)).Should().BeFalse();
-        IsDue(10_000, baseline: 1000, attemptedAt: Now.AddDays(-7)).Should().BeTrue();
-    }
-
     [Theory]
     [InlineData(1200, 1699, false)]
     [InlineData(1200, 1700, true)]
@@ -45,11 +38,7 @@ public class FsrsAutoOptimiseTests
     [InlineData(500_000, 504_999, false)]
     [InlineData(500_000, 505_000, true)]
     public void Growth_IsAQuarterBetweenTheFloorAndTheCap(int baseline, int total, bool due)
-        => IsDue(total, baseline, Now.AddDays(-30)).Should().Be(due);
-
-    [Fact]
-    public void Refits_StillNeedTheMinimumHistory()
-        => IsDue(900, baseline: 300, attemptedAt: Now.AddDays(-30)).Should().BeFalse();
+        => IsDue(total, baseline).Should().Be(due);
 
     [Fact]
     public void V7EvaluateLoss_MatchesTheLossTheOptimiserReports()

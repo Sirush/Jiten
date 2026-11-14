@@ -222,6 +222,8 @@ export enum CardBatchKind {
   BackupRestore = 13,
   WordCheck = 14,
   ReadingCheck = 15,
+  WaniKaniLevels = 16,
+  WaniKaniProgress = 17,
 }
 
 export enum FsrsRating {

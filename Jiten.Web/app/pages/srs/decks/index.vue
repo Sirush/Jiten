@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useSrsStore } from '~/stores/srsStore';
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
@@ -38,6 +39,12 @@
   const downloadDeck = ref<StudyDeckDto | undefined>(undefined);
   const showDownloadDialog = ref(false);
   const decksLoading = ref(!srsStore.studyDecks.length);
+  const overviewSettled = ref(false);
+  const forecastSettled = ref(false);
+  /** The store can already hold data when the client hydrates; placeholders must still match the server HTML until mount, or their classes never update. */
+  const isMounted = ref(false);
+  const streakPending = computed(() => !isMounted.value || (!overviewSettled.value && !srsStore.deckStreak));
+  const forecastPending = computed(() => !isMounted.value || (!forecastSettled.value && !srsStore.reviewForecast30d));
   const activeDeckListRef = ref<HTMLElement | null>(null);
   const inactiveDeckListRef = ref<HTMLElement | null>(null);
 
@@ -45,14 +52,16 @@
 
   onMounted(async () => {
     const isCold = !srsStore.studyDecks.length;
+    isMounted.value = true;
+    srsStore.fetchReviewForecast30d().finally(() => (forecastSettled.value = true));
     if (isCold) {
       decksLoading.value = true;
       await srsStore.refreshOverview(true);
       decksLoading.value = false;
+      overviewSettled.value = true;
     } else {
-      srsStore.refreshOverview();
+      srsStore.refreshOverview().finally(() => (overviewSettled.value = true));
     }
-    srsStore.fetchReviewForecast30d();
     srsStore.fetchSettings();
     if (!smartDeck.value) fetchPromo();
   });
@@ -239,6 +248,12 @@
   const CELL = 10;
   const GAP = 2;
   const WEEKS = 12;
+  const HEATMAP_GRID_HEIGHT = 7 * (CELL + GAP) - GAP;
+  const FORECAST_CHART_HEIGHT = HEATMAP_GRID_HEIGHT + 24;
+  /** Caption, grid and legend of the mini heatmap, so its placeholder holds the same space. */
+  const HEATMAP_BLOCK_HEIGHT = HEATMAP_GRID_HEIGHT + 45;
+  /** Totals row, caption and chart of the forecast column. */
+  const FORECAST_COLUMN_HEIGHT = FORECAST_CHART_HEIGHT + 64;
 
   interface MiniDay {
     date: string;
@@ -411,8 +426,8 @@
 
   function frequencyDeckLabel(deck: StudyDeckDto): string {
     const source = deck.frequencyMediaType ? getMediaTypeText(deck.frequencyMediaType) : deck.frequencySourceName;
-    const min = (deck.minGlobalFrequency ?? 1).toLocaleString();
-    const range = deck.maxGlobalFrequency ? `${min}-${deck.maxGlobalFrequency.toLocaleString()}` : `${min}+`;
+    const min = formatNumber(deck.minGlobalFrequency ?? 1);
+    const range = deck.maxGlobalFrequency ? `${min}-${formatNumber(deck.maxGlobalFrequency)}` : `${min}+`;
     return source ? `Rank ${range} in ${source}` : `Rank ${range}, global`;
   }
 </script>
@@ -445,17 +460,24 @@
       class="mb-6 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm overflow-hidden"
     >
       <div class="flex flex-col md:flex-row">
-        <div class="flex items-center gap-3 py-3 px-4 border-b md:border-b-0 md:border-r border-surface-200 dark:border-surface-700">
-          <Skeleton shape="circle" width="96px" height="96px" />
-          <div class="flex flex-col gap-2">
-            <Skeleton width="4rem" height="0.75rem" />
-            <Skeleton width="3rem" height="0.75rem" />
+        <div class="flex flex-col items-center md:items-start gap-1.5 py-3 px-4 border-b md:border-b-0 md:border-r border-surface-200 dark:border-surface-700">
+          <span class="text-[10px] font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-400">Today</span>
+          <div class="flex items-center gap-3">
+            <Skeleton shape="circle" width="96px" height="96px" />
+            <div class="flex flex-col gap-2">
+              <Skeleton width="4rem" height="0.75rem" />
+              <Skeleton width="3rem" height="0.75rem" />
+              <Skeleton width="3rem" height="0.75rem" />
+            </div>
           </div>
         </div>
-        <div class="grid grid-cols-3 divide-x divide-surface-200 dark:divide-surface-700 flex-1">
-          <div v-for="i in 3" :key="i" class="flex flex-col items-center justify-center gap-2 py-3 px-3">
-            <Skeleton width="2.5rem" height="2rem" />
-            <Skeleton width="3rem" height="0.75rem" />
+        <div class="flex-1 flex flex-col">
+          <span class="text-[10px] font-semibold uppercase tracking-wide text-surface-400 dark:text-surface-400 px-3 pt-3">Due now</span>
+          <div class="grid grid-cols-3 divide-x divide-surface-200 dark:divide-surface-700 flex-1">
+            <div v-for="i in 3" :key="i" class="flex flex-col items-center justify-center gap-0.5 py-3 px-3">
+              <Skeleton width="2.5rem" height="calc(clamp(0.95rem, 5vw, 1.5rem) * 1.5)" />
+              <Skeleton width="3rem" height="1rem" />
+            </div>
           </div>
         </div>
       </div>
@@ -518,6 +540,8 @@
     <!-- Streak & Mini Heatmap -->
     <div
       v-if="
+        (srsStore.studySettings.showReviewActivity && streakPending) ||
+        (srsStore.studySettings.showReviewForecast && forecastPending) ||
         (srsStore.deckStreak && srsStore.deckStreak.totalReviewDays > 0) ||
         (srsStore.studySettings.showReviewForecast && forecastChartData && srsStore.reviewForecast30d?.days.some((d) => d.count > 0))
       "
@@ -526,7 +550,11 @@
       <div class="flex flex-col md:flex-row gap-4">
         <!-- Left: streak + heatmap -->
         <div v-if="srsStore.studySettings.showReviewActivity" class="flex-1 flex flex-col gap-3">
-          <div v-if="srsStore.deckStreak && srsStore.deckStreak.totalReviewDays > 0" class="flex flex-wrap items-center gap-x-5 gap-y-3">
+          <template v-if="streakPending">
+            <Skeleton width="16rem" height="1.75rem" class="max-w-full" />
+            <Skeleton :width="`${WEEKS * (CELL + GAP) - GAP}px`" :height="`${HEATMAP_BLOCK_HEIGHT}px`" />
+          </template>
+          <div v-else-if="srsStore.deckStreak && srsStore.deckStreak.totalReviewDays > 0" class="flex flex-wrap items-center gap-x-5 gap-y-3">
             <!-- Streak -->
             <div class="flex items-center gap-2">
               <Icon name="material-symbols:local-fire-department" size="1.5rem" class="text-orange-500" />
@@ -542,7 +570,7 @@
             </div>
           </div>
           <!-- Mini Heatmap -->
-          <div v-if="miniHeatmap.length > 0" class="overflow-x-auto flex flex-col items-start">
+          <div v-if="!streakPending && miniHeatmap.length > 0" class="overflow-x-auto flex flex-col items-start">
             <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">Review activity</div>
             <div class="relative" :style="{ width: `${WEEKS * (CELL + GAP) - GAP}px`, height: `${7 * (CELL + GAP) - GAP}px` }">
               <div
@@ -572,9 +600,13 @@
           </div>
         </div>
 
+        <div v-if="srsStore.studySettings.showReviewForecast && forecastPending" class="w-full md:w-1/2 flex-shrink-0 min-w-0">
+          <Skeleton width="100%" :height="`${FORECAST_COLUMN_HEIGHT}px`" />
+        </div>
+
         <!-- Right: forecast totals + chart -->
         <div
-          v-if="srsStore.studySettings.showReviewForecast && forecastChartData && srsStore.reviewForecast30d?.days.some((d) => d.count > 0)"
+          v-else-if="srsStore.studySettings.showReviewForecast && forecastChartData && srsStore.reviewForecast30d?.days.some((d) => d.count > 0)"
           class="w-full md:w-1/2 flex-shrink-0 min-w-0 flex flex-col gap-3"
         >
           <div class="flex flex-wrap items-center gap-x-5 gap-y-3">
@@ -586,7 +618,7 @@
             </div>
           </div>
           <div class="text-xs text-gray-500 dark:text-gray-400 mb-1">Upcoming reviews</div>
-          <div :style="{ height: `${7 * (CELL + GAP) - GAP + 24}px` }">
+          <div :style="{ height: `${FORECAST_CHART_HEIGHT}px` }">
             <Bar :data="forecastChartData" :options="forecastChartOptions" :plugins="[ChartDataLabels]" />
           </div>
         </div>
@@ -594,7 +626,11 @@
     </div>
 
     <!-- Stats link-tile -->
-    <div v-if="srsStore.studySettings.showReviewActivity && srsStore.deckStreak && srsStore.deckStreak.totalReviewDays > 0" class="mb-6">
+    <div
+      v-if="srsStore.studySettings.showReviewActivity && (streakPending || (srsStore.deckStreak && srsStore.deckStreak.totalReviewDays > 0))"
+      class="mb-6"
+      :class="{ invisible: streakPending }"
+    >
       <NuxtLink
         to="/srs/stats"
         class="flex items-center justify-between gap-3 rounded-xl border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-4 transition-colors hover:bg-surface-50 dark:hover:bg-surface-800"
@@ -648,18 +684,25 @@
       <!-- Usage -->
       <div class="flex items-center gap-3 mb-3 text-xs">
         <Tooltip :content="usageTooltip" placement="bottom">
-          <div class="flex items-center gap-3">
+          <div class="flex items-center gap-3" :class="{ invisible: !planFetched }">
             <span :class="usageColor(deckUsage, planLimits.studyDecks)">
               <span class="font-semibold tabular-nums">{{ deckUsage }}</span
               ><span class="opacity-60">/{{ planLimits.studyDecks }} decks</span>
             </span>
             <span v-if="hasStaticDecks" :class="usageColor(staticWordUsage, planLimits.studyDeckWords)">
-              <span class="font-semibold tabular-nums">{{ staticWordUsage.toLocaleString() }}</span
+              <span class="font-semibold tabular-nums">{{ formatNumber(staticWordUsage) }}</span
               ><span class="opacity-60">/{{ compactWords(planLimits.studyDeckWords) }} custom words</span>
             </span>
           </div>
         </Tooltip>
-        <NuxtLink v-if="!isPlus" to="/jiten-plus" class="text-primary-600 dark:text-primary-400 hover:underline whitespace-nowrap"> Need more? </NuxtLink>
+        <NuxtLink
+          v-if="!isPlus"
+          to="/jiten-plus"
+          class="text-primary-600 dark:text-primary-400 hover:underline whitespace-nowrap"
+          :class="{ invisible: !planFetched }"
+        >
+          Need more?
+        </NuxtLink>
         <Button icon="pi pi-plus" label="Add Deck" size="small" class="sm:!hidden ml-auto flex-shrink-0" @click="showAddDialog = true" />
       </div>
 

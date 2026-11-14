@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { FsrsState } from '~/types/enums';
 
   const emit = defineEmits<{ changed: [] }>();
@@ -123,7 +124,7 @@
       <Dialog
         v-model:visible="showPreview"
         modal
-        :header="`Duplicate Spellings (${forms.length.toLocaleString()})`"
+        :header="`Duplicate Spellings (${formatNumber(forms.length)})`"
         :style="{ width: '720px', maxWidth: '95vw' }"
       >
         <div v-if="forms.length === 0" class="text-sm text-muted-color italic py-4 text-center">No duplicates found.</div>
@@ -140,7 +141,7 @@
               <Checkbox :model-value="allSelected" binary :indeterminate="!allSelected && selected.length > 0" @update:model-value="toggleAll" />
               <span class="text-sm">Select all</span>
             </label>
-            <span class="text-xs text-muted-color">{{ selected.length.toLocaleString() }} of {{ forms.length.toLocaleString() }} selected</span>
+            <span class="text-xs text-muted-color">{{ formatNumber(selected.length) }} of {{ formatNumber(forms.length) }} selected</span>
           </div>
 
           <div class="max-h-[55vh] overflow-y-auto divide-y divide-surface-200 dark:divide-surface-700">
@@ -172,7 +173,7 @@
                   </NuxtLink>
                   <span class="text-xs" :class="fsrsStateTone(form.state).tone">{{ fsrsStateTone(form.state).label }}</span>
                   <span v-if="form.reviewCount > 0" class="text-xs text-muted-color">
-                    {{ form.reviewCount.toLocaleString() }} review{{ form.reviewCount === 1 ? '' : 's' }}
+                    {{ formatNumber(form.reviewCount) }} review{{ form.reviewCount === 1 ? '' : 's' }}
                   </span>
 
                   <i class="pi pi-arrow-right text-[0.65rem] text-muted-color mx-1" />
@@ -192,7 +193,7 @@
               </div>
 
               <span v-if="form.frequencyRank > 0" class="shrink-0 text-xs text-muted-color tabular-nums pt-0.5">
-                #{{ form.frequencyRank.toLocaleString() }}
+                #{{ formatNumber(form.frequencyRank) }}
               </span>
             </div>
           </div>
@@ -202,7 +203,7 @@
           <div class="flex justify-end gap-2">
             <Button label="Cancel" severity="secondary" text @click="showPreview = false" />
             <Button
-              :label="selected.length === 0 ? 'Remove selected' : selected.length === 1 ? 'Remove 1 form' : `Remove ${selected.length.toLocaleString()} forms`"
+              :label="selected.length === 0 ? 'Remove selected' : selected.length === 1 ? 'Remove 1 form' : `Remove ${formatNumber(selected.length)} forms`"
               icon="pi pi-trash"
               severity="danger"
               :disabled="selected.length === 0 || removeLoading"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useApiFetch } from '~/composables/useApiFetch';
   import Button from 'primevue/button';
   import Card from 'primevue/card';
@@ -48,7 +49,7 @@
   const typePhrase = (key: string, singular: string, plural: string) => {
     const count = response.value?.mediaByType?.[key];
     if (!count) return plural;
-    return `${count.toLocaleString()} ${count === 1 ? singular : plural}`;
+    return `${formatNumber(count)} ${count === 1 ? singular : plural}`;
   };
 
   const listDescriptions = computed<{ name: string; text: string }[]>(() => [
@@ -186,7 +187,7 @@
       <h1 class="text-3xl font-bold mb-2">Japanese Frequency Dictionaries (Yomitan & CSV)</h1>
       <p class="text-sm text-surface-600 dark:text-surface-300">
         Word frequency lists built from the Japanese media analysed on Jiten<template v-if="status === 'success' && response"
-          >, currently {{ response.totalMojis?.toLocaleString() }} characters across {{ response.totalMedia?.toLocaleString() }} titles</template
+          >, currently {{ (response.totalMojis == null ? '' : formatNumber(response.totalMojis)) }} characters across {{ (response.totalMedia == null ? '' : formatNumber(response.totalMedia)) }} titles</template
         >. There is a global list, one list per media type, and a kanji list, each available as a Yomitan frequency dictionary or a plain CSV.
       </p>
     </header>
@@ -312,7 +313,7 @@
       </template>
       <template #content>
         <div class="mb-3">
-          <b>{{ response.totalMojis?.toLocaleString() }}</b> characters in <b>{{ response.totalMedia?.toLocaleString() }}</b> media
+          <b>{{ (response.totalMojis == null ? '' : formatNumber(response.totalMojis)) }}</b> characters in <b>{{ (response.totalMedia == null ? '' : formatNumber(response.totalMedia)) }}</b> media
         </div>
 
         <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -321,7 +322,7 @@
               {{ getMediaTypeText(MediaType[mediaType]) }}
             </div>
             <div class="text-lg font-bold text-primary-600">
-              {{ amount?.toLocaleString() }}
+              {{ (amount == null ? '' : formatNumber(amount)) }}
             </div>
           </div>
         </div>

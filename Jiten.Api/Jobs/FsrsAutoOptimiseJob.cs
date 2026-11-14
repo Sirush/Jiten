@@ -12,11 +12,10 @@ namespace Jiten.Api.Jobs;
 
 public class FsrsAutoOptimiseOptions
 {
-    public int FirstFitMinimum { get; set; } = 1000;
+    public int FirstFitMinimum { get; set; } = 400;
     public double GrowthRatio { get; set; } = 0.25;
     public int GrowthFloor { get; set; } = 500;
     public int GrowthCap { get; set; } = 5000;
-    public int MinDaysBetweenAttempts { get; set; } = 7;
     public int ActiveWithinDays { get; set; } = 14;
 }
 
@@ -103,8 +102,7 @@ public class FsrsAutoOptimiseJob(
                                         .Where(s => active.Contains(s.UserId))
                                         .Select(s => new
                                         {
-                                            s.UserId, s.ParametersSource, s.AutoOptimise,
-                                            s.AutoOptimiseAttemptedAtUtc, s.AutoOptimiseAttemptedReviewCount
+                                            s.UserId, s.ParametersSource, s.AutoOptimise, s.AutoOptimiseAttemptedReviewCount
                                         })
                                         .ToDictionaryAsync(s => s.UserId);
 
@@ -114,7 +112,7 @@ public class FsrsAutoOptimiseJob(
             var row = settings.GetValueOrDefault(total.UserId);
             var source = row?.ParametersSource ?? FsrsParametersSource.Default;
             var baseline = row?.AutoOptimiseAttemptedReviewCount ?? 0;
-            if (IsDue(o, source, row?.AutoOptimise ?? true, row?.AutoOptimiseAttemptedAtUtc, baseline, total.Total, utcNow))
+            if (IsDue(o, source, row?.AutoOptimise ?? true, baseline, total.Total))
                 due.Add(new Candidate(total.UserId, total.Total, baseline));
         }
 
@@ -125,12 +123,9 @@ public class FsrsAutoOptimiseJob(
     }
 
     /// <param name="baselineReviewCount">Lifetime total at the last attempt or manual change; 0 when there was none.</param>
-    public static bool IsDue(FsrsAutoOptimiseOptions o, FsrsParametersSource source, bool autoOptimise, DateTime? attemptedAtUtc,
-                             int baselineReviewCount, int reviewTotal, DateTime utcNow)
+    public static bool IsDue(FsrsAutoOptimiseOptions o, FsrsParametersSource source, bool autoOptimise, int baselineReviewCount, int reviewTotal)
     {
         if (!autoOptimise || source == FsrsParametersSource.Edited || reviewTotal < o.FirstFitMinimum)
-            return false;
-        if (attemptedAtUtc is { } attemptedAt && utcNow - attemptedAt < TimeSpan.FromDays(o.MinDaysBetweenAttempts))
             return false;
         if (baselineReviewCount <= 0)
             return true;

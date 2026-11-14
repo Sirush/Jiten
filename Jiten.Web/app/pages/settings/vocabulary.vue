@@ -96,6 +96,7 @@
     { key: 'jpdb', label: 'JPDB', desc: 'Import from JPDB API', icon: 'pi pi-cloud-download' },
     { key: 'anki-file', label: 'Anki File', desc: 'Upload .txt or .csv', icon: 'pi pi-file' },
     { key: 'frequency', label: 'Frequency Range', desc: 'Add words by frequency rank', icon: 'pi pi-chart-bar' },
+    { key: 'wanikani', label: 'WaniKani', desc: 'Import by level or from your account', icon: 'pi pi-graduation-cap' },
     { key: 'complete-vocabulary', label: 'Complete Backup', desc: 'Restore a full vocabulary backup', icon: 'pi pi-database' },
   ];
 
@@ -233,6 +234,7 @@
                 <VocabularyImportJpdbPanel v-if="option === 'jpdb'" @changed="onPanelChanged" />
                 <VocabularyImportAnkiFilePanel v-if="option === 'anki-file'" @changed="onPanelChanged" />
                 <VocabularyImportFrequencyPanel v-if="option === 'frequency'" @changed="onPanelChanged" />
+                <VocabularyImportWaniKaniPanel v-if="option === 'wanikani'" @changed="onPanelChanged" />
                 <VocabularyCompleteVocabularyPanel v-if="option === 'complete-vocabulary'" mode="import" @changed="onPanelChanged" />
               </div>
             </SettingsListItem>

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import Card from 'primevue/card';
   import Button from 'primevue/button';
   import InputText from 'primevue/inputtext';
@@ -484,7 +485,7 @@
     const divider = '| --- | ---: | ---: | ---: |';
     const rows = results.map((r) => {
       const share = totalOcc > 0 ? (r.totalOccurrences / totalOcc) * 100 : 0;
-      return `| ${r.term} | ${r.totalOccurrences.toLocaleString()} | ${r.workRangePercentage.toFixed(1)}% | ${share.toFixed(1)}% |`;
+      return `| ${r.term} | ${formatNumber(r.totalOccurrences)} | ${r.workRangePercentage.toFixed(1)}% | ${share.toFixed(1)}% |`;
     });
     const table = [header, divider, ...rows].join('\n');
 
@@ -691,22 +692,22 @@
             {{ searchResponse.filteredScope.hasFilters ? 'Filtered scope' : 'Searchable corpus' }}
           </span>
           <span class="text-surface-700 dark:text-surface-200">
-            <strong>{{ searchResponse.filteredScope.decks.toLocaleString() }}</strong>
+            <strong>{{ formatNumber(searchResponse.filteredScope.decks) }}</strong>
             decks
           </span>
           <span class="text-surface-700 dark:text-surface-200">
-            <strong>{{ searchResponse.filteredScope.works.toLocaleString() }}</strong>
+            <strong>{{ formatNumber(searchResponse.filteredScope.works) }}</strong>
             works
           </span>
           <span class="text-surface-700 dark:text-surface-200">
-            <strong>{{ searchResponse.filteredScope.characters.toLocaleString() }}</strong>
+            <strong>{{ formatNumber(searchResponse.filteredScope.characters) }}</strong>
             characters
           </span>
         </div>
         <p v-if="searchResponse.filteredScope.hasFilters" class="text-xs text-surface-400">
           Narrowed by your filters (year / difficulty / media type) from
-          {{ searchResponse.corpusStats.decksWithRawText.toLocaleString() }} decks · {{ searchResponse.corpusStats.totalWorks.toLocaleString() }} works ·
-          {{ searchResponse.corpusStats.totalCharacters.toLocaleString() }} characters total. All stats below are relative to this scope.
+          {{ formatNumber(searchResponse.corpusStats.decksWithRawText) }} decks · {{ formatNumber(searchResponse.corpusStats.totalWorks) }} works ·
+          {{ formatNumber(searchResponse.corpusStats.totalCharacters) }} characters total. All stats below are relative to this scope.
         </p>
       </div>
 
@@ -733,13 +734,13 @@
             </Column>
             <Column field="matchingDecks" header="Matching Decks" />
             <Column header="Occurrences">
-              <template #body="{ data }">{{ data.totalOccurrences.toLocaleString() }} ({{ occurrenceShare(data.totalOccurrences).toFixed(1) }}%)</template>
+              <template #body="{ data }">{{ formatNumber(data.totalOccurrences) }} ({{ occurrenceShare(data.totalOccurrences).toFixed(1) }}%)</template>
             </Column>
             <Column header="Occ/M chars">
               <template #body="{ data }">{{ data.hitsPerMillion.toFixed(2) }}</template>
             </Column>
             <Column header="Works (range)">
-              <template #body="{ data }">{{ data.worksMatched.toLocaleString() }} ({{ data.workRangePercentage.toFixed(1) }}%)</template>
+              <template #body="{ data }">{{ formatNumber(data.worksMatched) }} ({{ data.workRangePercentage.toFixed(1) }}%)</template>
             </Column>
             <Column header="Dispersion" title="Gries' Deviation of Proportions across media types: 0 = spread evenly across registers, 1 = concentrated in one">
               <template #body="{ data }">{{ data.dispersion.toFixed(2) }}</template>
@@ -823,8 +824,8 @@
             </span>
           </template>
           <template #subtitle>
-            {{ activeResult.totalOccurrences.toLocaleString() }} occurrences · {{ activeResult.hitsPerMillion.toFixed(2) }} occ/M chars · in
-            {{ activeResult.worksMatched.toLocaleString() }}/{{ activeResult.worksTotal.toLocaleString() }} works ({{
+            {{ formatNumber(activeResult.totalOccurrences) }} occurrences · {{ activeResult.hitsPerMillion.toFixed(2) }} occ/M chars · in
+            {{ formatNumber(activeResult.worksMatched) }}/{{ formatNumber(activeResult.worksTotal) }} works ({{
               activeResult.workRangePercentage.toFixed(1)
             }}%) · dispersion {{ activeResult.dispersion.toFixed(2) }} · Avg dialogue: {{ activeResult.dialogueWeightedAvg.toFixed(1) }}%
           </template>
@@ -867,7 +868,7 @@
                 <template #body="{ data }">{{ getMediaTypeText(data.mediaType) }}</template>
               </Column>
               <Column header="Occurrences" style="width: 7rem">
-                <template #body="{ data }">{{ data.occurrences.toLocaleString() }}</template>
+                <template #body="{ data }">{{ formatNumber(data.occurrences) }}</template>
               </Column>
               <Column header="Per M chars" style="width: 7rem">
                 <template #body="{ data }">{{ data.perMillion.toFixed(2) }}</template>

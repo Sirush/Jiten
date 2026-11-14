@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { ReschedulePreviewResponse } from '~/types';
 
   const props = defineProps<{
@@ -37,7 +38,7 @@
   });
 
   const percent = (retention: number) => `${Math.round(retention * 1000) / 10}%`;
-  const count = (value: number) => value.toLocaleString();
+  const count = (value: number) => formatNumber(value);
   const delta = (value: number, current: number) => {
     const diff = value - current;
     if (diff === 0) return 'no change';

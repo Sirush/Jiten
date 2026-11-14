@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { ProfileReadable } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { formatDateLong } from '~/utils/dateFormat';
@@ -88,9 +89,9 @@
                 :class="{ 'font-semibold': row.isTotal }"
               >
                 <th scope="row" class="whitespace-nowrap py-1.5 pr-2 text-left sm:pr-3" :class="row.isTotal ? 'font-semibold' : 'font-normal'">{{ row.name }}</th>
-                <td class="px-1.5 py-1.5 text-right tabular-nums text-muted-color sm:px-2">{{ row.titles.toLocaleString('en-US') }}</td>
+                <td class="px-1.5 py-1.5 text-right tabular-nums text-muted-color sm:px-2">{{ formatNumber(row.titles) }}</td>
                 <td v-for="(cell, i) in row.cells" :key="i" class="px-1.5 py-1.5 text-right tabular-nums sm:px-2" :class="shade(cell.share)">
-                  <Tooltip v-if="cell.share !== null" :content="`${cell.count.toLocaleString('en-US')} of ${row.titles.toLocaleString('en-US')} titles`">
+                  <Tooltip v-if="cell.share !== null" :content="`${formatNumber(cell.count)} of ${formatNumber(row.titles)} titles`">
                     <span class="font-medium">{{ formatShare(cell.share) }}</span>
                   </Tooltip>
                   <span v-else class="text-muted-color">-</span>

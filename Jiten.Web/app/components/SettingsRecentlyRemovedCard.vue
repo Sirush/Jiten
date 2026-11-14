@@ -1,4 +1,5 @@
 ﻿<script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { CardArchiveReason, type FsrsState } from '~/types/enums';
   import { formatDateShort } from '~/utils/dateFormat';
 
@@ -120,7 +121,7 @@
   }
 
   function metaText(row: ArchivedRow): string {
-    return [reasonText(row), formatDate(row.archivedAt), `${row.reviewCount.toLocaleString()} review${row.reviewCount === 1 ? '' : 's'}`].join(' · ');
+    return [reasonText(row), formatDate(row.archivedAt), `${formatNumber(row.reviewCount)} review${row.reviewCount === 1 ? '' : 's'}`].join(' · ');
   }
 
   // Only paging keeps an "everything matching" selection: any other reload either changed the matching set or already acted on it.
@@ -196,14 +197,14 @@
 
       const notes: string[] = [];
       if (failures.length > 0) notes.push(`${failures.length} could not be restored.`);
-      if (remainingCount > 0) notes.push(`${remainingCount.toLocaleString()} still to go. Run it again to continue.`);
+      if (remainingCount > 0) notes.push(`${formatNumber(remainingCount)} still to go. Run it again to continue.`);
 
       toast.add({
         severity: 'success',
         summary: restored === 1 ? 'Card restored' : 'Cards restored',
         detail: row
           ? row.plainReading
-          : `Restored ${restored.toLocaleString()} card${restored === 1 ? '' : 's'} with their review history. ${notes.join(' ')}`.trim(),
+          : `Restored ${formatNumber(restored)} card${restored === 1 ? '' : 's'} with their review history. ${notes.join(' ')}`.trim(),
         life: row ? 2500 : 6000,
       });
 
@@ -218,11 +219,11 @@
 
   function confirmForget(row?: ArchivedRow) {
     const count = actionCount.value;
-    const reviews = row ? `Its ${row.reviewCount.toLocaleString()} kept review${row.reviewCount === 1 ? '' : 's'} are` : 'The kept review history is';
+    const reviews = row ? `Its ${formatNumber(row.reviewCount)} kept review${row.reviewCount === 1 ? '' : 's'} are` : 'The kept review history is';
     const subject = row ? 'the card' : 'these cards';
 
     confirm.require({
-      header: row ? `Forget ${row.plainReading}` : `Forget ${count.toLocaleString()} entr${count === 1 ? 'y' : 'ies'}`,
+      header: row ? `Forget ${row.plainReading}` : `Forget ${formatNumber(count)} entr${count === 1 ? 'y' : 'ies'}`,
       message: `This is permanent. ${reviews} deleted, ${subject} can no longer be restored, and your heatmap, streaks and retention will be rebuilt without those reviews.`,
       icon: 'pi pi-exclamation-triangle',
       acceptLabel: 'Forget for good',
@@ -264,7 +265,7 @@
       <Skeleton v-if="countLoading" width="7rem" height="1.2rem" />
       <span v-else-if="archivedCount === 0" class="text-sm text-muted-color italic">Nothing has been removed.</span>
       <span v-else class="text-sm text-muted-color">
-        <strong>{{ archivedCount.toLocaleString() }}</strong>
+        <strong>{{ formatNumber(archivedCount) }}</strong>
         card{{ archivedCount === 1 ? '' : 's' }} kept
       </span>
       <Button
@@ -281,7 +282,7 @@
       <Dialog
         v-model:visible="showDialog"
         modal
-        :header="`Recently removed — ${totalItems.toLocaleString()} card${totalItems === 1 ? '' : 's'}`"
+        :header="`Recently removed — ${formatNumber(totalItems)} card${totalItems === 1 ? '' : 's'}`"
         :style="{ width: '800px', maxWidth: '95vw' }"
       >
         <p class="text-sm text-muted-color mb-3">
@@ -312,7 +313,7 @@
             v-if="selectAllMatching"
             class="mb-2 rounded border border-amber-300 dark:border-amber-700/70 bg-amber-50 dark:bg-amber-900/20 px-3 py-2 text-xs text-amber-800 dark:text-amber-200"
           >
-            <strong>All {{ totalItems.toLocaleString() }} matching entries are selected,</strong>
+            <strong>All {{ formatNumber(totalItems) }} matching entries are selected,</strong>
             including the ones on other pages. Restore and Forget will act on every one of them.
           </div>
 
@@ -327,12 +328,12 @@
                 class="text-primary-600 dark:text-primary-400 hover:underline cursor-pointer"
                 @click="selectEverything"
               >
-                Select all {{ totalItems.toLocaleString() }}
+                Select all {{ formatNumber(totalItems) }}
               </button>
               <button v-if="selectAllMatching" class="text-primary-600 dark:text-primary-400 hover:underline cursor-pointer" @click="selectPageOnly">
                 Select only this page
               </button>
-              <span class="text-muted-color">{{ actionCount > 0 ? `${actionCount.toLocaleString()} selected` : 'Nothing selected' }}</span>
+              <span class="text-muted-color">{{ actionCount > 0 ? `${formatNumber(actionCount)} selected` : 'Nothing selected' }}</span>
             </div>
           </div>
 
@@ -363,7 +364,7 @@
                     <span lang="ja" v-html="row.rubyHtml" />
                   </NuxtLink>
                   <span class="text-xs" :class="fsrsStateTone(row.state).tone">{{ fsrsStateTone(row.state).label }}</span>
-                  <span v-if="row.frequencyRank > 0" class="text-xs text-muted-color tabular-nums">#{{ row.frequencyRank.toLocaleString() }}</span>
+                  <span v-if="row.frequencyRank > 0" class="text-xs text-muted-color tabular-nums">#{{ formatNumber(row.frequencyRank) }}</span>
                   <span class="min-w-0 truncate text-xs text-muted-color">{{ row.mainDefinition || '—' }}</span>
                 </div>
 
@@ -420,7 +421,7 @@
           <div class="flex flex-wrap justify-end gap-2">
             <Button label="Close" severity="secondary" @click="showDialog = false" />
             <Button
-              :label="actionCount === 0 ? 'Forget for good' : `Forget ${actionCount.toLocaleString()} for good`"
+              :label="actionCount === 0 ? 'Forget for good' : `Forget ${formatNumber(actionCount)} for good`"
               icon="pi pi-trash"
               severity="danger"
               outlined
@@ -428,7 +429,7 @@
               @click="confirmForget()"
             />
             <Button
-              :label="actionCount === 0 ? 'Restore' : `Restore ${actionCount.toLocaleString()}`"
+              :label="actionCount === 0 ? 'Restore' : `Restore ${formatNumber(actionCount)}`"
               icon="pi pi-replay"
               :disabled="actionCount === 0 || busy"
               :loading="busy"

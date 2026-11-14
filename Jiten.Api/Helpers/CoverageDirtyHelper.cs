@@ -6,6 +6,41 @@ namespace Jiten.Api.Helpers;
 
 public static class CoverageDirtyHelper
 {
+    public static async Task<List<string>> MarkWordSetSubscribersDirty(UserDbContext userContext, int setId)
+    {
+        var userIds = await userContext.UserWordSetStates
+                                       .AsNoTracking()
+                                       .Where(s => s.SetId == setId)
+                                       .Select(s => s.UserId)
+                                       .ToListAsync();
+        if (userIds.Count == 0)
+            return userIds;
+
+        if (userContext.Database.ProviderName?.Contains("Npgsql") != true)
+        {
+            foreach (var userId in userIds)
+                await MarkCoverageDirty(userContext, userId);
+            return userIds;
+        }
+
+        var now = DateTime.UtcNow;
+        await userContext.Database.ExecuteSqlRawAsync("""
+            UPDATE "user"."UserMetadatas"
+            SET "CoverageDirty" = TRUE,
+                "CoverageDirtyAt" = {1}::timestamptz
+            WHERE "UserId" IN (SELECT "UserId" FROM "user"."UserWordSetStates" WHERE "SetId" = {0})
+            """, setId, now);
+        await userContext.Database.ExecuteSqlRawAsync("""
+            INSERT INTO "user"."UserMetadatas" ("UserId", "CoverageDirty", "CoverageDirtyAt", "CoverageRefreshedAt")
+            SELECT "UserId", TRUE, {1}::timestamptz, NULL
+            FROM "user"."UserWordSetStates"
+            WHERE "SetId" = {0}
+            ON CONFLICT DO NOTHING
+            """, setId, now);
+
+        return userIds;
+    }
+
     public static async Task MarkCoverageDirty(UserDbContext userContext, string userId, DateTime? dirtyAt = null)
     {
         var now = dirtyAt ?? DateTime.UtcNow;

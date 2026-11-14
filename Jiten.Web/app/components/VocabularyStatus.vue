@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import Button from 'primevue/button';
   import Popover from 'primevue/popover';
   import { KnownState, StudyDeckType, type DerivationCoverDto, type Word } from '~/types';
@@ -67,7 +68,7 @@
     toast.add({
       severity: 'info',
       summary: 'History restored',
-      detail: `Restored ${reviews.toLocaleString()} review${reviews === 1 ? '' : 's'} from your previous ${plainText.value} card.`,
+      detail: `Restored ${formatNumber(reviews)} review${reviews === 1 ? '' : 's'} from your previous ${plainText.value} card.`,
       life: 6000,
     });
   };
@@ -138,7 +139,7 @@
       toast.add({
         severity: 'success',
         summary: 'Card restored',
-        detail: reviews > 0 ? `Brought back ${reviews.toLocaleString()} review${reviews === 1 ? '' : 's'}.` : 'The card is back in your collection.',
+        detail: reviews > 0 ? `Brought back ${formatNumber(reviews)} review${reviews === 1 ? '' : 's'}.` : 'The card is back in your collection.',
         life: 5000,
       });
     } catch (e) {
@@ -298,7 +299,7 @@
       : {
           label:
             archived.value.reviewCount > 0
-              ? `Restore ${archived.value.reviewCount.toLocaleString()} review${archived.value.reviewCount === 1 ? '' : 's'}`
+              ? `Restore ${formatNumber(archived.value.reviewCount)} review${archived.value.reviewCount === 1 ? '' : 's'}`
               : 'Restore removed card',
           icon: 'pi pi-replay',
           run: restoreWord,

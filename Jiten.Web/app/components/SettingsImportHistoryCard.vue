@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useConfirm } from 'primevue/useconfirm';
   import type { CardBatch, PaginatedResponse } from '~/types/types';
   import { batchDetail, cardSourceDisplay } from '~/utils/cardSource';
@@ -49,7 +50,7 @@
   );
 
   function plural(count: number, word: string): string {
-    return `${count.toLocaleString()} ${word}${count === 1 ? '' : 's'}`;
+    return `${formatNumber(count)} ${word}${count === 1 ? '' : 's'}`;
   }
 
   function sourceLabel(batch: CardBatch): string {
@@ -92,7 +93,7 @@
           summary: 'Import undone',
           detail:
             result.kept > 0
-              ? `Removed ${plural(result.removed, 'word')}, kept ${result.kept.toLocaleString()} you've studied or changed since.`
+              ? `Removed ${plural(result.removed, 'word')}, kept ${formatNumber(result.kept)} you've studied or changed since.`
               : `Removed ${plural(result.removed, 'word')}.`,
           life: 6000,
         });
@@ -164,7 +165,7 @@
 
             <span class="flex items-center gap-1.5 text-sm tabular-nums sm:justify-end" :aria-label="`${plural(batch.wordCount, 'word')} added`">
               <i class="pi pi-book text-xs text-muted-color sm:hidden" aria-hidden="true" />
-              {{ batch.wordCount.toLocaleString() }}
+              {{ formatNumber(batch.wordCount) }}
             </span>
 
             <div class="ml-auto sm:ml-0 flex justify-end">
@@ -192,7 +193,7 @@
 
         <div v-if="hasMore" class="flex justify-center pt-3">
           <Button
-            :label="`Show more (${(totalItems - batches.length).toLocaleString()} left)`"
+            :label="`Show more (${formatNumber(totalItems - batches.length)} left)`"
             severity="secondary"
             text
             size="small"

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useRoute } from '#vue-router';
   import type { DeckRankingRow, PaginatedResponse } from '~/types';
   import { MediaType } from '~/types';
@@ -96,7 +97,7 @@
   const metaTitle = computed(() => `Japanese ${plural} by Difficulty: Vocabulary Lists & Anki Decks${pageSuffix.value}`);
   const metaDescription = computed(
     () =>
-      `Browse ${totalItems.value.toLocaleString('en-US')} Japanese ${pluralLower} ranked from easiest to hardest. Difficulty ratings, character counts, full vocabulary lists and free Anki decks for every title.`
+      `Browse ${formatNumber(totalItems.value)} Japanese ${pluralLower} ranked from easiest to hardest. Difficulty ratings, character counts, full vocabulary lists and free Anki decks for every title.`
   );
 
   useSeoMeta({
@@ -150,7 +151,7 @@
       <h1 class="text-3xl font-bold mb-2">Japanese {{ plural }} by Difficulty</h1>
       <p class="max-w-3xl text-surface-600 dark:text-surface-300">{{ introTexts[mediaType] }}</p>
       <p v-if="totalItems" class="mt-2 text-sm text-surface-500 dark:text-surface-400">
-        {{ totalItems.toLocaleString('en-US') }} {{ pluralLower }}, sorted from {{ hardestFirst ? 'hardest to easiest' : 'easiest to hardest' }}.
+        {{ formatNumber(totalItems) }} {{ pluralLower }}, sorted from {{ hardestFirst ? 'hardest to easiest' : 'easiest to hardest' }}.
       </p>
     </header>
 
@@ -206,7 +207,7 @@
               <span v-for="title in secondaryTitles(deck)" :key="title" class="ml-2 text-xs text-surface-400">{{ title }}</span>
             </td>
             <td class="px-3 py-2"><DifficultyDisplay :difficulty="deck.difficulty" :difficulty-raw="deck.difficulty" /></td>
-            <td class="px-3 py-2 text-right tabular-nums">{{ deck.characterCount.toLocaleString('en-US') }}</td>
+            <td class="px-3 py-2 text-right tabular-nums">{{ formatNumber(deck.characterCount) }}</td>
             <td class="px-3 py-2 text-right tabular-nums">{{ deck.releaseYear ?? '' }}</td>
           </tr>
         </tbody>

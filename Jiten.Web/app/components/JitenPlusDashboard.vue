@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { BoostBalance } from '~/composables/useMediaRequests';
 
   import { useAuthStore } from '~/stores/authStore';
@@ -87,7 +88,7 @@
       { label: 'Custom sentences per word', value: l.customSentencesPerWord },
       { label: 'Community lists', value: l.communityLists },
       { label: 'Titles per community list', value: l.communityListItems },
-    ].map((row) => ({ label: row.label, value: row.value.toLocaleString() }));
+    ].map((row) => ({ label: row.label, value: formatNumber(row.value) }));
   });
 </script>
 

@@ -123,7 +123,7 @@ describe('progressFieldLabel', () => {
 
 describe('formatCharacters', () => {
   it('keeps small counts exact', () => {
-    expect(formatCharacters(9_500)).toBe((9_500).toLocaleString());
+    expect(formatCharacters(9_500)).toBe('9,500');
     expect(formatCharacters(1_234_567)).toBe('1.2M');
   });
 });

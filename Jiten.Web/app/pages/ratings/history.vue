@@ -42,7 +42,7 @@
   const skippedTotal = ref(0);
   const skippedOffset = ref(0);
 
-  const isLoading = ref(false);
+  const isLoading = ref(true);
 
   function getVoteDisplay(vote: DifficultyVoteDto) {
     const { outcome, deckA, deckB } = vote;

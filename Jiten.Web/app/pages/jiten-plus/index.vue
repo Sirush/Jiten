@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { JitenPlusPricingInfo } from '~/types';
   import { useToast } from 'primevue/usetoast';
   import { useAuthStore } from '~/stores/authStore';
@@ -51,7 +52,7 @@
       { label: 'Custom sentences per word', ...l.customSentencesPerWord },
       { label: 'Community lists', ...l.communityLists },
       { label: 'Titles per community list', ...l.communityListItems },
-    ].map((row) => ({ label: row.label, free: row.free.toLocaleString(), plus: row.plus.toLocaleString() }));
+    ].map((row) => ({ label: row.label, free: formatNumber(row.free), plus: formatNumber(row.plus) }));
   });
 
   const showLifetimeNotice = computed(() => lifetimeAvailable.value && !!lifetimeWindowEndLabel.value && !isLifetime.value);

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import Skeleton from 'primevue/skeleton';
   import type { Franchise, FranchiseNode, MediaGroupStats, MediaGroupTitles, MediaType } from '~/types';
   import { useAuthStore } from '~/stores/authStore';
@@ -99,10 +100,10 @@
           <span v-if="years" class="whitespace-nowrap tabular-nums"><span aria-hidden="true" class="inline-block w-5 text-center">·</span>{{ years }}</span>
           <template v-if="statsStatus === 'ready' && stats">
             <span class="whitespace-nowrap tabular-nums">
-              <span aria-hidden="true" class="inline-block w-5 text-center">·</span>{{ stats.characterCount.toLocaleString() }} characters
+              <span aria-hidden="true" class="inline-block w-5 text-center">·</span>{{ formatNumber(stats.characterCount) }} characters
             </span>
             <span class="whitespace-nowrap tabular-nums">
-              <span aria-hidden="true" class="inline-block w-5 text-center">·</span>{{ stats.uniqueWordCount.toLocaleString() }} unique words
+              <span aria-hidden="true" class="inline-block w-5 text-center">·</span>{{ formatNumber(stats.uniqueWordCount) }} unique words
             </span>
             <span class="whitespace-nowrap">
               <span aria-hidden="true" class="inline-block w-5 text-center">·</span>

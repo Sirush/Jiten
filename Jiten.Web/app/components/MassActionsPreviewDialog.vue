@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useConfirm } from 'primevue/useconfirm';
 
   const props = defineProps<{
@@ -59,7 +60,7 @@
 
   function confirmExecute() {
     confirm.require({
-      message: `This will affect ${props.data?.totalCount.toLocaleString()} card(s). Are you sure?`,
+      message: `This will affect ${formatNumber(props.data?.totalCount ?? 0)} card(s). Are you sure?`,
       header: 'Confirm Mass Action',
       icon: 'pi pi-exclamation-triangle',
       acceptClass: 'p-button-danger',
@@ -87,7 +88,7 @@
   <Dialog
     :visible="visible"
     modal
-    :header="`Preview — ${data?.totalCount.toLocaleString() ?? 0} card(s)`"
+    :header="`Preview — ${formatNumber(data?.totalCount ?? 0)} card(s)`"
     :style="{ width: '900px', maxWidth: '95vw' }"
     :closable="true"
     @update:visible="emit('update:visible', $event)"
@@ -104,7 +105,7 @@
     >
       <Column header="#" style="width: 55px">
         <template #body="{ index }">
-          <span class="text-sm text-muted-color">{{ (index + 1).toLocaleString() }}</span>
+          <span class="text-sm text-muted-color">{{ formatNumber(index + 1) }}</span>
         </template>
       </Column>
       <Column header="Word" style="min-width: 150px">
@@ -157,7 +158,7 @@
       <Column header="Rank" style="width: 80px">
         <template #body="{ data: card }">
           <template v-if="card">
-            <span class="text-sm text-muted-color">{{ card.frequencyRank > 0 ? `#${card.frequencyRank.toLocaleString()}` : '—' }}</span>
+            <span class="text-sm text-muted-color">{{ card.frequencyRank > 0 ? `#${formatNumber(card.frequencyRank)}` : '—' }}</span>
           </template>
           <Skeleton v-else width="3rem" height="1.2rem" />
         </template>
@@ -168,7 +169,7 @@
       <div class="flex justify-end gap-2">
         <Button label="Cancel" severity="secondary" @click="emit('update:visible', false)" />
         <Button
-          :label="`Execute (${data?.totalCount.toLocaleString() ?? 0} cards)`"
+          :label="`Execute (${formatNumber(data?.totalCount ?? 0)} cards)`"
           severity="danger"
           icon="pi pi-check"
           :loading="executing"

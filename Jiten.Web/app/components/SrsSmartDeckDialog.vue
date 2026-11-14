@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useToast } from 'primevue/usetoast';
   import { useConfirm } from 'primevue/useconfirm';
   import { useSrsStore } from '~/stores/srsStore';
@@ -172,8 +173,8 @@
   const previewSummary = computed(() => {
     const p = smart.status.value?.preview;
     if (!p) return null;
-    const parts = [`${p.words.toLocaleString()} words`, `${p.newWords.toLocaleString()} new`];
-    if (p.windowWords > 0) parts.push(`${p.windowWords.toLocaleString()} of them from the units ahead`);
+    const parts = [`${formatNumber(p.words)} words`, `${formatNumber(p.newWords)} new`];
+    if (p.windowWords > 0) parts.push(`${formatNumber(p.windowWords)} of them from the units ahead`);
     return parts.join(', ');
   });
 
@@ -297,9 +298,9 @@
   const deckSummary = computed(() => {
     const s = smart.status.value;
     if (!s) return '';
-    if (s.building) return s.wordCount > 0 ? `${s.wordCount.toLocaleString()} words, rebuilding` : 'Building your deck, this could take up to a minute';
+    if (s.building) return s.wordCount > 0 ? `${formatNumber(s.wordCount)} words, rebuilding` : 'Building your deck, this could take up to a minute';
     if (s.wordCount === 0) return 'No words matched. Loosen the word filters or add a title.';
-    const count = s.wordCount.toLocaleString();
+    const count = formatNumber(s.wordCount);
     return lastRebuiltText.value ? `${count} words, rebuilt ${lastRebuiltText.value}` : `${count} words`;
   });
 
@@ -313,9 +314,9 @@
 
   const wordsSummary = computed(() => {
     const parts: string[] = [];
-    if (minRank.value && maxRank.value) parts.push(`rank ${minRank.value.toLocaleString()}-${maxRank.value.toLocaleString()}`);
-    else if (minRank.value) parts.push(`rank ${minRank.value.toLocaleString()}+`);
-    else if (maxRank.value) parts.push(`top ${maxRank.value.toLocaleString()}`);
+    if (minRank.value && maxRank.value) parts.push(`rank ${formatNumber(minRank.value)}-${formatNumber(maxRank.value)}`);
+    else if (minRank.value) parts.push(`rank ${formatNumber(minRank.value)}+`);
+    else if (maxRank.value) parts.push(`top ${formatNumber(maxRank.value)}`);
     if (posFilter.value.length) parts.push(`${posFilter.value.length} tag${posFilter.value.length === 1 ? '' : 's'}`);
     if (excludeKana.value) parts.push('no kana');
     return parts.length ? parts.join(', ') : 'all words';

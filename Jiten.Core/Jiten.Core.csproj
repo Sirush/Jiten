@@ -45,6 +45,10 @@
     </ItemGroup>
 
     <ItemGroup>
+      <EmbeddedResource Include="Data\wanikani_vocabulary.csv" />
+    </ItemGroup>
+
+    <ItemGroup>
       <None Update="appsettings.json">
         <CopyToOutputDirectory>Always</CopyToOutputDirectory>
       </None>

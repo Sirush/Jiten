@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { stripRuby } from '~/utils/stripRuby';
 
   const props = defineProps<{
@@ -23,7 +24,7 @@
 
   const rankText = computed(() => {
     if (props.frequencyRank == null) return '';
-    return props.frequencyRank === 0 ? 'Unranked' : `Rank #${props.frequencyRank.toLocaleString()}`;
+    return props.frequencyRank === 0 ? 'Unranked' : `Rank #${formatNumber(props.frequencyRank)}`;
   });
 
   const posText = computed(() => {
@@ -39,7 +40,7 @@
 
   const mediaCountText = computed(() => {
     if (props.usedInMediaAmount == null) return '';
-    return `Appears in ${props.usedInMediaAmount.toLocaleString()} media`;
+    return `Appears in ${formatNumber(props.usedInMediaAmount)} media`;
   });
 </script>
 
