@@ -73,6 +73,7 @@ public class JitenDbContext : DbContext
 
     public DbSet<WordSet> WordSets { get; set; }
     public DbSet<WordSetMember> WordSetMembers { get; set; }
+    public DbSet<WordSetExclusion> WordSetExclusions { get; set; }
 
     public DbSet<DifficultyVote> DifficultyVotes { get; set; }
     public DbSet<DifficultyRating> DifficultyRatings { get; set; }
@@ -1148,6 +1149,18 @@ public class JitenDbContext : DbContext
             entity.Property(ws => ws.Name).HasMaxLength(100).IsRequired();
             entity.Property(ws => ws.CreatedAt).IsRequired();
             entity.HasIndex(ws => ws.Slug).IsUnique().HasDatabaseName("IX_WordSet_Slug");
+            if (isNpgsql)
+                entity.Property(ws => ws.RuleJson).HasColumnType("jsonb");
+        });
+
+        modelBuilder.Entity<WordSetExclusion>(entity =>
+        {
+            entity.ToTable("WordSetExclusions", "jiten");
+            entity.HasKey(e => new { e.SetId, e.WordId, e.ReadingIndex });
+            entity.HasOne(e => e.Set)
+                  .WithMany(ws => ws.Exclusions)
+                  .HasForeignKey(e => e.SetId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<WordSetMember>(entity =>

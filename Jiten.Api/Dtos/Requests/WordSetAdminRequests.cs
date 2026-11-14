@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Jiten.Core.Data;
 
 namespace Jiten.Api.Dtos.Requests;
 
@@ -50,4 +51,25 @@ public class WordSetMemberInput
 {
     public int WordId { get; set; }
     public short ReadingIndex { get; set; }
+}
+
+public enum UnmatchedMemberAction
+{
+    Keep = 0,
+    MarkManual = 1,
+    Remove = 2
+}
+
+public class PreviewWordSetRuleRequest
+{
+    [Required]
+    public required WordSetRule Rule { get; set; }
+}
+
+public class ApplyWordSetRuleRequest
+{
+    [Required]
+    public required WordSetRule Rule { get; set; }
+
+    public UnmatchedMemberAction Unmatched { get; set; }
 }

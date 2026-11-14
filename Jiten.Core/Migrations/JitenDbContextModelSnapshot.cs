@@ -3066,6 +3066,12 @@ namespace Jiten.Core.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<DateTime?>("RegeneratedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("RuleJson")
+                        .HasColumnType("jsonb");
+
                     b.Property<string>("Slug")
                         .IsRequired()
                         .HasMaxLength(50)
@@ -3083,6 +3089,22 @@ namespace Jiten.Core.Migrations
                     b.ToTable("WordSets", "jiten");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.WordSetExclusion", b =>
+                {
+                    b.Property<int>("SetId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("WordId")
+                        .HasColumnType("integer");
+
+                    b.Property<short>("ReadingIndex")
+                        .HasColumnType("smallint");
+
+                    b.HasKey("SetId", "WordId", "ReadingIndex");
+
+                    b.ToTable("WordSetExclusions", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.WordSetMember", b =>
                 {
                     b.Property<int>("SetId")
@@ -3093,6 +3115,9 @@ namespace Jiten.Core.Migrations
 
                     b.Property<short>("ReadingIndex")
                         .HasColumnType("smallint");
+
+                    b.Property<bool>("IsManual")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("Position")
                         .HasColumnType("integer");
@@ -4015,6 +4040,17 @@ namespace Jiten.Core.Migrations
                     b.Navigation("Deck");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.WordSetExclusion", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.WordSet", "Set")
+                        .WithMany("Exclusions")
+                        .HasForeignKey("SetId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Set");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.WordSetMember", b =>
                 {
                     b.HasOne("Jiten.Core.Data.WordSet", "Set")
@@ -4169,6 +4205,8 @@ namespace Jiten.Core.Migrations
 
             modelBuilder.Entity("Jiten.Core.Data.WordSet", b =>
                 {
+                    b.Navigation("Exclusions");
+
                     b.Navigation("Members");
                 });
 
