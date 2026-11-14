@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   const { state, refresh } = useOnboarding();
 
   onMounted(() => refresh().catch(() => {}));
@@ -10,7 +11,7 @@
 <template>
   <HomeStrip v-if="state?.showSetupStrip" label="Your known words" icon="material-symbols:info-outline-rounded" to="/welcome" cta="Take the word check">
     <template v-if="knownWords > 0 && grammarMissing > 0">
-      You know {{ knownWords.toLocaleString() }} words, but {{ grammarMissing.toLocaleString() }} basic grammar
+      You know {{ formatNumber(knownWords) }} words, but {{ formatNumber(grammarMissing) }} basic grammar
       {{ grammarMissing === 1 ? "word isn't" : "words aren't" }} marked yet.
     </template>
     <template v-else>Tell Jiten what you already know to see your coverage of every title.</template>

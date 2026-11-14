@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { Line } from 'vue-chartjs';
   import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Filler, Tooltip, type ChartData, type ChartOptions } from 'chart.js';
   import type { SiteStatsMonthPoint } from '~/types';
@@ -44,7 +45,7 @@
         displayColors: false,
         callbacks: {
           title: (items) => formatMonth(props.points[items[0]!.dataIndex]!.month, true),
-          label: (item) => `${props.label}: ${(item.raw as number).toLocaleString('en-US')}`,
+          label: (item) => `${props.label}: ${formatNumber(item.raw as number)}`,
         },
       },
     },

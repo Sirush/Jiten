@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useApiFetch, useApiFetchPaginated } from '~/composables/useApiFetch';
   import { readDescribeQuery } from '~/utils/describeQuery';
   import type { DescriptionSearchResponse } from '~/types/types';
@@ -1244,7 +1245,7 @@
           >"<template v-if="describeMediaTypeLabel">, {{ describeMediaTypeLabel }} only</template>.
           <template v-if="totalItems > 0">
             <button type="button" class="text-primary-500 hover:underline cursor-pointer" @click="searchTitlesInstead">
-              {{ totalItems.toLocaleString() }} {{ totalItems === 1 ? 'title matches' : 'titles match' }} this text
+              {{ formatNumber(totalItems) }} {{ totalItems === 1 ? 'title matches' : 'titles match' }} this text
             </button>
           </template>
           <button v-else type="button" class="text-primary-500 hover:underline cursor-pointer" @click="searchTitlesInstead">Search titles instead</button>
@@ -1276,8 +1277,8 @@
           v-for="(deck, index) in describeDecks"
           :key="deck.deckId"
           :deck="deck"
-          :lazy-cover="index >= 3"
-          :class="index >= 3 ? '[content-visibility:auto] [contain-intrinsic-size:auto_30rem] p-1 -m-1' : ''"
+          :cover-loading="deckCardCoverLoading(index)"
+          :class="deckCardRenderClass(index)"
           @update:deck="updateDescribedDeck"
         />
       </div>
@@ -1333,8 +1334,8 @@
             v-for="(deck, index) in visibleDecks"
             :key="deck.deckId"
             :deck="deck"
-            :lazy-cover="index >= 3"
-            :class="index >= 3 ? '[content-visibility:auto] [contain-intrinsic-size:auto_30rem] p-1 -m-1' : ''"
+            :cover-loading="deckCardCoverLoading(index)"
+            :class="deckCardRenderClass(index)"
             @update:deck="updateDeckInList"
           />
         </div>

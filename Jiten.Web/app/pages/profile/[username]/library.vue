@@ -916,8 +916,8 @@
                     v-for="(deck, index) in activeGroup.decks"
                     :key="deck.deckId"
                     :deck="deck"
-                    :lazy-cover="index >= 3"
-                    :class="index >= 3 ? '[content-visibility:auto] [contain-intrinsic-size:auto_30rem] p-1 -m-1' : ''"
+                    :cover-loading="deckCardCoverLoading(index)"
+                    :class="deckCardRenderClass(index)"
                     :read-only-list="!isOwnProfile"
                     show-score
                     @update:deck="updateDeckInList"

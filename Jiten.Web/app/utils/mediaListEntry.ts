@@ -1,3 +1,4 @@
+import { formatNumber } from '~/utils/formatNumber';
 import { DeckStatus, MediaListEntryState, MediaType } from '~/types/enums';
 import type { Deck, MediaListEntry, MediaListEntrySummary } from '~/types/types';
 import { getChildrenCountText } from '~/utils/mediaTypeMapper';
@@ -164,7 +165,7 @@ export function releaseDateChoice(releaseDate: string | Date | null | undefined,
 const compact = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 
 export function formatCharacters(count: number): string {
-  return count < 10_000 ? count.toLocaleString() : compact.format(count);
+  return count < 10_000 ? formatNumber(count) : compact.format(count);
 }
 
 /** A closed pass without a date gets no fact unless `undated` asks for one. */

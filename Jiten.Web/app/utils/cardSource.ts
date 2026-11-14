@@ -1,3 +1,4 @@
+import { formatNumber } from '~/utils/formatNumber';
 import { CardBatchKind, CardSource } from '~/types/enums';
 import type { CardBatch, CardBatchDeck } from '~/types/types';
 import { getDeckStatusText } from '~/utils/deckStatusMapper';
@@ -46,7 +47,7 @@ export function batchDetail(batch: Pick<CardBatch, 'details' | 'deck'>, localise
     case CardBatchKind.PartsOfKnown:
       return 'Parts of words you know';
     case CardBatchKind.FrequencyRange:
-      return minRank != null && maxRank != null ? `Ranks ${minRank.toLocaleString()} to ${maxRank.toLocaleString()}` : null;
+      return minRank != null && maxRank != null ? `Ranks ${formatNumber(minRank)} to ${formatNumber(maxRank)}` : null;
     case CardBatchKind.MediaDeck:
       return batch.deck ? localiseTitle(batch.deck) : null;
     case CardBatchKind.MediaList:
@@ -56,7 +57,7 @@ export function batchDetail(batch: Pick<CardBatch, 'details' | 'deck'>, localise
       return 'The common words you know';
     case CardBatchKind.ReadingCheck:
       if (units == null) return null;
-      return units === 1 ? '1 volume or work' : `${units.toLocaleString()} volumes and works`;
+      return units === 1 ? '1 volume or work' : `${formatNumber(units)} volumes and works`;
     case CardBatchKind.WaniKaniLevels:
       if (maxLevel == null) return null;
       return maxLevel === 1 ? 'Level 1' : `Levels 1 to ${maxLevel}`;

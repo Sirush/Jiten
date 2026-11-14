@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useToast } from 'primevue/usetoast';
   import type { DeckDetail } from '~/types';
   import { MetadataEditActor, MetadataEditStatus, type MetadataDeckHistory, type MetadataHistoryItem, type MetadataRevertResult } from '~/types/metadataEdits';
@@ -149,7 +150,7 @@
           <span class="hidden md:inline"> - Edit history</span>
         </h1>
         <p class="m-0 text-sm text-muted-color min-h-5">
-          <template v-if="history">{{ total.toLocaleString() }} {{ total === 1 ? 'edit' : 'edits' }}</template>
+          <template v-if="history">{{ formatNumber(total) }} {{ total === 1 ? 'edit' : 'edits' }}</template>
         </p>
       </div>
       <Button as="router-link" :to="`/decks/media/${deckId}/edit`" label="Suggest an edit" icon="pi pi-pencil" severity="secondary" />

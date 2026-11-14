@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { debounce } from 'perfect-debounce';
   import { useConfirm } from 'primevue/useconfirm';
   import { useToast } from 'primevue/usetoast';
@@ -41,15 +42,15 @@
     if (!m) return [];
     const approvalRate = m.decided30d ? Math.round((m.approved30d / m.decided30d) * 100) : null;
     return [
-      { label: 'Waiting for review', value: m.pending.toLocaleString(), hint: m.oldestPendingHours == null ? 'Queue is empty' : `Oldest ${hoursText(m.oldestPendingHours)}` },
-      { label: 'Live, unreviewed', value: m.liveUnreviewed.toLocaleString(), hint: `${m.autoApplied30d.toLocaleString()} went live without review in 30 days` },
+      { label: 'Waiting for review', value: formatNumber(m.pending), hint: m.oldestPendingHours == null ? 'Queue is empty' : `Oldest ${hoursText(m.oldestPendingHours)}` },
+      { label: 'Live, unreviewed', value: formatNumber(m.liveUnreviewed), hint: `${formatNumber(m.autoApplied30d)} went live without review in 30 days` },
       { label: 'Median wait for a decision', value: hoursText(m.medianHoursToDecision30d), hint: 'Last 30 days' },
       {
         label: 'Decisions in 30 days',
-        value: m.decided30d.toLocaleString(),
-        hint: approvalRate == null ? 'None yet' : `${approvalRate}% approved, ${m.reverted30d.toLocaleString()} reverted`,
+        value: formatNumber(m.decided30d),
+        hint: approvalRate == null ? 'None yet' : `${approvalRate}% approved, ${formatNumber(m.reverted30d)} reverted`,
       },
-      { label: 'Submissions in 30 days', value: m.submissions30d.toLocaleString(), hint: `${m.withdrawn30d.toLocaleString()} withdrawn by their authors` },
+      { label: 'Submissions in 30 days', value: formatNumber(m.submissions30d), hint: `${formatNumber(m.withdrawn30d)} withdrawn by their authors` },
     ];
   });
 
@@ -334,9 +335,9 @@
             <tbody>
               <tr v-for="week in metrics.weeks" :key="week.weekStart" class="border-t border-surface-200 dark:border-surface-700">
                 <td class="py-1">{{ formatDayMonth(week.weekStart) }}</td>
-                <td class="py-1 text-right">{{ week.submissions.toLocaleString() }}</td>
-                <td class="py-1 text-right">{{ week.decisions.toLocaleString() }}</td>
-                <td class="py-1 text-right">{{ week.autoApplied.toLocaleString() }}</td>
+                <td class="py-1 text-right">{{ formatNumber(week.submissions) }}</td>
+                <td class="py-1 text-right">{{ formatNumber(week.decisions) }}</td>
+                <td class="py-1 text-right">{{ formatNumber(week.autoApplied) }}</td>
               </tr>
             </tbody>
           </table>

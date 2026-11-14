@@ -1,3 +1,4 @@
+import { formatNumber } from '~/utils/formatNumber';
 export interface JpdbImportDeck {
   name: string;
   vocabularyCount: number;
@@ -23,8 +24,8 @@ export function jpdbListName(name: string) {
 export function jpdbImportLimitReason(selected: JpdbImportDeck[], existing: JpdbImportExistingDeck[], limits: JpdbImportLimits): string {
   const oversized = selected.filter((d) => d.vocabularyCount > limits.importWords);
   if (oversized.length === 1)
-    return `"${oversized[0]!.name}" has ${oversized[0]!.vocabularyCount.toLocaleString()} words, over the ${limits.importWords.toLocaleString()}-word limit per deck.`;
-  if (oversized.length > 1) return `${oversized.length} selected decks are over the ${limits.importWords.toLocaleString()}-word limit per deck.`;
+    return `"${oversized[0]!.name}" has ${formatNumber(oversized[0]!.vocabularyCount)} words, over the ${formatNumber(limits.importWords)}-word limit per deck.`;
+  if (oversized.length > 1) return `${oversized.length} selected decks are over the ${formatNumber(limits.importWords)}-word limit per deck.`;
 
   const incoming = new Map<string, number>();
   for (const d of selected) {
@@ -44,7 +45,7 @@ export function jpdbImportLimitReason(selected: JpdbImportDeck[], existing: Jpdb
   const incomingWords = [...incoming.values()].reduce((sum, n) => sum + n, 0);
   const total = retainedWords + incomingWords;
   if (total > limits.studyDeckWords)
-    return `Your word lists would reach about ${total.toLocaleString()} words, over the ${limits.studyDeckWords.toLocaleString()}-word limit.`;
+    return `Your word lists would reach about ${formatNumber(total)} words, over the ${formatNumber(limits.studyDeckWords)}-word limit.`;
 
   return '';
 }

@@ -1,3 +1,4 @@
+import { formatNumber } from '~/utils/formatNumber';
 import type { Reading, ResolvedFrequencyRank, StudySettingsDto } from '~/types';
 import { getMediaTypeText } from './mediaTypeMapper';
 
@@ -48,7 +49,7 @@ export function rowRankLabel(
   reading: Pick<Reading, 'frequencyRank' | 'frequencyRankSource' | 'isFrequencyFallback'>,
   requestedSourceLabel?: string
 ): { rank: string; source: string | null; hint: string | null } {
-  const rank = reading.frequencyRank > 0 ? reading.frequencyRank.toLocaleString() : '\u2014';
+  const rank = reading.frequencyRank > 0 ? formatNumber(reading.frequencyRank) : '\u2014';
   if (!requestedSourceLabel) return { rank, source: null, hint: null };
   if (reading.isFrequencyFallback) {
     return { rank, source: 'global', hint: fallbackRankHint(requestedSourceLabel) };

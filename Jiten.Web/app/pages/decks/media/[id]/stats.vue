@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { DeckCoverageStats, CurveDatum, DeckDetail, DeckDifficultyDto } from '~/types';
   import { DifficultyValueDisplayStyle } from '~/types';
   import { useApiFetch, useApiFetchPaginated } from '~/composables/useApiFetch';
@@ -170,11 +171,11 @@
         <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 pt-2">
           <div v-for="milestone in sortedMilestones" :key="milestone.percentage">
             <div class="text-sm text-gray-500 dark:text-gray-400">{{ milestone.percentage }} Coverage</div>
-            <div class="text-xl font-bold">{{ milestone.words.toLocaleString() }} words</div>
+            <div class="text-xl font-bold">{{ formatNumber(milestone.words) }} words</div>
           </div>
           <div>
             <div class="text-sm text-gray-500 dark:text-gray-400">Total Words</div>
-            <div class="text-2xl font-bold">{{ stats?.totalUniqueWords.toLocaleString() }}</div>
+            <div class="text-2xl font-bold">{{ stats ? formatNumber(stats.totalUniqueWords) : '' }}</div>
           </div>
         </div>
       </template>

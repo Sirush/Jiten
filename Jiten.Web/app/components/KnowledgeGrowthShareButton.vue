@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useToast } from 'primevue/usetoast';
   import type { KnowledgeGrowth } from '~/types';
   import { createBitmapLoader, currentExportPalette, drawSeriesCard, saveCanvasPng } from '~/utils/imageExport';
@@ -28,7 +29,7 @@
         palette,
         logo: logoBitmap,
         kicker: 'WORDS LEARNED OVER TIME',
-        stat: (combined[combined.length - 1] ?? 0).toLocaleString(),
+        stat: formatNumber(combined[combined.length - 1] ?? 0),
         statSuffix: 'words learned',
         subtitle: `since ${startLabel}`,
         line: known,

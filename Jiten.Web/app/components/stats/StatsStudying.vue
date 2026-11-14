@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { SiteStatsStudiedDeck } from '~/types';
   import { coverUrl } from '~/utils/coverImage';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
@@ -27,7 +28,7 @@
             <span class="block text-xs text-gray-500 dark:text-gray-400">{{ getMediaTypeText(deck.mediaType) }}</span>
           </span>
           <span class="text-right leading-tight">
-            <span class="block text-sm font-bold tabular-nums">{{ deck.learners.toLocaleString('en-US') }}</span>
+            <span class="block text-sm font-bold tabular-nums">{{ formatNumber(deck.learners) }}</span>
             <span class="block text-xs text-gray-500 dark:text-gray-400">learners</span>
           </span>
         </NuxtLink>

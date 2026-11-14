@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { ref } from 'vue';
   import { useToast } from 'primevue/usetoast';
   import { extractApiError } from '~/utils/toast';
@@ -138,7 +139,7 @@
           />
           <div class="mt-2 text-right text-sm text-gray-600 dark:text-gray-400">
             Characters left:
-            <b>{{ (200000 - userText.length).toLocaleString() }}</b>
+            <b>{{ formatNumber(200000 - userText.length) }}</b>
           </div>
         </div>
         <div class="flex flex-col sm:flex-row gap-3 items-center justify-center">

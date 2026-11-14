@@ -10,7 +10,7 @@ export function useNotifications() {
   const notifications = ref<NotificationDto[]>([]);
   const totalCount = ref(0);
   const unreadCount = sharedUnreadCount;
-  const isLoading = ref(false);
+  const isLoading = ref(true);
   const error = ref<Error | null>(null);
 
   const fetchNotifications = async (

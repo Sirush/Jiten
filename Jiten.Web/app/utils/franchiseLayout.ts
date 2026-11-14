@@ -1,3 +1,4 @@
+import { formatNumber } from '~/utils/formatNumber';
 import type { RouteLocationRaw } from 'vue-router';
 import { DeckRelationshipType } from '~/types/enums';
 import type { Franchise, FranchiseEdge, FranchiseNode } from '~/types/types';
@@ -43,7 +44,7 @@ export function franchiseHasSideLinks(edges: FranchiseEdge[]): boolean {
 
 export function franchiseEntryCountLabel(shown: number, total: number): string {
   const noun = total === 1 ? 'entry' : 'entries';
-  return shown === total ? `${total.toLocaleString()} ${noun}` : `${shown.toLocaleString()} of ${total.toLocaleString()} ${noun}`;
+  return shown === total ? `${formatNumber(total)} ${noun}` : `${formatNumber(shown)} of ${formatNumber(total)} ${noun}`;
 }
 
 /** Edges between two present decks, without the legacy series/setting types. */

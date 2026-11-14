@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { MAX_CHARACTERS_READ, rawPercentOf } from '~/utils/mediaListEntry';
 
   const props = defineProps<{
@@ -86,11 +87,11 @@
   }
 
   const inputValue = computed(() => (draft.value == null && (hasFallback.value || !props.completed) ? null : effective.value));
-  const placeholder = computed(() => (hasFallback.value ? props.fallback!.toLocaleString() : 'Not counted'));
+  const placeholder = computed(() => (hasFallback.value ? formatNumber(props.fallback!) : 'Not counted'));
 
   const fallbackNote = computed(() => {
     if (!hasFallback.value) return null;
-    const fallback = props.fallback!.toLocaleString();
+    const fallback = formatNumber(props.fallback!);
     if (draft.value == null) return `Added up from its ${props.fallbackFrom}`;
     if (props.completed || draft.value > props.fallback!) return `Replaces the ${fallback} its ${props.fallbackFrom} add up to`;
     return `The ${props.fallbackFrom} adds up to ${fallback} which is higher and you might want to use instead.`;
@@ -107,7 +108,7 @@
       <span>{{ label ?? 'Characters read' }}</span>
       <span v-if="hasSlider" class="tabular-nums">
         <span class="font-semibold" :class="percent > 100 ? 'text-primary-600 dark:text-primary-300' : 'text-gray-800 dark:text-gray-100'">{{ percent }}%</span>
-        of {{ deckCharacters.toLocaleString() }} characters
+        of {{ formatNumber(deckCharacters) }} characters
       </span>
     </div>
 
@@ -119,7 +120,7 @@
         :max="100"
         :step="1"
         class="flex-1 min-w-0"
-        :aria-label="`${label ?? 'Characters read'}, as a percentage of ${deckCharacters.toLocaleString()} characters`"
+        :aria-label="`${label ?? 'Characters read'}, as a percentage of ${formatNumber(deckCharacters)} characters`"
       />
       <InputNumber
         :model-value="inputValue"

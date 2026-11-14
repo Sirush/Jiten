@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { SiteStatsWordsForCoverage } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { roundToHundred } from '~/utils/siteStats';
@@ -81,7 +82,7 @@
           <tr v-for="row in rows" :key="row.mediaType" class="border-t border-surface-200 dark:border-surface-700">
             <th scope="row" class="text-left font-normal py-1.5 pr-3 whitespace-nowrap">{{ row.name }}</th>
             <td v-for="(rank, i) in row.ranks" :key="i" class="text-right tabular-nums font-medium py-1.5 px-2" :class="shade(rank)">
-              {{ rank === null ? '-' : roundToHundred(rank).toLocaleString('en-US') }}
+              {{ rank === null ? '-' : formatNumber(roundToHundred(rank)) }}
             </td>
           </tr>
         </tbody>

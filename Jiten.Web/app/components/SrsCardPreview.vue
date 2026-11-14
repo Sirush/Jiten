@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { StudySettingsDto } from '~/types';
   import { resolveCardLayout } from '~/utils/cardLayout';
   import { cardBlockRegistry } from '~/components/srs/card-blocks/cardBlockRegistry';
@@ -78,7 +79,7 @@
           <!-- Top bar: frequency rank (back only) -->
           <div class="relative z-30 flex justify-end items-center min-h-[1.25rem]">
             <div v-if="showFrequencyRankChrome" class="text-xs text-gray-400" :class="context.showBackgroundImage.value ? 'dark:!text-white' : undefined">
-              #{{ SAMPLE.frequencyRank.toLocaleString() }}
+              #{{ formatNumber(SAMPLE.frequencyRank) }}
             </div>
           </div>
 

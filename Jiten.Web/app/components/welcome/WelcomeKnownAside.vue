@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { CardBatch, PaginatedResponse } from '~/types/types';
 
   const props = defineProps<{ since: string | null; refreshKey: number }>();
@@ -33,14 +34,14 @@
   <aside class="rounded-xl border border-gray-200 dark:border-neutral-700 bg-white dark:bg-neutral-900 p-5 flex flex-col gap-3.5">
     <span class="text-[11px] font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">Your known words</span>
     <div v-if="loaded" class="flex items-baseline gap-2">
-      <span class="text-4xl font-bold tabular-nums">{{ (totalWordsAmount ?? 0).toLocaleString() }}</span>
+      <span class="text-4xl font-bold tabular-nums">{{ formatNumber(totalWordsAmount ?? 0) }}</span>
       <span class="text-sm text-gray-600 dark:text-gray-300">words</span>
     </div>
     <Skeleton v-else width="8rem" height="2.5rem" />
     <ul v-if="sessionBatches.length > 0" class="flex flex-col gap-2 text-sm">
       <li v-for="batch in sessionBatches" :key="batch.batchId" class="flex justify-between gap-3">
         <span class="text-gray-700 dark:text-gray-300 truncate">{{ cardSourceDisplay(batch.source).label }}</span>
-        <span class="font-semibold tabular-nums">{{ batch.wordCount.toLocaleString() }}</span>
+        <span class="font-semibold tabular-nums">{{ formatNumber(batch.wordCount) }}</span>
       </li>
     </ul>
     <p

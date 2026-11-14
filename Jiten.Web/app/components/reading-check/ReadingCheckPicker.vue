@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { debounce } from 'perfect-debounce';
   import type { MediaSuggestion } from '~/types/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
@@ -288,7 +289,7 @@
       <p class="flex-1 text-sm text-gray-700 dark:text-gray-300" aria-live="polite">
         <template v-if="startHint">{{ startHint }}</template>
         <template v-else-if="count && count.candidates > 0">
-          <span class="font-bold text-gray-900 dark:text-white tabular-nums">{{ count.candidates.toLocaleString() }} words</span>
+          <span class="font-bold text-gray-900 dark:text-white tabular-nums">{{ formatNumber(count.candidates) }} words</span>
           you met at least 5 times across {{ count.units }} {{ count.units === 1 ? 'volume or work' : 'volumes and works' }}
         </template>
         <template v-else-if="counting">Counting words</template>

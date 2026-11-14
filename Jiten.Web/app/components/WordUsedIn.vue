@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { WordSummary, UsedInPage } from '~/types';
 
   const props = defineProps<{
@@ -109,7 +110,7 @@
         </NuxtLink>
         <div class="flex-1 min-w-0 flex flex-col">
           <span v-if="component.frequencyRank" class="text-[10px] text-surface-500 dark:text-surface-400 leading-none self-end">
-            #{{ component.frequencyRank.toLocaleString() }}
+            #{{ formatNumber(component.frequencyRank) }}
           </span>
           <span v-if="component.mainDefinition" class="text-surface-600 dark:text-surface-400 text-xs line-clamp-2 mt-0.5">
             {{ component.mainDefinition }}

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { DeckDetail, DeckIPlusOneSentence, DeckIPlusOneSentencesResponse, SentenceSegmentBar, StudyDeckDto, Word, WordSummary } from '~/types';
   import { DeckOrder, KnownState, MediaType, StudyDeckType } from '~/types';
   import { useApiFetchPaginated } from '~/composables/useApiFetch';
@@ -277,7 +278,7 @@
                   step.word.mainDefinition
                 }}</span>
               </NuxtLink>
-              <span class="text-right text-sm tabular-nums font-semibold text-green-700 dark:text-green-400">+{{ step.unlocked.toLocaleString() }}</span>
+              <span class="text-right text-sm tabular-nums font-semibold text-green-700 dark:text-green-400">+{{ formatNumber(step.unlocked) }}</span>
               <span class="text-right text-sm tabular-nums text-gray-600 dark:text-gray-300">{{ formatPercent(step.readableAfter) }}</span>
               <div class="justify-self-end self-center">
                 <VocabularyStatus :word="step.statusWord" @changed="(states) => onStatusChanged(step.word, states)" />
@@ -304,7 +305,7 @@
             <div v-for="milestone in milestones" :key="milestone.percent">
               <div class="text-sm text-gray-500 dark:text-gray-400">{{ milestone.percent }}% readable</div>
               <div class="text-xl font-bold tabular-nums">
-                {{ milestone.words == null ? 'Over 2,000 words' : `${milestone.words.toLocaleString()} ${milestone.words === 1 ? 'word' : 'words'}` }}
+                {{ milestone.words == null ? 'Over 2,000 words' : `${formatNumber(milestone.words)} ${milestone.words === 1 ? 'word' : 'words'}` }}
               </div>
             </div>
           </div>
@@ -323,7 +324,7 @@
           <p v-else-if="mineFailed && mineSentences.length === 0" class="text-gray-500 dark:text-gray-400">Couldn't load the sentences just now.</p>
           <p v-else-if="mineSentences.length === 0" class="text-gray-500 dark:text-gray-400">None of this title's example sentences are i+1 for you.</p>
           <template v-else>
-            <p class="text-sm text-gray-500 dark:text-gray-400 mb-2">{{ mineTotal.toLocaleString() }} sentences</p>
+            <p class="text-sm text-gray-500 dark:text-gray-400 mb-2">{{ formatNumber(mineTotal) }} sentences</p>
             <ul class="flex flex-col divide-y divide-surface-200 dark:divide-surface-700">
               <li v-for="(group, index) in mineGroups" :key="`${group.key}-${index}`" class="py-4 first:pt-0 flex flex-col gap-2">
                 <div class="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
@@ -336,7 +337,7 @@
                     <span v-if="group.word.mainDefinition" class="text-sm text-gray-600 dark:text-gray-300">{{ group.word.mainDefinition }}</span>
                   </NuxtLink>
                   <span v-if="group.wordSentences" class="text-xs text-gray-500 dark:text-gray-400 tabular-nums whitespace-nowrap">
-                    {{ group.wordSentences.toLocaleString() }} {{ group.wordSentences === 1 ? 'sentence' : 'sentences' }}
+                    {{ formatNumber(group.wordSentences) }} {{ group.wordSentences === 1 ? 'sentence' : 'sentences' }}
                   </span>
                 </div>
                 <ExampleSentenceEntry

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { debounce } from 'perfect-debounce';
   import { useToast } from 'primevue/usetoast';
   import type { Deck, MediaSuggestion, Tag } from '~/types';
@@ -579,10 +580,10 @@
               <NuxtLink :to="`/decks/media/${deckId}/detail`" class="font-semibold truncate" v-bind="japaneseTextAttrs(title)">{{ title }}</NuxtLink>
               <span class="text-xs text-muted-color">
                 {{ getMediaTypeText(editable.mediaType) }}<template v-if="editable.releaseYear">, {{ editable.releaseYear }}</template
-                >, {{ editable.characterCount.toLocaleString() }} characters
+                >, {{ formatNumber(editable.characterCount) }} characters
               </span>
               <NuxtLink :to="`/decks/media/${deckId}/history`" class="text-xs">
-                See edit history ({{ editable.historyCount.toLocaleString() }} {{ editable.historyCount === 1 ? 'edit' : 'edits' }})
+                See edit history ({{ formatNumber(editable.historyCount) }} {{ editable.historyCount === 1 ? 'edit' : 'edits' }})
               </NuxtLink>
             </div>
           </div>
@@ -870,7 +871,7 @@
           <section :class="sectionClass" aria-labelledby="names-heading">
             <div :class="sectionHeadClass">
               <h2 id="names-heading" class="m-0 text-base font-bold">Character names</h2>
-              <span class="text-xs text-muted-color tabular-nums">{{ (draft.characterNames.length + addedSurfaceCount).toLocaleString() }} names</span>
+              <span class="text-xs text-muted-color tabular-nums">{{ formatNumber(draft.characterNames.length + addedSurfaceCount) }} names</span>
             </div>
             <div class="p-4 grid gap-4">
               <p class="m-0 text-sm text-muted-color">
@@ -958,7 +959,7 @@
               <MetadataEditField
                 label="Description"
                 input-id="f-desc"
-                :count="`${draft.description.length.toLocaleString()} / ${MAX_DESCRIPTION_LENGTH.toLocaleString()}`"
+                :count="`${formatNumber(draft.description.length)} / ${formatNumber(MAX_DESCRIPTION_LENGTH)}`"
                 v-bind="fieldBindings(MetadataField.Description)"
               >
                 <Textarea

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { SiteStatsKnownWords } from '~/types';
   import { floorToHundred, rankLabel } from '~/utils/siteStats';
 
@@ -13,9 +14,9 @@
   <StatsSection v-if="bars.length && knownWords.learners > 0" title="How many words learners know">
     <p class="m-0">
       The median learner knows
-      <b class="tabular-nums text-primary-700 dark:text-primary-300">{{ Math.round(knownWords.median).toLocaleString('en-US') }}</b> words.
+      <b class="tabular-nums text-primary-700 dark:text-primary-300">{{ formatNumber(Math.round(knownWords.median)) }}</b> words.
       <template v-if="knownWords.p75 >= 100">
-        One in four knows over <b class="tabular-nums text-primary-700 dark:text-primary-300">{{ floorToHundred(knownWords.p75).toLocaleString('en-US') }}</b
+        One in four knows over <b class="tabular-nums text-primary-700 dark:text-primary-300">{{ formatNumber(floorToHundred(knownWords.p75)) }}</b
         >.
       </template>
     </p>
@@ -28,7 +29,7 @@
           >{{ Math.round(bar.share) }}%</span
         >
         <div class="w-full rounded-t-sm bg-primary-500 dark:bg-primary-400" :style="{ height: `${Math.max(bar.share, 0.5)}%` }" />
-        <span class="sr-only">{{ Math.round(bar.share) }}% know at least {{ bar.words.toLocaleString('en-US') }} words</span>
+        <span class="sr-only">{{ Math.round(bar.share) }}% know at least {{ formatNumber(bar.words) }} words</span>
       </div>
     </div>
     <div class="flex gap-1 sm:gap-2 -mt-2" aria-hidden="true">

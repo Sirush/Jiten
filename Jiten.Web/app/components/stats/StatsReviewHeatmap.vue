@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { SiteStatsHeatmap } from '~/types';
   import { heatStep } from '~/utils/siteStats';
 
@@ -37,7 +38,7 @@
     v-if="max > 0"
     title="When people review"
     subtitle="Last 90 days, in their own time zone"
-    :note="`From the ${heatmap.learners.toLocaleString('en-US')} learners who have set a study time zone.`"
+    :note="`From the ${formatNumber(heatmap.learners)} learners who have set a study time zone.`"
   >
     <div class="overflow-x-auto -mx-1 px-1">
       <div class="grid gap-[2px] min-w-[30rem] text-[11px] text-gray-500 dark:text-gray-400" style="grid-template-columns: 2.25rem repeat(24, minmax(0, 1fr))" role="img" :aria-label="summary">
@@ -50,7 +51,7 @@
             :key="hour"
             class="aspect-square rounded-[2px]"
             :class="STEP_CLASSES[heatStep(value, max)]"
-            :title="`${DAYS[day]} ${hour}:00, ${value.toLocaleString('en-US')} reviews`"
+            :title="`${DAYS[day]} ${hour}:00, ${formatNumber(value)} reviews`"
           />
         </template>
       </div>

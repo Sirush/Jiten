@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   const props = withDefaults(
     defineProps<{
       previousLink: object | null;
@@ -179,7 +180,7 @@
             aria-label="Go to page"
             @keyup.enter="jump"
           />
-          <span :class="compactClass">/ {{ totalPages.toLocaleString() }}</span>
+          <span :class="compactClass">/ {{ formatNumber(totalPages) }}</span>
         </template>
         <span v-else>Page {{ currentPage }} of {{ totalPages }}</span>
       </div>
@@ -202,16 +203,16 @@
 
     <p v-if="showSummary" class="text-sm text-surface-500 dark:text-surface-400">
       Showing
-      <span class="font-medium text-surface-700 dark:text-surface-200">{{ start.toLocaleString() }}-{{ end.toLocaleString() }}</span>
+      <span class="font-medium text-surface-700 dark:text-surface-200">{{ formatNumber(start) }}-{{ formatNumber(end) }}</span>
       of
-      <span class="font-medium text-surface-700 dark:text-surface-200">{{ totalItems.toLocaleString() }}</span>
+      <span class="font-medium text-surface-700 dark:text-surface-200">{{ formatNumber(totalItems) }}</span>
       {{ label }}
     </p>
   </div>
 
   <div v-if="mobileCompact" class="flex items-center justify-between gap-2 text-sm text-surface-500 dark:text-surface-400 md:hidden">
     <span>
-      <span class="font-medium text-surface-700 dark:text-surface-200">{{ totalItems.toLocaleString() }}</span>
+      <span class="font-medium text-surface-700 dark:text-surface-200">{{ formatNumber(totalItems) }}</span>
       {{ label }}
     </span>
     <div v-if="totalPages > 1" class="flex items-center gap-0.5">
@@ -231,7 +232,7 @@
       <Button v-else severity="secondary" text size="small" disabled class="min-w-8!" aria-label="Previous page">
         <Icon name="material-symbols:chevron-left-rounded" size="1.25em" />
       </Button>
-      <span class="tabular-nums">{{ currentPage }} / {{ totalPages.toLocaleString() }}</span>
+      <span class="tabular-nums">{{ currentPage }} / {{ formatNumber(totalPages) }}</span>
       <Button
         v-if="nextLink"
         as="router-link"

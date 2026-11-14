@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { formatDateTime } from '~/utils/dateFormat';
 
   const props = defineProps<{ setId: number }>();
@@ -122,7 +123,7 @@
 
   watch(rule, () => (preview.value = null), { deep: true });
 
-  const formatCount = (n: number) => n.toLocaleString('en-US');
+  const formatCount = (n: number) => formatNumber(n);
   const forms = (n: number) => `${formatCount(n)} ${n === 1 ? 'form' : 'forms'}`;
 
   function fillForm(saved: WordSetRule | null) {

@@ -58,7 +58,7 @@
   const rows = ref<SeriesSummary[]>([]);
   const total = ref(0);
   const offset = ref(0);
-  const loading = ref(false);
+  const loading = ref(true);
   const listError = ref('');
 
   async function loadList() {
@@ -288,7 +288,7 @@
             class="overflow-hidden rounded-lg shadow-md"
             @page="onPage"
           >
-            <template #empty>
+            <template v-if="!loading" #empty>
               <p class="m-0 py-6 text-center text-gray-500 dark:text-gray-400">
                 {{ query || kindFilter ? 'Nothing matches this search.' : 'No series yet. Create one here, or from the franchise builder.' }}
               </p>

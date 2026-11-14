@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import Popover from 'primevue/popover';
   import type { WordFrequencyRanks } from '~/types';
 
@@ -109,7 +110,7 @@
 <template>
   <span class="inline-flex flex-col leading-tight" :class="align === 'right' ? 'items-end' : 'items-start'">
     <span class="inline-flex items-center gap-1 whitespace-nowrap">
-      <span>Rank #{{ rank > 0 ? rank.toLocaleString() : '—' }}</span>
+      <span>Rank #{{ rank > 0 ? formatNumber(rank) : '—' }}</span>
       <button
         type="button"
         class="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded text-surface-500 dark:text-surface-400 hover:bg-surface-100 dark:hover:bg-surface-700 cursor-pointer"
@@ -142,7 +143,7 @@
         >
           <i class="w-3 text-center text-[0.65rem]" :class="row.value === currentValue ? 'pi pi-check' : ''" />
           <span class="truncate">{{ row.label }}</span>
-          <span class="ml-auto pl-3 tabular-nums text-xs">#{{ row.rank.toLocaleString() }}</span>
+          <span class="ml-auto pl-3 tabular-nums text-xs">#{{ formatNumber(row.rank) }}</span>
         </button>
 
         <template v-if="authStore.isAuthenticated">
@@ -165,7 +166,7 @@
               <i class="w-3 text-center text-[0.65rem]" :class="row.value === currentValue ? 'pi pi-check' : ''" />
               <span class="truncate max-w-40">{{ row.label }}</span>
               <span class="ml-auto pl-3 tabular-nums text-xs" :class="row.rank === 0 ? 'text-surface-400 italic' : ''">
-                {{ row.rank > 0 ? `#${row.rank.toLocaleString()}` : 'not in list' }}
+                {{ row.rank > 0 ? `#${formatNumber(row.rank)}` : 'not in list' }}
               </span>
             </button>
           </template>

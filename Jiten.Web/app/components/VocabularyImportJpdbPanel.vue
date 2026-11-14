@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { debounce } from 'perfect-debounce';
   import type { JpdbDeck, JpdbImportSummary } from '~/composables/useJpdbApi';
   import { StudyDeckType } from '~/types';
@@ -393,7 +394,7 @@
                       <span v-if="exceedsImportWords(deck)" class="text-xs text-red-600 dark:text-red-400 shrink-0">too large</span>
                       <span v-if="deck.isBuiltIn" class="text-xs text-gray-500 dark:text-gray-400 shrink-0">built-in</span>
                       <span class="text-sm text-gray-600 dark:text-gray-400 shrink-0 tabular-nums"
-                        >{{ deck.vocabularyCount.toLocaleString() }}<span class="hidden sm:inline"> words</span></span
+                        >{{ formatNumber(deck.vocabularyCount) }}<span class="hidden sm:inline"> words</span></span
                       >
                     </li>
                   </ul>

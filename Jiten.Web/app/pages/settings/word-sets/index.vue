@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { WordSetDto, UserWordSetSubscriptionDto } from '~/types/types';
   import { WordSetStateType } from '~/types';
   import { autoLinkUrls } from '~/utils/autoLinkUrls';
@@ -143,7 +144,7 @@
                   <span class="text-xl font-semibold">{{ sub.name }}</span>
                   <Tag :value="getStateLabel(sub.state)" :severity="getStateSeverity(sub.state)" />
                 </div>
-                <p class="text-muted-color mt-1">{{ sub.wordCount.toLocaleString() }} words &middot; {{ sub.formCount.toLocaleString() }} forms</p>
+                <p class="text-muted-color mt-1">{{ formatNumber(sub.wordCount) }} words &middot; {{ formatNumber(sub.formCount) }} forms</p>
               </div>
             </template>
             <template #content>
@@ -187,7 +188,7 @@
             <template #header>
               <div class="p-5 pb-0">
                 <span class="text-xl font-semibold">{{ set.name }}</span>
-                <p class="text-muted-color mt-1">{{ set.wordCount.toLocaleString() }} words &middot; {{ set.formCount.toLocaleString() }} forms</p>
+                <p class="text-muted-color mt-1">{{ formatNumber(set.wordCount) }} words &middot; {{ formatNumber(set.formCount) }} forms</p>
               </div>
             </template>
             <template #content>

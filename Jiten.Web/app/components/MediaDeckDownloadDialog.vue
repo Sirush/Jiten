@@ -1,6 +1,14 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { type DeckCard, type StudyDeckDto, StudyDeckType, DeckDownloadType, DeckFormat, DeckOrder, MediaType } from '~/types';
-  import { SelectButton, Select, Slider, InputNumber, Checkbox, Dialog, Button, ProgressSpinner } from 'primevue';
+  import SelectButton from 'primevue/selectbutton';
+  import Select from 'primevue/select';
+  import Slider from 'primevue/slider';
+  import InputNumber from 'primevue/inputnumber';
+  import Checkbox from 'primevue/checkbox';
+  import Dialog from 'primevue/dialog';
+  import Button from 'primevue/button';
+  import ProgressSpinner from 'primevue/progressspinner';
   import { debounce } from 'perfect-debounce';
   import { useAuthStore } from '~/stores/authStore';
   import { studyDeckPresentation } from '~/utils/studyDeckPresentation';
@@ -818,7 +826,7 @@
     <div v-if="guestDownloadResult" class="p-5 flex flex-col gap-4">
       <p class="text-gray-800 dark:text-gray-200">
         <span class="font-semibold">{{ guestDownloadResult.title }}</span
-        ><template v-if="guestDownloadResult.count !== null">, {{ guestDownloadResult.count.toLocaleString() }} words</template>.
+        ><template v-if="guestDownloadResult.count !== null">, {{ formatNumber(guestDownloadResult.count) }} words</template>.
       </p>
       <p
         class="rounded-lg border border-primary-200 dark:border-primary-800 bg-primary-50 dark:bg-primary-950/40 p-4 text-sm leading-relaxed text-gray-800 dark:text-gray-200"

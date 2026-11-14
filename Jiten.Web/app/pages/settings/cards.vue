@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { ref, computed } from 'vue';
   import { useConfirm } from 'primevue/useconfirm';
   import { useToast } from 'primevue/usetoast';
@@ -607,7 +608,7 @@
               />
 
               <span v-if="card.frequencyRank" class="text-xs text-surface-400 tabular-nums row-start-1 col-start-1 sm:order-2 sm:shrink-0">
-                #{{ card.frequencyRank.toLocaleString() }}
+                #{{ formatNumber(card.frequencyRank) }}
               </span>
 
               <div class="hidden sm:block sm:flex-1 sm:order-3" />

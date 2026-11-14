@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useApiFetch } from '~/composables/useApiFetch';
   import type { GlobalStats, SiteStats } from '~/types';
   import { formatCompact, formatSnapshotDate } from '~/utils/siteStats';
@@ -64,7 +65,7 @@
       <dl v-if="globalStats" class="grid grid-cols-2 gap-3 m-0 max-w-md">
         <div class="rounded-lg border border-surface-200 bg-surface-0 px-4 py-3 dark:border-surface-700 dark:bg-surface-900 flex flex-col-reverse">
           <dt class="text-sm text-gray-600 dark:text-gray-400">Titles analysed</dt>
-          <dd class="m-0 text-2xl font-bold tabular-nums">{{ globalStats.totalMedia.toLocaleString('en-US') }}</dd>
+          <dd class="m-0 text-2xl font-bold tabular-nums">{{ formatNumber(globalStats.totalMedia) }}</dd>
         </div>
         <div class="rounded-lg border border-surface-200 bg-surface-0 px-4 py-3 dark:border-surface-700 dark:bg-surface-900 flex flex-col-reverse">
           <dt class="text-sm text-gray-600 dark:text-gray-400">Characters parsed</dt>

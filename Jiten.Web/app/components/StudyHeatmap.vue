@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { StudyHeatmapResponse } from '~/types';
   import { MONTHS_SHORT, formatWeekdayDayMonth } from '~/utils/dateFormat';
 
@@ -252,11 +253,11 @@
         </div>
         <div>
           <span class="text-sm text-gray-500 dark:text-gray-400">Days studied:</span>
-          <span class="font-semibold tabular-nums ml-1">{{ heatmapData.totalReviewDays.toLocaleString() }}</span>
+          <span class="font-semibold tabular-nums ml-1">{{ formatNumber(heatmapData.totalReviewDays) }}</span>
         </div>
         <div>
           <span class="text-sm text-gray-500 dark:text-gray-400">{{ rolling ? 'Reviews in the last 12 months:' : 'Reviews this year:' }}</span>
-          <span class="font-semibold tabular-nums ml-1">{{ heatmapData.totalReviews.toLocaleString() }}</span>
+          <span class="font-semibold tabular-nums ml-1">{{ formatNumber(heatmapData.totalReviews) }}</span>
         </div>
       </div>
 

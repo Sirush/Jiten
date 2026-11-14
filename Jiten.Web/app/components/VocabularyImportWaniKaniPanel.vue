@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { createWaniKaniClient, WANIKANI_STAGE_OPTIONS, WaniKaniApiError, type WaniKaniProgressPhase } from '~/utils/waniKaniApi';
 
   const emit = defineEmits<{ changed: [] }>();
@@ -44,7 +45,7 @@
         severity: 'success',
         detail:
           data.words > 0
-            ? `Added ${data.words.toLocaleString()} words, ${data.forms.toLocaleString()} forms from WaniKani ${range}.`
+            ? `Added ${formatNumber(data.words)} words, ${formatNumber(data.forms)} forms from WaniKani ${range}.`
             : `All words from WaniKani ${range} are already in the vocabulary.`,
         life: 5000,
       });
@@ -95,14 +96,14 @@
       const user = await client.getUser();
 
       const words = await client.getStudiedWords(minStage.value, (phase, loaded, total) => {
-        progress.value = `${PHASE_LABELS[phase]} for ${user.username}: ${loaded.toLocaleString()} of ${total.toLocaleString()}`;
+        progress.value = `${PHASE_LABELS[phase]} for ${user.username}: ${formatNumber(loaded)} of ${formatNumber(total)}`;
       });
       if (words.length === 0) {
         accountResult.value = { received: 0, words: 0, forms: 0, matched: 0, unmatched: 0, unmatchedWords: [] };
         return;
       }
 
-      progress.value = `Adding ${words.length.toLocaleString()} words…`;
+      progress.value = `Adding ${formatNumber(words.length)} words…`;
       const data = await $api<AccountImportResult>('user/vocabulary/import-from-wanikani', { method: 'POST', body: { words } });
       accountResult.value = { ...data, received: words.length };
       await nextTick();
@@ -160,7 +161,7 @@
           </div>
           <p class="min-h-5 text-sm text-surface-600 dark:text-surface-300" aria-live="polite">
             <template v-if="wordCount != null">
-              <span class="font-semibold tabular-nums text-surface-900 dark:text-surface-0">{{ wordCount.toLocaleString() }}</span>
+              <span class="font-semibold tabular-nums text-surface-900 dark:text-surface-0">{{ formatNumber(wordCount) }}</span>
               words will be added as mastered.
             </template>
           </p>
@@ -209,14 +210,14 @@
             <Message v-if="accountResult.received === 0" severity="info" :closable="false">No vocabulary at this stage on the account.</Message>
             <Message v-else severity="success" :closable="false">
               <template v-if="accountResult.words > 0">
-                Added {{ accountResult.words.toLocaleString() }} words, {{ accountResult.forms.toLocaleString() }} forms from
-                {{ accountResult.received.toLocaleString() }} WaniKani words.
+                Added {{ formatNumber(accountResult.words) }} words, {{ formatNumber(accountResult.forms) }} forms from
+                {{ formatNumber(accountResult.received) }} WaniKani words.
               </template>
-              <template v-else>All {{ accountResult.matched.toLocaleString() }} matched WaniKani words are already in the vocabulary.</template>
+              <template v-else>All {{ formatNumber(accountResult.matched) }} matched WaniKani words are already in the vocabulary.</template>
             </Message>
             <div v-if="accountResult.unmatched > 0" class="text-sm">
               <p class="mb-1 text-surface-600 dark:text-surface-300">
-                Not in the dictionary ({{ accountResult.unmatched.toLocaleString() }}):
+                Not in the dictionary ({{ formatNumber(accountResult.unmatched) }}):
               </p>
               <p class="max-h-32 overflow-y-auto rounded border border-surface-200 p-2 font-noto-sans dark:border-surface-700" lang="ja">
                 {{ accountResult.unmatchedWords.join('、') }}

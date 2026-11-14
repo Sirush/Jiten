@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { CharacterNameSurface, CharacterNameSurfaceStatus } from '~/types/metadataEdits';
 
   const props = defineProps<{
@@ -33,7 +34,7 @@
     return { text: 'All found in the text', tone: TONE.ok };
   });
 
-  const presence = (s: CharacterNameSurface) => (s.occurrences != null ? `${s.occurrences.toLocaleString()} in text` : s.found ? 'In the text' : 'Not in the text');
+  const presence = (s: CharacterNameSurface) => (s.occurrences != null ? `${formatNumber(s.occurrences)} in text` : s.found ? 'In the text' : 'Not in the text');
 
   /** Splits an excerpt around each occurrence so the name can be highlighted without v-html. */
   function excerptParts(excerpt: string, surface: string): { text: string; match: boolean }[] {

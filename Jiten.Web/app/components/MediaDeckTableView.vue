@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { type MediaListDeck, DeckStatus, MediaType } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { formatScore } from '~/utils/formatScore';
@@ -69,7 +70,7 @@
               <span v-if="deck.score != null" class="font-semibold tabular-nums text-gray-700 dark:text-gray-200">Score {{ formatScore(deck.score) }}</span>
               <span v-if="deck.discussionReplyCount > 0" class="flex items-center gap-1" :title="discussionReplyLabel(deck.discussionReplyCount)">
                 <i class="pi pi-comments text-[10px]" aria-hidden="true" />
-                <span class="tabular-nums" aria-hidden="true">{{ deck.discussionReplyCount.toLocaleString() }}</span>
+                <span class="tabular-nums" aria-hidden="true">{{ formatNumber(deck.discussionReplyCount) }}</span>
                 <span class="sr-only">{{ discussionReplyLabel(deck.discussionReplyCount) }}</span>
               </span>
               <span v-for="fact in listEntryLine" :key="fact" class="text-gray-600 dark:text-gray-300">{{ fact }}</span>
@@ -85,7 +86,7 @@
             </div>
             <div v-else class="flex flex-col items-center w-20">
               <div class="text-xs text-gray-600 dark:text-gray-300">Characters</div>
-              <div class="font-medium tabular-nums">{{ deck.characterCount.toLocaleString() }}</div>
+              <div class="font-medium tabular-nums">{{ formatNumber(deck.characterCount) }}</div>
             </div>
 
             <div v-if="runtimeLabel" class="flex flex-col items-center w-16">
@@ -95,17 +96,17 @@
 
             <div class="flex flex-col items-center w-18">
               <div class="text-xs text-gray-600 dark:text-gray-300">Words</div>
-              <div class="font-medium tabular-nums">{{ deck.wordCount.toLocaleString() }}</div>
+              <div class="font-medium tabular-nums">{{ formatNumber(deck.wordCount) }}</div>
             </div>
 
             <div class="flex flex-col items-center w-22">
               <div class="text-xs text-gray-600 dark:text-gray-300">Uniq Words</div>
-              <div class="font-medium tabular-nums">{{ deck.uniqueWordCount.toLocaleString() }}</div>
+              <div class="font-medium tabular-nums">{{ formatNumber(deck.uniqueWordCount) }}</div>
             </div>
 
             <div class="flex flex-col items-center w-14">
               <div class="text-xs text-gray-600 dark:text-gray-300">Kanji</div>
-              <div class="font-medium tabular-nums">{{ deck.uniqueKanjiCount.toLocaleString() }}</div>
+              <div class="font-medium tabular-nums">{{ formatNumber(deck.uniqueKanjiCount) }}</div>
             </div>
 
             <div class="flex flex-col items-center w-22" :class="{ invisible: deck.averageSentenceLength === 0 || deck.hideAverageSentenceLength }">

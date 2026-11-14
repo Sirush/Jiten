@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import type { MediaType } from '~/types/enums';
 
@@ -21,11 +22,11 @@
 
   const statsItems = computed(() => {
     const items = [
-      { label: 'Character count:', value: props.characterCount?.toLocaleString() ?? 'N/A' },
-      { label: 'Words:', value: props.wordCount?.toLocaleString() ?? 'N/A' },
-      { label: 'Unique Words:', value: props.uniqueWordCount?.toLocaleString() ?? 'N/A' },
-      { label: 'Unique Kanji:', value: props.uniqueKanjiCount?.toLocaleString() ?? 'N/A' },
-      { label: 'Kanji (1-occurence):', value: props.uniqueKanjiUsedOnceCount?.toLocaleString() ?? 'N/A' },
+      { label: 'Character count:', value: props.characterCount == null ? 'N/A' : formatNumber(props.characterCount) },
+      { label: 'Words:', value: props.wordCount == null ? 'N/A' : formatNumber(props.wordCount) },
+      { label: 'Unique Words:', value: props.uniqueWordCount == null ? 'N/A' : formatNumber(props.uniqueWordCount) },
+      { label: 'Unique Kanji:', value: props.uniqueKanjiCount == null ? 'N/A' : formatNumber(props.uniqueKanjiCount) },
+      { label: 'Kanji (1-occurence):', value: props.uniqueKanjiUsedOnceCount == null ? 'N/A' : formatNumber(props.uniqueKanjiUsedOnceCount) },
     ];
 
     if (props.averageSentenceLength !== 0 && !props.hideAverageSentenceLength) {

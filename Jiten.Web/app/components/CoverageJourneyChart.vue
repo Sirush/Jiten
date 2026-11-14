@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { Line } from 'vue-chartjs';
   import {
     Chart as ChartJS,
@@ -157,7 +158,7 @@
   }));
 
   function formatValue(value: number): string {
-    return isCount.value ? value.toLocaleString() : `${value.toFixed(1)}%`;
+    return isCount.value ? formatNumber(value) : `${value.toFixed(1)}%`;
   }
 
   function rawValue(label: string | undefined, index: number): number {
@@ -166,7 +167,7 @@
   }
 
   function formatTick(value: number | string): string {
-    if (isCount.value) return Number(value).toLocaleString();
+    if (isCount.value) return formatNumber(Number(value));
     return formatCoverageTick(Number(value), linearDecimals.value);
   }
 

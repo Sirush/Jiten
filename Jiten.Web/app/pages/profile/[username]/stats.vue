@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import {
     MediaType,
     type ProfileBar,
@@ -30,7 +31,7 @@
     const s = stats.value;
     if (!s) return [];
     const result: { label: string; value: string }[] = [];
-    if (s.titlesFinished != null) result.push({ label: 'Titles finished', value: s.titlesFinished.toLocaleString('en-US') });
+    if (s.titlesFinished != null) result.push({ label: 'Titles finished', value: formatNumber(s.titlesFinished) });
     if (s.characters != null) result.push({ label: 'Characters', value: formatCompact(s.characters) });
     if (s.meanScore != null) result.push({ label: `Mean score (${s.scoredCount} scored)`, value: s.meanScore.toFixed(1) });
     return result;
@@ -92,7 +93,7 @@
   /** Width that fits a label such as "Jan 26" and a value such as "99.4K" on every column, so none are thinned out. */
   const MONTH_COLUMN_WIDTH = 40;
 
-  const titlesText = (count: number) => `${count.toLocaleString('en-US')} ${count === 1 ? 'title' : 'titles'}`;
+  const titlesText = (count: number) => `${formatNumber(count)} ${count === 1 ? 'title' : 'titles'}`;
 
   const profileMonthGroupingIsMonth = computed(() => jitenStore.profileMonthGrouping !== 'year');
 
@@ -252,19 +253,19 @@
     const completed = getCompletedDisplay(a.mediaType, a.completedUnitCount, a.completedDeckCount);
     const inProgress = a.unfinishedCharacterCount ?? 0;
     const tiles: { label: string; value: string; sub?: string }[] = [
-      { label: completed?.label ?? 'Completed', value: (completed?.value ?? a.completedDeckCount).toLocaleString('en-US'), sub: completed?.sub },
+      { label: completed?.label ?? 'Completed', value: formatNumber(completed?.value ?? a.completedDeckCount), sub: completed?.sub },
     ];
     if (stats.value?.characters != null)
       tiles.push({
         label: 'Characters',
-        value: (a.totalCharacterCount + inProgress).toLocaleString('en-US'),
-        sub: inProgress > 0 ? `Including ${inProgress.toLocaleString('en-US')} in titles in progress` : undefined,
+        value: formatNumber(a.totalCharacterCount + inProgress),
+        sub: inProgress > 0 ? `Including ${formatNumber(inProgress)} in titles in progress` : undefined,
       });
     tiles.push(
-      { label: 'Words', value: a.totalWordCount.toLocaleString('en-US') },
-      { label: 'Unique words', value: a.uniqueWordCount.toLocaleString('en-US') },
-      { label: 'Words seen once', value: a.uniqueWordUsedOnceCount.toLocaleString('en-US') },
-      { label: 'Unique kanji', value: a.uniqueKanjiCount.toLocaleString('en-US') }
+      { label: 'Words', value: formatNumber(a.totalWordCount) },
+      { label: 'Unique words', value: formatNumber(a.uniqueWordCount) },
+      { label: 'Words seen once', value: formatNumber(a.uniqueWordUsedOnceCount) },
+      { label: 'Unique kanji', value: formatNumber(a.uniqueKanjiCount) }
     );
     return tiles;
   });

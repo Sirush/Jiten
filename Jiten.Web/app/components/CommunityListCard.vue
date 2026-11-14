@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { CommunityListStatus } from '~/types';
   import type { CommunityListSummary } from '~/types/types';
   import { COMMUNITY_LIST_STATUS_TEXT } from '~/composables/useCommunityLists';
@@ -65,11 +66,11 @@
       <div class="mt-auto flex items-center gap-3 pt-1 text-sm whitespace-nowrap text-muted-color">
         <span class="flex items-center gap-1" :aria-label="`${list.itemCount} ${list.itemCount === 1 ? 'title' : 'titles'}`">
           <i class="pi pi-book text-xs" aria-hidden="true" />
-          {{ list.itemCount.toLocaleString() }}
+          {{ formatNumber(list.itemCount) }}
         </span>
         <span v-if="list.favouriteCount > 0" class="flex items-center gap-1" :aria-label="`${list.favouriteCount} favourites`">
           <i class="pi text-xs" :class="list.isFavourited ? 'pi-heart-fill text-pink-600 dark:text-pink-400' : 'pi-heart'" aria-hidden="true" />
-          {{ list.favouriteCount.toLocaleString() }}
+          {{ formatNumber(list.favouriteCount) }}
         </span>
         <ClientOnly>
           <Tooltip :content="`Updated ${formatDateLong(list.updatedAt)}`">

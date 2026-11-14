@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { MetadataContributions } from '~/types/metadataEdits';
   import { useApiFetch } from '~/composables/useApiFetch';
 
@@ -42,7 +43,7 @@
       <template v-if="data">
         <div v-for="stat in stats" :key="stat.label" class="flex flex-col gap-0.5">
           <dt class="text-xs text-muted-color">{{ stat.label }}</dt>
-          <dd class="m-0 text-2xl font-bold tabular-nums">{{ stat.value.toLocaleString() }}</dd>
+          <dd class="m-0 text-2xl font-bold tabular-nums">{{ formatNumber(stat.value) }}</dd>
         </div>
       </template>
       <template v-else>

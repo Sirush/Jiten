@@ -1,8 +1,9 @@
+import { formatNumber } from '~/utils/formatNumber';
 import { formatDateOmitCurrentYear } from '~/utils/dateFormat';
 
 export type FsrsParametersSource = 'default' | 'optimised' | 'auto' | 'edited' | 'legacy';
 
-const reviewsText = (count: number) => `${count.toLocaleString('en-US')} ${count === 1 ? 'review' : 'reviews'}`;
+const reviewsText = (count: number) => `${formatNumber(count)} ${count === 1 ? 'review' : 'reviews'}`;
 
 const SOURCE_TEXT: Record<FsrsParametersSource, { label: string; line: string; fitted?: boolean }> = {
   auto: { label: 'Automatic update', line: 'Updated automatically', fitted: true },

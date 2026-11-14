@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useConfirm } from 'primevue/useconfirm';
   import { useToast } from 'primevue/usetoast';
   import { CommunityListStatus, type Genre } from '~/types';
@@ -470,7 +471,7 @@
         <Message v-if="overItemCap" severity="warn" :closable="false">
           This list is over the {{ maxItems }}-title limit for your plan. You can still edit, reorder and remove titles, but you can't add new ones.
           <template v-if="quota && maxItems < quota.fullMaxItems">
-            <NuxtLink to="/jiten-plus" class="font-semibold">Jiten+</NuxtLink> raises the limit to {{ quota.fullMaxItems.toLocaleString() }}.
+            <NuxtLink to="/jiten-plus" class="font-semibold">Jiten+</NuxtLink> raises the limit to {{ formatNumber(quota.fullMaxItems) }}.
           </template>
         </Message>
         <Message v-else-if="remaining === 0" severity="secondary" :closable="false">This list is full. Remove a title to add another.</Message>

@@ -32,7 +32,7 @@ describe('batchDetail', () => {
   });
 
   it('formats ranges, units and media lists', () => {
-    expect(detail({ kind: CardBatchKind.FrequencyRange, minRank: 1, maxRank: 5000 })).toBe(`Ranks 1 to ${(5000).toLocaleString()}`);
+    expect(detail({ kind: CardBatchKind.FrequencyRange, minRank: 1, maxRank: 5000 })).toBe('Ranks 1 to 5,000');
     expect(detail({ kind: CardBatchKind.WaniKaniLevels, maxLevel: 1 })).toBe('Level 1');
     expect(detail({ kind: CardBatchKind.WaniKaniLevels, maxLevel: 22 })).toBe('Levels 1 to 22');
     expect(detail({ kind: CardBatchKind.WaniKaniProgress })).toBe('Account progress');

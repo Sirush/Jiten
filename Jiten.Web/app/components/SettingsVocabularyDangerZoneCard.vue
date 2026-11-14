@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useConfirm } from 'primevue/useconfirm';
   import { formatDateShort } from '~/utils/dateFormat';
 
@@ -64,7 +65,7 @@
       toast.add({
         severity: 'success',
         summary: 'Rebuild queued',
-        detail: `Cleared ${(result?.clearedDays ?? 0).toLocaleString()} stored day${result?.clearedDays === 1 ? '' : 's'}. Your study activity chart and streaks are being recalculated and will be back shortly.`,
+        detail: `Cleared ${formatNumber(result?.clearedDays ?? 0)} stored day${result?.clearedDays === 1 ? '' : 's'}. Your study activity chart and streaks are being recalculated and will be back shortly.`,
         life: 6000,
       });
       emit('changed');
@@ -117,10 +118,10 @@
         severity: 'success',
         summary: 'Review history erased',
         detail:
-          `Deleted ${(result?.deletedLogs ?? 0).toLocaleString()} reviews` +
-          (cards > 0 ? `, and removed ${cards.toLocaleString()} card${cards === 1 ? '' : 's'} left with no history` : '') +
-          (archives > 0 ? `, and cleared the history on ${archives.toLocaleString()} removed card${archives === 1 ? '' : 's'}` : '') +
-          (dropped > 0 ? `. ${dropped.toLocaleString()} removed card${dropped === 1 ? '' : 's'} left Recently Removed for good` : '') +
+          `Deleted ${formatNumber(result?.deletedLogs ?? 0)} reviews` +
+          (cards > 0 ? `, and removed ${formatNumber(cards)} card${cards === 1 ? '' : 's'} left with no history` : '') +
+          (archives > 0 ? `, and cleared the history on ${formatNumber(archives)} removed card${archives === 1 ? '' : 's'}` : '') +
+          (dropped > 0 ? `. ${formatNumber(dropped)} removed card${dropped === 1 ? '' : 's'} left Recently Removed for good` : '') +
           '. Your schedules are being recalculated in the background.',
         life: 6000,
       });

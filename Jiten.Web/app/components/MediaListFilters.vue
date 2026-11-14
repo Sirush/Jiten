@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { useApiFetch } from '~/composables/useApiFetch';
   import type { Tag } from '~/types';
   import { getAllGenres } from '~/utils/genreMapper';
@@ -145,11 +146,11 @@
 
   const genreLabel = (value: number, label: string): string => {
     if (!hasGenreFacets.value) return label;
-    return `${label} (${(props.genreCounts[value] ?? 0).toLocaleString()})`;
+    return `${label} (${formatNumber(props.genreCounts[value] ?? 0)})`;
   };
   const tagLabel = (tagId: number, name: string): string => {
     const count = props.tagCounts[tagId];
-    return hasTagFacets.value && count != null ? `${name} (${count.toLocaleString()})` : name;
+    return hasTagFacets.value && count != null ? `${name} (${formatNumber(count)})` : name;
   };
 
   const genreEntries = computed<TagCloudEntry[]>(() =>
@@ -279,7 +280,7 @@
     return activeFilterCount.value > 0 ? String(activeFilterCount.value) : null;
   });
 
-  const deckCountLabel = computed(() => (props.deckCount == null ? 'Show results' : `Show ${props.deckCount.toLocaleString()} decks`));
+  const deckCountLabel = computed(() => (props.deckCount == null ? 'Show results' : `Show ${formatNumber(props.deckCount)} decks`));
 
   const toggle = (event: Event) => {
     if (isMobile.value) {

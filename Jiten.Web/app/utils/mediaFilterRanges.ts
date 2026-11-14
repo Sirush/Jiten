@@ -1,3 +1,4 @@
+import { formatNumber } from '~/utils/formatNumber';
 import type { Ref } from 'vue';
 import { formatRangeSummary, type RangeBounds } from '~/utils/rangeFilters';
 
@@ -71,7 +72,7 @@ export const formatRangeValue = (spec: MediaRangeSpec, value: number): string =>
   const text =
     spec.grouping === false
       ? value.toFixed(digits)
-      : value.toLocaleString(undefined, { minimumFractionDigits: digits, maximumFractionDigits: digits });
+      : formatNumber(value, { minimumFractionDigits: digits, maximumFractionDigits: digits });
   return `${text}${spec.suffix ?? ''}`;
 };
 

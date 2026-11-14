@@ -89,7 +89,7 @@
 
     <div ref="previewEl" class="card-preview">
       <div v-if="previewDeck" inert>
-        <MediaDeckCard :deck="previewDeck" lazy-cover />
+        <MediaDeckCard :deck="previewDeck" cover-loading="lazy" />
       </div>
       <div
         v-else-if="failed.has(selectedType)"

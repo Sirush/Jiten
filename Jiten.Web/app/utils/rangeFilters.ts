@@ -1,3 +1,4 @@
+import { formatNumber } from '~/utils/formatNumber';
 const clamp = (val: number, min: number, max: number) => Math.min(max, Math.max(min, val));
 
 export type RangeBounds = { min: number | null; max: number | null };
@@ -14,7 +15,7 @@ export const clampRange = (min: number | null, max: number | null, floor: number
 export const formatRangeSummary = (
   min: number | null,
   max: number | null,
-  format: (value: number) => string = (value) => value.toLocaleString()
+  format: (value: number) => string = (value) => formatNumber(value)
 ): string | null => {
   if (min == null && max == null) return null;
   if (min != null && max != null) return min === max ? format(min) : `${format(min)} - ${format(max)}`;
@@ -26,7 +27,7 @@ export const rangeChipLabel = (
   label: string,
   min: number | null,
   max: number | null,
-  format: (value: number) => string = (value) => value.toLocaleString()
+  format: (value: number) => string = (value) => formatNumber(value)
 ): string | null => {
   const summary = formatRangeSummary(min, max, format);
   return summary === null ? null : `${label} ${summary}`;

@@ -1,9 +1,11 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { type MediaListDeck, LinkType, MediaType, DeckStatus } from '~/types';
   import Card from 'primevue/card';
   import TieredMenu from 'primevue/tieredmenu';
   import Popover from 'primevue/popover';
   import { coverUrl } from '~/utils/coverImage';
+  import type { CoverLoading } from '~/utils/deckCardList';
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { ordinal } from '~/utils/ordinal';
   import { getLinkLabel } from '~/utils/linkTypeMapper';
@@ -26,9 +28,8 @@
     hideControl?: boolean;
     hideDetailButton?: boolean;
     titleTag?: string;
-    // Set by list views for below-the-fold cards so their covers don't compete
-    // with the LCP image. Defaults to eager (single-card pages).
-    lazyCover?: boolean;
+    /** Unset means 'priority': single-card pages show the cover as their LCP image. */
+    coverLoading?: CoverLoading;
     // Guest homepage demo: shows the coverage bars without an authenticated user; hides rating and download to keep the card short.
     demoCoverage?: boolean;
     /** Opens the study dialog once mounted, for a visitor coming back from sign-up through the guest Study button. */
@@ -77,7 +78,7 @@
     if (deck.popularityGlobalRank) lines[0] += `, #${deck.popularityGlobalRank} across all media`;
     if (deck.popularityCounts) {
       const c = deck.popularityCounts;
-      lines.push(`${c.inLists.toLocaleString()} in lists · ${c.favourites.toLocaleString()} favourites · ${c.studyDecks.toLocaleString()} study decks`);
+      lines.push(`${formatNumber(c.inLists)} in lists · ${formatNumber(c.favourites)} favourites · ${formatNumber(c.studyDecks)} study decks`);
     }
     if (deck.isTrending) lines.push('Trending: has a spike of activity recently');
     return lines.join('\n');
@@ -457,7 +458,7 @@
     () => nextTick(measureTitleClip)
   );
 
-  const formatOnce = (count: number) => `${count.toLocaleString()} once`;
+  const formatOnce = (count: number) => `${formatNumber(count)} once`;
 
   const hiddenInDemo = new Set<MediaCardStatId>(['dialogue', 'readingDuration', 'externalRating']);
 
@@ -587,7 +588,7 @@
                 >
                   <i class="pi pi-comments utility-icon" />
                   <span v-if="deck.discussionReplyCount > 0" class="text-xs font-semibold leading-none tabular-nums text-gray-600 dark:text-gray-300">
-                    {{ deck.discussionReplyCount.toLocaleString() }}
+                    {{ formatNumber(deck.discussionReplyCount) }}
                   </span>
                 </NuxtLink>
               </Tooltip>
@@ -684,8 +685,8 @@
                         :alt="localiseTitle(deck)"
                         class="object-cover"
                         :class="hasLandscapeCover ? 'w-60 min-w-60 aspect-video rounded-md' : 'h-48 w-34 min-w-34'"
-                        :fetchpriority="lazyCover ? undefined : 'high'"
-                        :loading="lazyCover ? 'lazy' : 'eager'"
+                        :fetchpriority="(coverLoading ?? 'priority') === 'priority' ? 'high' : undefined"
+                        :loading="coverLoading === 'lazy' ? 'lazy' : 'eager'"
                         decoding="async"
                         :width="hasLandscapeCover ? 240 : 136"
                         :height="hasLandscapeCover ? 135 : 192"
@@ -720,7 +721,7 @@
                     <div v-for="(column, columnIndex) in statColumns" :key="columnIndex" class="min-w-0 @max-3xl:contents">
                       <template v-for="statId in column" :key="statId">
                         <div v-if="statId === 'speechDuration'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
-                          <Tooltip :content="'Total duration of speech, excluding silence.\nCharacter count: ' + deck.characterCount.toLocaleString()">
+                          <Tooltip :content="'Total duration of speech, excluding silence.\nCharacter count: ' + formatNumber(deck.characterCount)">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                               <span class="@xl:hidden">Speech time</span><span class="hidden @xl:inline">Speech duration</span>
                             </span>
@@ -732,15 +733,15 @@
                             <span class="@xl:hidden">Characters</span><span class="hidden @xl:inline">Character count</span>
                           </span>
                           <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
-                            deck.characterCount.toLocaleString()
+                            formatNumber(deck.characterCount)
                           }}</span>
                         </div>
                         <div v-else-if="statId === 'wordCount'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Word count</span>
-                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.wordCount.toLocaleString() }}</span>
+                          <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ formatNumber(deck.wordCount) }}</span>
                         </div>
                         <div v-else-if="statId === 'uniqueWords'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
-                          <Tooltip :content="'Words appearing exactly once: ' + deck.uniqueWordUsedOnceCount.toLocaleString()">
+                          <Tooltip :content="'Words appearing exactly once: ' + formatNumber(deck.uniqueWordUsedOnceCount)">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                               Unique words
                               <span class="hidden @xl:inline text-gray-600 dark:text-gray-400 text-xs tabular-nums"
@@ -749,11 +750,11 @@
                             </span>
                           </Tooltip>
                           <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
-                            deck.uniqueWordCount.toLocaleString()
+                            formatNumber(deck.uniqueWordCount)
                           }}</span>
                         </div>
                         <div v-else-if="statId === 'uniqueKanji'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
-                          <Tooltip :content="'Kanji appearing exactly once: ' + deck.uniqueKanjiUsedOnceCount.toLocaleString()">
+                          <Tooltip :content="'Kanji appearing exactly once: ' + formatNumber(deck.uniqueKanjiUsedOnceCount)">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                               Unique kanji
                               <span class="hidden @xl:inline text-gray-600 dark:text-gray-400 text-xs tabular-nums"
@@ -762,7 +763,7 @@
                             </span>
                           </Tooltip>
                           <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
-                            deck.uniqueKanjiCount.toLocaleString()
+                            formatNumber(deck.uniqueKanjiCount)
                           }}</span>
                         </div>
                         <div v-else-if="statId === 'averageSentenceLength'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
@@ -820,14 +821,14 @@
                               childrenLabel
                             }}</span>
                             <span class="tabular-nums font-semibold whitespace-nowrap text-primary-600 dark:text-primary-400">
-                              {{ deck.childrenDeckCount.toLocaleString() }}
+                              {{ formatNumber(deck.childrenDeckCount) }}
                               <i class="pi pi-arrow-right text-xs ml-0.5 transition-transform group-hover:translate-x-0.5" />
                             </span>
                           </router-link>
                           <div v-else :data-stat="statId" class="flex justify-between gap-2 stat-row">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">{{ childrenLabel }}</span>
                             <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
-                              deck.childrenDeckCount.toLocaleString()
+                              formatNumber(deck.childrenDeckCount)
                             }}</span>
                           </div>
                         </template>
@@ -847,7 +848,7 @@
                               readingSpeedLabel +
                               ':\n ' +
                               '<strong>' +
-                              readingSpeed.toLocaleString() +
+                              formatNumber(readingSpeed) +
                               '</strong>' +
                               ' characters per hour.\n<i>You can change it in the display settings.</i>'
                             "
@@ -874,7 +875,7 @@
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                             <span class="@xl:hidden">Appears</span><span class="hidden @xl:inline">Appears (times)</span>
                           </span>
-                          <span class="tabular-nums font-bold whitespace-nowrap">{{ deck.selectedWordOccurrences.toLocaleString() }}</span>
+                          <span class="tabular-nums font-bold whitespace-nowrap">{{ formatNumber(deck.selectedWordOccurrences) }}</span>
                         </div>
                       </template>
                     </div>

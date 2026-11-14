@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { Line } from 'vue-chartjs';
   import { Chart as ChartJS, LogarithmicScale, LinearScale, PointElement, LineElement, Filler, Tooltip, type ChartData, type ChartOptions } from 'chart.js';
   import type { SiteStatsFrequencyBand } from '~/types';
@@ -77,7 +78,7 @@
         callbacks: {
           title: (items) => {
             const band = props.bands[items[0]!.dataIndex]!;
-            return `Words ranked ${band.from.toLocaleString('en-US')} to ${band.to.toLocaleString('en-US')}`;
+            return `Words ranked ${formatNumber(band.from)} to ${formatNumber(band.to)}`;
           },
           label: (item) => {
             const band = props.bands[item.dataIndex]!;

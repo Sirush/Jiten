@@ -1,3 +1,4 @@
+import { formatNumber } from '~/utils/formatNumber';
 import type { SmartDeckSettings, SmartDeckSourceAction, SmartDeckStatusDto, SmartDeckUnitReportDto } from '~/types';
 import { useSrsStore } from '~/stores/srsStore';
 import { useToast } from 'primevue/usetoast';
@@ -132,7 +133,7 @@ export function useSmartDeck() {
       toast.add({
         severity: 'info',
         summary: 'Smart Deck rebuilt',
-        detail: count > 0 ? `${count.toLocaleString()} words total.` : 'No words matched your settings.',
+        detail: count > 0 ? `${formatNumber(count)} words total.` : 'No words matched your settings.',
         life: 4000,
       });
     }, attempt === 0 ? 35000 : 10000);

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { SiteStatsReading } from '~/types';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { formatCompact, isWatchedType, watchedFigure } from '~/utils/siteStats';
@@ -15,7 +16,7 @@
     detail: string;
   }
 
-  const learnerText = (n: number) => (n > 0 ? `${n.toLocaleString('en-US')} ${n === 1 ? 'learner' : 'learners'}` : '');
+  const learnerText = (n: number) => (n > 0 ? `${formatNumber(n)} ${n === 1 ? 'learner' : 'learners'}` : '');
   const typeLabel = (row: SiteStatsReading) => (row.mediaType === null ? 'Other' : getMediaTypeText(row.mediaType));
 
   const read = computed<Bar[]>(() =>
@@ -35,7 +36,7 @@
         key: String(row.mediaType),
         label: typeLabel(row),
         value: figure.value,
-        display: figure.value.toLocaleString('en-US'),
+        display: formatNumber(figure.value),
         detail: [figure.unit, learnerText(row.learners)].filter(Boolean).join(', '),
       }))
   );

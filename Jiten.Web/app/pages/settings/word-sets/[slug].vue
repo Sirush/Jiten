@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import type { WordSetDto, Word } from '~/types/types';
   import { WordSetStateType } from '~/types';
   import { autoLinkUrls } from '~/utils/autoLinkUrls';
@@ -253,7 +254,7 @@
           </div>
         </template>
         <template #subtitle>
-          <span class="text-muted-color">{{ wordSet.wordCount.toLocaleString() }} words &middot; {{ wordSet.formCount.toLocaleString() }} forms</span>
+          <span class="text-muted-color">{{ formatNumber(wordSet.wordCount) }} words &middot; {{ formatNumber(wordSet.formCount) }} forms</span>
         </template>
         <template #content>
           <p v-if="wordSet.description" class="text-sm mb-4" v-html="sanitiseHtml(autoLinkUrls(wordSet.description))" />

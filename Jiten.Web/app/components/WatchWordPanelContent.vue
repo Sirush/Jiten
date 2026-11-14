@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import Button from 'primevue/button';
   import Skeleton from 'primevue/skeleton';
   import { FsrsRating, KnownState, type Word } from '~/types';
@@ -73,7 +74,7 @@
         />
         <div v-if="conjugationText" class="text-xs text-surface-500 dark:text-surface-400">Conjugation: {{ conjugationText }}</div>
         <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-surface-500 dark:text-surface-400">
-          <span v-if="word.mainReading.frequencyRank > 0" class="tabular-nums">Rank #{{ word.mainReading.frequencyRank.toLocaleString() }}</span>
+          <span v-if="word.mainReading.frequencyRank > 0" class="tabular-nums">Rank #{{ formatNumber(word.mainReading.frequencyRank) }}</span>
           <VocabularyStatus :word="word" @changed="emit('changed')" />
         </div>
       </div>

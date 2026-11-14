@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   import { Bar } from 'vue-chartjs';
   import { Chart as ChartJS, BarElement, CategoryScale, LinearScale, Tooltip, Legend, type ChartOptions, type ChartData } from 'chart.js';
   import type { SentenceSegmentBar } from '~/types';
@@ -40,7 +41,7 @@
         callbacks: {
           title: (items) => props.segments[items[0]!.dataIndex]?.tooltipTitle ?? '',
           label: (item) => `${item.dataset.label}: ${Number(item.raw).toFixed(0)}%`,
-          footer: (items) => `Out of ${(props.segments[items[0]!.dataIndex]?.total ?? 0).toLocaleString()} sentences`,
+          footer: (items) => `Out of ${formatNumber(props.segments[items[0]!.dataIndex]?.total ?? 0)} sentences`,
         },
       },
     },

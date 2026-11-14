@@ -1,4 +1,5 @@
 <script setup lang="ts">
+  import { formatNumber } from '~/utils/formatNumber';
   const emit = defineEmits<{ changed: [] }>();
 
   const { $api } = useNuxtApp();
@@ -119,7 +120,7 @@
       toast.add({
         severity: 'success',
         summary: 'Bulk edit completed',
-        detail: `${result.affectedCount.toLocaleString()} card${result.affectedCount === 1 ? '' : 's'} affected.`,
+        detail: `${formatNumber(result.affectedCount)} card${result.affectedCount === 1 ? '' : 's'} affected.`,
         life: 5000,
       });
       emit('changed');
