@@ -124,6 +124,9 @@ public class YouTubeSubtitleCleanerTests
     [InlineData("UC6Xtu6v_op552SsOr5_jWrg", YouTubeSourceKind.Channel, "UC6Xtu6v_op552SsOr5_jWrg")]
     [InlineData("https://www.youtube.com/playlist?list=PLxxxxxxxxxxxxxxxxxxxx", YouTubeSourceKind.Playlist, "PLxxxxxxxxxxxxxxxxxxxx")]
     [InlineData("https://www.youtube.com/watch?v=abc&list=PLxxxxxxxxxxxxxxxxxxxx", YouTubeSourceKind.Playlist, "PLxxxxxxxxxxxxxxxxxxxx")]
+    [InlineData("https://www.youtube.com/show/VLPLHovnlOusNLiJz3sm0d5i2Evwa2LDLdrg", YouTubeSourceKind.Playlist, "PLHovnlOusNLiJz3sm0d5i2Evwa2LDLdrg")]
+    [InlineData("https://www.youtube.com/browse/VLPLHovnlOusNLiJz3sm0d5i2Evwa2LDLdrg", YouTubeSourceKind.Playlist, "PLHovnlOusNLiJz3sm0d5i2Evwa2LDLdrg")]
+    [InlineData("VLPLHovnlOusNLiJz3sm0d5i2Evwa2LDLdrg", YouTubeSourceKind.Playlist, "PLHovnlOusNLiJz3sm0d5i2Evwa2LDLdrg")]
     public void UrlParser_ResolvesSources(string input, YouTubeSourceKind expectedKind, string? expectedId)
     {
         YouTubeUrlParser.TryParse(input, out var kind, out var listingUrl, out var knownId).Should().BeTrue();
