@@ -7,6 +7,7 @@ using CsvHelper.Configuration;
 using Jiten.Api.Helpers;
 using Jiten.Cli;
 using Jiten.Core;
+using Jiten.Core.Data;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data.User;
 using Microsoft.EntityFrameworkCore;
@@ -216,11 +217,38 @@ public partial class DeckImportService(
                           })
                           .ToList();
 
+        await SetDictionaryReadings(matched);
+
         var previewToken = Guid.NewGuid().ToString("N");
         var db = redis.GetDatabase();
         await db.StringSetAsync($"import-preview:{previewToken}", JsonSerializer.Serialize(matched), PreviewTtl);
 
         return new ImportPreviewResponse { Matched = matched, Unmatched = [], TotalLines = matched.Count, PreviewToken = previewToken };
+    }
+
+    private async Task SetDictionaryReadings(List<ImportMatchedWord> matched)
+    {
+        if (matched.Count == 0) return;
+
+        var wordIds = matched.Select(m => m.WordId).Distinct().ToList();
+        await using var jitenContext = await contextFactory.CreateDbContextAsync();
+        var forms = await jitenContext.WordForms
+                                      .AsNoTracking()
+                                      .Where(f => wordIds.Contains(f.WordId))
+                                      .Select(f => new JmDictWordForm
+                                                   {
+                                                       WordId = f.WordId, ReadingIndex = f.ReadingIndex, Text = f.Text,
+                                                       RubyText = f.RubyText, FormType = f.FormType
+                                                   })
+                                      .ToListAsync();
+        var formsByWord = forms.GroupBy(f => f.WordId).ToDictionary(g => g.Key, g => g.ToList());
+
+        foreach (var word in matched)
+        {
+            if (!formsByWord.TryGetValue(word.WordId, out var wordForms)) continue;
+            var form = wordForms.FirstOrDefault(f => f.ReadingIndex == word.ReadingIndex);
+            if (form != null) word.Reading = RubyTextHelper.FormReading(form, wordForms);
+        }
     }
 
     private async Task<string> StoreEmpty()
@@ -241,23 +269,50 @@ public partial class DeckImportService(
             textCounts[t] = textCounts.GetValueOrDefault(t) + 1;
 
         var distinctTexts = textCounts.Keys.ToList();
-        var deckWords = await Parser.Parser.GetWordsDirectLookup(contextFactory, distinctTexts);
-        var matchedTexts = deckWords.Select(dw => dw.OriginalText).ToHashSet();
 
-        var matched = deckWords
-                      .GroupBy(dw => (dw.WordId, dw.ReadingIndex))
+        var annotated = new Dictionary<string, (string Word, string Reading)>();
+        foreach (var text in distinctTexts)
+        {
+            var (word, hints) = Parser.FuriganaHintExtractor.Extract(text);
+            if (hints.Length > 0)
+                annotated[text] = (word, Parser.FuriganaHintExtractor.ApplyReadings(word, hints));
+        }
+
+        var surfaces = distinctTexts.Select(t => annotated.TryGetValue(t, out var a) ? a.Word : t).Distinct().ToList();
+        var bySurface = (await Parser.Parser.GetWordsDirectLookup(contextFactory, surfaces))
+                        .GroupBy(dw => dw.OriginalText)
+                        .ToDictionary(g => g.Key, g => g.First());
+        var byReading = annotated.Count > 0
+            ? await Parser.Parser.GetWordsDirectLookupByReading(contextFactory, annotated.Values.Distinct().ToList())
+            : [];
+
+        var resolved = new List<(DeckWord Word, int Occurrences)>();
+        var unmatched = new List<string>();
+        foreach (var text in distinctTexts)
+        {
+            DeckWord? deckWord;
+            if (annotated.TryGetValue(text, out var pair))
+                deckWord = byReading.GetValueOrDefault(pair) ?? bySurface.GetValueOrDefault(pair.Word);
+            else
+                deckWord = bySurface.GetValueOrDefault(text);
+
+            if (deckWord == null) unmatched.Add(text);
+            else resolved.Add((deckWord, textCounts[text]));
+        }
+
+        var matched = resolved
+                      .GroupBy(r => (r.Word.WordId, r.Word.ReadingIndex))
                       .Select(g =>
                       {
-                          var first = g.First();
-                          var occurrences = g.Sum(dw => textCounts.GetValueOrDefault(dw.OriginalText, 1));
+                          var first = g.First().Word;
                           return new ImportMatchedWord
                                  {
                                      WordId = first.WordId, ReadingIndex = first.ReadingIndex, Text = first.OriginalText,
-                                     Reading = first.SudachiReading, Occurrences = occurrences
+                                     Reading = first.SudachiReading, Occurrences = g.Sum(r => r.Occurrences)
                                  };
                       }).ToList();
 
-        var unmatched = distinctTexts.Where(t => !matchedTexts.Contains(t)).ToList();
+        await SetDictionaryReadings(matched);
 
         var previewToken = Guid.NewGuid().ToString("N");
         var db = redis.GetDatabase();

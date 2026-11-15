@@ -189,6 +189,51 @@ public class FuriganaHintExtractorTests
         relocated.Should().BeEmpty();
     }
 
+    [Theory]
+    [InlineData("{羚'かも}{羊'しか}", "羚羊", "かもしか")]
+    [InlineData("{羚羊'かもしか}", "羚羊", "かもしか")]
+    [InlineData("お{取'と}り{寄'よ}せ", "お取り寄せ", "おとりよせ")]
+    public void ApplyReadings_ReplacesHintedBasesAndKeepsKana(string annotated, string expectedWord, string expectedReading)
+    {
+        var (cleanText, hints) = FuriganaHintExtractor.Extract(annotated);
+
+        cleanText.Should().Be(expectedWord);
+        FuriganaHintExtractor.ApplyReadings(cleanText, hints).Should().Be(expectedReading);
+    }
+
+    [Fact]
+    public void RelocateToCleanedOriginal_SkipsEarlierUnhintedOccurrenceOfTheSameKanji()
+    {
+        var (cleanText, hints) = FuriganaHintExtractor.Extract("来月末で一七歳です。なら{一'ひと}{月'つき}分上だ");
+
+        var relocated = FuriganaHintExtractor.RelocateToCleanedOriginal(cleanText, hints, cleanText);
+
+        relocated.Should().Equal(hints);
+    }
+
+    [Fact]
+    public void RelocateToCleanedOriginal_FollowsRemovedAndReplacedCharacters()
+    {
+        var (cleanText, hints) = FuriganaHintExtractor.Extract("一人で\n「一 緒!」 と{一'ひと}{言'こと}。Hello world, this is a long aside. {一'いち}{日'にち}");
+        var cleanedOriginal = "一人で「一緒！」と一言。一日";
+
+        var relocated = FuriganaHintExtractor.RelocateToCleanedOriginal(cleanedOriginal, hints, cleanText);
+
+        relocated.Select(h => (h.Offset, cleanedOriginal.Substring(h.Offset, h.Length), h.Reading)).Should().Equal(
+            (9, "一", "ひと"), (10, "言", "こと"), (12, "一", "いち"), (13, "日", "にち"));
+    }
+
+    [Fact]
+    public void RelocateToCleanedOriginal_MissingBaseDoesNotShiftLaterHints()
+    {
+        var (cleanText, hints) = FuriganaHintExtractor.Extract("{側'そば}にいる。その{側'がわ}の{人'ひと}");
+        var cleanedOriginal = "にいる。その側の人";
+
+        var relocated = FuriganaHintExtractor.RelocateToCleanedOriginal(cleanedOriginal, hints, cleanText);
+
+        relocated.Select(h => (h.Offset, h.Reading)).Should().Equal((6, "がわ"), (8, "ひと"));
+    }
+
     [Fact]
     public void Extract_MixedAnnotatedAndPlainText()
     {

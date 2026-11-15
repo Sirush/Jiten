@@ -2781,6 +2781,8 @@ namespace Jiten.Parser
                 {
                     var hintHira = KanaNormalizer.Normalize(KanaConverter.ToHiragana(hint, convertLongVowelMark: false));
                     var byReading = matches.Where(m => WordHasKanaReading(m.match, hintHira)).ToList();
+                    if (byReading.Count == 0)
+                        byReading = matches.Where(m => WordHasKanaReading(m.match, hintHira, ignoreKanaSize: true)).ToList();
                     if (byReading.Count > 0)
                         return byReading.OrderBy(FreqRank).First();
                 }
@@ -2794,9 +2796,19 @@ namespace Jiten.Parser
 
         private static readonly char[] ReadingHintSeparators = [';', '；', ',', '，', '、', '/', '／', '|'];
 
-        private static bool WordHasKanaReading(JmDictWord word, string hintHira) =>
-            word.Forms.Any(f => f.FormType == JmDictFormType.KanaForm &&
-                                KanaNormalizer.Normalize(KanaConverter.ToHiragana(f.Text, convertLongVowelMark: false)) == hintHira);
+        private static bool WordHasKanaReading(JmDictWord word, string hintHira, bool ignoreKanaSize = false)
+        {
+            foreach (var f in word.Forms)
+            {
+                if (f.FormType != JmDictFormType.KanaForm) continue;
+
+                var formHira = KanaNormalizer.Normalize(KanaConverter.ToHiragana(f.Text, convertLongVowelMark: false));
+                if (ignoreKanaSize ? FuriganaHintScorer.MatchesIgnoringKanaSize(formHira, hintHira) : formHira == hintHira)
+                    return true;
+            }
+
+            return false;
+        }
 
         private static DeckWord BuildDirectLookupWord(string word, (JmDictWord match, int readingIndex) best) =>
             new DeckWord
@@ -5430,25 +5442,30 @@ namespace Jiten.Parser
             return result;
         }
 
-        private static FuriganaHint? FindMatchingHint(FuriganaHint[]? hints, WordInfo token)
+        /// <summary>Reading of the whole token from every hint inside it; unhinted characters keep their surface ({開'あ}く, {羚'かも}{羊'しか}).</summary>
+        internal static FuriganaHint? FindMatchingHint(FuriganaHint[]? hints, WordInfo token)
         {
             if (hints == null || token.StartOffset < 0) return null;
             int tokenEnd = token.StartOffset + token.Text.Length;
+            int cursor = token.StartOffset;
+            StringBuilder? reading = null;
             foreach (var h in hints)
             {
-                if (h.Offset < token.StartOffset || h.Offset >= tokenEnd) continue;
+                if (h.Offset < cursor || h.Offset >= tokenEnd) continue;
                 int hintEnd = h.Offset + h.Length;
                 if (hintEnd > tokenEnd) continue;
 
                 if (h.Length == token.Text.Length) return h;
 
-                // Partial hint ({開'あ}く): append the unhinted okurigana.
-                int suffixStart = h.Offset - token.StartOffset + h.Length;
-                var suffix = token.Text.AsSpan(suffixStart);
-                var extendedReading = h.Reading + suffix.ToString();
-                return new FuriganaHint(token.StartOffset, token.Text.Length, extendedReading);
+                reading ??= new StringBuilder(token.Text.Length * 2);
+                reading.Append(token.Text, cursor - token.StartOffset, h.Offset - cursor).Append(h.Reading);
+                cursor = hintEnd;
             }
-            return null;
+
+            if (reading == null) return null;
+
+            reading.Append(token.Text, cursor - token.StartOffset, tokenEnd - cursor);
+            return new FuriganaHint(token.StartOffset, token.Text.Length, reading.ToString());
         }
 
         private static async Task<List<DeckWord>> ApplyAdjacentScoring(

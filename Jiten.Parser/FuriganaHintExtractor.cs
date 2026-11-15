@@ -66,29 +66,94 @@ public static partial class FuriganaHintExtractor
         return sb.ToString();
     }
 
+    /// <summary>Reading of the clean text with every hinted base replaced by its reading; unhinted characters are kept.</summary>
+    public static string ApplyReadings(string cleanText, ReadOnlySpan<FuriganaHint> hints)
+    {
+        if (hints.Length == 0) return cleanText;
+
+        var sb = new StringBuilder(cleanText.Length * 2);
+        int lastEnd = 0;
+
+        foreach (var hint in hints)
+        {
+            sb.Append(cleanText, lastEnd, hint.Offset - lastEnd);
+            sb.Append(hint.Reading);
+            lastEnd = hint.Offset + hint.Length;
+        }
+
+        sb.Append(cleanText, lastEnd, cleanText.Length - lastEnd);
+        return sb.ToString();
+    }
+
+    private const int ResyncWindow = 32;
+    private const int ResyncMatchLength = 4;
+
+    /// <summary>Maps hint offsets from the clean text onto its preprocessed copy by walking both in step, so a base lands on its own occurrence and not on an earlier identical character.</summary>
     internal static FuriganaHint[] RelocateToCleanedOriginal(
         string cleanedOriginal, FuriganaHint[] hints, string cleanText)
     {
         if (hints.Length == 0) return [];
 
         var relocated = new List<FuriganaHint>(hints.Length);
-        int searchStart = 0;
+        int cleanPos = 0, originalPos = 0;
 
         foreach (var hint in hints)
         {
-            var span = cleanText.AsSpan(hint.Offset, hint.Length);
-            int found = cleanedOriginal.AsSpan(searchStart).IndexOf(span, StringComparison.Ordinal);
-            if (found >= 0)
+            if (hint.Offset < cleanPos) continue;
+
+            while (cleanPos < hint.Offset && originalPos < cleanedOriginal.Length)
             {
-                found += searchStart;
+                if (cleanText[cleanPos] == cleanedOriginal[originalPos])
+                {
+                    cleanPos++;
+                    originalPos++;
+                }
+                else if (!TryResync(cleanText, cleanedOriginal, ref cleanPos, ref originalPos, hint.Offset))
+                {
+                    cleanPos++;
+                }
             }
-            if (found >= 0)
-            {
-                relocated.Add(new FuriganaHint(found, hint.Length, hint.Reading));
-                searchStart = found + hint.Length;
-            }
+
+            if (cleanPos < hint.Offset) continue;
+
+            int found = MatchesAt(cleanText, cleanPos, cleanedOriginal, originalPos, hint.Length) ? originalPos : -1;
+            for (int skip = 1; skip <= ResyncWindow && found < 0; skip++)
+                if (MatchesAt(cleanText, cleanPos, cleanedOriginal, originalPos + skip, hint.Length + ResyncMatchLength))
+                    found = originalPos + skip;
+            if (found < 0) continue;
+
+            relocated.Add(new FuriganaHint(found, hint.Length, hint.Reading));
+            cleanPos = hint.Offset + hint.Length;
+            originalPos = found + hint.Length;
         }
 
         return relocated.ToArray();
+    }
+
+    private static bool TryResync(string cleanText, string cleanedOriginal, ref int cleanPos, ref int originalPos, int cleanLimit)
+    {
+        for (int skipped = 1; skipped <= 2 * ResyncWindow; skipped++)
+        {
+            for (int originalSkip = Math.Max(0, skipped - ResyncWindow); originalSkip <= Math.Min(skipped, ResyncWindow); originalSkip++)
+            {
+                int c = cleanPos + skipped - originalSkip;
+                int o = originalPos + originalSkip;
+                if (c > cleanLimit || !MatchesAt(cleanText, c, cleanedOriginal, o, ResyncMatchLength)) continue;
+
+                cleanPos = c;
+                originalPos = o;
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool MatchesAt(string cleanText, int cleanPos, string cleanedOriginal, int originalPos, int maxLength)
+    {
+        int length = Math.Min(maxLength, cleanText.Length - cleanPos);
+        if (length <= 0 || originalPos + length > cleanedOriginal.Length) return false;
+
+        return cleanText.AsSpan(cleanPos, length).SequenceEqual(cleanedOriginal.AsSpan(originalPos, length));
     }
 }
