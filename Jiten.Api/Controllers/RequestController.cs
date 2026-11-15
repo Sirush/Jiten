@@ -1601,7 +1601,7 @@ public partial class RequestController(
             return Results.BadRequest("fulfilledDeckId must be omitted for non-Completed status");
 
         request.Status = model.Status;
-        request.AdminNote = model.AdminNote;
+        request.AdminNote = model.AdminNote?.Trim();
         if (model.Status == MediaRequestStatus.Completed)
             request.FulfilledDeckId = fulfilledDeckId;
         request.UpdatedAt = DateTime.UtcNow;
@@ -1879,7 +1879,7 @@ public partial class RequestController(
             return Results.NotFound("Upload not found");
 
         upload.AdminReviewed = model.AdminReviewed;
-        upload.AdminNote = model.AdminNote;
+        upload.AdminNote = model.AdminNote?.Trim();
 
         var uploaderUserId = upload.Comment?.UserId;
         if (uploaderUserId != null)

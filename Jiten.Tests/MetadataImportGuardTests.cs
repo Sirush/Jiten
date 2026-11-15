@@ -116,6 +116,27 @@ public class MetadataImportGuardTests : IDisposable
     }
 
     [Fact]
+    public void Alias_merge_trims_and_skips_an_alias_differing_only_in_whitespace()
+    {
+        var deck = new Deck { DeckId = 1, OriginalTitle = "テスト" };
+        deck.Titles.Add(new DeckTitle { DeckId = 1, Title = " ศึกสุดท้าย", TitleType = DeckTitleType.Alias });
+
+        MetadataProviderHelper.MergeAliases(deck, ["ศึกสุดท้าย", "  KimiSen ", " "], DeckMetadataExclusionSet.Empty);
+
+        deck.Titles.Select(t => t.Title).Should().BeEquivalentTo([" ศึกสุดท้าย", "KimiSen"]);
+    }
+
+    [Fact]
+    public void Snapshot_aliases_are_trimmed_and_deduplicated()
+    {
+        var deck = new Deck { DeckId = 1, OriginalTitle = "テスト" };
+        deck.Titles.Add(new DeckTitle { Title = " ศึกสุดท้าย", TitleType = DeckTitleType.Alias });
+        deck.Titles.Add(new DeckTitle { Title = "ศึกสุดท้าย", TitleType = DeckTitleType.Alias });
+
+        DeckMetadataSnapshot.Capture(deck).Aliases.Should().Equal("ศึกสุดท้าย");
+    }
+
+    [Fact]
     public void Name_merge_never_re_adds_an_excluded_character_name()
     {
         var deck = new Deck { DeckId = 1, OriginalTitle = "テスト" };
@@ -144,6 +165,19 @@ public class MetadataImportGuardTests : IDisposable
         locked.Description.Should().BeNull();
         unlocked.ReleaseDate.Should().Be(new DateOnly(2004, 8, 13));
         unlocked.Description.Should().Be("From the provider");
+    }
+
+    [Fact]
+    public void Provider_description_is_trimmed_and_blank_stays_empty()
+    {
+        var padded = new Deck { OriginalTitle = "テスト" };
+        var blank = new Deck { OriginalTitle = "テスト" };
+
+        MetadataProviderHelper.ApplyScalars(padded, new Metadata { Description = "\r\n  From the provider 　" });
+        MetadataProviderHelper.ApplyScalars(blank, new Metadata { Description = "  " });
+
+        padded.Description.Should().Be("From the provider");
+        blank.Description.Should().BeNull();
     }
 
     [Fact]

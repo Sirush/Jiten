@@ -215,7 +215,7 @@ public class YouTubeDrainService(
         if (info == null)
             return;
 
-        video.Title = Truncate(info.Title, 500);
+        video.Title = Truncate(info.Title.Trim(), 500);
         video.UploadedAt = info.UploadedAt ?? video.UploadedAt;
         video.RuntimeSeconds = info.DurationSeconds ?? video.RuntimeSeconds;
         video.PlayableInEmbed = info.PlayableInEmbed;

@@ -1680,6 +1680,30 @@ export const useSrsStore = defineStore('srs', () => {
       settingsLoaded.value = true;
     } catch {
       // Use defaults
+      return;
+    }
+    await persistDetectedTimezone();
+  }
+
+  let timezoneDetectionAttempted = false;
+
+  async function persistDetectedTimezone() {
+    if (!import.meta.client || timezoneDetectionAttempted || studySettings.value.timezone) return;
+    timezoneDetectionAttempted = true;
+    let zone: string | undefined;
+    try {
+      zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    } catch {
+      return;
+    }
+    if (!zone) return;
+    try {
+      studySettings.value = await $api<StudySettingsDto>('srs/study-settings', {
+        method: 'PUT',
+        body: { ...studySettings.value, timezone: zone },
+      });
+    } catch {
+      timezoneDetectionAttempted = false;
     }
   }
 

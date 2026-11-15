@@ -45,11 +45,12 @@ public static partial class YouTubeUrlParser
             return true;
         }
 
-        if (PlaylistIdPattern().IsMatch(input))
+        var bareId = StripBrowsePrefix(input);
+        if (PlaylistIdPattern().IsMatch(bareId))
         {
             kind = YouTubeSourceKind.Playlist;
-            knownId = input;
-            listingUrl = PlaylistUrl(input);
+            knownId = bareId;
+            listingUrl = PlaylistUrl(bareId);
             return true;
         }
 
@@ -97,10 +98,18 @@ public static partial class YouTubeUrlParser
                 kind = ChannelKind(segments, 1);
                 listingUrl = $"https://www.youtube.com/{handle}/{Tab(kind)}";
                 return true;
+            case "show" or "browse" when segments.Length >= 2 && PlaylistIdPattern().IsMatch(StripBrowsePrefix(segments[1])):
+                kind = YouTubeSourceKind.Playlist;
+                knownId = StripBrowsePrefix(segments[1]);
+                listingUrl = PlaylistUrl(knownId);
+                return true;
             default:
                 return false;
         }
     }
+
+    /// <summary>Show and browse pages address a playlist by its browse id, which is the playlist id prefixed with "VL".</summary>
+    private static string StripBrowsePrefix(string id) => id.StartsWith("VL", StringComparison.Ordinal) ? id[2..] : id;
 
     private static YouTubeSourceKind ChannelKind(string[] segments, int tabIndex) =>
         segments.Length > tabIndex && segments[tabIndex].Equals("streams", StringComparison.OrdinalIgnoreCase)

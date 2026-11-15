@@ -4076,6 +4076,8 @@ public partial class UserController(
 
     private async Task<IResult> CreateUserExampleSentence(int wordId, byte readingIndex, string text, string? source)
     {
+        text = text.Trim();
+        source = source?.Trim() is { Length: > 0 } trimmedSource ? trimmedSource : null;
         var userId = userService.UserId;
         if (userId == null) return Results.Unauthorized();
         if (!MarkerRegex.IsMatch(text)) return Results.BadRequest("Text must contain at least one **word** marker.");
@@ -4123,16 +4125,18 @@ public partial class UserController(
     {
         var userId = userService.UserId;
         if (userId == null) return Results.Unauthorized();
-        if (!MarkerRegex.IsMatch(request.Text)) return Results.BadRequest("Text must contain at least one **word** marker.");
-        if (request.Text.Length > 150) return Results.BadRequest("Text must be 150 characters or fewer.");
-        if (request.Source?.Length > 150) return Results.BadRequest("Source must be 150 characters or fewer.");
+        var text = request.Text.Trim();
+        var source = request.Source?.Trim() is { Length: > 0 } trimmedSource ? trimmedSource : null;
+        if (!MarkerRegex.IsMatch(text)) return Results.BadRequest("Text must contain at least one **word** marker.");
+        if (text.Length > 150) return Results.BadRequest("Text must be 150 characters or fewer.");
+        if (source?.Length > 150) return Results.BadRequest("Source must be 150 characters or fewer.");
 
         var sentence = await userContext.UserExampleSentences
             .FirstOrDefaultAsync(e => e.UserExampleSentenceId == id && e.UserId == userId);
         if (sentence == null) return Results.NotFound();
 
-        sentence.Text = request.Text;
-        sentence.Source = request.Source;
+        sentence.Text = text;
+        sentence.Source = source;
         await userContext.SaveChangesAsync();
 
         return Results.Ok(new UserExampleSentenceDto

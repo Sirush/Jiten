@@ -1,9 +1,38 @@
+using Jiten.Core.Data.Providers;
 using Jiten.Core.Data.Providers.Jimaku;
 
 namespace Jiten.Core;
 
 public partial class MetadataProviderHelper
 {
+    /// <summary>Null when the entry carries neither an AniList nor a TMDB id.</summary>
+    public static async Task<Metadata?> JimakuEntryMetadataAsync(JimakuEntry entry, string tmdbApiKey)
+    {
+        Metadata metadata;
+        if (entry.Flags.Anime && entry.AnilistId.HasValue)
+        {
+            metadata = await AnilistAnimeApi(entry.AnilistId.Value);
+        }
+        else if (entry.TmdbId != null)
+        {
+            metadata = entry.Flags.Movie
+                ? await TmdbMovieApi(entry.TmdbId.Replace("movie:", ""), tmdbApiKey)
+                : await TmdbTvApi(entry.TmdbId.Replace("tv:", ""), tmdbApiKey);
+            metadata.OriginalTitle = entry.JapaneseName;
+            metadata.EnglishTitle = entry.EnglishName;
+            metadata.RomajiTitle = entry.Name;
+        }
+        else
+        {
+            return null;
+        }
+
+        if (string.IsNullOrEmpty(metadata.OriginalTitle))
+            metadata.OriginalTitle = metadata.EnglishTitle ?? metadata.RomajiTitle ?? entry.Name;
+
+        return metadata;
+    }
+
     public static async Task<JimakuEntry?> JimakuGetEntryAsync(HttpClient httpClient, string apiKey, int id)
     {
         var request = new HttpRequestMessage(HttpMethod.Get, $"https://jimaku.cc/api/entries/{id}");
@@ -25,7 +54,7 @@ public partial class MetadataProviderHelper
         var content = await response.Content.ReadAsStringAsync();
         return System.Text.Json.JsonSerializer.Deserialize<List<JimakuFile>>(content);
     }
-    
+
     public static async Task<List<JimakuEntry>?> JimakuSearchAsync(
         HttpClient httpClient, string apiKey,
         int? anilistId = null, string? tmdbId = null, string? query = null, bool anime = true)

@@ -104,4 +104,34 @@ public class FuriganaHintScorerTests
         FuriganaHintScorer.Score(candidate0, "にち").Should().Be(500);
         FuriganaHintScorer.Score(candidate0, "か").Should().Be(0);
     }
+
+    [Theory]
+    [InlineData("一緒", "いっしょ", "いつしよ")]
+    [InlineData("状況", "じょうきょう", "じようきよう")]
+    [InlineData("格好", "かっこう", "かつこう")]
+    public void Score_HintTypesetWithoutSmallKana_MatchesSmallKanaReading(string kanji, string reading, string hint)
+    {
+        var (word, form) = CreateWord(1000, kanji, reading);
+        var candidate = new FormCandidate(word, form, 0, reading);
+
+        FuriganaHintScorer.Score(candidate, hint).Should().Be(500);
+    }
+
+    [Fact]
+    public void Score_HintWithSmallKana_DoesNotMatchLargeKanaReading()
+    {
+        var (word, form) = CreateWord(1000, "器用", "きよう");
+        var candidate = new FormCandidate(word, form, 0, "きよう");
+
+        FuriganaHintScorer.Score(candidate, "きょう").Should().Be(0);
+    }
+
+    [Fact]
+    public void Score_HintMixingSmallAndLargeKana_RequiresExactMatch()
+    {
+        var (word, form) = CreateWord(1000, "出張", "しゅっちょう");
+        var candidate = new FormCandidate(word, form, 0, "しゅっちょう");
+
+        FuriganaHintScorer.Score(candidate, "しゅつちょう").Should().Be(0);
+    }
 }

@@ -47,8 +47,8 @@ public partial class AdminController
         var wordSet = new WordSet
         {
             Slug = request.Slug,
-            Name = request.Name,
-            Description = request.Description,
+            Name = request.Name.Trim(),
+            Description = request.Description?.Trim(),
             WordCount = 0,
             CreatedAt = DateTime.UtcNow
         };
@@ -84,8 +84,8 @@ public partial class AdminController
             return BadRequest(new { Message = $"A word set with slug '{request.Slug}' already exists" });
 
         wordSet.Slug = request.Slug;
-        wordSet.Name = request.Name;
-        wordSet.Description = request.Description;
+        wordSet.Name = request.Name.Trim();
+        wordSet.Description = request.Description?.Trim();
 
         await dbContext.SaveChangesAsync();
 

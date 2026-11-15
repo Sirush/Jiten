@@ -64,11 +64,11 @@
     form.writeInReview = { ...srsStore.studySettings.writeInReview };
     syncEasyFromForm();
     syncStepsFromForm();
-    if (!form.timezone) applyDetectedTimezone();
     // Let the hydration mutations flush through the deep watcher (still guarded by loaded=false)
     // before arming auto-save, otherwise the initial Object.assign triggers a spurious save.
     await nextTick();
     loaded.value = true;
+    if (!form.timezone) applyDetectedTimezone();
     tickInterval = setInterval(() => {
       nowMinute.value = Date.now();
     }, 60_000);

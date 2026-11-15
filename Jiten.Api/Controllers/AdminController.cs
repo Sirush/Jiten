@@ -1225,30 +1225,9 @@ public partial class AdminController(
             string path = Path.Join(config["StaticFilesPath"], "tmp", Guid.NewGuid().ToString());
             Directory.CreateDirectory(path);
 
-            Metadata metadata;
-            if (entry.Flags.Anime && entry.AnilistId.HasValue)
-            {
-                metadata = await MetadataProviderHelper.AnilistAnimeApi(entry.AnilistId.Value) ??
-                           throw new Exception("Anilist API returned null.");
-            }
-            else if (entry.Flags.Movie && entry.TmdbId != null)
-            {
-                metadata = await MetadataProviderHelper.TmdbMovieApi(entry.TmdbId.Replace("movie:", ""), config["TmdbApiKey"]!);
-                metadata.OriginalTitle = entry.JapaneseName;
-                metadata.EnglishTitle = entry.EnglishName;
-                metadata.RomajiTitle = entry.Name;
-            }
-            else if (entry.TmdbId != null)
-            {
-                metadata = await MetadataProviderHelper.TmdbTvApi(entry.TmdbId.Replace("tv:", ""), config["TmdbApiKey"]!);
-                metadata.OriginalTitle = entry.JapaneseName;
-                metadata.EnglishTitle = entry.EnglishName;
-                metadata.RomajiTitle = entry.Name;
-            }
-            else
-            {
+            var metadata = await MetadataProviderHelper.JimakuEntryMetadataAsync(entry, config["TmdbApiKey"]!);
+            if (metadata == null)
                 return BadRequest("No metadata provider found for this entry.");
-            }
 
             if (!string.IsNullOrEmpty(metadata.Image))
             {
@@ -1360,9 +1339,6 @@ public partial class AdminController(
             {
                 return BadRequest("No valid subtitle files found.");
             }
-
-            if (string.IsNullOrEmpty(metadata.OriginalTitle))
-                metadata.OriginalTitle = metadata.EnglishTitle ?? metadata.RomajiTitle ?? entry.Name;
 
             var mediaType = entry.Flags.Anime ? MediaType.Anime : entry.Flags.Movie ? MediaType.Movie : MediaType.Drama;
             backgroundJobs.Enqueue<ParseJob>(job => job.Parse(metadata, mediaType, bool.Parse(config["StoreRawText"] ?? "false")));

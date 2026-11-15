@@ -1835,6 +1835,116 @@ namespace Jiten.Core.Migrations
                     b.ToTable("WordKanji", "jmdict");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.Jimaku.JimakuSource", b =>
+                {
+                    b.Property<int>("DeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AiredEpisodes")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("AnilistId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("ConsecutiveFailures")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ExpectedEpisodes")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("ExpectedEpisodesOverride")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FilePattern")
+                        .IsRequired()
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("FinishedAiring")
+                        .HasColumnType("boolean");
+
+                    b.Property<int>("JimakuEntryId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("LastCheckedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(1000)
+                        .HasColumnType("character varying(1000)");
+
+                    b.Property<DateTimeOffset?>("LastSyncedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("NextCheckAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("SyncEnabled")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("TmdbId")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<int?>("TmdbSeason")
+                        .HasColumnType("integer");
+
+                    b.HasKey("DeckId");
+
+                    b.HasIndex("JimakuEntryId")
+                        .IsUnique()
+                        .HasDatabaseName("IX_JimakuSources_JimakuEntryId");
+
+                    b.HasIndex("SyncEnabled", "NextCheckAt")
+                        .HasDatabaseName("IX_JimakuSources_SyncEnabled_NextCheckAt");
+
+                    b.ToTable("JimakuSources", "jiten");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.Jimaku.JimakuTrackedFile", b =>
+                {
+                    b.Property<int>("SourceDeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("FileName")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int?>("ChildDeckId")
+                        .HasColumnType("integer");
+
+                    b.Property<double?>("EpisodeNumber")
+                        .HasColumnType("double precision");
+
+                    b.Property<DateTimeOffset>("FirstSeenAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("HoldReason")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<long>("Size")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset?>("SourceModifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Url")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.HasKey("SourceDeckId", "FileName");
+
+                    b.ToTable("JimakuTrackedFiles", "jiten");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.Link", b =>
                 {
                     b.Property<int>("LinkId")
@@ -3778,6 +3888,28 @@ namespace Jiten.Core.Migrations
                     b.Navigation("Word");
                 });
 
+            modelBuilder.Entity("Jiten.Core.Data.Jimaku.JimakuSource", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Deck", "Deck")
+                        .WithOne()
+                        .HasForeignKey("Jiten.Core.Data.Jimaku.JimakuSource", "DeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Deck");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.Jimaku.JimakuTrackedFile", b =>
+                {
+                    b.HasOne("Jiten.Core.Data.Jimaku.JimakuSource", "Source")
+                        .WithMany("Files")
+                        .HasForeignKey("SourceDeckId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Source");
+                });
+
             modelBuilder.Entity("Jiten.Core.Data.Link", b =>
                 {
                     b.HasOne("Jiten.Core.Data.Deck", "Deck")
@@ -4148,6 +4280,11 @@ namespace Jiten.Core.Migrations
             modelBuilder.Entity("Jiten.Core.Data.JMDict.Kanji", b =>
                 {
                     b.Navigation("WordKanjis");
+                });
+
+            modelBuilder.Entity("Jiten.Core.Data.Jimaku.JimakuSource", b =>
+                {
+                    b.Navigation("Files");
                 });
 
             modelBuilder.Entity("Jiten.Core.Data.MediaRequest", b =>

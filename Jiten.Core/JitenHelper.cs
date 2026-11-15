@@ -22,17 +22,21 @@ public static class JitenHelper
     private static string? StripNul(string? value) =>
         value != null && value.Contains('\0') ? value.Replace("\0", "") : value;
 
+    private static string? CleanText(string? value) => StripNul(value)?.Trim() is { Length: > 0 } cleaned ? cleaned : null;
+
     private static void SanitizeDeckStrings(Deck deck)
     {
-        deck.OriginalTitle = StripNul(deck.OriginalTitle) ?? deck.OriginalTitle;
-        deck.RomajiTitle = StripNul(deck.RomajiTitle);
-        deck.EnglishTitle = StripNul(deck.EnglishTitle);
-        deck.Description = StripNul(deck.Description);
+        deck.OriginalTitle = CleanText(deck.OriginalTitle) ?? deck.OriginalTitle;
+        deck.RomajiTitle = CleanText(deck.RomajiTitle);
+        deck.EnglishTitle = CleanText(deck.EnglishTitle);
+        deck.Description = CleanText(deck.Description);
 
         foreach (var title in deck.Titles)
-            title.Title = StripNul(title.Title) ?? title.Title;
+            title.Title = CleanText(title.Title) ?? "";
 
-        deck.Titles = deck.Titles.Where(t => t.Title.Length <= DeckTitleMaxLength).ToList();
+        deck.Titles = deck.Titles.Where(t => t.Title.Length is > 0 and <= DeckTitleMaxLength)
+                          .DistinctBy(t => (t.TitleType, t.Title))
+                          .ToList();
 
         foreach (var link in deck.Links)
             link.Url = StripNul(link.Url) ?? link.Url;
