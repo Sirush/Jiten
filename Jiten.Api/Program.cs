@@ -17,6 +17,7 @@ using Jiten.Core;
 using Jiten.Parser;
 using Jiten.Core.Data.Authentication;
 using Jiten.Core.Data.WebNovel;
+using Jiten.Core.Jimaku;
 using Jiten.Core.WebNovel;
 using Jiten.Core.YouTube;
 using Microsoft.Extensions.Options;
@@ -174,6 +175,19 @@ builder.Services.AddTransient<YouTubeDrainService>(sp =>
                             Path.Join(builder.Configuration["StaticFilesPath"], "tmp", "youtube"),
                             TimeSpan.FromMilliseconds(sp.GetRequiredService<IOptions<YouTubeOptions>>().Value.DelayMs),
                             sp.GetRequiredService<ILogger<YouTubeDrainService>>()));
+builder.Services.AddHttpClient("Jimaku", client =>
+{
+    client.DefaultRequestHeaders.UserAgent.ParseAdd("Jiten/1.0");
+    client.Timeout = TimeSpan.FromSeconds(60);
+});
+builder.Services.AddSingleton<JimakuClient>(sp =>
+    new JimakuClient(sp.GetRequiredService<IHttpClientFactory>().CreateClient("Jimaku"),
+                     builder.Configuration["JimakuApiKey"] ?? string.Empty,
+                     sp.GetRequiredService<ILogger<JimakuClient>>()));
+builder.Services.AddSingleton<EpisodeAiringLookup>(sp =>
+    new EpisodeAiringLookup(sp.GetRequiredService<IHttpClientFactory>().CreateClient(),
+                            builder.Configuration["TmdbApiKey"] ?? string.Empty,
+                            sp.GetRequiredService<ILogger<EpisodeAiringLookup>>()));
 builder.Services.AddScoped<Jiten.Api.Controllers.IngestKeyFilter>();
 
 // Shared secret sent by the Nuxt SSR server (X-Internal-Ssr-Key) so first-party server
@@ -1007,6 +1021,7 @@ builder.Services.AddScoped<WebNovelSyncSweepJob>();
 builder.Services.AddScoped<YouTubeImportJob>();
 builder.Services.AddScoped<YouTubeFetchJob>();
 builder.Services.AddScoped<YouTubeSyncSweepJob>();
+builder.Services.AddScoped<JimakuSyncJob>();
 builder.Services.AddScoped<ReparseJob>();
 builder.Services.AddScoped<ComputationJob>();
 builder.Services.AddScoped<SrsRecomputeJob>();
@@ -1101,6 +1116,13 @@ foreach (var site in WebNovelProviders.Sites)
         options.WorkerCount = 1;
     });
 }
+
+builder.Services.AddHangfireServer((options) =>
+{
+    options.ServerName = "JimakuServer";
+    options.Queues = [JimakuQueues.Sync];
+    options.WorkerCount = 1;
+});
 
 builder.Services.AddHangfireServer((options) =>
 {
@@ -1240,6 +1262,11 @@ if (!app.Environment.IsEnvironment("Testing"))
         "youtube-sync-sweep",
         job => job.Sweep(),
         Cron.Daily(4));
+
+    recurringJobs.AddOrUpdate<JimakuSyncJob>(
+        "jimaku-sync-sweep",
+        job => job.Sweep(),
+        Cron.Daily(3));
 
     recurringJobs.AddOrUpdate<YouTubeImportJob>(
         "youtube-import-fetched",

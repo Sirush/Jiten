@@ -57,6 +57,16 @@
       </Card>
 
       <Card class="shadow-md">
+        <template #title>Anime & Drama Tracking</template>
+        <template #content>
+          <p class="mb-4">Follow airing shows on Jimaku and ingest new episodes</p>
+          <div class="flex justify-center">
+            <Button label="Track Shows" class="p-button-primary" @click="navigateTo('/dashboard/anime-drama')" />
+          </div>
+        </template>
+      </Card>
+
+      <Card class="shadow-md">
         <template #title>Add Webnovel</template>
         <template #content>
           <p class="mb-4">Import a Syosetu or Kakuyomu novel and keep it in sync</p>

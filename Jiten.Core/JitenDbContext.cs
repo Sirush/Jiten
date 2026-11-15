@@ -2,6 +2,7 @@ using Jiten.Core.Data;
 using Jiten.Core.Data.CommunityLists;
 using Jiten.Core.Data.JMDict;
 using Jiten.Core.Data.MetadataEdits;
+using Jiten.Core.Data.Jimaku;
 using Jiten.Core.Data.WebNovel;
 using Jiten.Core.Data.YouTube;
 using Microsoft.Extensions.Configuration;
@@ -69,6 +70,8 @@ public class JitenDbContext : DbContext
     public DbSet<YouTubeSource> YouTubeSources { get; set; }
     public DbSet<YouTubeVideo> YouTubeVideos { get; set; }
     public DbSet<YouTubeRegistration> YouTubeRegistrations { get; set; }
+    public DbSet<JimakuSource> JimakuSources { get; set; }
+    public DbSet<JimakuTrackedFile> JimakuTrackedFiles { get; set; }
     public DbSet<DeckSubtitleTrack> DeckSubtitleTracks { get; set; }
 
     public DbSet<WordSet> WordSets { get; set; }
@@ -391,6 +394,37 @@ public class JitenDbContext : DbContext
 
             entity.HasIndex(s => new { s.SyncEnabled, s.NextCheckAt })
                   .HasDatabaseName("IX_YouTubeSources_SyncEnabled_NextCheckAt");
+        });
+
+        modelBuilder.Entity<JimakuSource>(entity =>
+        {
+            entity.ToTable("JimakuSources", "jiten");
+            entity.HasKey(s => s.DeckId);
+            entity.Property(s => s.DeckId).ValueGeneratedNever();
+            entity.Ignore(s => s.EffectiveExpectedEpisodes);
+
+            entity.HasOne(s => s.Deck)
+                  .WithOne()
+                  .HasForeignKey<JimakuSource>(s => s.DeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasIndex(s => s.JimakuEntryId)
+                  .IsUnique()
+                  .HasDatabaseName("IX_JimakuSources_JimakuEntryId");
+
+            entity.HasIndex(s => new { s.SyncEnabled, s.NextCheckAt })
+                  .HasDatabaseName("IX_JimakuSources_SyncEnabled_NextCheckAt");
+        });
+
+        modelBuilder.Entity<JimakuTrackedFile>(entity =>
+        {
+            entity.ToTable("JimakuTrackedFiles", "jiten");
+            entity.HasKey(f => new { f.SourceDeckId, f.FileName });
+
+            entity.HasOne(f => f.Source)
+                  .WithMany(s => s.Files)
+                  .HasForeignKey(f => f.SourceDeckId)
+                  .OnDelete(DeleteBehavior.Cascade);
         });
 
         modelBuilder.Entity<YouTubeRegistration>(entity =>
