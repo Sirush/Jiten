@@ -26,7 +26,7 @@ For the metadata, these APIs are used:
 The sources for the data are:
 
 - Subtitles from [Jimaku](https://www.jimaku.cc)
-- Game scripts from [Jo-Mako](https://sites.google.com/view/jo-mako/resources/resources-list?authuser=0)
+- Game scripts from [Jo-Mako](https://sites.google.com/view/jo-mako/resources/resources-list?authuser=0), [Japanese Video Game Text Dumps](https://vgtextdump.neocities.org)
 - Some VN scripts from [Wareya](http://wiki.wareya.moe/Stats)
 - Everything else comes from me or our generous contributors on [Discord](https://discord.gg/cZWM7b4wzk)!
 
