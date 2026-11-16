@@ -126,9 +126,12 @@ internal static class RederivationHelper
             return allCandidates;
         }
 
+        bool namesOnly = !skipPosFilter && state.WordInfo.IsPersonNameContext && HasPureNameCandidate(state, wordCache);
+
         foreach (var id in state.CandidateIds)
         {
             if (!wordCache.TryGetValue(id, out var word)) continue;
+            if (namesOnly && !IsPureNameEntry(word)) continue;
             if (!skipPosFilter)
             {
                 bool isNameWord = word.CachedPOS.All(p => p is PartOfSpeech.Name or PartOfSpeech.Unknown);
@@ -144,5 +147,17 @@ internal static class RederivationHelper
         }
 
         return allCandidates;
+    }
+
+    private static bool IsPureNameEntry(JmDictWord word) =>
+        word.CachedPOS.Contains(PartOfSpeech.Name) && word.CachedPOS.All(p => p is PartOfSpeech.Name or PartOfSpeech.Unknown);
+
+    /// <summary>The first pass resolves a person-name context among name entries only (忍さん); rescoring must not reopen it to common nouns.</summary>
+    private static bool HasPureNameCandidate(RederiveState state, Dictionary<int, JmDictWord> wordCache)
+    {
+        foreach (var id in state.CandidateIds)
+            if (wordCache.TryGetValue(id, out var word) && IsPureNameEntry(word))
+                return true;
+        return false;
     }
 }

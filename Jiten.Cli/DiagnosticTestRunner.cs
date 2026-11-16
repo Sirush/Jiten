@@ -22,6 +22,8 @@ public class DiagnosticTestRunner
     /// <summary>
     /// Loads test cases by reflecting over MemberData attributes in the test assembly
     /// </summary>
+    private static readonly string TestTargetFramework = $"net{Environment.Version.Major}.0";
+
     public List<(string Input, string[] Expected)> LoadTestCasesFromAssembly()
     {
         var testCases = new List<(string, string[])>();
@@ -31,9 +33,9 @@ public class DiagnosticTestRunner
         var candidatePaths = new[]
         {
             Path.Combine(baseDir, "Jiten.Tests.dll"),
-            Path.Combine(baseDir, "..", "..", "..", "..", "Jiten.Tests", "bin", "Debug", "net9.0", "Jiten.Tests.dll"),
-            Path.Combine(baseDir, "..", "..", "..", "..", "Jiten.Tests", "bin", "Release", "net9.0", "Jiten.Tests.dll"),
-            Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "Jiten.Tests", "bin", "Debug", "net9.0", "Jiten.Tests.dll")),
+            Path.Combine(baseDir, "..", "..", "..", "..", "Jiten.Tests", "bin", "Debug", TestTargetFramework, "Jiten.Tests.dll"),
+            Path.Combine(baseDir, "..", "..", "..", "..", "Jiten.Tests", "bin", "Release", TestTargetFramework, "Jiten.Tests.dll"),
+            Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "Jiten.Tests", "bin", "Debug", TestTargetFramework, "Jiten.Tests.dll")),
         };
 
         string? testAssemblyPath = null;
@@ -196,9 +198,9 @@ public class DiagnosticTestRunner
         var candidatePaths = new[]
         {
             Path.Combine(baseDir, "Jiten.Tests.dll"),
-            Path.Combine(baseDir, "..", "..", "..", "..", "Jiten.Tests", "bin", "Debug", "net9.0", "Jiten.Tests.dll"),
-            Path.Combine(baseDir, "..", "..", "..", "..", "Jiten.Tests", "bin", "Release", "net9.0", "Jiten.Tests.dll"),
-            Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "Jiten.Tests", "bin", "Debug", "net9.0", "Jiten.Tests.dll")),
+            Path.Combine(baseDir, "..", "..", "..", "..", "Jiten.Tests", "bin", "Debug", TestTargetFramework, "Jiten.Tests.dll"),
+            Path.Combine(baseDir, "..", "..", "..", "..", "Jiten.Tests", "bin", "Release", TestTargetFramework, "Jiten.Tests.dll"),
+            Path.GetFullPath(Path.Combine(Directory.GetCurrentDirectory(), "Jiten.Tests", "bin", "Debug", TestTargetFramework, "Jiten.Tests.dll")),
         };
 
         string? testAssemblyPath = null;

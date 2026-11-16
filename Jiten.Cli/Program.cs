@@ -248,6 +248,11 @@ public class Program
             await diagnosticCommands.ParseBatch(options);
         }
 
+        if (options.TatoebaBenchmark != null)
+        {
+            await new TatoebaBenchmarkCommands(context).Run(options);
+        }
+
         if (options.ParseDeckTest != null)
         {
             await diagnosticCommands.ParseDeckTest(options);
@@ -357,6 +362,11 @@ public class Program
         if (options.SnapshotTokens)
         {
             await diagnosticCommands.SnapshotTokens(options);
+        }
+
+        if (options.DumpTokens != null)
+        {
+            await diagnosticCommands.DumpTokens(options);
         }
 
         if (!string.IsNullOrEmpty(options.ConcurrencySmoke))

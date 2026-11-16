@@ -269,15 +269,14 @@ public class TransitionRuleEngineTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void Sfp_FollowedByContentWord_MergedOrRemoved()
+    public void Sfp_FollowedByContentWord_KeptWhenNoMergeExists()
     {
-        // 食べる + よ(SFP) + 明日(Noun) → よ should be merged/removed
         var words = Sentence(
             W("食べる", PartOfSpeech.Verb),
             W("よ", PartOfSpeech.Particle, "よ", PartOfSpeechSection.SentenceEndingParticle),
             W("明日", PartOfSpeech.Noun));
         TransitionRuleEngine.ApplyHardRules(words, NoLookup);
-        words.Select(w => w.word.Text).Should().Equal("食べる", "明日");
+        words.Select(w => w.word.Text).Should().Equal("食べる", "よ", "明日");
     }
 
     [Fact]
@@ -383,14 +382,36 @@ public class TransitionRuleEngineTests
     }
 
     [Fact]
-    public void Sfp_Ne_FollowedByVerb_Removed()
+    public void Sfp_DialectParticle_FollowedByContentWord_Removed()
+    {
+        var words = Sentence(
+            W("楽しけれ", PartOfSpeech.IAdjective),
+            W("ばい", PartOfSpeech.Particle, "ばい", PartOfSpeechSection.SentenceEndingParticle),
+            W("いって", PartOfSpeech.Verb));
+        TransitionRuleEngine.ApplyHardRules(words, NoLookup);
+        words.Select(w => w.word.Text).Should().Equal("楽しけれ", "いって");
+    }
+
+    [Fact]
+    public void Sfp_DrawnOutParticle_FollowedByContentWord_Kept()
+    {
+        var words = Sentence(
+            W("いい", PartOfSpeech.IAdjective),
+            W("ねぇ", PartOfSpeech.Particle, "ね", PartOfSpeechSection.SentenceEndingParticle),
+            W("それ", PartOfSpeech.Pronoun));
+        TransitionRuleEngine.ApplyHardRules(words, NoLookup);
+        words.Select(w => w.word.Text).Should().Equal("いい", "ねぇ", "それ");
+    }
+
+    [Fact]
+    public void Sfp_Ne_FollowedByVerb_KeptWhenNoMergeExists()
     {
         var words = Sentence(
             W("本", PartOfSpeech.Noun),
             W("ね", PartOfSpeech.Particle, "ね", PartOfSpeechSection.SentenceEndingParticle),
             W("読む", PartOfSpeech.Verb));
         TransitionRuleEngine.ApplyHardRules(words, NoLookup);
-        words.Select(w => w.word.Text).Should().Equal("本", "読む");
+        words.Select(w => w.word.Text).Should().Equal("本", "ね", "読む");
     }
 
     [Fact]

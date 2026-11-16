@@ -7,7 +7,7 @@ A free, open-source platform for Japanese immersion learners. Jiten offers detai
 - [Nazeka](https://github.com/wareya/nazeka) - Original deconjugation rules, deconjugator
 - [JL](https://github.com/rampaa/JL/tree/master) - Updated deconjugation rules, deconjugator port
 - [Ichiran](https://github.com/tshatrov/ichiran) - Parser tests
-- [JMDict](https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project) - Dictionary
+- [JMDict](https://www.edrdg.org/wiki/index.php/JMdict-EDICT_Dictionary_Project) - Dictionary (CC BY-SA 4.0)
 - [JmdictFurigana](https://github.com/Doublevil/JmdictFurigana) - Furigana dictionary for JMDict
 - [Lapis](https://github.com/donkuri/lapis) - Anki notetype
 - [Hatsuon](https://github.com/DJTB/hatsuon) - Pitch accent display

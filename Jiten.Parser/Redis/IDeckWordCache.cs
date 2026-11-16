@@ -19,4 +19,5 @@ public interface IDeckWordCache
     Task SetManyAsync(IReadOnlyList<(DeckWordCacheKey key, DeckWord word)> entries, CommandFlags flags = CommandFlags.None);
 }
 
-public record DeckWordCacheKey(string Text, PartOfSpeech PartOfSpeech, string DictionaryForm, string Reading, bool IsPersonNameContext, bool IsNameLikeSudachiNoun);
+public record DeckWordCacheKey(string Text, PartOfSpeech PartOfSpeech, string DictionaryForm, string NormalizedForm, string Reading,
+                               bool IsPersonNameContext, bool IsNameLikeSudachiNoun, bool IsImperative);

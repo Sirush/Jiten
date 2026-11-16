@@ -50,6 +50,12 @@ internal static class TransitionRuleSets
         "とする", "として", "とした", "としている", "としていた", "とすれば", "としたら", "と思う", "と思った"
     ];
 
+    /// <summary>Dialect and noise tokens Sudachi also tags sentence-ending (ばい, じょ, べ) stay out: mid-sentence they are word shards.</summary>
+    internal static readonly HashSet<string> StandardSentenceEndingParticles =
+    [
+        "よ", "ね", "わ", "な", "か", "の", "さ", "や", "かな", "かしら", "じゃん", "もん", "っけ", "とも"
+    ];
+
     internal static readonly HashSet<string> HonorificSuffixes =
     [
         "さん", "くん", "ちゃん", "様", "殿", "氏"
@@ -107,6 +113,47 @@ internal static class TransitionRuleSets
         // 一分前 / 一分一秒 = いっぷん "one minute", not the news-ranked いちぶ "one tenth" (1166270).
         { 1166290, (["前", "後", "ぐらい", "くらい", "ほど", "経つ", "経った", "経って", "一秒"], 60) },
     };
+
+    /// <summary>Mined from spellings that name the verb without context (弾いた for ひいた): after this noun and particle, a pick of RivalVerb yields to the target.</summary>
+    internal static readonly Dictionary<(int Noun, string Particle, int RivalVerb), (int TargetWordId, int Bonus)> MinedNounVerbCollocations =
+        LoadMinedCollocations();
+
+    /// <summary>は and も hide the case of the noun they mark, so the mined rows file them under は.</summary>
+    internal static string? CollocationParticle(string text) => text switch
+    {
+        "を" or "に" or "が" or "で" or "と" or "は" or "へ" or "から" or "まで" => text,
+        "も" => "は",
+        _ => null
+    };
+
+    private static Dictionary<(int Noun, string Particle, int RivalVerb), (int TargetWordId, int Bonus)> LoadMinedCollocations()
+    {
+        const string fileName = "noun_verb_collocations.tsv";
+        string[] candidates =
+        [
+            Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "resources", fileName),
+            Path.Combine("Shared", "resources", fileName),
+            Path.Combine("..", "Shared", "resources", fileName)
+        ];
+
+        var rows = new Dictionary<(int, string, int), (int, int)>();
+        var path = candidates.FirstOrDefault(File.Exists);
+        if (path == null)
+            return rows;
+
+        foreach (var line in File.ReadLines(path))
+        {
+            if (line.Length == 0 || line[0] == '#')
+                continue;
+
+            var fields = line.Split('\t');
+            if (fields.Length >= 5 && int.TryParse(fields[0], out int noun) && int.TryParse(fields[2], out int rival)
+                && int.TryParse(fields[3], out int target) && int.TryParse(fields[4], out int bonus))
+                rows[(noun, fields[1], rival)] = (target, bonus);
+        }
+
+        return rows;
+    }
 
     // Pass-2 prefilter keeps a confident token rescorable when an anchor could flip its homograph.
     internal static readonly HashSet<string> ForwardAnchorSurfaces =
@@ -373,6 +420,13 @@ internal static class TransitionRuleSets
             WhenToken: [MatchCondition.IsCounter],
             ValidIf: [MatchCondition.PrevExists, MatchCondition.PrevIsNumericOrNoun],
             OnViolation: ViolationAction.ReclassifyCurrentAsNoun),
+
+        // Unpunctuated speech runs utterances together (んだ|よ|俺): a standard SFP that cannot merge is real and stays.
+        new(
+            Id: "sfp-run-on",
+            WhenToken: [MatchCondition.IsSentenceEndingParticle, MatchCondition.IsStandardSfp, MatchCondition.NextIsContentWord, MatchCondition.NextIsNotQuotative],
+            ValidIf: [MatchCondition.PrevIsSfpValidHost],
+            OnViolation: ViolationAction.MergeWithPreviousOrKeep),
 
         // Plain predicates host an SFP in unpunctuated speech (欲しいな); ぞ/ぜ never merge (出るぞ無名！).
         new(

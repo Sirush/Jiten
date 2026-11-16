@@ -169,7 +169,6 @@ public partial class MorphologicalAnalyser
         ("何に", "も", PartOfSpeech.Adverb),
         ("ま", "だ", PartOfSpeech.Adverb),
         ("いっしょ", "に", PartOfSpeech.Adverb),
-        ("と", "言った", PartOfSpeech.Conjunction),
         ("その", "時", PartOfSpeech.Expression),
         ("そう", "いえば", PartOfSpeech.Expression),
         ("出来", "なさそう", PartOfSpeech.Verb),

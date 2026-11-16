@@ -952,6 +952,7 @@ public partial class MorphologicalAnalyser
             var nextWord = wordInfos[i];
 
             if ((wordInfos[i].PartOfSpeech == PartOfSpeech.Suffix || wordInfos[i].HasPartOfSpeechSection(PartOfSpeechSection.Suffix))
+                && !IsNonWordToken(currentWord)
                 && (wordInfos[i].DictionaryForm == "っこ"
                     || wordInfos[i].DictionaryForm == "さ"
                     // 何|がって is が + って, not 何がる.
@@ -1018,7 +1019,7 @@ public partial class MorphologicalAnalyser
 
     private List<WordInfo> ReclassifyOrphanedSuffixes(List<WordInfo> wordInfos)
     {
-        for (int i = 1; i < wordInfos.Count; i++)
+        for (int i = 0; i < wordInfos.Count; i++)
         {
             if (wordInfos[i].PartOfSpeech != PartOfSpeech.Suffix)
                 continue;
@@ -1053,13 +1054,16 @@ public partial class MorphologicalAnalyser
             }
 
             // A predicate-tail suffix (チッチャ|い) can't host a suffix; 車 after it must reclassify to reach its noun.
-            var prevInfo = wordInfos[i - 1];
-            bool prevIsPredicateTailSuffix = prevInfo.PartOfSpeech == PartOfSpeech.Suffix
-                                             && prevInfo.Text is "い" or "く" or "かっ";
-            var prev = prevInfo.PartOfSpeech;
-            if (prev is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Numeral or PartOfSpeech.Prefix or PartOfSpeech.Pronoun
-                || (prev == PartOfSpeech.Suffix && !prevIsPredicateTailSuffix))
-                continue;
+            if (i > 0)
+            {
+                var prevInfo = wordInfos[i - 1];
+                bool prevIsPredicateTailSuffix = prevInfo.PartOfSpeech == PartOfSpeech.Suffix
+                                                 && prevInfo.Text is "い" or "く" or "かっ";
+                var prev = prevInfo.PartOfSpeech;
+                if (prev is PartOfSpeech.Noun or PartOfSpeech.CommonNoun or PartOfSpeech.Numeral or PartOfSpeech.Prefix or PartOfSpeech.Pronoun
+                    || (prev == PartOfSpeech.Suffix && !prevIsPredicateTailSuffix))
+                    continue;
+            }
 
             // 形容詞的 (っぽい) need their POS for the adj branch; 形状詞的 (気) may start expressions (気を引き締める).
             if (wordInfos[i].PartOfSpeechSection1 is PartOfSpeechSection.Adjectival or PartOfSpeechSection.NaAdjectiveLike)
@@ -1234,6 +1238,14 @@ public partial class MorphologicalAnalyser
         return dict.ToFrozenDictionary(StringComparer.Ordinal);
     }
 
+    /// <summary>の|で before は, も or ある is the nominaliser plus the copula, not ので "because"; なのである is its own entry, hence beforeAru.</summary>
+    private static bool IsNominaliserBeforeCopula(List<WordInfo> wordInfos, int deIndex, bool beforeAru = true)
+    {
+        if (wordInfos[deIndex].Text != "で" || deIndex + 1 >= wordInfos.Count) return false;
+        var next = wordInfos[deIndex + 1];
+        return next.Text is "は" or "も" || (beforeAru && next.DictionaryForm is "ある" or "有る");
+    }
+
     private List<WordInfo> CombineFinal(List<WordInfo> wordInfos)
     {
         if (wordInfos.Count < 2)
@@ -1275,6 +1287,7 @@ public partial class MorphologicalAnalyser
                 foreach (var sc in sc2List)
                 {
                     if (sc.Second == "で" && tokoroDeBlocked) continue;
+                    if (currentWord.Text == "の" && IsNominaliserBeforeCopula(wordInfos, i + 1)) continue;
                     if (nextWord.Text == sc.Second)
                     {
                         newList ??= CopyAccumulatorUpTo(wordInfos, i);
@@ -1303,7 +1316,7 @@ public partial class MorphologicalAnalyser
                 {
                     bool thirdMatch = thirdWord.Text == sc.Third ||
                         (sc.Third.Length > 1 && sc.Third[^1] == 'ー' && thirdWord.Text == sc.Third[..^1]);
-                    if (nextWord.Text == sc.Item2 && thirdMatch)
+                    if (nextWord.Text == sc.Item2 && thirdMatch && !(nextWord.Text == "の" && IsNominaliserBeforeCopula(wordInfos, i + 2, beforeAru: false)))
                     {
                         newList ??= CopyAccumulatorUpTo(wordInfos, i);
                         var merged = new WordInfo(currentWord)

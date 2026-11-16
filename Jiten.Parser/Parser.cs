@@ -558,29 +558,25 @@ namespace Jiten.Parser
         private static List<WordInfo> CollectUniqueWordInfos(List<WordInfo> wordInfos)
         {
             var uniqueWords = new List<WordInfo>();
-            var seen = new HashSet<(string text, PartOfSpeech pos, string dictionaryForm, string reading, bool isPersonNameContext, bool
-                isNameLikeSudachiNoun, int? preMatchedWordId)>();
+            var seen = new HashSet<WordDedupKey>();
 
             foreach (var word in wordInfos)
             {
-                var isNameLikeSudachiNoun = PosMapper.IsNameLikeSudachiNoun(word.PartOfSpeech, word.PartOfSpeechSection1,
-                                                                            word.PartOfSpeechSection2, word.PartOfSpeechSection3);
-                if (seen.Add((word.Text, word.PartOfSpeech, word.DictionaryForm, word.Reading, word.IsPersonNameContext,
-                              isNameLikeSudachiNoun, word.PreMatchedWordId)))
+                if (seen.Add(GetDedupKey(word)))
                     uniqueWords.Add(word);
             }
 
             return uniqueWords;
         }
 
-        private static async Task<List<(DeckWord? word, int? margin, List<FormCandidate>? candidates)>> ProcessWordsInBatches(
+        private static async Task<List<(DeckWord? word, int? margin)>> ProcessWordsInBatches(
             List<WordInfo> words,
             Deconjugator deconjugator,
             int batchSize = 1000,
             ParserDiagnostics? diagnostics = null,
             Dictionary<string, DeckDictionaryEntry>? dictionaryEntriesBySurface = null)
         {
-            List<(DeckWord? word, int? margin, List<FormCandidate>? candidates)> allProcessedWords = new();
+            List<(DeckWord? word, int? margin)> allProcessedWords = new();
 
             for (int i = 0; i < words.Count; i += batchSize)
             {
@@ -629,7 +625,7 @@ namespace Jiten.Parser
 
                         if (overrideWord != null)
                         {
-                            allProcessedWords.Add((overrideWord, int.MaxValue, null));
+                            allProcessedWords.Add((overrideWord, int.MaxValue));
                             continue;
                         }
                     }
@@ -641,11 +637,11 @@ namespace Jiten.Parser
                         && numeralNameMeta.Pos.Length > 0
                         && numeralNameMeta.Pos.All(p => p is PartOfSpeech.Name or PartOfSpeech.Unknown))
                     {
-                        allProcessedWords.Add((null, null, null));
+                        allProcessedWords.Add((null, null));
                         continue;
                     }
 
-                    allProcessedWords.Add((result.Word, result.Margin, result.FirstPassCandidates));
+                    allProcessedWords.Add((result.Word, result.Margin));
                 }
             }
 
@@ -726,9 +722,11 @@ namespace Jiten.Parser
         }
 
         private static DeckWordCacheKey BuildCacheKey(WordInfo wordInfo) =>
-            new(wordInfo.Text, wordInfo.PartOfSpeech, wordInfo.DictionaryForm, CacheKeyReading(wordInfo), wordInfo.IsPersonNameContext,
+            new(wordInfo.Text, wordInfo.PartOfSpeech, wordInfo.DictionaryForm, wordInfo.NormalizedForm, CacheKeyReading(wordInfo),
+                wordInfo.IsPersonNameContext,
                 PosMapper.IsNameLikeSudachiNoun(wordInfo.PartOfSpeech, wordInfo.PartOfSpeechSection1,
-                                                wordInfo.PartOfSpeechSection2, wordInfo.PartOfSpeechSection3));
+                                                wordInfo.PartOfSpeechSection2, wordInfo.PartOfSpeechSection3),
+                wordInfo.IsImperative);
 
         /// <summary>The cache key has no pin context (帽子のツバ→鍔 and ツバを飲む→唾 share a key), so pinned words skip the cache.</summary>
         private static bool IsPinned(WordInfo wordInfo) =>
@@ -810,20 +808,17 @@ namespace Jiten.Parser
             var processedWithMargins = await ProcessWordsInBatches(wordInfos, Deconjugator.Instance, diagnostics: diagnostics);
 
             var marginMap = BuildMarginMap(sentences, processedWithMargins);
-            var candidateLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), List<FormCandidate>>();
 
             if (ResegmentationEngine.TryResegmentLowConfidenceTokens(sentences, _lookups, _wordFrequencyRanks, marginMap,
                                                                     WordMeta, diagnostics))
             {
                 diagnostics?.Results.Clear();
 
-                var oldResultLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), (DeckWord? word, int? margin)>();
+                var oldResultLookup = new Dictionary<WordDedupKey, (DeckWord? word, int? margin)>();
                 for (int i = 0; i < wordInfos.Count; i++)
                 {
                     var key = GetDedupKey(wordInfos[i]);
                     oldResultLookup.TryAdd(key, (processedWithMargins[i].word, processedWithMargins[i].margin));
-                    if (processedWithMargins[i].candidates != null)
-                        candidateLookup.TryAdd(key, processedWithMargins[i].candidates!);
                 }
 
                 wordInfos = ExtractWordInfos(sentences);
@@ -843,32 +838,13 @@ namespace Jiten.Parser
                     {
                         var key = GetDedupKey(newTokens[i]);
                         oldResultLookup.TryAdd(key, (newResults[i].word, newResults[i].margin));
-                        if (newResults[i].candidates != null)
-                            candidateLookup.TryAdd(key, newResults[i].candidates!);
                     }
                 }
 
-                processedWithMargins = wordInfos.Select(wi =>
-                {
-                    var key = GetDedupKey(wi);
-                    if (oldResultLookup.TryGetValue(key, out var r))
-                        return (r.word, r.margin, candidateLookup.GetValueOrDefault(key));
-                    return ((DeckWord?)null, (int?)null, (List<FormCandidate>?)null);
-                }).ToList();
-            }
-            else
-            {
-                for (int i = 0; i < wordInfos.Count; i++)
-                {
-                    if (processedWithMargins[i].candidates != null)
-                    {
-                        var key = GetDedupKey(wordInfos[i]);
-                        candidateLookup.TryAdd(key, processedWithMargins[i].candidates!);
-                    }
-                }
+                processedWithMargins = wordInfos.Select(wi => LookupResult(wi, oldResultLookup)).ToList();
             }
 
-            var corrected = await ApplyAdjacentScoring(sentences, processedWithMargins, candidateLookup, diagnostics, relocatedHints);
+            var corrected = await ApplyAdjacentScoring(sentences, processedWithMargins, diagnostics, relocatedHints);
             corrected = await ApplyMisparseGates(sentences, corrected, diagnostics);
             return ExcludeFinalMisparses(corrected, diagnostics);
         }
@@ -1035,15 +1011,9 @@ namespace Jiten.Parser
 
             var allProcessedWithMargins = await ProcessWordsInBatches(uniqueWords, deconjugator, dictionaryEntriesBySurface: dictionaryEntriesBySurface);
 
-            var resultLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), (DeckWord? word, int? margin)>();
-            var candidateLookup = new Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), List<FormCandidate>>();
+            var resultLookup = new Dictionary<WordDedupKey, (DeckWord? word, int? margin)>();
             for (int i = 0; i < uniqueWords.Count; i++)
-            {
-                var key = GetDedupKey(uniqueWords[i]);
-                resultLookup.TryAdd(key, (allProcessedWithMargins[i].word, allProcessedWithMargins[i].margin));
-                if (allProcessedWithMargins[i].candidates != null)
-                    candidateLookup.TryAdd(key, allProcessedWithMargins[i].candidates!);
-            }
+                resultLookup.TryAdd(GetDedupKey(uniqueWords[i]), allProcessedWithMargins[i]);
 
             if (sw != null) { timings!.DeconjugationLookupMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
@@ -1065,12 +1035,7 @@ namespace Jiten.Parser
                     var deduped = CollectUniqueWordInfos(newUniqueWords);
                     var newResults = await ProcessWordsInBatches(deduped, deconjugator);
                     for (int i = 0; i < deduped.Count; i++)
-                    {
-                        var key = GetDedupKey(deduped[i]);
-                        resultLookup.TryAdd(key, (newResults[i].word, newResults[i].margin));
-                        if (newResults[i].candidates != null)
-                            candidateLookup.TryAdd(key, newResults[i].candidates!);
-                    }
+                        resultLookup.TryAdd(GetDedupKey(deduped[i]), newResults[i]);
                 }
 
                 wordInfos = newWordInfos;
@@ -1078,7 +1043,7 @@ namespace Jiten.Parser
 
             if (sw != null) { timings!.ResegmentationMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
 
-            var corrected = await ApplyAdjacentScoring(sentences, resultLookup, candidateLookup, relocatedHints: relocatedHints);
+            var corrected = await ApplyAdjacentScoring(sentences, resultLookup, relocatedHints: relocatedHints);
             corrected = await ApplyMisparseGates(sentences, corrected);
 
             if (sw != null) { timings!.AdjacentScoringMs += sw.Elapsed.TotalMilliseconds; sw.Restart(); }
@@ -1280,14 +1245,13 @@ namespace Jiten.Parser
         {
             private ProcessWordResult(ProcessWordStatus status, DeckWord? word = null,
                                       DeckWordCacheKey? cacheKey = null, DeckWord? cacheWord = null,
-                                      int? margin = null, List<FormCandidate>? firstPassCandidates = null)
+                                      int? margin = null)
             {
                 Status = status;
                 Word = word;
                 CacheKey = cacheKey;
                 CacheWord = cacheWord;
                 Margin = margin;
-                FirstPassCandidates = firstPassCandidates;
             }
 
             public ProcessWordStatus Status { get; }
@@ -1295,12 +1259,10 @@ namespace Jiten.Parser
             public DeckWordCacheKey? CacheKey { get; }
             public DeckWord? CacheWord { get; }
             public int? Margin { get; }
-            public List<FormCandidate>? FirstPassCandidates { get; }
 
             public static ProcessWordResult FromResolved(DeckWord word, DeckWordCacheKey? cacheKey = null,
-                                                         DeckWord? cacheWord = null, int? margin = null,
-                                                         List<FormCandidate>? firstPassCandidates = null)
-                => new(ProcessWordStatus.Resolved, word, cacheKey, cacheWord, margin, firstPassCandidates);
+                                                         DeckWord? cacheWord = null, int? margin = null)
+                => new(ProcessWordStatus.Resolved, word, cacheKey, cacheWord, margin);
 
             public static ProcessWordResult FilteredOut { get; } = new(ProcessWordStatus.FilteredOut);
             public static ProcessWordResult Unresolved { get; } = new(ProcessWordStatus.Unresolved);
@@ -1348,7 +1310,6 @@ namespace Jiten.Parser
 
                 DeckWord? processedWord = null;
                 int? resolvedMargin = null;
-                List<FormCandidate>? firstPassCandidates = null;
 
                 // Captured before the escalation chain rewrites the POS; gates POS-relaxed lookups for exclamations.
                 wordInfo.IsKanaExclamation =
@@ -1391,13 +1352,11 @@ namespace Jiten.Parser
                                 var nounResult = await DeconjugateWord(wordInfo, diagnostics, batchWordCache);
                                 processedWord = nounResult.word;
                                 resolvedMargin = nounResult.margin;
-                                firstPassCandidates = nounResult.candidates;
                             }
                             else
                             {
                                 processedWord = verbResult.word;
                                 resolvedMargin = verbResult.margin;
-                                firstPassCandidates = verbResult.candidates;
                             }
                         }
                         else
@@ -1408,7 +1367,6 @@ namespace Jiten.Parser
                                 var verbResult = await ResolveByPosEscalation(wordInfo, deconjugator, diagnostics, batchWordCache);
                                 processedWord = verbResult.word;
                                 resolvedMargin = verbResult.margin;
-                                firstPassCandidates = verbResult.candidates;
                             }
                             else if (wordInfo.PartOfSpeech is PartOfSpeech.Pronoun or PartOfSpeech.Conjunction
                                      or PartOfSpeech.Interjection or PartOfSpeech.Particle or PartOfSpeech.Adverb
@@ -1417,15 +1375,11 @@ namespace Jiten.Parser
                             {
                                 processedWord = nounResult.word;
                                 resolvedMargin = nounResult.margin;
-                                firstPassCandidates = nounResult.candidates;
                             }
                             else
                             {
-                                List<FormCandidate>? arbitrationCandidates;
-                                (processedWord, resolvedMargin, arbitrationCandidates) = await ArbitrateNounVsVerbStem(
+                                (processedWord, resolvedMargin) = await ArbitrateNounVsVerbStem(
                                     wordInfo, nounResult, isNameLikeSudachiNoun, deconjugator, diagnostics, batchWordCache);
-                                if (firstPassCandidates == null && processedWord != null)
-                                    firstPassCandidates = arbitrationCandidates;
                             }
                         }
 
@@ -1433,7 +1387,6 @@ namespace Jiten.Parser
                         {
                             processedWord = null;
                             resolvedMargin = null;
-                            firstPassCandidates = null;
                         }
 
                         if (processedWord != null)
@@ -1473,7 +1426,7 @@ namespace Jiten.Parser
                     var geminationRetry = await TryGeminationCollapseRetry(wordInfo, processedWord, baseWord,
                                                                            deconjugator, diagnostics, batchWordCache);
                     if (geminationRetry != null)
-                        (processedWord, resolvedMargin, firstPassCandidates) = geminationRetry.Value;
+                        (processedWord, resolvedMargin) = geminationRetry.Value;
                 }
 
                 if (processedWord == null)
@@ -1485,12 +1438,8 @@ namespace Jiten.Parser
                 processedWord.SudachiReading = wordInfo.Reading;
                 processedWord.SudachiPartOfSpeech = wordInfo.PartOfSpeech;
 
-                var candidatesToKeep = !ScoringPolicy.IsHighConfidence(resolvedMargin)
-                    ? firstPassCandidates
-                    : null;
-
                 if (!UseCache || hasPin)
-                    return ProcessWordResult.FromResolved(processedWord, margin: resolvedMargin, firstPassCandidates: candidatesToKeep);
+                    return ProcessWordResult.FromResolved(processedWord, margin: resolvedMargin);
 
                 var cacheWord = new DeckWord
                                 {
@@ -1500,7 +1449,7 @@ namespace Jiten.Parser
                                     CachedMargin = resolvedMargin
                                 };
 
-                return ProcessWordResult.FromResolved(processedWord, cacheKey, cacheWord, resolvedMargin, candidatesToKeep);
+                return ProcessWordResult.FromResolved(processedWord, cacheKey, cacheWord, resolvedMargin);
             }
             finally
             {
@@ -1558,7 +1507,7 @@ namespace Jiten.Parser
             (PartOfSpeech.Interjection, true, false),
         ];
 
-        private static async Task<(bool success, DeckWord? word, int? margin, List<FormCandidate>? candidates)>
+        private static async Task<(bool success, DeckWord? word, int? margin)>
             ResolveByPosEscalation(WordInfo wordInfo, Deconjugator deconjugator,
                                    ParserDiagnostics? diagnostics, ConcurrentDictionary<int, JmDictWord>? batchWordCache)
         {
@@ -1576,7 +1525,7 @@ namespace Jiten.Parser
                     var direct = await DeconjugateWord(wordInfo, diagnostics, batchWordCache);
                     if (direct is { success: true, word: not null })
                     {
-                        verbResult = (true, direct.word, direct.margin, direct.candidates);
+                        verbResult = (true, direct.word, direct.margin);
                         continue;
                     }
                 }
@@ -1590,9 +1539,9 @@ namespace Jiten.Parser
         }
 
         // Noun-tagged tokens may be verb stems (抱え: rare noun "armful" or 連用形 of 抱える), so both readings compete.
-        private static async Task<(DeckWord? word, int? margin, List<FormCandidate>? candidates)> ArbitrateNounVsVerbStem(
+        private static async Task<(DeckWord? word, int? margin)> ArbitrateNounVsVerbStem(
             WordInfo wordInfo,
-            (bool success, DeckWord? word, int? margin, List<FormCandidate>? candidates) nounResult,
+            (bool success, DeckWord? word, int? margin) nounResult,
             bool isNameLikeSudachiNoun, Deconjugator deconjugator,
             ParserDiagnostics? diagnostics, ConcurrentDictionary<int, JmDictWord>? batchWordCache)
         {
@@ -1609,7 +1558,7 @@ namespace Jiten.Parser
                 && wordInfo.Text.All(JapaneseTextHelper.IsKanji)
                 && adjFallback.PartsOfSpeech.Contains(PartOfSpeech.IAdjective)
                 && !adjFallback.PartsOfSpeech.Contains(PartOfSpeech.Verb))
-                verbFallback = (false, null, null, null);
+                verbFallback = (false, null, null);
 
             // Bare ichidan stems have no ending to deconjugate, so look up surface+る directly (抱え → 抱える).
             if (nounResult.word != null &&
@@ -1652,7 +1601,7 @@ namespace Jiten.Parser
                                 ReadingIndex = stemReadingIndex,
                                 Conjugations = ["continuative"], PartsOfSpeech = [..bestV1.CachedPOS],
                                 Origin = bestV1.Origin
-                            }, (int?)null, (List<FormCandidate>?)null);
+                            }, (int?)null);
                     }
                 }
             }
@@ -1777,11 +1726,7 @@ namespace Jiten.Parser
                 resolvedMargin = nounResult.margin;
             }
 
-            var candidates = processedWord == null ? null
-                : processedWord.WordId == nounResult.word?.WordId
-                    ? nounResult.candidates
-                    : verbFallback.candidates;
-            return (processedWord, resolvedMargin, candidates);
+            return (processedWord, resolvedMargin);
         }
 
         // Reading-key collisions the surface can't support: イエイ → 遺影, ひゅーん → 庇陰, てりゃあ → テリア.
@@ -1870,7 +1815,7 @@ namespace Jiten.Parser
         }
 
         // A junk collision via emphatic sokuon (ばっかな → 幕下) retries without it; kana-appropriate hits (ばっか = ばかり) stay.
-        private static async Task<(DeckWord word, int? margin, List<FormCandidate>? candidates)?> TryGeminationCollapseRetry(
+        private static async Task<(DeckWord word, int? margin)?> TryGeminationCollapseRetry(
             WordInfo wordInfo, DeckWord processedWord, string baseWord,
             Deconjugator deconjugator, ParserDiagnostics? diagnostics,
             ConcurrentDictionary<int, JmDictWord>? batchWordCache)
@@ -1891,7 +1836,7 @@ namespace Jiten.Parser
                 && (IsKanaAppropriateId(retry.word.WordId) || HasPrioritizedMeta(retry.word.WordId)))
             {
                 retry.word.OriginalText = baseWord;
-                return (retry.word, retry.margin, retry.candidates);
+                return (retry.word, retry.margin);
             }
 
             return null;
@@ -1957,7 +1902,7 @@ namespace Jiten.Parser
             return normalizedKanji > surfaceKanji;
         }
 
-        private static async Task<(bool success, DeckWord? word, int? margin, List<FormCandidate>? candidates)> DeconjugateWord(
+        private static async Task<(bool success, DeckWord? word, int? margin)> DeconjugateWord(
             WordInfo wordInfo,
             ParserDiagnostics? diagnostics = null,
             ConcurrentDictionary<int, JmDictWord>? batchWordCache = null)
@@ -1967,7 +1912,7 @@ namespace Jiten.Parser
             var textWithoutBar = text.TrimEnd('ー');
             if ((textWithoutBar.Length > 0 && textWithoutBar.All(char.IsDigit)) || (text.Length == 1 && text.IsAsciiOrFullWidthLetter()))
             {
-                return (false, null, null, null);
+                return (false, null, null);
             }
 
             var textInHiragana = KanaConverter.ToHiragana(wordInfo.Text, convertLongVowelMark: false);
@@ -2043,12 +1988,12 @@ namespace Jiten.Parser
                 catch (Exception ex)
                 {
                     Console.WriteLine($"Error retrieving word cache: {ex.Message}");
-                    return (false, null, null, null);
+                    return (false, null, null);
                 }
 
                 if (wordCache.Count == 0)
                 {
-                    return (false, null, null, null);
+                    return (false, null, null);
                 }
 
                 // A katakana hit bars words with no katakana form (カモン ≠ 家紋, フル ≠ 降る); 懐炉/カイロ still competes.
@@ -2186,7 +2131,7 @@ namespace Jiten.Parser
                     }
                     else
                     {
-                        return (false, null, null, null);
+                        return (false, null, null);
                     }
                 }
 
@@ -2250,7 +2195,7 @@ namespace Jiten.Parser
                 }
 
                 if (bestPair == null)
-                    return (false, null, null, null);
+                    return (false, null, null);
 
                 DeckWord deckWord = new()
                                     {
@@ -2258,26 +2203,26 @@ namespace Jiten.Parser
                                         ReadingIndex = bestPair.ReadingIndex,
                                         PartsOfSpeech = [..bestPair.Word.CachedPOS], Origin = bestPair.Word.Origin
                                     };
-                return (true, deckWord, margin, allFormCandidates);
+                return (true, deckWord, margin);
             }
 
-            return (false, null, null, null);
+            return (false, null, null);
         }
 
-        private static async Task<(bool success, DeckWord? word, int? margin, List<FormCandidate>? candidates)> DeconjugateVerbOrAdjective(
+        private static async Task<(bool success, DeckWord? word, int? margin)> DeconjugateVerbOrAdjective(
             WordInfo wordInfo, Deconjugator deconjugator,
             ParserDiagnostics? diagnostics = null,
             ConcurrentDictionary<int, JmDictWord>? batchWordCache = null)
         {
             // Before WanaKana, which can't convert full-width digits.
             if (IsNumberOrSingleLetter(wordInfo.Text))
-                return (false, null, null, null);
+                return (false, null, null);
 
             var normalizedText = KanaNormalizer.Normalize(KanaConverter.ToHiragana(wordInfo.Text));
 
             if (normalizedText.Length == 1 && normalizedText.IsAsciiOrFullWidthLetter())
             {
-                return (false, null, null, null);
+                return (false, null, null);
             }
 
             var (deconjugated, candidates, fromReadingChannel) =
@@ -2289,7 +2234,7 @@ namespace Jiten.Parser
                 PrioritiseAndCollectCandidateIds(wordInfo, candidates, baseDictionaryWord);
 
             if (allCandidateIds.Count == 0)
-                return (false, null, null, null);
+                return (false, null, null);
 
             Dictionary<int, JmDictWord> wordCache;
             try
@@ -2298,13 +2243,13 @@ namespace Jiten.Parser
 
                 if (wordCache.Count == 0)
                 {
-                    return (false, null, null, null);
+                    return (false, null, null);
                 }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Error retrieving verb/adjective word cache: {ex.Message}");
-                return (false, null, null, null);
+                return (false, null, null);
             }
 
             var (matches, filteredSuruNounIds) = await FilterAndMatchCandidates(
@@ -2313,7 +2258,7 @@ namespace Jiten.Parser
 
             if (matches.Count == 0)
             {
-                return (false, null, null, null);
+                return (false, null, null);
             }
 
             var allFormCandidates = EnumerateMatchAndSurfaceCandidates(
@@ -2331,7 +2276,7 @@ namespace Jiten.Parser
             (bestPair, margin) = ApplyConjugationChainOverrides(bestPair, margin, allFormCandidates, wordInfo);
 
             if (bestPair == null)
-                return (false, null, null, null);
+                return (false, null, null);
 
             DeckWord deckWord = new()
                                 {
@@ -2344,7 +2289,7 @@ namespace Jiten.Parser
                                     PartsOfSpeech = [..bestPair.Word.CachedPOS], Origin = bestPair.Word.Origin
                                 };
 
-            return (true, deckWord, margin, allFormCandidates);
+            return (true, deckWord, margin);
         }
 
         private static (List<DeconjugationForm> deconjugated, List<(DeconjugationForm form, List<int> ids)> candidates,
@@ -5497,16 +5442,20 @@ namespace Jiten.Parser
         #region Adjacent-word scoring
 
         // PreMatchedWordId is keyed: same-surface pins (帽子のツバ→鍔, ツバを飲む→唾) must not share a resolution.
-        private static (string text, PartOfSpeech pos, string dictionaryForm, string reading, bool isPersonNameContext, bool isNameLike, int? preMatchedWordId)
-            GetDedupKey(WordInfo wi) =>
-            (wi.Text, wi.PartOfSpeech, wi.DictionaryForm, wi.Reading, wi.IsPersonNameContext,
-             PosMapper.IsNameLikeSudachiNoun(wi.PartOfSpeech, wi.PartOfSpeechSection1,
-                                             wi.PartOfSpeechSection2, wi.PartOfSpeechSection3),
-             wi.PreMatchedWordId);
+        private static WordDedupKey GetDedupKey(WordInfo wi) =>
+            new(wi.Text, wi.PartOfSpeech, wi.DictionaryForm, wi.NormalizedForm, wi.Reading, wi.IsPersonNameContext,
+                PosMapper.IsNameLikeSudachiNoun(wi.PartOfSpeech, wi.PartOfSpeechSection1,
+                                                wi.PartOfSpeechSection2, wi.PartOfSpeechSection3),
+                wi.IsImperative, wi.PreMatchedWordId);
+
+        /// <summary>Every token field first-pass resolution reads; tokens with equal keys share one resolution (もと as 下 and as 元 must not).</summary>
+        private readonly record struct WordDedupKey(string Text, PartOfSpeech Pos, string DictionaryForm, string NormalizedForm,
+                                                    string Reading, bool IsPersonNameContext, bool IsNameLike, bool IsImperative,
+                                                    int? PreMatchedWordId);
 
         private static (DeckWord? word, int? margin) LookupResult(
             WordInfo wi,
-            Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), (DeckWord? word, int? margin)> resultLookup)
+            Dictionary<WordDedupKey, (DeckWord? word, int? margin)> resultLookup)
         {
             var key = GetDedupKey(wi);
             resultLookup.TryGetValue(key, out var result);
@@ -5541,8 +5490,7 @@ namespace Jiten.Parser
 
         private static async Task<List<DeckWord>> ApplyAdjacentScoring(
             List<SentenceInfo> sentences,
-            List<(DeckWord? word, int? margin, List<FormCandidate>? candidates)> processedResults,
-            Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), List<FormCandidate>>? candidateLookup = null,
+            List<(DeckWord? word, int? margin)> processedResults,
             ParserDiagnostics? diagnostics = null,
             FuriganaHint[]? relocatedHints = null)
         {
@@ -5553,18 +5501,17 @@ namespace Jiten.Parser
                 var r = processedResults[pos++];
                 return (r.word, r.margin);
             });
-            return await ApplyAdjacentScoringCore(sentencePairs, candidateLookup, diagnostics, relocatedHints);
+            return await ApplyAdjacentScoringCore(sentencePairs, diagnostics, relocatedHints);
         }
 
         private static async Task<List<DeckWord>> ApplyAdjacentScoring(
             List<SentenceInfo> sentences,
-            Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), (DeckWord? word, int? margin)> resultLookup,
-            Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), List<FormCandidate>>? candidateLookup = null,
+            Dictionary<WordDedupKey, (DeckWord? word, int? margin)> resultLookup,
             ParserDiagnostics? diagnostics = null,
             FuriganaHint[]? relocatedHints = null)
         {
             var sentencePairs = BuildSentencePairs(sentences, wi => LookupResult(wi, resultLookup));
-            return await ApplyAdjacentScoringCore(sentencePairs, candidateLookup, diagnostics, relocatedHints);
+            return await ApplyAdjacentScoringCore(sentencePairs, diagnostics, relocatedHints);
         }
 
         // State stands in for the dedup key: pass 1 builds exactly one RederiveState per dedup key.
@@ -5576,7 +5523,8 @@ namespace Jiten.Parser
             bool IsSentenceInitial,
             bool IsSentenceFinal,
             bool NextIsCopula,
-            bool AdmitCounters);
+            bool AdmitCounters,
+            bool FollowsClauseArgument);
 
         private sealed record ScoredCandidates(
             List<FormCandidate> Candidates,
@@ -5591,6 +5539,43 @@ namespace Jiten.Parser
                 ResultWordId == current.WordId && ResultReadingIndex == current.ReadingIndex
                 && (AllRefineToResult || (onlyInterjectionAllowed && !InterjectionFlip));
         }
+
+        /// <summary>A case-marked phrase, te-form or adverb right before the last word of a sentence makes that word a predicate, not a bare exclamation.</summary>
+        private static bool IsClauseArgument(WordInfo prev, DeckWord? prevResult, WordInfo current)
+        {
+            if (prev.EndOffset >= 0 && current.StartOffset >= 0 && prev.EndOffset != current.StartOffset)
+                return false;
+
+            if (ClauseArgumentParticles.Contains(prev.Text)
+                || (prev.PartOfSpeech == PartOfSpeech.Particle
+                    && (prev.HasPartOfSpeechSection(PartOfSpeechSection.CaseMarkingParticle)
+                        || prev.HasPartOfSpeechSection(PartOfSpeechSection.BindingParticle)
+                        || prev.HasPartOfSpeechSection(PartOfSpeechSection.AdverbialParticle))))
+                return true;
+
+            if (prev.PartOfSpeech == PartOfSpeech.Verb)
+                return prev.Text.EndsWith('て') || prev.Text.EndsWith('で') || prev.Text.EndsWith("ずに");
+            if (prev.PartOfSpeech == PartOfSpeech.IAdjective)
+                return prev.Text.EndsWith('く');
+
+            const uint adverbial = (1u << (int)PartOfSpeech.Adverb) | (1u << (int)PartOfSpeech.AdverbTo)
+                                   | (1u << (int)PartOfSpeech.Pronoun) | (1u << (int)PartOfSpeech.Counter)
+                                   | (1u << (int)PartOfSpeech.Numeral);
+            return PosMask.Has(adverbial, PosMask.Bit(prev.PartOfSpeech))
+                   || prev.HasPartOfSpeechSection(PartOfSpeechSection.PotentialAdverb)
+                   || prev.HasPartOfSpeechSection(PartOfSpeechSection.Counter)
+                   || (prevResult != null && PosMask.Has(adverbial, PosMask.FromList(prevResult.PartsOfSpeech)));
+        }
+
+        /// <summary>Matched by surface, not by tag: Sudachi tags the に of 完全に as an auxiliary.</summary>
+        private static readonly HashSet<string> ClauseArgumentParticles =
+            ["を", "に", "が", "は", "も", "で", "と", "へ", "から", "まで", "より", "だけ", "しか", "ばかり", "こそ", "さえ", "すら"];
+
+        private static (int TargetWordId, int Bonus)? MinedCollocation(DeckWord? noun, WordInfo particle, int pickedVerbWordId) =>
+            noun != null && TransitionRuleSets.CollocationParticle(particle.Text) is { } p
+            && TransitionRuleSets.MinedNounVerbCollocations.TryGetValue((noun.WordId, p, pickedVerbWordId), out var row)
+                ? row
+                : null;
 
         private static bool AllCandidatesRefineTo(List<FormCandidate> candidates, FormScoringContext context, DeckWord current)
         {
@@ -5648,7 +5633,6 @@ namespace Jiten.Parser
 
         private static async Task<List<DeckWord>> ApplyAdjacentScoringCore(
             List<List<(WordInfo word, DeckWord? result, int? margin)>> sentencePairs,
-            Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), List<FormCandidate>>? candidateLookup = null,
             ParserDiagnostics? diagnostics = null,
             FuriganaHint[]? relocatedHints = null)
         {
@@ -5657,8 +5641,7 @@ namespace Jiten.Parser
 
             var allWordIds = new HashSet<int>();
             var rederiveStates = new RederivationHelper.RederiveState?[sentencePairs.Count][];
-            var cachedCandidates = new List<FormCandidate>?[sentencePairs.Count][];
-            var rederiveCache = new Dictionary<(string, PartOfSpeech, string, string, bool, bool, int?), RederivationHelper.RederiveState?>();
+            var rederiveCache = new Dictionary<WordDedupKey, RederivationHelper.RederiveState?>();
 
             // Surface text is immutable across both passes.
             var isClassicalBySentence = new bool[sentencePairs.Count];
@@ -5683,9 +5666,13 @@ namespace Jiten.Parser
                     // A collocating noun (手を|ふる) must reach the boost even when the first pass was confident (降る's jiten priority).
                     bool prevCollocationNoun = false;
                     if (currentResult.PartsOfSpeech.Contains(PartOfSpeech.Verb))
+                    {
                         for (int k = Math.Max(0, i - 3); k < i && !prevCollocationNoun; k++)
                             prevCollocationNoun = sentenceWords[k].result is { } kr
                                                   && TransitionRuleSets.NounVerbCollocations.ContainsKey(kr.WordId);
+                        prevCollocationNoun |= i >= 2 && MinedCollocation(sentenceWords[i - 2].result, sentenceWords[i - 1].word,
+                                                                          currentResult.WordId) != null;
+                    }
 
                     // A counter homograph after a numeral (第二|話) stays rescorable; only pass 2 sees the numeral.
                     // A pick that is itself a numeral (ガンつく1|ワン) is already cohesive and must not reshuffle.
@@ -5736,16 +5723,6 @@ namespace Jiten.Parser
                     }
 
                     var dedupKey = GetDedupKey(currentInfo);
-
-                    if (candidateLookup != null && !hasHint)
-                    {
-                        if (candidateLookup.TryGetValue(dedupKey, out var fpCandidates))
-                        {
-                            (cachedCandidates[si] ??= new List<FormCandidate>?[sentenceWords.Count])[i] = fpCandidates;
-                            Interlocked.Increment(ref ParserCounters.AdjFirstPassCandidates);
-                            continue;
-                        }
-                    }
 
                     RederivationHelper.RederiveState? state;
                     if (!rederiveCache.TryGetValue(dedupKey, out state))
@@ -5818,9 +5795,13 @@ namespace Jiten.Parser
 
                     bool hasCollocationNoun = false;
                     if (currentResult.PartsOfSpeech.Contains(PartOfSpeech.Verb))
+                    {
                         for (int k = Math.Max(0, i - 3); k < i && !hasCollocationNoun; k++)
                             hasCollocationNoun = resolvedResults[k] is { } kr
                                                  && TransitionRuleSets.NounVerbCollocations.ContainsKey(kr.WordId);
+                        hasCollocationNoun |= i >= 2 && MinedCollocation(resolvedResults[i - 2], sentenceWords[i - 1].word,
+                                                                         currentResult.WordId) != null;
+                    }
 
                     // A confident sentence-final verb takes only the interjection override (行けよ), unless a collocating noun precedes it.
                     bool onlyInterjectionAllowed = i == sentenceWords.Count - 1
@@ -5828,18 +5809,15 @@ namespace Jiten.Parser
                         && currentResult.PartsOfSpeech.Contains(PartOfSpeech.Verb)
                         && !hasCollocationNoun;
 
+                    bool followsClauseArgument = i == sentenceWords.Count - 1 && i > 0
+                        && IsClauseArgument(sentenceWords[i - 1].word, resolvedResults[i - 1], currentInfo);
+
                     List<FormCandidate>? candidates = null;
-                    bool fromFirstPassCache = false;
                     bool memoHit = false;
                     bool hasMemoKey = false;
                     ScoredCandidatesKey memoKey = default;
                     FormScoringContext? memoContext = null;
-                    if (cachedCandidates[si]?[i] is { } cached)
-                    {
-                        candidates = cached;
-                        fromFirstPassCache = true;
-                    }
-                    else if (rederiveStates[si]?[i] is { } state)
+                    if (rederiveStates[si]?[i] is { } state)
                     {
                         // Kanji surfaces only: kana after a numeral is usually not a counter (何|か, not 箇/課).
                         bool admitCounters = i > 0
@@ -5852,7 +5830,8 @@ namespace Jiten.Parser
                         {
                             memoKey = new ScoredCandidatesKey(state, currentInfo.NormalizedForm,
                                 currentInfo.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant),
-                                isArchaicSentence, i == 0, i == sentenceWords.Count - 1, nextIsCopula, admitCounters);
+                                isArchaicSentence, i == 0, i == sentenceWords.Count - 1, nextIsCopula, admitCounters,
+                                followsClauseArgument);
                             hasMemoKey = true;
                         }
 
@@ -5901,9 +5880,6 @@ namespace Jiten.Parser
                                                                          nextResult?.PartsOfSpeech,
                                                                          nextInfo?.Text);
 
-                    // Adjacent context (archaic, sentence edges) only affects WordPriorityScorer; interior tokens keep traces.
-                    bool skipRescore = fromFirstPassCache && !isArchaicSentence && i > 0 && i < sentenceWords.Count - 1;
-
                     var scoringContext = memoContext ?? FormScoringContext.Create(
                         currentInfo.Text, currentInfo.DictionaryForm, currentInfo.NormalizedForm,
                         currentInfo.IsPersonNameContext, currentInfo.Reading,
@@ -5911,7 +5887,8 @@ namespace Jiten.Parser
                         isSentenceInitial: i == 0,
                         isSentenceFinal: i == sentenceWords.Count - 1,
                         sudachiPOS: currentInfo.PartOfSpeech,
-                        isSudachiPossibleDependant: currentInfo.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant));
+                        isSudachiPossibleDependant: currentInfo.HasPartOfSpeechSection(PartOfSpeechSection.PossibleDependant),
+                        followsClauseArgument: followsClauseArgument);
 
                     // 来い → int 2742070, not 来る's imperative; only this pass knows the token is sentence-final.
                     var sfInterjCurrent = scoringContext.IsSentenceFinal
@@ -5925,7 +5902,7 @@ namespace Jiten.Parser
                         foreach (var c in candidates)
                             c.IsPosIncompatibleDirectSurface = false;
 
-                    if (!skipRescore && !memoHit)
+                    if (!memoHit)
                         foreach (var c in candidates)
                             c.SetScoreTrace(FormCandidateScorer.Score(c, scoringContext, ArchaicPosTypes));
 
@@ -5952,13 +5929,22 @@ namespace Jiten.Parser
                     for (int k = Math.Max(0, i - 3); k < i; k++)
                     {
                         var rr = resolvedResults[k];
-                        if (rr != null
-                            && TransitionRuleSets.NounVerbCollocations.TryGetValue(rr.WordId, out var collocations))
+                        if (rr == null)
+                            continue;
+
+                        if (TransitionRuleSets.NounVerbCollocations.TryGetValue(rr.WordId, out var collocations))
                         {
                             collocMap ??= new Dictionary<int, int>();
                             foreach (var cv in collocations)
                                 collocMap[cv.TargetWordId] = collocMap.GetValueOrDefault(cv.TargetWordId) + cv.Bonus;
                         }
+
+                    }
+
+                    if (i >= 2 && MinedCollocation(resolvedResults[i - 2], sentenceWords[i - 1].word, currentResult.WordId) is { } mined)
+                    {
+                        collocMap ??= new Dictionary<int, int>();
+                        collocMap[mined.TargetWordId] = collocMap.GetValueOrDefault(mined.TargetWordId) + mined.Bonus;
                     }
 
                     // The next surface (前/後) selects a homograph reading the priority scorer would miss.
@@ -6132,7 +6118,7 @@ namespace Jiten.Parser
 
         private static Dictionary<(int sentenceIndex, int wordIndex), int?> BuildMarginMap(
             List<SentenceInfo> sentences,
-            List<(DeckWord? word, int? margin, List<FormCandidate>? candidates)> processedWithMargins)
+            List<(DeckWord? word, int? margin)> processedWithMargins)
         {
             var map = new Dictionary<(int, int), int?>();
             int flatIndex = 0;

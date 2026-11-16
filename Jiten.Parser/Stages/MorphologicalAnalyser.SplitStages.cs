@@ -456,7 +456,7 @@ public partial class MorphologicalAnalyser
         return result ?? wordInfos;
     }
 
-    /// <summary>Re-cuts Sudachi's イッ + たん(suffix) + だ as イッた + ん + だ; ProcessSpecialCases then merges ん + だ.</summary>
+    /// <summary>Re-cuts Sudachi's イッ + たん(suffix) + だ as イッた + ん + だ; the verb must exist, or a name + たん (るみたん) reads as a past tense.</summary>
     private List<WordInfo> SplitTanSuffix(List<WordInfo> wordInfos)
     {
         if (wordInfos.Count < 2) return wordInfos;
@@ -488,7 +488,8 @@ public partial class MorphologicalAnalyser
             {
                 var candidateText = NormalizeToHiragana(prev.Text + "た");
                 var forms = deconj.Deconjugate(candidateText);
-                if (forms.Any(f => f.Tags.Any(t => t.StartsWith('v')) && f.Process.Any(p => p == "past")))
+                if (forms.Any(f => f.Tags.Any(t => t.StartsWith('v')) && f.Process.Any(p => p == "past")
+                                   && HasVerbOrAdjectiveLookup?.Invoke(f.Text) != false))
                     shouldSplit = true;
             }
 
@@ -1007,7 +1008,7 @@ public partial class MorphologicalAnalyser
         {
             var word = wordInfos[i];
 
-            if (!IsLikelyOovGarbage(word) || result.Count == 0)
+            if (!IsLikelyOovGarbage(word) || result.Count == 0 || IsNonWordToken(result[^1]))
             {
                 result.Add(word);
                 continue;

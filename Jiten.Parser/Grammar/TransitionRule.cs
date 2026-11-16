@@ -9,6 +9,8 @@ internal enum ViolationAction
     None,
     RemoveCurrent,
     MergeWithPrevious,
+    /// <summary>Merges only into a dictionary word; otherwise the token stays.</summary>
+    MergeWithPreviousOrKeep,
     ReclassifyCurrentAsNoun,
     RequestResegmentation
 }
@@ -23,6 +25,7 @@ internal enum MatchCondition
     PrevIsVerbOrAux,             // Prev.PartOfSpeech is Verb or Auxiliary
     PrevIsVerbAuxIAdjOrSfp,      // Prev.PartOfSpeech is Verb, Auxiliary, IAdjective, or sentence-ending particle
     IsNotEmphaticSfp,            // Current.Text is not the emphatic ぞ/ぜ (they never merge)
+    IsStandardSfp,               // Current.Text, minus a drawn-out vowel, is in StandardSentenceEndingParticles
     PrevIsNumericOrNoun, // Prev.PartOfSpeech is Numeral, Noun, CommonNoun, Pronoun, or Name
     PrevExists,          // Prev != null
     IsSentenceEndingParticle, // PartOfSpeech == Particle && Section == SentenceEndingParticle

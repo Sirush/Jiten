@@ -44,7 +44,6 @@ internal enum TokenFeatures : uint
     HiraganaOovBlob = 1 << 23,
     AdverbEndsTo    = 1 << 24,
     TextTobashi     = 1 << 25,
-    VerbKaeru       = 1 << 26,
     GeminateSuffixShape = 1 << 27,
     KatakanaRun     = 1 << 28,
     CompoundBoundaryShape = 1 << 29,
@@ -95,7 +94,7 @@ internal static class TokenFeatureScanner
     private const TokenFeatures TextShapeFeatures =
         TokenFeatures.TextTanSuffix | TokenFeatures.TextTanka | TokenFeatures.TextHasa | TokenFeatures.TextTawake
         | TokenFeatures.TextTatte | TokenFeatures.TextRan | TokenFeatures.TextKaratte | TokenFeatures.TextSakki
-        | TokenFeatures.TextTobashi | TokenFeatures.Prefix | TokenFeatures.DictKiru | TokenFeatures.VerbKaeru
+        | TokenFeatures.TextTobashi | TokenFeatures.Prefix | TokenFeatures.DictKiru
         | TokenFeatures.AdverbEndsTo;
 
     public static TokenFeatures Scan(List<WordInfo> tokens) => ScanCore(tokens, null, AllFeatures);
@@ -301,10 +300,6 @@ internal static class TokenFeatureScanner
 
         if (w.DictionaryForm == "切る")
             f |= TokenFeatures.DictKiru;
-
-        // Superset: RepairIntensifierKaeru splits only OOV X返る, not entries like 静まり返る.
-        if (w.PartOfSpeech == PartOfSpeech.Verb && w.NormalizedForm.EndsWith("返る", StringComparison.Ordinal))
-            f |= TokenFeatures.VerbKaeru;
 
         if (w.PartOfSpeech == PartOfSpeech.Adverb && text.Length >= 2 && text[^1] == 'と')
             f |= TokenFeatures.AdverbEndsTo;

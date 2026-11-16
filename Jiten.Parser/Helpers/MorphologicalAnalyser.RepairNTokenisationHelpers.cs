@@ -105,18 +105,18 @@ public partial class MorphologicalAnalyser
 
         for (int lookback = 1; lookback <= Math.Min(3, result.Count); lookback++)
         {
-            bool hasBlankSpace = false;
+            bool hasNonWord = false;
             for (int j = result.Count - lookback; j < result.Count; j++)
             {
-                if (result[j].PartOfSpeech != PartOfSpeech.BlankSpace)
+                if (!IsNonWordToken(result[j]))
                     continue;
 
-                hasBlankSpace = true;
+                hasNonWord = true;
                 break;
             }
 
-            // Blank spaces deconjugate to a false match.
-            if (hasBlankSpace) continue;
+            // Punctuation and blanks deconjugate to a false match.
+            if (hasNonWord) continue;
 
             // ん after a te-form contracts いる (ている → てん), not past tense.
             bool hasTeParticle = false;

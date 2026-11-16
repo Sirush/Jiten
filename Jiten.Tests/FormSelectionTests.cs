@@ -2157,6 +2157,33 @@ public class FormSelectionTests
         // Hokkaido/Tohoku dialect あずましい (吾妻しい) and the arbour あずまや (東屋), not 東 + 敷く / や
         yield return ["あずましくねえべさ", "あずましくねえ", 2107400, (byte)1];
         yield return ["あずまや近くの一画。", "あずまや", 1447570, (byte)4];
+        yield return ["おや、まあ、あさってなの、まだまだ先のことかと思ってたけど", "あさって", 1584640, (byte)1];
+        yield return ["「信用して」と彼は言った。", "と", 1008490, (byte)0];
+        yield return ["僕たちは放課後よくチェスをやった。", "やった", 1012980, (byte)2];
+        yield return ["やった！2回続けて勝った。", "やった", 2016840, (byte)0];
+        yield return ["彼女はその仕事を完全にやった。", "やった", 1012980, (byte)2];
+        yield return ["こっちに来い！", "来い", 1547720, (byte)0];
+        yield return ["来い！", "来い", 2742070, (byte)0];
+        yield return ["あの赤い布は茶道具です。", "あの", 1000420, (byte)1];
+        yield return ["あの、私、残念ですが失礼します。", "あの", 1000430, (byte)0];
+        yield return ["何時ですか。", "何時", 1188770, (byte)0];
+        yield return ["明日は何時に起きますか。", "何時", 1188770, (byte)0];
+        yield return ["何時になったら帰れるの。", "何時", 1188760, (byte)0];
+        yield return ["彼は金を払った。", "金", 1242590, (byte)0];
+        yield return ["陸路ではそこへ行けない。", "行けない", 1578850, (byte)0];
+        yield return ["来年君は何歳になりますか。", "君", 1247250, (byte)0];
+        yield return ["田中君は上手にピアノを弾く。", "君", 1247260, (byte)0];
+        yield return ["列車が私たちの側を通り過ぎた。", "側", 1403830, (byte)0];
+        yield return ["反対側に渡った。", "反対側", 1480720, (byte)0];
+        yield return ["彼女はピアノをひいた。", "ひいた", 1419370, (byte)1];
+        yield return ["冗談はやめよう。", "やめよう", 1310680, (byte)3];
+        yield return ["電車が駅についた。", "ついた", 1422970, (byte)1];
+        yield return ["彼は要職についた。", "ついた", 1331530, (byte)2];
+        yield return ["指についた血を拭いた。", "ついた", 1495740, (byte)2];
+        yield return ["靴をはいて出かけた。", "はいて", 1607260, (byte)5];
+        yield return ["彼は疑問を抱いた。", "抱いた", 1584090, (byte)0];
+        yield return ["僕は彼女を幸せにすると言った。", "言った", 1587040, (byte)0];
+        yield return ["この法律案が通らなかった場合において、おまえはどういう責任をとるのだ。", "において", 1009550, (byte)2];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

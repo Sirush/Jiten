@@ -46,9 +46,8 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Repair, RetokeniseOovBlobs, TokenFeatures.HiraganaOovBlob),
         Stage(TokenStageGroup.Repair, RepairColloquialNegativeNee, TokenFeatures.Interjection),
         Stage(TokenStageGroup.Repair, RepairColloquialRanNai, TokenFeatures.TextRan),
-        Stage(TokenStageGroup.Repair, RepairIntensifierKaeru, TokenFeatures.VerbKaeru),
-        Stage(TokenStageGroup.Repair, RepairNounReadAsTeForm, TokenFeatures.EndsWithTsu),
         Stage(TokenStageGroup.Repair, RepairQuotativeTte, TokenFeatures.EndsWithTsu),
+        Stage(TokenStageGroup.Repair, RepairNounReadAsTeForm, TokenFeatures.EndsWithTsu),
         Stage(TokenStageGroup.Repair, RepairStolenUBeforeSsu),
         Stage(TokenStageGroup.Repair, RepairInterjectionStemShred, TokenFeatures.Interjection),
         Stage(TokenStageGroup.Repair, RepairNounTsukuCompound),
@@ -94,11 +93,76 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Disambiguation, FixReadingAmbiguity),
     ];
 
+    private const int PipelineBlockMinTokens = 256;
+
+    /// <summary>Diagnostics record one entry per stage, so a diagnostics run is never split into blocks.</summary>
     private List<WordInfo> RunPipeline(List<WordInfo> wordInfos, ParserDiagnostics? diagnostics,
                                       BenchmarkTimings? timings = null)
     {
         _pipelineDeconjCache = new Dictionary<string, IReadOnlyList<DeconjugationForm>>(StringComparer.Ordinal);
         _pipelineDeconjCacheAlt = _pipelineDeconjCache.GetAlternateLookup<ReadOnlySpan<char>>();
+
+        List<WordInfo> result;
+        if (diagnostics != null || wordInfos.Count <= PipelineBlockMinTokens)
+        {
+            result = RunStages(wordInfos, diagnostics, timings);
+        }
+        else
+        {
+            result = new List<WordInfo>(wordInfos.Count);
+            WordInfo? precedingEnder = null;
+            for (int start = 0; start < wordInfos.Count;)
+            {
+                int end = FindBlockEnd(wordInfos, start);
+                var block = new List<WordInfo>(end - start + 1);
+                if (precedingEnder != null)
+                    block.Add(precedingEnder);
+                for (int i = start; i < end; i++)
+                    block.Add(wordInfos[i]);
+
+                var pristineEnder = end < wordInfos.Count ? new WordInfo(wordInfos[end - 1]) : null;
+                AppendBlock(result, RunStages(block, null, timings), precedingEnder);
+                precedingEnder = pristineEnder;
+                start = end;
+            }
+        }
+
+        _pipelineDeconjCache = null;
+        return result;
+    }
+
+    /// <summary>A block runs behind a copy of the ender before it, so its first word keeps the left neighbour it has in a whole-document run.</summary>
+    private static void AppendBlock(List<WordInfo> result, List<WordInfo> block, WordInfo? precedingEnder)
+    {
+        int skip = 0;
+        if (precedingEnder != null)
+        {
+            if (block.Count > 0 && block[0].Text == precedingEnder.Text)
+                skip = 1;
+            else if (result.Count > 0 && result[^1].Text == precedingEnder.Text)
+                result.RemoveAt(result.Count - 1);
+        }
+
+        for (int i = skip; i < block.Count; i++)
+            result.Add(block[i]);
+    }
+
+    /// <summary>Blocks end only after 。！？ followed by a sentence start; reading context still crosses that point, so the cut must stay rare.</summary>
+    private static int FindBlockEnd(List<WordInfo> tokens, int start)
+    {
+        int end = start + PipelineBlockMinTokens;
+        while (end < tokens.Count && !(IsSentenceEnder(tokens[end - 1].Text) && StartsSentence(tokens[end].Text)))
+            end++;
+        return Math.Min(end, tokens.Count);
+    }
+
+    private static bool IsSentenceEnder(string text) => text is "。" or "！" or "？";
+
+    private static bool StartsSentence(string text) =>
+        text.Length > 0 && !IsSentenceEnder(text) && text is not ("」" or "』" or "）" or "〉" or "》");
+
+    private List<WordInfo> RunStages(List<WordInfo> wordInfos, ParserDiagnostics? diagnostics, BenchmarkTimings? timings)
+    {
         TokenFeatureScan? candidateScan = null;
         var features = TokenFeatureScanner.Scan(wordInfos);
         bool featuresStale = false;
@@ -158,7 +222,6 @@ public partial class MorphologicalAnalyser
             }
         }
 
-        _pipelineDeconjCache = null;
         return wordInfos;
     }
 

@@ -1092,6 +1092,46 @@ public class DiagnosticCommands(CliContext context)
         Console.WriteLine($"Wrote {tokenCount} tokens to {outPath}");
     }
 
+    public async Task DumpTokens(CliOptions options)
+    {
+        if (!Directory.Exists(options.DumpTokens))
+        {
+            Console.WriteLine("--dump-tokens requires an existing folder of .txt files");
+            return;
+        }
+
+        var files = Directory.GetFiles(options.DumpTokens, "*.txt").OrderBy(f => f, StringComparer.Ordinal).ToArray();
+        var outPath = string.IsNullOrEmpty(options.ParseTestOutput) ? "tokens.tsv" : options.ParseTestOutput;
+        var sw = Stopwatch.StartNew();
+        long tokenCount = 0;
+
+        await using var writer = new StreamWriter(outPath, false, new UTF8Encoding(false));
+        foreach (var file in files)
+        {
+            var lines = await File.ReadAllLinesAsync(file);
+            var parsed = new string[lines.Length];
+            await Parallel.ForEachAsync(Enumerable.Range(0, lines.Length), async (n, _) =>
+            {
+                if (string.IsNullOrWhiteSpace(lines[n]))
+                {
+                    parsed[n] = "";
+                    return;
+                }
+
+                var words = await Jiten.Parser.Parser.ParseText(context.ContextFactory, lines[n]);
+                parsed[n] = string.Join('\t', words.Select(w => $"{w.WordId}:{w.ReadingIndex}:{w.OriginalText}"));
+                Interlocked.Add(ref tokenCount, words.Count);
+            });
+
+            await writer.WriteLineAsync("## " + Path.GetFileName(file));
+            foreach (var line in parsed)
+                if (line.Length > 0)
+                    await writer.WriteLineAsync(line);
+        }
+
+        Console.WriteLine($"Wrote {tokenCount:N0} tokens from {files.Length} files to {outPath} in {sw.Elapsed.TotalSeconds:N0} s");
+    }
+
     public async Task WarmJmDictCache()
     {
         var sw = Stopwatch.StartNew();

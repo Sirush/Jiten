@@ -106,6 +106,9 @@ internal static class TransitionRuleEngine
                 MatchCondition.IsNotEmphaticSfp =>
                     w.Current.Text is not ("ぞ" or "ぜ"),
 
+                MatchCondition.IsStandardSfp =>
+                    IsStandardSfp(w.Current.Text),
+
                 MatchCondition.PrevExists =>
                     w.Prev != null,
 
@@ -165,6 +168,13 @@ internal static class TransitionRuleEngine
         return true;
     }
 
+    private static bool IsStandardSfp(string text)
+    {
+        var core = KanaConverter.ToHiragana(text, convertLongVowelMark: false).AsSpan().TrimEnd("ーぁぃぅぇぉあいうえお");
+        return core.Length > 0
+               && TransitionRuleSets.StandardSentenceEndingParticles.GetAlternateLookup<ReadOnlySpan<char>>().Contains(core);
+    }
+
     private static bool IsVocativeFollower(WordInfo? next)
     {
         if (next?.PartOfSpeech is PartOfSpeech.Name or PartOfSpeech.Pronoun)
@@ -189,6 +199,7 @@ internal static class TransitionRuleEngine
                 break;
 
             case ViolationAction.MergeWithPrevious:
+            case ViolationAction.MergeWithPreviousOrKeep:
                 if (i == 0)
                 {
                     words.RemoveAt(i);
@@ -222,7 +233,7 @@ internal static class TransitionRuleEngine
                     }, prevPos, prevLen + auxLen);
                     words.RemoveAt(i);
                 }
-                else
+                else if (rule.OnViolation == ViolationAction.MergeWithPrevious)
                 {
                     words.RemoveAt(i);
                 }

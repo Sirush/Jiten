@@ -738,64 +738,6 @@ public partial class MorphologicalAnalyser
         return list ?? wordInfos;
     }
 
-    // An OOV intensifier X返る (のさばり返る) drops whole; split to head verb + 返る. Attested 静まり返る fails the lookup gate.
-    private List<WordInfo> RepairIntensifierKaeru(List<WordInfo> wordInfos) =>
-        HasNonNameCompoundLookup == null ? wordInfos : ScanRewrite(wordInfos, TryRepairIntensifierKaeru);
-
-    private int TryRepairIntensifierKaeru(List<WordInfo> tokens, int i, List<WordInfo>? _, Func<List<WordInfo>> output)
-    {
-        var w = tokens[i];
-        if (!(w.PartOfSpeech == PartOfSpeech.Verb && w.PreMatchedWordId == null
-              && w.NormalizedForm.Length >= 4 && w.Text.Length >= 3
-              && w.NormalizedForm.EndsWith("返る", StringComparison.Ordinal)
-              && !HasNonNameCompoundLookup!(w.NormalizedForm)))
-            return 0;
-
-        // The head is the normalised form minus 返る, a kana-stable renyoukei (のさばり → のさばる).
-        var headStem = w.NormalizedForm[..^2];
-        string? headDict = null;
-        foreach (var f in Deconjugator.Instance.Deconjugate(headStem))
-            if (f.Tags.Any(t => t.StartsWith("v", StringComparison.Ordinal)) && HasNonNameCompoundLookup(f.Text))
-            { headDict = f.Text; break; }
-
-        // Surface must open with the same kana head (のさばりかえっ).
-        if (headDict == null || !w.Text.StartsWith(headStem, StringComparison.Ordinal)
-            || w.Text.Length <= headStem.Length)
-            return 0;
-
-        var result = output();
-        var suffixSurface = w.Text[headStem.Length..];
-        int cut = w.StartOffset >= 0 ? w.StartOffset + headStem.Length : -1;
-        result.Add(new WordInfo(w)
-        {
-            Text = headStem, DictionaryForm = headDict, NormalizedForm = headDict,
-            Reading = "", PartOfSpeech = PartOfSpeech.Verb, EndOffset = cut
-        });
-        // Folds て/た into 返って so it is read neither as quotative って nor as 却って.
-        if (suffixSurface.EndsWith("っ", StringComparison.Ordinal)
-            && i + 1 < tokens.Count && tokens[i + 1].Text is "て" or "た")
-        {
-            result.Add(new WordInfo(w)
-            {
-                Text = suffixSurface + tokens[i + 1].Text, DictionaryForm = "返る", NormalizedForm = "返る",
-                Reading = "", PartOfSpeech = PartOfSpeech.Verb, PreMatchedWordId = 1512150,
-                // Deconjugation is kana-side, so the chain is recovered against かえる, not 返る.
-                PreMatchedConjugations = PinnedConjugationProcess(suffixSurface + tokens[i + 1].Text, "かえる"),
-                StartOffset = cut, EndOffset = tokens[i + 1].EndOffset
-            });
-            return 2;
-        }
-
-        result.Add(new WordInfo(w)
-        {
-            Text = suffixSurface, DictionaryForm = "返る", NormalizedForm = "返る",
-            Reading = "", PartOfSpeech = PartOfSpeech.Verb, PreMatchedWordId = 1512150,
-            PreMatchedConjugations = PinnedConjugationProcess(suffixSurface, "かえる"),
-            StartOffset = cut, EndOffset = w.EndOffset
-        });
-        return 1;
-    }
-
     // A numeral claims 段 (一段|飛ばし), stranding 飛ばし on the fraud noun; reform 段飛ばし. A blanket 段+X rule would split 三段跳び.
     private List<WordInfo> RepairDanTobashi(List<WordInfo> wordInfos) =>
         ScanRewrite(wordInfos, static (tokens, i, _, output) =>
@@ -847,7 +789,7 @@ public partial class MorphologicalAnalyser
             var word = wordInfos[i];
 
             // Noun たか after a verb stem is past た + か (言い過ぎ|たか); 鷹/高 after を/の never forms a past tense.
-            if (word is { PartOfSpeech: PartOfSpeech.Noun, Text: "たか" } && result.Count > 0)
+            if (word is { PartOfSpeech: PartOfSpeech.Noun, Text: "たか" } && result.Count > 0 && !IsNonWordToken(result[^1]))
             {
                 var prevTok = result[^1];
                 var pastForms = deconj.Deconjugate(NormalizeToHiragana(prevTok.Text + "た"));
@@ -1144,6 +1086,15 @@ public partial class MorphologicalAnalyser
         return true;
     }
 
+    /// <summary>Punctuation and blanks never host a returned mora or a suffix; judged on the text because Sudachi tags some punctuation as a noun.</summary>
+    private static bool IsNonWordToken(WordInfo w)
+    {
+        foreach (var c in w.Text)
+            if (char.IsLetterOrDigit(c))
+                return false;
+        return true;
+    }
+
     private List<WordInfo> RepairVowelElongation(List<WordInfo> wordInfos)
     {
         bool changed = false;
@@ -1299,7 +1250,7 @@ public partial class MorphologicalAnalyser
         {
             var current = wordInfos[i];
 
-            if (result.Count == 0)
+            if (result.Count == 0 || IsNonWordToken(result[^1]))
             {
                 result.Add(current);
                 continue;
@@ -2511,6 +2462,18 @@ public partial class MorphologicalAnalyser
         {
             WordInfo w1 = wordInfos[i];
 
+            // し straight after a suru-noun is する's 連用中止 (蒸発し大気に); the particle し needs a predicate before it.
+            if (w1 is { Text: "し", PartOfSpeech: PartOfSpeech.Conjunction } && newList.Count > 0
+                && newList[^1].PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                && HasSuruVerbCompoundLookup?.Invoke(newList[^1].Text) == true)
+            {
+                w1 = new WordInfo(w1)
+                {
+                    PartOfSpeech = PartOfSpeech.Verb, PartOfSpeechSection1 = PartOfSpeechSection.PossibleDependant,
+                    DictionaryForm = "する", NormalizedForm = "為る"
+                };
+            }
+
             // Kana したんだ with dict form したむ is Sudachi's misread of した+んだ; the dated verb 湑む is written in kanji.
             if (w1.DictionaryForm == "したむ" && w1.Text.StartsWith("した", StringComparison.Ordinal)
                 && w1.Text.Length >= 3)
@@ -3156,7 +3119,7 @@ public partial class MorphologicalAnalyser
                         // RepairVowelElongation may have stripped the particle's trailing ー.
                         bool thirdMatch = w3.Text == sc.Third ||
                             (sc.Third.Length > 1 && sc.Third[^1] == 'ー' && w3.Text == sc.Third[..^1]);
-                        if (w2.Text == sc.Second && thirdMatch)
+                        if (w2.Text == sc.Second && thirdMatch && !(w2.Text == "の" && IsNominaliserBeforeCopula(wordInfos, i + 2, beforeAru: false)))
                         {
                             if (newList.Count > 0 && HasCompoundLookup != null &&
                                 w2.PartOfSpeech == PartOfSpeech.Verb)
@@ -3367,6 +3330,7 @@ public partial class MorphologicalAnalyser
                         if (sc.Second == "じゃ" && soreJaBlocked) continue;
                         if (sc.Second == "に" && doNiBlocked) continue;
                         if (sc.Second == "か" && tsuKaBlocked) continue;
+                        if (w1.Text == "の" && IsNominaliserBeforeCopula(wordInfos, i + 1)) continue;
                         if (w2.Text == sc.Second
                             && !(sc.Pos == PartOfSpeech.Verb && w1.PartOfSpeech == PartOfSpeech.Conjunction))
                         {
@@ -4425,7 +4389,7 @@ public partial class MorphologicalAnalyser
 
             var thief = wordInfos[i];
             var stripped = thief.Text[..^1];
-            var prev = result.Count > 0 ? result[^1] : null;
+            var prev = result.Count > 0 && !IsNonWordToken(result[^1]) ? result[^1] : null;
 
             // のか|なっ|て → のかな|って; a clause-final token before か makes the question reading certain.
             if (thief.Text == "なっ" && prev is { PartOfSpeech: PartOfSpeech.Particle, Text: "か" }

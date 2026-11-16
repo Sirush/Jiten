@@ -187,6 +187,12 @@ public class CliOptions
     [Option(longName: "parse-test-output", Required = false, HelpText = "Output file path for parse-test diagnostics. Defaults to stdout.")]
     public string? ParseTestOutput { get; set; }
 
+    [Option(longName: "tatoeba-benchmark", Required = false, HelpText = "Score the parser against Tatoeba's JMdict-linked sentence index. Takes the folder holding jpn_indices.csv and jpn_sentences.tsv; prints agreement rates and writes every disagreement to --parse-test-output.")]
+    public string? TatoebaBenchmark { get; set; }
+
+    [Option(longName: "tatoeba-limit", Required = false, Default = 0, HelpText = "Only score the first N indexed sentences of --tatoeba-benchmark (0 = all).")]
+    public int TatoebaLimit { get; set; }
+
     [Option(longName: "mine-margins", Required = false, HelpText = "Mine low-margin (uncertain segmentation) spans from a text file (or literal text). Uses Sudachi lattice margins; no DB needed. Files are streamed (multi-GB ok) with progress reports and incremental snapshots to --parse-test-output (default: <input>.margins.json).")]
     public string? MineMargins { get; set; }
 
@@ -340,6 +346,10 @@ public class CliOptions
     [Option(longName: "snapshot-tokens", Required = false,
             HelpText = "Dump every token's (WordId,ReadingIndex,Conjugations) for a corpus to --parse-test-output, for before/after refactor diffing. Requires --input.")]
     public bool SnapshotTokens { get; set; }
+
+    [Option(longName: "dump-tokens", Required = false,
+            HelpText = "Parse every line of the .txt files in a folder and write one line per input line to --parse-test-output: wordId:readingIndex:surface per token, tab-separated, with a '## file' header per file. For mining collocations.")]
+    public string? DumpTokens { get; set; }
 
     [Option(longName: "concurrency-smoke", Required = false,
             HelpText = "Parse all .txt files in the given directory and dump per-file (WordId:ReadingIndex:Text) signatures to --parse-test-output. Parses in parallel by default (concurrent cross-document stress on the shared JmDict cache); add --smoke-sequential for a single-threaded pass. Run twice cold (flush Redis between, fresh process each) and diff the outputs to prove parallel==sequential.")]
