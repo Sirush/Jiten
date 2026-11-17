@@ -34,6 +34,7 @@ public class ParseJob(
     public async Task<int> ParseAndGetDeckId(Metadata metadata, MediaType deckType, bool storeRawText = false, int? requestId = null)
     {
         Deck deck = new();
+        var discoveredNames = new HashSet<string>();
         string filePath = metadata.FilePath!;
 
         await using var context = await contextFactory.CreateDbContextAsync();
@@ -93,18 +94,19 @@ public class ParseJob(
             }
 
             deck = await Parser.Parser.ParseTextToDeck(contextFactory, text, storeRawText, true, deckType,
-                dictionaryEntries: metadata.DictionaryEntries);
+                dictionaryEntries: metadata.DictionaryEntries, discoveredNames: discoveredNames);
         }
 
         deck.SpeechDuration = metadata.SpeechDuration ?? 0;
         deck.SpeechMoraCount = metadata.SpeechMoraCount ?? 0;
-        deck.DictionaryEntries = metadata.DictionaryEntries;
 
         // Batch process ALL descendants in one Sudachi call
         if (metadata.Children.Count > 0)
         {
-            await ParseChildrenBatched(metadata.Children, deck, deckType, storeRawText, metadata.DictionaryEntries);
+            await ParseChildrenBatched(metadata.Children, deck, deckType, storeRawText, metadata.DictionaryEntries, discoveredNames);
         }
+
+        deck.DictionaryEntries = [.. metadata.DictionaryEntries, .. DeckNameDiscovery.ToEntries(discoveredNames, metadata.DictionaryEntries)];
 
         await deck.AddChildDeckWords(context);
 
@@ -203,7 +205,8 @@ public class ParseJob(
     /// then reassembles the hierarchy.
     /// </summary>
     private async Task ParseChildrenBatched(List<Metadata> children, Deck rootDeck, MediaType deckType, bool storeRawText,
-                                               List<DeckDictionaryEntry>? dictionaryEntries = null)
+                                               List<DeckDictionaryEntry>? dictionaryEntries = null,
+                                               ICollection<string>? discoveredNames = null)
     {
         // Flatten ALL descendants with their hierarchy info
         // Using Metadata as key to track parent relationships
@@ -230,7 +233,8 @@ public class ParseJob(
             storeRawText,
             predictDifficulty: true,
             deckType,
-            dictionaryEntries: dictionaryEntries);
+            dictionaryEntries: dictionaryEntries,
+            discoveredNames: discoveredNames);
 
         // Create mapping from Metadata -> Deck for hierarchy reassembly
         var metaToDeck = new Dictionary<Metadata, Deck>();

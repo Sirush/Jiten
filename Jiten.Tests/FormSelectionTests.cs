@@ -2278,4 +2278,31 @@ public class FormSelectionTests
                                     .FirstOrDefaultAsync();
         formText.Should().Be(name, $"ReadingIndex {match!.ReadingIndex} of word {match.WordId} should be the '{name}' form");
     }
+
+    [Fact]
+    public async Task DiscoveredNameIsCutTheSameWayInALaterPartialParse()
+    {
+        var contextFactory = GetContextFactory();
+        static bool IsPiece(DeckWord w) => w.OriginalText is "霞" or "空";
+
+        var discovered = new HashSet<string>();
+        var full = await Jiten.Parser.Parser.ParseTextToDeck(contextFactory, "霞空さんが来た。" + string.Concat(Enumerable.Repeat("霞空は笑った。", 5)),
+                                                             predictDifficulty: false, discoveredNames: discovered);
+        discovered.Should().Contain("霞空");
+        full.DeckWords.Any(IsPiece).Should().BeFalse("the name recurs enough to be discovered");
+
+        var withoutHonorific = new HashSet<string>();
+        await Jiten.Parser.Parser.ParseTextToDeck(contextFactory, string.Concat(Enumerable.Repeat("霞空は笑った。", 6)),
+                                                  predictDifficulty: false, discoveredNames: withoutHonorific);
+        withoutHonorific.Should().BeEmpty("a span never seen with an honorific may be a coined term");
+
+        const string newSubdeck = "霞空は笑った。";
+        var alone = await Jiten.Parser.Parser.ParseTextToDeck(contextFactory, newSubdeck, predictDifficulty: false);
+        alone.DeckWords.Any(IsPiece).Should().BeTrue("one occurrence is below the discovery threshold");
+
+        var entries = new List<DeckDictionaryEntry> { new() { Surface = "霞空", EntryType = DeckDictionaryEntryType.DiscoveredName } };
+        var withParentEntries = await Jiten.Parser.Parser.ParseTextToDeck(contextFactory, newSubdeck, predictDifficulty: false,
+                                                                          dictionaryEntries: entries);
+        withParentEntries.DeckWords.Any(IsPiece).Should().BeFalse("the parent deck already knows the name");
+    }
 }

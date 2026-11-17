@@ -57,6 +57,9 @@ internal static class ResegmentationEngine
                         _ when HasShortPureNameSegment(path, wordMeta) => "short pure-name segment",
                         _ when HasNameSegmentOutsidePersonContext(path, span, sentence, wordMeta) =>
                             "name segment outside person context",
+                        _ when HasImplausibleKatakanaSegment(path, span.Text, lookups, frequencyRanks, wordMeta)
+                               && !path.Segments.Any(s => s.Length >= MinUnlistedKatakanaSegmentLength) =>
+                            "implausible katakana segment",
                         _ when ResegmentationScorer.ScorePath(path, frequencyRanks, span.Text) < 0 => "negative path score",
                         _ => null
                     };
@@ -95,7 +98,8 @@ internal static class ResegmentationEngine
             if (freqScore + posScore < MinAcceptScore)
                 continue;
             ReplaceSpan(sentence, span, path, lookups, frequencyRanks, wordMeta,
-                        "Resegmentation.UncertainSpan", freqScore, posScore, diagnostics);
+                        "Resegmentation.UncertainSpan", freqScore, posScore, diagnostics,
+                        shedShortKatakanaPieces: HasImplausibleKatakanaSegment(path, span.Text, lookups, frequencyRanks, wordMeta));
         }
     }
 
@@ -317,6 +321,73 @@ internal static class ResegmentationEngine
         return false;
     }
 
+    private const int MinUnlistedKatakanaSegmentLength = 4;
+
+    /// <summary>Short dictionary words match inside an unknown katakana word by accident (ルーデウス → ルー+デウス); name segments are left to the name guards.</summary>
+    private static bool HasImplausibleKatakanaSegment(SpanPath path, string text, Dictionary<string, List<int>> lookups,
+        Dictionary<int, int> frequencyRanks, Dictionary<int, JmDictWordMeta> wordMeta)
+    {
+        foreach (var c in text)
+            if (!JapaneseTextHelper.IsKatakanaWordChar(c))
+                return false;
+
+        if (IsKatakanaStyledSentence(path, text))
+            return false;
+
+        foreach (var s in path.Segments)
+        {
+            var segment = text.Substring(s.StartChar, s.Length);
+            var id = SegmentWordId(segment, s.WordIds, frequencyRanks, out bool surfacePinned);
+            if (surfacePinned)
+                continue;
+            if (id != null && wordMeta.TryGetValue(id.Value, out var meta) && meta.IsTrueName)
+                continue;
+            if (!IsPlausibleKatakanaPiece(segment, lookups, wordMeta))
+                return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>A particle after a word (オマエガ) marks a sentence styled in katakana, whose pieces are native words.</summary>
+    private static bool IsKatakanaStyledSentence(SpanPath path, string text)
+    {
+        foreach (var s in path.Segments)
+            if (s.StartChar > 0 && s.Length == 1 && ResegmentationScorer.IsKatakanaParticleChar(text[s.StartChar]))
+                return true;
+
+        return false;
+    }
+
+    /// <summary>A short piece counts only when a common word lists that exact katakana spelling (バカ, ガン), not a kana-folded kanji word (タル for 樽).</summary>
+    internal static bool IsPlausibleKatakanaPiece(string text, Dictionary<string, List<int>> lookups,
+        Dictionary<int, JmDictWordMeta> wordMeta)
+    {
+        if (text.Length >= MinUnlistedKatakanaSegmentLength)
+            return true;
+        if (!lookups.TryGetValue(text, out var ids))
+            return false;
+
+        foreach (var id in ids)
+            if (wordMeta.TryGetValue(id, out var meta)
+                && meta.Pos.Any(p => p is not (PartOfSpeech.Name or PartOfSpeech.Unknown))
+                && meta.PriorityScoreKana + meta.PriorityScoreKanji > 0)
+                return true;
+
+        return false;
+    }
+
+    private static int? SegmentWordId(string text, List<int> wordIds, Dictionary<int, int> frequencyRanks, out bool surfacePinned)
+    {
+        surfacePinned = SegmentSurfacePins.TryGetValue(text, out var pinnedId);
+        if (surfacePinned)
+            return pinnedId;
+
+        return wordIds.OrderBy(id => frequencyRanks.TryGetValue(id, out int r) ? r : int.MaxValue)
+                      .Cast<int?>()
+                      .FirstOrDefault();
+    }
+
     // A bare する-conjugation tail only matches noun homographs (キャッキャウフフした must not shed 舌).
     private static bool HasSuruConjugationTail(SpanPath path, string text)
     {
@@ -389,9 +460,20 @@ internal static class ResegmentationEngine
     // Segments born here skip ApplyContextPins; ナシ means 無し, but the pear 梨 would win the rank tiebreak.
     private static readonly Dictionary<string, int> SegmentSurfacePins = new() { ["ナシ"] = 1529560, ["オラ"] = 2080360 };
 
+    /// <summary>Beside an implausible piece only long pieces are trusted (ボロ|アパート keeps アパート); a short one stays unknown, whatever it matches.</summary>
+    private static WordInfo UnknownKatakanaPiece(string text) => new()
+    {
+        Text = text,
+        DictionaryForm = text,
+        NormalizedForm = text,
+        PartOfSpeech = PartOfSpeech.Noun,
+        Reading = KanaConverter.ToHiragana(text),
+        IsUnknownWordPiece = true,
+    };
+
     private static void ReplaceSpan(SentenceInfo sentence, UncertainSpan span, SpanPath path,
         Dictionary<string, List<int>> lookups, Dictionary<int, int> frequencyRanks, Dictionary<int, JmDictWordMeta> wordMeta,
-        string source, int freqScore, int posScore, ParserDiagnostics? diagnostics)
+        string source, int freqScore, int posScore, ParserDiagnostics? diagnostics, bool shedShortKatakanaPieces = false)
     {
         if (path.Segments.Count == 0
             || path.Segments[0].StartChar != 0
@@ -403,17 +485,18 @@ internal static class ResegmentationEngine
         var replacements = path.Segments.Select((seg, segIdx) =>
         {
             var text = span.Text.Substring(seg.StartChar, seg.Length);
-            bool surfacePinned = SegmentSurfacePins.TryGetValue(text, out var pinnedId);
-            int? bestWordId = surfacePinned
-                ? pinnedId
-                : seg.WordIds
-                    .OrderBy(id => frequencyRanks.TryGetValue(id, out int r) ? r : int.MaxValue)
-                    .Cast<int?>()
-                    .FirstOrDefault();
+            int? bestWordId = SegmentWordId(text, seg.WordIds, frequencyRanks, out bool surfacePinned);
 
             var pos = PartOfSpeech.Noun;
+            bool isTrueName = false;
             if (bestWordId.HasValue && wordMeta.TryGetValue(bestWordId.Value, out var meta))
+            {
                 pos = meta.GetPrimaryPos();
+                isTrueName = meta.IsTrueName;
+            }
+
+            if (shedShortKatakanaPieces && seg.Length < MinUnlistedKatakanaSegmentLength && !surfacePinned && !isTrueName)
+                return (UnknownKatakanaPiece(text), span.Position + seg.StartChar, seg.Length);
 
             var replacement = new WordInfo
             {

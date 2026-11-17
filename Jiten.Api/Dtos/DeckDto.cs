@@ -125,7 +125,8 @@ public class DeckDto : IDeckCoverageTarget
         HideDialoguePercentage = deck.HideDialoguePercentage;
         HideAverageSentenceLength = deck.HideAverageSentenceLength;
         Aliases = deck.Titles.Where(t => t.TitleType == DeckTitleType.Alias).Select(t => t.Title).ToList();
-        DictionaryEntries = deck.DictionaryEntries.Select(e => new DeckDictionaryEntryDto { Surface = e.Surface, EntryType = e.EntryType }).ToList();
+        DictionaryEntries = deck.DictionaryEntries.Where(e => e.EntryType == DeckDictionaryEntryType.Name)
+                                .Select(e => new DeckDictionaryEntryDto { Surface = e.Surface, EntryType = e.EntryType }).ToList();
         ExternalRating = deck.ExternalRating;
         MapPopularity(deck);
         ExampleSentence = exampleSentence;
@@ -176,7 +177,8 @@ public class DeckDto : IDeckCoverageTarget
         HideDialoguePercentage = deck.HideDialoguePercentage;
         HideAverageSentenceLength = deck.HideAverageSentenceLength;
         Aliases = deck.Titles.Where(t => t.TitleType == DeckTitleType.Alias).Select(t => t.Title).ToList();
-        DictionaryEntries = deck.DictionaryEntries.Select(e => new DeckDictionaryEntryDto { Surface = e.Surface, EntryType = e.EntryType }).ToList();
+        DictionaryEntries = deck.DictionaryEntries.Where(e => e.EntryType == DeckDictionaryEntryType.Name)
+                                .Select(e => new DeckDictionaryEntryDto { Surface = e.Surface, EntryType = e.EntryType }).ToList();
         ExternalRating = deck.ExternalRating;
         MapPopularity(deck);
         ExampleSentence = exampleSentence;

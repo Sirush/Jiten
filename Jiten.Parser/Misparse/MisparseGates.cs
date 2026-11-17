@@ -183,7 +183,7 @@ internal static class MisparseGates
     }
 
     internal static bool IsKanaShardNeighbour(WordInfo? w)
-        => w is { ResolvedWordId: null } && w.Text.Length <= 3 && JapaneseTextHelper.IsAllKana(w.Text)
+        => w is { ResolvedWordId: null, IsUnknownWordPiece: false } && w.Text.Length <= 3 && JapaneseTextHelper.IsAllKana(w.Text)
            && w.PartOfSpeech is not (PartOfSpeech.Particle or PartOfSpeech.Auxiliary
                or PartOfSpeech.BlankSpace);
 

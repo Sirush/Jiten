@@ -953,10 +953,10 @@ public class MorphologicalAnalyserTests
         // チックショー: colloquial geminated form of ちくしょう — Sudachi splits into チック(suffix)+ショー
         // but user_dic overrides to produce a single 感動詞 token
         yield return ["チックショー", new[] { "チックショー" }];
-        // I-adjective stem resegmentation: Sudachi fuses adj-i stems in slang compounds
-        // ださ → ださ+い in lookups fallback enables the split; きも → きも matches 肝 directly
-        yield return ["ダサキモ", new[] { "ダサ", "キモ" }];
-        yield return ["百合豚ダサキモ眼鏡", new[] { "百合", "豚", "ダサ", "キモ", "眼鏡" }];
+        // A short piece of an unknown katakana word needs a common word that lists that katakana spelling (ルー|デウス fails);
+        // ダサ has none, so the slang compound stays whole and unresolved
+        yield return ["ダサキモ", Array.Empty<string>()];
+        yield return ["百合豚ダサキモ眼鏡", new[] { "百合", "豚", "眼鏡" }];
         // として/からして/クセして compound particle combination
         yield return ["護衛として彼女に付き従う", new[] { "護衛", "として", "彼女", "に", "付き従う" }];
         yield return ["憮然として言う", new[] { "憮然", "として", "言う" }];
@@ -1152,7 +1152,17 @@ public class MorphologicalAnalyserTests
         yield return ["ふざっけんな！", new[] { "ふざっけんな" }];
 
         // === 早くー — original surface preserved ===
-        yield return ["ルーデウス早くー！", new[] { "ルー", "デウス", "早くー" }];
+        yield return ["ルーデウス早くー！", new[] { "早くー" }];
+
+        // === Unknown katakana words: short accidental pieces stay whole, long or common loanwords split off ===
+        yield return ["エリナリーゼが笑う", new[] { "が", "笑う" }];
+        yield return ["シュバルトやリンダのような連中", new[] { "や", "リンダ", "の", "ような", "連中" }];
+        yield return ["ブラックドラゴンが現れた", new[] { "ブラック", "ドラゴン", "が", "現れた" }];
+        yield return ["ボロアパートに来た", new[] { "アパート", "に", "来た" }];
+        yield return ["ハッピーバースデーリク", new[] { "ハッピー", "バースデー" }];
+
+        // === A single kanji next to an unknown kanji piece is its by-product ===
+        yield return ["腐死の解決策が見つかる", new[] { "の", "解決策", "が", "見つかる" }];
 
         // === Pending: need user_dic.xml entries (Sudachi splits these incorrectly) ===
         // からかう: Sudachi splits as から(particle) + かう(verb)

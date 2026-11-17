@@ -348,7 +348,7 @@ public class CliOptions
     public bool SnapshotTokens { get; set; }
 
     [Option(longName: "dump-tokens", Required = false,
-            HelpText = "Parse every line of the .txt files in a folder and write one line per input line to --parse-test-output: wordId:readingIndex:surface per token, tab-separated, with a '## file' header per file. For mining collocations.")]
+            HelpText = "Parse every line of the .txt files in a folder and write one line per input line to --parse-test-output: wordId:readingIndex:surface per token, tab-separated, with a '## file' header per file. A folder of subfolders parses each subfolder as one deck instead, one line per file. For mining collocations and corpus diffs.")]
     public string? DumpTokens { get; set; }
 
     [Option(longName: "concurrency-smoke", Required = false,

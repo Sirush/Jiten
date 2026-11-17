@@ -36,6 +36,9 @@ public class WordInfo
     public bool IsMergedInflection { get; set; }
     public int? ResolvedWordId { get; set; }
 
+    /// <summary>A piece of a longer unknown word (バルト in シュバルト), so its length says nothing about being a kana scrap.</summary>
+    public bool IsUnknownWordPiece { get; set; }
+
     /// <summary>Null for tokens that are not vocabulary; set once the misparse gates ran.</summary>
     public (int WordId, byte ReadingIndex)? KeptForm { get; set; }
 
@@ -80,6 +83,7 @@ public class WordInfo
         SuffixReading = other.SuffixReading;
         IsMergedInflection = other.IsMergedInflection;
         ResolvedWordId = other.ResolvedWordId;
+        IsUnknownWordPiece = other.IsUnknownWordPiece;
         KeptForm = other.KeptForm;
         SudachiBoundaryMargin = other.SudachiBoundaryMargin;
         IsKanaExclamation = other.IsKanaExclamation;

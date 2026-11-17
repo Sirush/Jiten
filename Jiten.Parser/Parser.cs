@@ -425,6 +425,182 @@ namespace Jiten.Parser
             }
         }
 
+        public static bool NameDiscoveryEnabled { get; set; } = true;
+
+        private const int DiscoveredNameMinCount = 5;
+
+        /// <summary>Without an honorific anywhere in the deck a bound span is as often a coined term (機兵) as a name.</summary>
+        private const int DiscoveredNameMinHonorifics = 1;
+
+        /// <summary>Two suffixes confirm a name without the bound-share test; a full name's honorifics count for its last part (槻司鳶丸さん for 鳶丸).</summary>
+        private const int DiscoveredNameConfirmingSuffixes = 2;
+        private const int DiscoveredNameMinCountWhenConfirmed = 3;
+
+        /// <summary>Share of a kanji's standalone uses that must fall inside the span for it to count as bound to it.</summary>
+        private const double DiscoveredNameMinBoundShare = 0.5;
+
+        private const string KanjiHonorifics = "様君殿氏嬢";
+
+        /// <summary>Kanji that follow an unknown name as real words of their own (霞空様, 霞空達).</summary>
+        private const string KanjiNameSuffixes = KanjiHonorifics + "達";
+
+        private enum NameEvidence { None, Title, Suffix }
+
+        /// <summary>A suffix (さん) cannot stand without a name; a title (先生) is also a noun that can follow any word (３年前先生は), so it confirms less.</summary>
+        private static NameEvidence EvidenceFrom(WordInfo next)
+        {
+            if (IsKanjiHonorific(next) || next.Text is "さん" or "くん" or "ちゃん" or "さま" or "たん")
+                return NameEvidence.Suffix;
+
+            return PersonHonorifics.Contains(next.Text) || next.Text is "先輩" or "殿下" or "陛下" or "閣下"
+                ? NameEvidence.Title
+                : NameEvidence.None;
+        }
+
+        /// <summary>A kanji honorific only as a suffix: 君 and 殿 are also the words "you" and "lord" (３年前君は).</summary>
+        private static bool IsKanjiHonorific(WordInfo w) =>
+            w.Text.Length == 1 && KanjiHonorifics.Contains(w.Text[0])
+            && w.PartOfSpeech is PartOfSpeech.Suffix or PartOfSpeech.NounSuffix;
+
+        /// <summary>Sequences of adjacent single-kanji tokens, each ended by an honorific or by any other token (霞|空|様|霞|空 gives 霞空 twice).</summary>
+        private static IEnumerable<(int start, int count, NameEvidence evidence)> SingleKanjiRuns(
+            List<(WordInfo word, int position, int length)> words)
+        {
+            static bool IsSingleKanji(WordInfo w) => w.Text.Length == 1 && JapaneseTextHelper.IsKanji(w.Text[0]);
+            bool IsAdjacent(int k) => words[k].position == words[k - 1].position + words[k - 1].length;
+
+            int i = 0;
+            while (i < words.Count)
+            {
+                if (!IsSingleKanji(words[i].word))
+                {
+                    i++;
+                    continue;
+                }
+
+                int j = i + 1;
+                while (j < words.Count && IsSingleKanji(words[j].word) && IsAdjacent(j) && !IsKanjiHonorific(words[j].word))
+                    j++;
+
+                bool followed = j < words.Count && IsAdjacent(j);
+                if (j - i >= 2)
+                    yield return (i, j - i, followed ? EvidenceFrom(words[j].word) : NameEvidence.None);
+
+                i = followed && IsKanjiHonorific(words[j].word) ? j + 1 : j;
+            }
+        }
+
+        private static string SpanText(List<(WordInfo word, int position, int length)> words, int start, int count) =>
+            string.Concat(words.Skip(start).Take(count).Select(w => w.word.Text));
+
+        /// <summary>A recurring kanji span seen with an honorific, whose kanji barely occur outside it, is an unlisted name (碧|桜) and becomes one token; kanji used on their own elsewhere mark a readable compound (人|族).</summary>
+        private static HashSet<string> MergeDiscoveredNames(List<List<SentenceInfo>> allTexts)
+        {
+            var discovered = new HashSet<string>();
+            if (!NameDiscoveryEnabled)
+                return discovered;
+
+            var standalone = new Dictionary<char, int>();
+            var spans = new Dictionary<string, (int count, int suffixes, int titles)>();
+
+            foreach (var sentences in allTexts)
+            foreach (var sentence in sentences)
+            {
+                var words = sentence.Words;
+                foreach (var (word, _, _) in words)
+                    if (word.Text.Length == 1 && JapaneseTextHelper.IsKanji(word.Text[0]))
+                        standalone[word.Text[0]] = standalone.GetValueOrDefault(word.Text[0]) + 1;
+
+                foreach (var (start, count, evidence) in SingleKanjiRuns(words))
+                {
+                    var span = SpanText(words, start, count);
+                    var seen = spans.GetValueOrDefault(span);
+                    spans[span] = (seen.count + 1,
+                                   seen.suffixes + (evidence == NameEvidence.Suffix ? 1 : 0),
+                                   seen.titles + (evidence == NameEvidence.Title ? 1 : 0));
+                }
+            }
+
+            foreach (var (span, (count, ownSuffixes, ownTitles)) in spans)
+            {
+                if (count < DiscoveredNameMinCountWhenConfirmed)
+                    continue;
+                if (span.Any(c => NumeralKanji.Contains(c) || c is '万' or '億' or '兆' or '何'))
+                    continue;
+
+                int suffixes = ownSuffixes, titles = ownTitles;
+                foreach (var (fullName, seen) in spans)
+                {
+                    if (fullName.Length <= span.Length || !fullName.EndsWith(span, StringComparison.Ordinal))
+                        continue;
+                    suffixes += seen.suffixes;
+                    titles += seen.titles;
+                }
+
+                if (suffixes + titles < DiscoveredNameMinHonorifics)
+                    continue;
+
+                bool confirmedBySuffix = suffixes >= DiscoveredNameConfirmingSuffixes;
+                if (count < DiscoveredNameMinCount && !confirmedBySuffix)
+                    continue;
+                if (!confirmedBySuffix && span.Any(c => count < DiscoveredNameMinBoundShare * standalone[c]))
+                    continue;
+                if (HasNonNameLookup(span))
+                    continue;
+
+                discovered.Add(span);
+            }
+
+            if (discovered.Count == 0)
+                return discovered;
+
+            foreach (var sentences in allTexts)
+            foreach (var sentence in sentences)
+            {
+                var words = sentence.Words;
+                var runs = SingleKanjiRuns(words).ToList();
+                for (int r = runs.Count - 1; r >= 0; r--)
+                {
+                    var (runStart, runCount, _) = runs[r];
+                    var names = new List<(int start, int count)>();
+                    for (int p = 0; p < runCount;)
+                    {
+                        int length = runCount - p;
+                        while (length >= 2 && !discovered.Contains(SpanText(words, runStart + p, length)))
+                            length--;
+
+                        if (length >= 2)
+                            names.Add((runStart + p, length));
+                        p += Math.Max(length, 1);
+                    }
+
+                    for (int n = names.Count - 1; n >= 0; n--)
+                        MergeIntoName(words, names[n].start, names[n].count);
+                }
+            }
+
+            return discovered;
+        }
+
+        private static void MergeIntoName(List<(WordInfo word, int position, int length)> words, int start, int count)
+        {
+            var span = SpanText(words, start, count);
+            var first = words[start];
+            var last = words[start + count - 1];
+            var merged = new WordInfo(first.word)
+            {
+                Text = span,
+                DictionaryForm = span,
+                NormalizedForm = span,
+                PartOfSpeech = PartOfSpeech.Noun,
+                Reading = string.Empty,
+                EndOffset = last.word.EndOffset,
+                IsPersonNameContext = true
+            };
+            words[start] = (merged, first.position, last.position + last.length - first.position);
+            words.RemoveRange(start + 1, count - 1);
+        }
+
         /// <summary>Splits Xして only when X completes a noun compound with preceding nouns (物々 + 交換して → 物々交換 + して).</summary>
         private static void SplitSuruInflectionsForNounCompounding(List<SentenceInfo> sentences)
         {
@@ -618,7 +794,7 @@ namespace Jiten.Parser
                         bool shouldOverride = !IsRiskyNameEntry(surface) || batch[j].IsPersonNameContext;
                         var overrideWord = shouldOverride ? dictEntry.EntryType switch
                         {
-                            DeckDictionaryEntryType.Name =>
+                            DeckDictionaryEntryType.Name or DeckDictionaryEntryType.DiscoveredName =>
                                 await ResolveAsNameEntry(surface, batchWordCache),
                             _ => null
                         } : null;
@@ -856,10 +1032,11 @@ namespace Jiten.Parser
                                                        ParserDiagnostics? diagnostics = null,
                                                        BenchmarkTimings? timings = null,
                                                        List<DeckDictionaryEntry>? dictionaryEntries = null,
-                                                       byte[]? speechBoundaries = null)
+                                                       byte[]? speechBoundaries = null,
+                                                       ICollection<string>? discoveredNames = null)
         {
             var results = await ParseTextsToDeck(contextFactory, [text], storeRawText, predictDifficulty, mediatype, diagnostics, timings, dictionaryEntries,
-                                                 speechBoundaries: [speechBoundaries]);
+                                                 speechBoundaries: [speechBoundaries], discoveredNames: discoveredNames);
             return results.Count > 0 ? results[0] : new Deck();
         }
 
@@ -872,7 +1049,8 @@ namespace Jiten.Parser
                                                               BenchmarkTimings? timings = null,
                                                               List<DeckDictionaryEntry>? dictionaryEntries = null,
                                                               List<List<ParsedOccurrence>>? occurrenceSink = null,
-                                                              IReadOnlyList<byte[]?>? speechBoundaries = null)
+                                                              IReadOnlyList<byte[]?>? speechBoundaries = null,
+                                                              ICollection<string>? discoveredNames = null)
         {
             if (texts.Count == 0) return [];
 
@@ -936,6 +1114,8 @@ namespace Jiten.Parser
                 PreprocessSentences(batchedSentences[textIndex], diagnostics, protectedSurfaces, timings);
 
             MergeConfirmedNameSplits(batchedSentences);
+            foreach (var name in MergeDiscoveredNames(batchedSentences))
+                discoveredNames?.Add(name);
             PropagatePersonNameContexts(batchedSentences);
 
             timer.Stop();
@@ -5607,16 +5787,112 @@ namespace Jiten.Parser
             foreach (var sentence in sentences)
             {
                 var pairs = new List<(WordInfo, DeckWord?, int?)>(sentence.Words.Count);
-                foreach (var (wordInfo, _, _) in sentence.Words)
+                var spans = new List<(int start, int end)>(sentence.Words.Count);
+                foreach (var (wordInfo, position, length) in sentence.Words)
                 {
                     if (wordInfo.PartOfSpeech == PartOfSpeech.SupplementarySymbol) continue;
                     var (word, margin) = lookupResult(wordInfo);
+                    if (wordInfo.IsUnknownWordPiece)
+                        (word, margin) = (null, null);
                     pairs.Add((wordInfo, word, margin));
+                    spans.Add((position, position + length));
                 }
+                DropByProductsOfUnknownWords(pairs, spans);
                 result.Add(pairs);
             }
 
             return result;
+        }
+
+        private enum RunScript { None, Kanji, Katakana }
+
+        private static RunScript RunScriptOf(string text)
+        {
+            if (text.Length == 0) return RunScript.None;
+            bool kanji = true, katakana = true;
+            foreach (var c in text)
+            {
+                kanji &= JapaneseTextHelper.IsKanji(c) || c is '々' or 'ヶ' or '〆';
+                katakana &= JapaneseTextHelper.IsKatakanaWordChar(c);
+            }
+            return kanji ? RunScript.Kanji : katakana ? RunScript.Katakana : RunScript.None;
+        }
+
+        /// <summary>Bare numerals never resolve by convention and sound marks are not words, so neither marks a run as unknown.</summary>
+        private static bool IsExpectedUnresolved(string text)
+        {
+            bool numeral = true, soundMark = true;
+            foreach (var c in text)
+            {
+                numeral &= NumeralKanji.Contains(c) || c is '万' or '億' or '兆';
+                soundMark &= c is 'ー' or 'ッ' or 'ァ' or 'ィ' or 'ゥ' or 'ェ' or 'ォ' or 'ャ' or 'ュ' or 'ョ';
+            }
+            return numeral || soundMark;
+        }
+
+        /// <summary>Resolved pieces of an unknown word are by-products (シュバルト → バルト, 腐死 → 死), except a plausible loanword beside an unknown name (ガゾルニア|レベル).</summary>
+        private static void DropByProductsOfUnknownWords(List<(WordInfo word, DeckWord? result, int? margin)> pairs,
+                                                         List<(int start, int end)> spans)
+        {
+            bool IsResolved(int k) =>
+                pairs[k].result is { } r && !ExcludedMisparses.Contains((r.WordId, r.ReadingIndex));
+
+            int i = 0;
+            while (i < pairs.Count)
+            {
+                var script = RunScriptOf(pairs[i].word.Text);
+                int j = i + 1;
+                if (script == RunScript.None)
+                {
+                    i = j;
+                    continue;
+                }
+
+                while (j < pairs.Count && spans[j].start == spans[j - 1].end && RunScriptOf(pairs[j].word.Text) == script)
+                    j++;
+
+                if (j - i < 2)
+                {
+                    i = j;
+                    continue;
+                }
+
+                bool IsByProduct(int k)
+                {
+                    if (!IsResolved(k))
+                        return false;
+
+                    var text = pairs[k].word.Text;
+                    if (script == RunScript.Kanji)
+                        return text.Length == 1 && !KanjiNameSuffixes.Contains(text[0]);
+
+                    return !ResegmentationEngine.IsPlausibleKatakanaPiece(text, _lookups, WordMeta);
+                }
+
+                var unknown = new List<int>();
+                for (int k = i; k < j; k++)
+                    if (!IsResolved(k) && !IsExpectedUnresolved(pairs[k].word.Text))
+                        unknown.Add(k);
+
+                void Drop(int k)
+                {
+                    pairs[k].word.IsUnknownWordPiece = true;
+                    pairs[k] = (pairs[k].word, null, null);
+                }
+
+                foreach (int k in unknown)
+                {
+                    int dropped = 0;
+                    for (int left = k - 1; left >= i && IsByProduct(left); left--, dropped++)
+                        Drop(left);
+                    for (int right = k + 1; right < j && IsByProduct(right); right++, dropped++)
+                        Drop(right);
+                    if (dropped > 0)
+                        pairs[k].word.IsUnknownWordPiece = true;
+                }
+
+                i = j;
+            }
         }
 
         /// <summary>Kana なくなる is never 亡くなる "to die" (written in kanji); compounds like 耐え切れなくなった are untouched.</summary>
@@ -6153,7 +6429,7 @@ namespace Jiten.Parser
                 var cost = -9000 - surface.Length * 100;
                 var pos = entry.EntryType switch
                 {
-                    DeckDictionaryEntryType.Name => "名詞,固有名詞,人名,一般,*,*",
+                    DeckDictionaryEntryType.Name or DeckDictionaryEntryType.DiscoveredName => "名詞,固有名詞,人名,一般,*,*",
                     _ => "名詞,普通名詞,一般,*,*,*"
                 };
                 sb.Append(surface).Append(",5146,5146,").Append(cost).Append(',')

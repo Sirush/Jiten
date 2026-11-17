@@ -152,6 +152,21 @@ public class MetadataImportGuardTests : IDisposable
     }
 
     [Fact]
+    public void Name_merge_turns_a_discovered_name_into_a_curated_one()
+    {
+        var deck = new Deck
+        {
+            DeckId = 1, OriginalTitle = "テスト",
+            DictionaryEntries = [new DeckDictionaryEntry { DeckId = 1, Surface = "圭一", EntryType = DeckDictionaryEntryType.DiscoveredName }]
+        };
+        var entries = new List<DeckDictionaryEntry> { new() { Surface = "圭一", EntryType = DeckDictionaryEntryType.Name } };
+
+        MetadataProviderHelper.MergeDictionaryEntries(deck, entries, Exclusions());
+
+        deck.DictionaryEntries.Should().ContainSingle().Which.EntryType.Should().Be(DeckDictionaryEntryType.Name);
+    }
+
+    [Fact]
     public void Scalar_fill_skips_locked_fields()
     {
         var metadata = new Metadata { ReleaseDate = new DateTime(2004, 8, 13), Description = "From the provider" };

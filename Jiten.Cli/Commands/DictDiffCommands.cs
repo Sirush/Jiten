@@ -5,6 +5,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Unicode;
 using Jiten.Core.Data;
+using Jiten.Core.Services;
 using Jiten.Parser;
 using Microsoft.EntityFrameworkCore;
 
@@ -184,6 +185,8 @@ public class DictDiffCommands(CliContext context)
                 : deck.ParentDeckId != null
                     ? await db.DeckDictionaryEntries.AsNoTracking().Where(e => e.DeckId == deck.ParentDeckId).ToListAsync()
                     : null;
+            if (deck.ParentDeckId == null)
+                dictEntries = DeckNameDiscovery.CuratedOnly(dictEntries);
 
             var units = deck.Children.Count == 0
                 ? [(deck, deck.OriginalTitle)]
