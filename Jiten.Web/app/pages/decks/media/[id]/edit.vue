@@ -432,6 +432,7 @@
   }
 
   const addedSurfaceCount = computed(() => new Set(draft.value?.addedNames.flatMap((n) => n.surfaces) ?? []).size);
+  const nameEntryCount = computed(() => (draft.value?.characterNames.length ?? 0) + addedSurfaceCount.value);
 
   const canSubmit = computed(
     () => !!viewer.value?.emailConfirmed && !!viewer.value?.hasDisplayName && !viewer.value?.banned && submission.value.fields.length > 0
@@ -870,14 +871,15 @@
 
           <section :class="sectionClass" aria-labelledby="names-heading">
             <div :class="sectionHeadClass">
-              <h2 id="names-heading" class="m-0 text-base font-bold">Character names</h2>
-              <span class="text-xs text-muted-color tabular-nums">{{ formatNumber(draft.characterNames.length + addedSurfaceCount) }} names</span>
+              <h2 id="names-heading" class="m-0 text-base font-bold">Names and terms</h2>
+              <span class="text-xs text-muted-color tabular-nums">{{ formatNumber(nameEntryCount) }} {{ nameEntryCount === 1 ? 'entry' : 'entries' }}</span>
             </div>
             <div class="p-4 grid gap-4">
               <p class="m-0 text-sm text-muted-color">
-                Names help Jiten split the text into words correctly. New names will only be reflected on the next reparse.
+                Characters, places, and made-up words that the text splits into pieces. Each entry is read as one word. If the dictionary also lists it
+                as a name, every use in this deck counts as that name, even where it means a common word. Changes take effect on the next reparse.
               </p>
-              <MetadataEditField label="Names in this deck" v-bind="fieldBindings(MetadataField.CharacterNames)">
+              <MetadataEditField label="In this deck" v-bind="fieldBindings(MetadataField.CharacterNames)">
                 <div class="flex flex-wrap gap-1.5">
                   <span v-for="name in draft.characterNames" :key="name" :class="chipClass">
                     <span lang="ja" class="ja-general">{{ name }}</span>
@@ -891,7 +893,7 @@
                       <i class="pi pi-times text-[10px]" aria-hidden="true" />
                     </button>
                   </span>
-                  <span v-if="!draft.characterNames.length && !draft.addedNames.length" class="text-sm text-muted-color">No names yet.</span>
+                  <span v-if="!draft.characterNames.length && !draft.addedNames.length" class="text-sm text-muted-color">None yet.</span>
                 </div>
                 <div v-if="removedNames.length" class="flex flex-wrap items-center gap-1.5 mt-2 text-sm">
                   <span class="text-xs text-muted-color">Will be removed:</span>
@@ -909,7 +911,7 @@
               </MetadataEditField>
 
               <div class="pl-3">
-                <label for="f-name" class="block text-xs font-semibold text-muted-color mb-1">Add a character</label>
+                <label for="f-name" class="block text-xs font-semibold text-muted-color mb-1">Add a name or term</label>
                 <div class="flex gap-2">
                   <InputText
                     id="f-name"
@@ -923,8 +925,8 @@
                   <Button label="Add" severity="secondary" :disabled="!canAddName" @click="addName" />
                 </div>
                 <p class="m-0 mt-1 text-xs text-muted-color">
-                  Write the full name as it appears in the text. Put a space between family and given name if you know where it splits. Do not include any
-                  honorifics. Common nicknames can be added too.
+                  Write it in full as it appears in the text, without honorifics. For a character, put a space between family and given name if you know
+                  where it splits. Common nicknames can be added too.
                 </p>
                 <div class="mt-2 min-h-0" aria-live="polite">
                   <p v-if="nameChecking" class="m-0 text-xs text-muted-color">
@@ -934,7 +936,7 @@
                   <p v-else-if="nameCheck?.error" class="m-0 text-xs text-red-600 dark:text-red-400">{{ nameCheck.error }}</p>
                   <MetadataNameCheck v-else-if="nameCheck && nameCheck.surfaces.length" :surfaces="nameCheck.surfaces" />
                   <p v-if="draft.addedNames.length >= MAX_ADDED_NAMES" class="m-0 text-xs text-muted-color">
-                    One edit can add up to {{ MAX_ADDED_NAMES }} names. Submit these first.
+                    One edit can add up to {{ MAX_ADDED_NAMES }} entries. Submit these first.
                   </p>
                 </div>
                 <div v-if="draft.addedNames.length" class="mt-3 flex flex-col gap-2">

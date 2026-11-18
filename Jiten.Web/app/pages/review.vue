@@ -55,7 +55,7 @@
   const PAGE_SIZE = 20;
   const CONFLICT_OPTIONS = ['current', 'edit'] as const;
   const REJECT_REASONS = ["The source doesn't support this", 'No source', 'Already correct', 'Belongs on a different deck'];
-  const FLAGGED_NAMES_NOTE = 'The automatic check flagged these names.';
+  const FLAGGED_NAMES_NOTE = 'The automatic check flagged these entries.';
 
   const route = useRoute();
   const router = useRouter();
@@ -818,7 +818,7 @@
                   </span>
                 </div>
                 <p v-if="!namePreviews[selected.id] || namePreviews[selected.id]!.loading" class="m-0 px-3 py-2 text-xs text-muted-color">
-                  <i class="pi pi-spin pi-spinner text-xs mr-1" aria-hidden="true" />Parsing lines from the deck with and without these names...
+                  <i class="pi pi-spin pi-spinner text-xs mr-1" aria-hidden="true" />Parsing lines from the deck with and without these entries…
                 </p>
                 <div v-else-if="namePreviews[selected.id]!.failed" class="px-3 py-2 flex items-center gap-2 text-xs">
                   <span>The preview didn't load.</span>
@@ -838,7 +838,7 @@
                     v-if="!namePreviews[selected.id]!.data!.examples.length"
                     class="m-0 px-3 py-2 text-xs text-muted-color border-t border-surface-200 dark:border-surface-700"
                   >
-                    No checked line reads differently with these names.
+                    No checked line reads differently with these entries.
                   </p>
                 </template>
               </div>

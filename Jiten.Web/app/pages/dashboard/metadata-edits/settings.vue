@@ -384,7 +384,7 @@
             </div>
             <p class="m-0 text-sm text-muted-color max-w-3xl">
               New accounts always wait for review; editors always go live. Low risk: dates, links, romaji and English titles, aliases. Medium risk: genres,
-              tags, related decks, character names. High risk: original title, media type, description.
+              tags, related decks, names and terms. High risk: original title, media type, description.
             </p>
           </div>
 

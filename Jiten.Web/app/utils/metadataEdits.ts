@@ -63,7 +63,7 @@ const FIELD_LABELS: Record<MetadataField, string> = {
   [MetadataField.Tags]: 'Tags',
   [MetadataField.Links]: 'External links',
   [MetadataField.Relationships]: 'Related decks',
-  [MetadataField.CharacterNames]: 'Character names',
+  [MetadataField.CharacterNames]: 'Names and terms',
   [MetadataField.Franchise]: 'Franchise',
 };
 
@@ -120,7 +120,7 @@ export interface SubmitOutcome {
 
 export function submitOutcome(appliedFields: number[], pendingFields: number[]): SubmitOutcome {
   const namesLive = appliedFields.includes(MetadataField.CharacterNames);
-  const namesNote = namesLive ? ' Character names take effect the next time the deck is analysed.' : '';
+  const namesNote = namesLive ? ' Names and terms take effect the next time the deck is analysed.' : '';
 
   if (pendingFields.length === 0) {
     return {
