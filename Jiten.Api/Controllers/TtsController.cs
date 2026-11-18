@@ -21,7 +21,7 @@ public class TtsController(ITtsService ttsService, IConfiguration configuration)
         try
         {
             var audio = await ttsService.GetWordAudioAsync(wordId, readingIndex, voice, rateLimitKey, ct, IsTrustedInternal());
-            return Results.File(audio, "audio/ogg");
+            return CacheableAudio(audio);
         }
         catch (TtsTextNotFoundException)
         {
@@ -52,7 +52,7 @@ public class TtsController(ITtsService ttsService, IConfiguration configuration)
         try
         {
             var audio = await ttsService.GetSentenceAudioAsync(sentenceId, voice, rateLimitKey, ct);
-            return Results.File(audio, "audio/ogg");
+            return CacheableAudio(audio);
         }
         catch (TtsTextNotFoundException)
         {
@@ -108,6 +108,13 @@ public class TtsController(ITtsService ttsService, IConfiguration configuration)
         {
             return Results.StatusCode(504);
         }
+    }
+
+    /// <summary>Private so UseResponseCaching never holds audio in API memory; one day because clips get regenerated in place at the same URL.</summary>
+    private IResult CacheableAudio(byte[] audio)
+    {
+        Response.Headers.CacheControl = "private, max-age=86400";
+        return Results.File(audio, "audio/ogg");
     }
 
     private string GetRateLimitKey()
