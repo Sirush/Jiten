@@ -1,22 +1,40 @@
-const UNITS: Array<[Intl.RelativeTimeFormatUnit, number]> = [
-  ['year', 365 * 24 * 3600],
-  ['month', 30 * 24 * 3600],
-  ['week', 7 * 24 * 3600],
-  ['day', 24 * 3600],
-  ['hour', 3600],
-  ['minute', 60],
+type RelativeTimeStyle = 'long' | 'short';
+
+interface RelativeUnit {
+  seconds: number;
+  long: string;
+  short: string;
+  shortPlural: string;
+  previous?: string;
+  next?: string;
+}
+
+const UNITS: RelativeUnit[] = [
+  { seconds: 365 * 24 * 3600, long: 'year', short: 'yr', shortPlural: 'yr', previous: 'last', next: 'next' },
+  { seconds: 30 * 24 * 3600, long: 'month', short: 'mo', shortPlural: 'mo', previous: 'last', next: 'next' },
+  { seconds: 7 * 24 * 3600, long: 'week', short: 'wk', shortPlural: 'wk', previous: 'last', next: 'next' },
+  { seconds: 24 * 3600, long: 'day', short: 'day', shortPlural: 'days' },
+  { seconds: 3600, long: 'hour', short: 'hr', shortPlural: 'hr' },
+  { seconds: 60, long: 'minute', short: 'min', shortPlural: 'min' },
 ];
 
-export function formatRelativeTime(value: string | Date, now: Date = new Date(), style: Intl.RelativeTimeFormatStyle = 'long'): string {
+/** English only: browser-locale output breaks the site fonts and mixes languages in an English interface. */
+export function formatRelativeTime(value: string | Date, now: Date = new Date(), style: RelativeTimeStyle = 'long'): string {
   const date = typeof value === 'string' ? new Date(value) : value;
   const seconds = Math.round((now.getTime() - date.getTime()) / 1000);
-  if (Math.abs(seconds) < 60) return 'just now';
-  const rtf = new Intl.RelativeTimeFormat(undefined, { numeric: 'auto', style });
-  for (const [unit, size] of UNITS) {
-    if (Math.abs(seconds) >= size) {
-      const text = rtf.format(-Math.round(seconds / size), unit);
-      return style === 'long' ? text : text.replace(/\.(?=\s|$)/g, '');
-    }
+  const unit = UNITS.find((u) => Math.abs(seconds) >= u.seconds);
+  if (!unit) return 'just now';
+
+  const count = Math.abs(Math.round(seconds / unit.seconds));
+  const isPast = seconds > 0;
+  const singular = style === 'long' ? unit.long : unit.short;
+
+  if (count === 1) {
+    if (unit.long === 'day') return isPast ? 'yesterday' : 'tomorrow';
+    if (unit.previous && unit.next) return `${isPast ? unit.previous : unit.next} ${singular}`;
   }
-  return 'just now';
+
+  const plural = style === 'long' ? `${unit.long}s` : unit.shortPlural;
+  const label = `${count} ${count === 1 ? singular : plural}`;
+  return isPast ? `${label} ago` : `in ${label}`;
 }

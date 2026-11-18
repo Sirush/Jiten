@@ -20,6 +20,18 @@ describe('formatRelativeTime', () => {
     expect(formatRelativeTime(new Date('2026-09-14T09:00:00Z'), now, 'short')).toBe('3 hr ago');
   });
 
+  it('names a single past unit instead of counting it', () => {
+    expect(formatRelativeTime(new Date('2026-08-14T12:00:00Z'), now)).toBe('last month');
+    expect(formatRelativeTime(new Date('2026-08-14T12:00:00Z'), now, 'short')).toBe('last mo');
+    expect(formatRelativeTime(new Date('2026-09-07T12:00:00Z'), now, 'short')).toBe('last wk');
+    expect(formatRelativeTime(new Date('2026-09-14T11:00:00Z'), now)).toBe('1 hour ago');
+  });
+
+  it('formats future dates', () => {
+    expect(formatRelativeTime(new Date('2026-09-17T12:00:00Z'), now)).toBe('in 3 days');
+    expect(formatRelativeTime(new Date('2026-09-15T12:00:00Z'), now)).toBe('tomorrow');
+  });
+
   it('accepts ISO strings', () => {
     expect(formatRelativeTime('2026-09-13T12:00:00Z', now)).toBe('yesterday');
   });
