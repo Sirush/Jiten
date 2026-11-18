@@ -379,7 +379,10 @@
   const statusRowClass =
     'flex items-center gap-3 px-3 py-1.5 rounded text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:bg-gray-100 dark:focus-visible:bg-gray-700 transition-colors cursor-pointer';
 
-  const hideStatusPopover = () => statusPopover.value?.hide();
+  const utilityButtonClass =
+    'inline-flex items-center justify-center gap-1 h-7 min-w-7 px-1.5 rounded leading-none hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer';
+
+  const hideStatusPopover =() => statusPopover.value?.hide();
 
   const openHistory = () => {
     hideStatusPopover();
@@ -541,7 +544,7 @@
               <Tooltip v-if="authStore.isAuthenticated && !readOnlyList" :content="deck.isFavourite ? 'Remove from favourites' : 'Add to favourites'">
                 <button
                   type="button"
-                  class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                  :class="utilityButtonClass"
                   :aria-pressed="!!deck.isFavourite"
                   :aria-label="deck.isFavourite ? 'Remove from favourites' : 'Add to favourites'"
                   @click="toggleFavourite"
@@ -557,7 +560,7 @@
               >
                 <button
                   type="button"
-                  class="flex items-center gap-1 p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                  :class="utilityButtonClass"
                   aria-haspopup="true"
                   :aria-expanded="statusPopoverOpen"
                   :aria-label="statusButtonLabel"
@@ -579,7 +582,7 @@
               <Tooltip v-if="canEditInline" :content="isEditing ? 'Stop editing' : 'Edit metadata inline'">
                 <button
                   type="button"
-                  class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                  :class="utilityButtonClass"
                   :aria-pressed="isEditing"
                   @click="isEditing = !isEditing"
                 >
@@ -592,7 +595,7 @@
                   :to="`/decks/media/${deck.deckId}/detail#discussion`"
                   :rel="subdeckLinkRel(deck)"
                   :aria-label="discussionTooltip"
-                  class="flex items-center gap-1 p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer no-underline"
+                  :class="[utilityButtonClass, 'no-underline']"
                   @click="onDiscussionClick"
                 >
                   <i class="pi pi-comments utility-icon" />
@@ -604,13 +607,13 @@
               <Tooltip content="View stats">
                 <router-link
                   :to="`/decks/media/${deck.deckId}/stats`"
-                  class="inline-block p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                  :class="utilityButtonClass"
                 >
                   <i class="pi pi-chart-bar utility-icon" />
                 </router-link>
               </Tooltip>
               <Tooltip v-if="authStore.isAuthenticated" content="More options">
-                <button type="button" class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer" @click="toggleMenu">
+                <button type="button" :class="utilityButtonClass" @click="toggleMenu">
                   <i class="pi pi-ellipsis-v utility-icon" />
                 </button>
               </Tooltip>

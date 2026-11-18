@@ -51,9 +51,14 @@
 </script>
 
 <template>
-  <span>
-    <button type="button" aria-label="Share" class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer" @click="toggle">
-      <i class="pi pi-share-alt text-surface-400 hover:text-primary transition-colors" />
+  <span class="inline-flex">
+    <button
+      type="button"
+      aria-label="Share"
+      class="group inline-flex items-center justify-center h-7 min-w-7 px-1.5 rounded leading-none hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+      @click="toggle"
+    >
+      <i class="pi pi-share-alt text-surface-400 group-hover:text-primary group-focus-visible:text-primary transition-colors" />
     </button>
     <Popover ref="op">
       <div class="flex items-center gap-1">
