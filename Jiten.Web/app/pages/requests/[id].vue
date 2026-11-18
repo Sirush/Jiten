@@ -909,7 +909,7 @@
             <i class="pi pi-paperclip mt-0.5 w-[14px] shrink-0 text-center text-[13px] text-amber-600 dark:text-amber-500" />
             <span>
               No file attached yet.
-              <template v-if="fulfilmentRange">Requests with one are usually filled in {{ fulfilmentRange }}.</template>
+              <template v-if="fulfilmentRange">Requests with one are usually filled in {{ fulfilmentRange }}.{{ ' ' }}</template>
               <template v-if="isMangaRequest">If you have the .mokuro file, attach it in a comment below.</template>
               <template v-else>If you have the script, subtitles or ebook, attach it in a comment below.</template>
             </span>
