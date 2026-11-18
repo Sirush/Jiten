@@ -336,6 +336,12 @@ public class CliOptions
     [Option(longName: "fsrs-eval-predictions", Required = false, HelpText = "With --fsrs-eval: directory to write every held-out prediction per model (<model>.bin: f32 p, u8 y, f32 elapsed days).")]
     public string? FsrsEvalPredictions { get; set; }
 
+    [Option(longName: "fsrs-eval-train-fraction", Required = false, HelpText = "With --fsrs-eval: share of each user's reviews, oldest first, used for training (default 0.8).")]
+    public double? FsrsEvalTrainFraction { get; set; }
+
+    [Option(longName: "fsrs-eval-interval-retention", Required = false, HelpText = "With --fsrs-eval-predictions: also write <model>.intervals.bin (f32 days until recall falls to this retention, taken after each held-out review) for the FSRS-7 models.")]
+    public double? FsrsEvalIntervalRetention { get; set; }
+
     [Option(longName: "scan-confidence", Required = false, HelpText = "Scan a corpus file for low-confidence token resolutions. Requires --input.")]
     public bool ScanConfidence { get; set; }
 

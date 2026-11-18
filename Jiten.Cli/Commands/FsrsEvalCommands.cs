@@ -7,7 +7,7 @@ namespace Jiten.Cli.Commands;
 
 public class FsrsEvalCommands
 {
-    private const double TrainFraction = 0.8;
+    private const double DefaultTrainFraction = 0.8;
 
     private record Review(DateTime Utc, int Rating);
 
@@ -22,6 +22,9 @@ public class FsrsEvalCommands
 
         /// <summary>Predicted recall for each review of a card's history; index 0 is unused.</summary>
         double[] Predict(FsrsTrainingReview[] reviews, double[] parameters);
+
+        /// <summary>Days until recall falls to <paramref name="retention"/>, measured from each review; null when the model has no interval formula here.</summary>
+        double[]? Intervals(FsrsTrainingReview[] reviews, double[] parameters, double retention) => null;
     }
 
     private sealed class Fsrs6Defaults : IEvalModel
@@ -70,6 +73,20 @@ public class FsrsEvalCommands
 
             return result;
         }
+
+        public double[] Intervals(FsrsTrainingReview[] reviews, double[] parameters, double retention)
+        {
+            var result = new double[reviews.Length];
+            var state = FsrsHelperV7.InitialState((FsrsRating)reviews[0].Rating, parameters);
+            result[0] = FsrsHelperV7.NextInterval(state, retention, parameters);
+            for (var i = 1; i < reviews.Length; i++)
+            {
+                state = FsrsHelperV7.NextState(state, reviews[i].DeltaT, (FsrsRating)reviews[i].Rating, parameters);
+                result[i] = FsrsHelperV7.NextInterval(state, retention, parameters);
+            }
+
+            return result;
+        }
     }
 
     private sealed class Fsrs7Optimised(string name, FsrsOptimizerV7Config config) : Fsrs7Defaults
@@ -107,6 +124,7 @@ public class FsrsEvalCommands
     public async Task Run(CliOptions options)
     {
         var dir = options.FsrsEval!;
+        var trainFraction = options.FsrsEvalTrainFraction ?? DefaultTrainFraction;
         var users = LoadUsers(dir);
         if (options.FsrsEvalMaxUsers is { } max)
             users = users.Take(max).ToList();
@@ -119,6 +137,7 @@ public class FsrsEvalCommands
         var pooled = models.ToDictionary(m => m.Name, _ => new List<Prediction>());
         var perUserMetrics = models.ToDictionary(m => m.Name, _ => new List<(Metrics Inter, Metrics Same, int ParamCount)>());
         Dictionary<string, BinaryWriter>? dumps = null;
+        var intervalDumps = new Dictionary<string, BinaryWriter>();
         if (options.FsrsEvalPredictions is { } dumpDir)
         {
             Directory.CreateDirectory(dumpDir);
@@ -127,7 +146,7 @@ public class FsrsEvalCommands
 
         foreach (var user in users)
         {
-            var (train, test, cutoff) = Split(user);
+            var (train, test, cutoff) = Split(user, trainFraction);
             var userModels = new Dictionary<string, object>();
 
             foreach (var model in models)
@@ -140,6 +159,11 @@ public class FsrsEvalCommands
                 foreach (var (reviews, firstTestIndex) in test)
                 {
                     var p = model.Predict(reviews, parameters);
+                    var intervals = dumps != null && options.FsrsEvalIntervalRetention is { } retention
+                        ? model.Intervals(reviews, parameters, retention)
+                        : null;
+                    if (intervals != null && !intervalDumps.ContainsKey(model.Name))
+                        intervalDumps[model.Name] = new BinaryWriter(File.Create(Path.Combine(options.FsrsEvalPredictions!, $"{model.Name}.intervals.bin")));
                     var interdayCount = 0;
                     var lapses = 0;
                     for (var i = 1; i < reviews.Length; i++)
@@ -156,6 +180,8 @@ public class FsrsEvalCommands
                                 w.Write((float)p[i]);
                                 w.Write((byte)(reviews[i].Rating > 1 ? 1 : 0));
                                 w.Write((float)reviews[i].DeltaT);
+                                if (intervals != null)
+                                    intervalDumps[model.Name].Write((float)intervals[i]);
                             }
                         }
                         if (interday && reviews[i].Rating == 1) lapses++;
@@ -185,7 +211,7 @@ public class FsrsEvalCommands
         }
 
         if (dumps != null)
-            foreach (var w in dumps.Values)
+            foreach (var w in dumps.Values.Concat(intervalDumps.Values))
                 w.Dispose();
 
         var summary = models.ToDictionary(m => m.Name, m => new
@@ -211,7 +237,7 @@ public class FsrsEvalCommands
         await File.WriteAllTextAsync(output, JsonSerializer.Serialize(new
         {
             createdUtc = DateTime.UtcNow,
-            trainFraction = TrainFraction,
+            trainFraction,
             rmse = "srs-benchmark rmse_matrix bins (elapsed days, interday review index, prior interday lapses)",
             models = models.Select(m => m.Name),
             summary,
@@ -225,10 +251,10 @@ public class FsrsEvalCommands
 
     /// <summary>Time split: training sees only pre-cutoff history; later reviews are predicted from each card's full prior history.</summary>
     private static (List<FsrsTrainingItem> Train, List<(FsrsTrainingReview[] Reviews, int FirstTestIndex)> Test, DateTime Cutoff)
-        Split(UserData user)
+        Split(UserData user, double trainFraction)
     {
         var allTimes = user.Cards.SelectMany(c => c.Select(r => r.Utc)).OrderBy(t => t).ToArray();
-        var cutoff = allTimes[(int)(allTimes.Length * TrainFraction)];
+        var cutoff = allTimes[(int)(allTimes.Length * trainFraction)];
 
         var train = new List<FsrsTrainingItem>();
         var test = new List<(FsrsTrainingReview[], int)>();
