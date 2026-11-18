@@ -65,6 +65,27 @@ public partial class MorphologicalAnalyser
         "みる", "見る",
     ];
 
+    /// <summary>A deconjugation only proves a subsidiary verb when it ends on that verb's own class; おくれ reaches おく via a dead-end stem.</summary>
+    private static readonly Dictionary<string, string[]> SubsidiaryVerbClasses = new()
+    {
+        ["あげる"] = ["v1"], ["上げる"] = ["v1"],
+        ["くれる"] = ["v1", "v1-s"], ["呉れる"] = ["v1", "v1-s"],
+        ["もらう"] = ["v5u"], ["貰う"] = ["v5u"],
+        ["やる"] = ["v5r"],
+        ["くださる"] = ["v5aru"], ["下さる"] = ["v5aru"],
+        ["おく"] = ["v5k"], ["置く"] = ["v5k"],
+        ["みる"] = ["v1"], ["見る"] = ["v1"],
+        ["いる"] = ["v1"], ["居る"] = ["v1"],
+        ["ある"] = ["v5r-i", "v5r"], ["有る"] = ["v5r-i", "v5r"],
+        ["しまう"] = ["v5u"], ["仕舞う"] = ["v5u"],
+        ["いく"] = ["v5k-s", "v5k"], ["行く"] = ["v5k-s", "v5k"],
+        ["くる"] = ["vk"], ["来る"] = ["vk"],
+    };
+
+    private static bool EndsOnSubsidiaryVerbClass(DeconjugationForm form) =>
+        form.Tags.Length > 0 && SubsidiaryVerbClasses.TryGetValue(form.Text, out var classes)
+                             && Array.IndexOf(classes, form.Tags[^1]) >= 0;
+
     private static readonly Dictionary<string, string> AuxiliaryVerbStems = new()
                                                                             {
                                                                                 { "続ける", "続け" }, { "始める", "始め" }, { "終わる", "終わ" },

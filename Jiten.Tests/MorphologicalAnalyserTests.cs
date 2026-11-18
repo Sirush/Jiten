@@ -2517,6 +2517,48 @@ public class MorphologicalAnalyserTests
         yield return ["雨が降ったので行かなかった。", new[] { "雨が降った", "ので", "行かなかった" }];
         yield return ["溶剤は使用時に蒸発し大気に放出されている。", new[] { "溶剤", "は", "使用時", "に", "蒸発し", "大気", "に", "放出されている" }];
         yield return ["彼は学生だし、まだ若い。", new[] { "彼", "は", "学生", "だ", "し", "まだ", "若い" }];
+        // Sudachi steals the negative ん into the interjection んっ (い|ませ|んっ|て)
+        yield return ["彼女なんていませんって", new[] { "彼女", "なんて", "いません", "って" }];
+        // A kanji noun after a prenominal modifier is the object of する, not a kanji+する verb (目する)
+        yield return ["「じゃあなんで、あんな不審な目してたのよ？」", new[] { "じゃあ", "なんで", "あんな", "不審な", "目", "してた", "の", "よ" }];
+        yield return ["彼女は綺麗な目してるね。", new[] { "彼女", "は", "綺麗な", "目", "してる", "ね" }];
+        // A verb stem that compounds with the kanji (忘れ物, 調べ物) keeps it; 物する is never the reading
+        yield return ["「もしかして俺、また忘れ物しちゃった？」", new[] { "もしかして", "俺", "また", "忘れ物", "しちゃった" }];
+        yield return ["図書館で調べ物してた。", new[] { "図書館", "で", "調べ物", "してた" }];
+        // Noun + かって before a quote verb is か + って, not かつて
+        yield return ["だから私は後者を選択し、女優かっていうぐらい一生懸命声を上げた。",
+            new[] { "だから", "私", "は", "後者", "を", "選択し", "女優", "か", "っていう", "ぐらい", "一生懸命", "声を上げた" }];
+        // A mimetic split from its と rejoins its adverb entry
+        yield return ["「何となく、フラっと。」", new[] { "何となく", "フラっと" }];
+        yield return ["父親はイラッとして母親に怒鳴る。", new[] { "父親", "は", "イラッと", "して", "母親", "に", "怒鳴る" }];
+        // Sudachi fuses ああやって and strands られん
+        yield return ["ああやってられん！！", new[] { "ああ", "やってられん" }];
+        // Sudachi reads 何|かきっかけ as 書きかけ
+        yield return ["必ず、何かきっかけがあるはずだ", new[] { "必ず", "何か", "きっかけ", "が", "ある", "はずだ" }];
+        // ちゃ|んっ|て after a name is ちゃん + って
+        yield return ["「椋ちゃんってそんなに強いの？」", new[] { "椋", "ちゃん", "って", "そんな", "に", "強い", "の" }];
+        // Separate words around an elongation never fuse into a respelling (うーん|そう is not 運送)
+        yield return ["うーんそうだね", new[] { "うーん", "そうだね" }];
+        // A usually-kana word cut off by 、 and restarted (いら、いられない) is a stutter, not 伊良
+        yield return ["「お、落ち着いてなんて、いら、いられないよっ」", new[] { "落ち着いて", "なんて", "いられない", "よ" }];
+        // A frequent word repeated after 、 is deliberate, not a stutter
+        yield return ["「ママのうた、うたって」", new[] { "ママ", "の", "うた", "うたって" }];
+        // Unknown katakana names drop out instead of resolving to fragments (ハン, ラ, ロン, パラ, レイ)
+        yield return ["この物語は、中年男性ハンバート・ハンバートの告白の形式をとっているの。",
+            new[] { "この", "物語", "は", "中年", "男性", "の", "告白", "の", "形式", "を", "とっている", "の" }];
+        yield return ["この組み合わせはムードラっていうんだけど、新しいカクテルは今までのヤツには当てはまらない。",
+            new[] { "この", "組み合わせ", "は", "っていう", "んだ", "けど", "新しい", "カクテル", "は", "今まで", "の", "ヤツ", "には", "当てはまらない" }];
+        yield return ["以前描いたポポロンのイラストをプロフィール写真にすることにした。",
+            new[] { "以前", "描いた", "の", "イラスト", "を", "プロフィール写真", "に", "する", "ことにした" }];
+        yield return ["イギリスの作家サッカレイが書いたの。", new[] { "イギリス", "の", "作家", "が", "書いた", "の" }];
+        yield return ["それからＰＣに向かい、腰を落ち着けてフレパラにログインした。",
+            new[] { "それ", "から", "ＰＣ", "に", "向かい", "腰を落ち着けて", "に", "ログインした" }];
+        // おくれ is never absorbed as the subsidiary おく; お呉れ and 遅れる stay their own tokens
+        yield return ["読んでおくれ。", new[] { "読んで", "おくれ" }];
+        yield return ["寝坊しておくれた。", new[] { "寝坊", "して", "おくれた" }];
+        yield return ["部屋に入って行く。", new[] { "部屋", "に", "入って", "行く" }];
+        yield return ["自分で弁当作ってくるって感じか？", new[] { "自分", "で", "弁当", "作って", "くる", "って", "感じ", "か" }];
+        yield return ["あわあわ、めぐみんったら一体、何やらかしたの？", new[] { "あわあわ", "ったら", "一体", "何", "やらかした", "の" }];
     }
 
     [Theory]

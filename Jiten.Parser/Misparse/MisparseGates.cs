@@ -22,7 +22,8 @@ internal readonly record struct MisparseGateContext(
     bool SurfaceAttestsLiterally = false,
     bool ShardBlobUnattested = false,
     bool PrevDroppedByGate = false,
-    bool NextDroppedByGate = false);
+    bool NextDroppedByGate = false,
+    bool HasFrequencyPriority = false);
 
 internal static class MisparseGates
 {
@@ -221,6 +222,14 @@ internal static class MisparseGates
         return false;
     }
 
+    /// <summary>A rare kana word cut off by 、 and restarted as an inflected word (いら、いられない) is a stutter even when usually-kana; frequent ones repeat on purpose (うた、うたって).</summary>
+    private static bool IsCutOffRepeat(in MisparseGateContext ctx, string surface) =>
+        !ctx.HasFrequencyPriority
+        && ctx.SymbolsAfter.Contains('、')
+        && ctx.Next is { PartOfSpeech: PartOfSpeech.Verb or PartOfSpeech.IAdjective } next
+        && next.Text.Length > surface.Length
+        && next.Text.StartsWith(surface, StringComparison.Ordinal);
+
     private static bool IsKanaStutterBeforeWord(in MisparseGateContext ctx)
     {
         string surface = ctx.Token.Text;
@@ -230,7 +239,7 @@ internal static class MisparseGates
         if (ctx.Token.PartOfSpeech == PartOfSpeech.Interjection
             && (surface.EndsWith('っ') || surface.EndsWith('ッ') || surface.EndsWith('ー'))) return false;
 
-        if (ctx.ReadingIsIchi || ctx.IsUsuallyKana) return false;
+        if ((ctx.ReadingIsIchi || ctx.IsUsuallyKana) && !IsCutOffRepeat(in ctx, surface)) return false;
 
         if (ctx.Next is not { Reading.Length: > 0, Text.Length: > 0 } next) return false;
 

@@ -5099,7 +5099,8 @@ namespace Jiten.Parser
                     attestsLiterally,
                     blobUnattested,
                     prevDropped,
-                    nextDropped);
+                    nextDropped,
+                    KanaScoringHelpers.HasFrequencyMarker(jmWord?.Priorities, includeJiten: false));
 
                 return MisparseGates.Evaluate(in ctx);
             }
@@ -5580,6 +5581,14 @@ namespace Jiten.Parser
                 if (matchId.HasValue && firstWord.PartOfSpeech == PartOfSpeech.Pronoun
                     && WordMeta.TryGetValue(matchId.Value, out var matchMeta)
                     && matchMeta.GetPrimaryPos() == PartOfSpeech.Verb)
+                    continue;
+
+                if (matchId.HasValue && startIndex > 0
+                    && firstWord.PartOfSpeech is PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+                    && MorphologicalAnalyser.IsPrenominalModifier(wordInfos[startIndex - 1])
+                    && dictForm.EndsWith("する", StringComparison.Ordinal)
+                    && WordMeta.TryGetValue(matchId.Value, out var nounVerbMeta)
+                    && nounVerbMeta.GetPrimaryPos() == PartOfSpeech.Verb)
                     continue;
 
                 if (matchId.HasValue)
@@ -6314,7 +6323,7 @@ namespace Jiten.Parser
                                    (newBest.Word.WordId != currentResult.WordId || newBest.ReadingIndex != currentResult.ReadingIndex);
 
                     if (diagnostics != null && newBest != null &&
-                        bonusCache.TryGetValue(newBest, out var dnb) && dnb.rules is { Count: > 0 })
+                        bonusCache.TryGetValue(newBest, out var dnb) && (dnb.rules is { Count: > 0 } || changed))
                     {
                         var firstPassCandidate = FindCandidate(candidates, currentResult.WordId, currentResult.ReadingIndex);
                         var firstPassScore = firstPassCandidate?.TotalScore ?? 0;
@@ -6335,7 +6344,7 @@ namespace Jiten.Parser
                                                                       Text = nextInfo.Text, Pos = nextInfo.PartOfSpeech
                                                                   }
                                                                 : null,
-                                                            RulesMatched = dnb.rules,
+                                                            RulesMatched = dnb.rules ?? [],
                                                             FirstPassWinner = new AdjacentCandidateInfo
                                                                               {
                                                                                   WordId = currentResult.WordId,

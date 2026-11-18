@@ -353,6 +353,13 @@ public partial class MorphologicalAnalyser
 
     private static readonly string[] DemonstrativeHeads = ["その", "この", "あの", "どの"];
 
+    /// <summary>Attributive forms only modify nouns, so the kanji after one is a noun head, never a verb stem (綺麗な|目してる is not 目する).</summary>
+    internal static bool IsPrenominalModifier(WordInfo w) =>
+        w.PartOfSpeech == PartOfSpeech.PrenounAdjectival
+        || (w.PartOfSpeech is PartOfSpeech.NaAdjective or PartOfSpeech.Auxiliary or PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+            && w.Text.EndsWith('な') && !w.DictionaryForm.EndsWith('な'))
+        || (w.PartOfSpeech == PartOfSpeech.IAdjective && w.Text.EndsWith('い'));
+
     // Sudachi splits a conjugated verb's kanji head from its kana tail as unrelated words (会|おう → 会+王).
     private List<WordInfo> RepairKanjiVerbShred(List<WordInfo> wordInfos, IReadOnlyList<int> candidates)
     {
@@ -384,6 +391,7 @@ public partial class MorphologicalAnalyser
             // A clause-initial single kanji is a speaker name in script dumps ([name]至[line]“そうなん?” is not 至る).
             if (i == 0 || toks[i - 1].PartOfSpeech is PartOfSpeech.Symbol
                 or PartOfSpeech.SupplementarySymbol or PartOfSpeech.BlankSpace) continue;
+            if (KanjiCompoundsWithPrevious(toks, i) || IsPrenominalModifier(toks[i - 1])) continue;
             if (tail.Text.Length is < 1 or > 4 || !tail.Text.All(c => c is >= 'ぁ' and <= 'ゖ')) continue;
             if (tail.PartOfSpeech is PartOfSpeech.Particle or PartOfSpeech.Auxiliary
                 or PartOfSpeech.Symbol or PartOfSpeech.SupplementarySymbol) continue;
@@ -3812,6 +3820,49 @@ public partial class MorphologicalAnalyser
             return 0;
         });
 
+    private const int OkureRequestWordId = 2868242;
+
+    /// <summary>User-dictionary ておく expressions swallow the request お呉れ (やめておく|れ is やめて + おくれ); passive おく would be おか|れ.</summary>
+    private List<WordInfo> RepairTeOkuRequest(List<WordInfo> wordInfos) =>
+        ScanRewrite(wordInfos, static (tokens, i, _, output) =>
+        {
+            var teOku = tokens[i];
+            if (i + 1 >= tokens.Count || teOku.PartOfSpeech is not (PartOfSpeech.Verb or PartOfSpeech.Expression) || teOku.Text.Length < 4
+                || !(teOku.Text.EndsWith("ておく", StringComparison.Ordinal) || teOku.Text.EndsWith("でおく", StringComparison.Ordinal))
+                || !teOku.Reading.EndsWith("オク", StringComparison.Ordinal))
+                return 0;
+
+            var re = tokens[i + 1];
+            if (re.PartOfSpeech != PartOfSpeech.Auxiliary || re.DictionaryForm != "れる" || re.Text is not ("れ" or "れよ"))
+                return 0;
+
+            var result = output();
+            string teForm = teOku.Text[..^2];
+            int split = teOku.StartOffset >= 0 ? teOku.StartOffset + teForm.Length : -1;
+            int okureEnd = split >= 0 ? split + 3 : -1;
+            result.Add(new WordInfo(teOku)
+            {
+                Text = teForm, DictionaryForm = teForm, NormalizedForm = teForm, Reading = teOku.Reading[..^2],
+                EndOffset = split
+            });
+            result.Add(new WordInfo(re)
+            {
+                Text = "おくれ", DictionaryForm = "おくれ", NormalizedForm = "お呉れ", Reading = "オクレ",
+                PartOfSpeech = PartOfSpeech.Expression, PartOfSpeechSection1 = PartOfSpeechSection.None,
+                PreMatchedWordId = OkureRequestWordId, PreMatchedReadingIndex = 1,
+                PinnedByRewriteRule = true, HardPinned = true,
+                StartOffset = split, EndOffset = re.Text == "れ" ? re.EndOffset : okureEnd
+            });
+            if (re.Text == "れよ")
+                result.Add(new WordInfo(re)
+                {
+                    Text = "よ", DictionaryForm = "よ", NormalizedForm = "よ", Reading = "ヨ",
+                    PartOfSpeech = PartOfSpeech.Particle, PartOfSpeechSection1 = PartOfSpeechSection.SentenceEndingParticle,
+                    StartOffset = okureEnd
+                });
+            return 2;
+        });
+
     /// <summary>Every RepairQuotativeTte rule needs a sokuon in the current token; a rule that does not must run before this gate.</summary>
     private static bool HasSokuon(WordInfo w) => w.Text.AsSpan().IndexOfAny('っ', 'ッ') >= 0;
 
@@ -4787,6 +4838,226 @@ public partial class MorphologicalAnalyser
         return tsuIdx - i + 1;
     }
 
+
+    /// <summary>A mimetic split from its と (フラ|っと, イラッ|として, キューっ|て) rejoins, pinned, when JMDict has the adverb and a hiragana head isn't a compound's tail (言い|が|かりっ|て, で|すかっ|て).</summary>
+    private List<WordInfo> RepairSplitMimeticAdverb(List<WordInfo> wordInfos)
+    {
+        if (HasNonNameCompoundLookup == null)
+            return wordInfos;
+        return ScanRewrite(wordInfos, TryRepairSplitMimeticAdverb);
+    }
+
+    private int TryRepairSplitMimeticAdverb(List<WordInfo> tokens, int i, List<WordInfo>? _, Func<List<WordInfo>> output)
+    {
+        if (i + 1 >= tokens.Count) return 0;
+        var head = tokens[i];
+        var next = tokens[i + 1];
+        if (head.PreMatchedWordId != null || next.PreMatchedWordId != null
+            || head.Text.Length is < 2 or > 6 || !head.Text.All(JapaneseTextHelper.IsKana)
+            || head.EndOffset < 0 || head.EndOffset != next.StartOffset)
+            return 0;
+
+        bool headEndsInSokuon = head.Text[^1] is 'っ' or 'ッ';
+        var stem = headEndsInSokuon ? head.Text[..^1] : head.Text;
+        if (!stem.All(JapaneseTextHelper.IsKatakana)
+            && ((i > 0 && HasNonNameCompoundLookup!(tokens[i - 1].Text + stem))
+                || (i > 1 && HasNonNameCompoundLookup!(tokens[i - 2].Text + tokens[i - 1].Text + stem))))
+            return 0;
+
+        if (!headEndsInSokuon && next.Text == "っと" && head.Text.All(JapaneseTextHelper.IsKatakana)
+            && head.PartOfSpeech is not (PartOfSpeech.Particle or PartOfSpeech.Auxiliary or PartOfSpeech.Verb)
+            && HasNonNameCompoundLookup!(head.Text + "っと"))
+        {
+            output().Add(MergedMimetic(head, next, head.Text + "っと", head.Text + "っと"));
+            return 2;
+        }
+
+        if (!headEndsInSokuon || head.PartOfSpeech != PartOfSpeech.Adverb || !HasNonNameCompoundLookup!(head.Text + "と"))
+            return 0;
+
+        if (next.Text == "として")
+        {
+            output().Add(new WordInfo(head)
+            {
+                Text = head.Text + "と", DictionaryForm = head.Text + "と", NormalizedForm = head.Text + "と",
+                Reading = head.Reading + "ト", PartOfSpeech = PartOfSpeech.Adverb,
+                EndOffset = head.EndOffset + 1
+            });
+            output().Add(new WordInfo(next)
+            {
+                Text = "して", DictionaryForm = "する", NormalizedForm = "為る", Reading = "シテ",
+                PartOfSpeech = PartOfSpeech.Verb, StartOffset = next.StartOffset + 1
+            });
+            return 2;
+        }
+
+        if (next.Text == "て" && next.PartOfSpeech == PartOfSpeech.Particle
+            && i + 2 < tokens.Count && tokens[i + 2].PartOfSpeech == PartOfSpeech.Verb)
+        {
+            output().Add(MergedMimetic(head, next, head.Text + "て", head.Text + "と"));
+            return 2;
+        }
+
+        return 0;
+
+        WordInfo MergedMimetic(WordInfo head, WordInfo next, string text, string dictForm)
+        {
+            int? id = GetNonNameCompoundWordId?.Invoke(dictForm);
+            return new WordInfo(head)
+            {
+                Text = text, DictionaryForm = dictForm, NormalizedForm = dictForm,
+                Reading = head.Reading + next.Reading, PartOfSpeech = PartOfSpeech.Adverb,
+                EndOffset = next.EndOffset,
+                PreMatchedWordId = id, PinnedByRewriteRule = id != null
+            };
+        }
+    }
+
+    /// <summary>A kana word shredded or respelled by emphatic っ/ー (ぬっくぬく, ほんっとーうに, うっと|ー|しい) rejoins its entry.</summary>
+    private List<WordInfo> RepairEmphaticKanaSpelling(List<WordInfo> wordInfos)
+    {
+        if (HasNonNameCompoundLookup == null || GetNonNameCompoundWordId == null)
+            return wordInfos;
+        return ScanRewrite(wordInfos, TryRepairEmphaticKanaSpelling);
+    }
+
+    private const int EmphaticRunMaxTokens = 4;
+    private const int EmphaticPlainMinLength = 4;
+
+    private int TryRepairEmphaticKanaSpelling(List<WordInfo> tokens, int i, List<WordInfo>? _, Func<List<WordInfo>> output)
+    {
+        if (!IsEmphaticRunToken(tokens[i]) || tokens[i].Text == "ー") return 0;
+
+        int maxEnd = i;
+        while (maxEnd + 1 < tokens.Count && maxEnd + 1 - i < EmphaticRunMaxTokens
+               && IsEmphaticRunToken(tokens[maxEnd + 1])
+               && (tokens[maxEnd].EndOffset < 0 || tokens[maxEnd + 1].StartOffset < 0
+                   || tokens[maxEnd].EndOffset == tokens[maxEnd + 1].StartOffset))
+            maxEnd++;
+
+        for (int end = maxEnd; end >= i; end--)
+        {
+            if (tokens[end].Text == "ー" && end > i) continue;
+            var run = string.Concat(tokens.Skip(i).Take(end - i + 1).Select(t => t.Text));
+            if (IsReduplication(tokens, i, end) || (end > i && MarkedTokenIsWord(tokens, i, end))) continue;
+            if (run.Length < EmphaticPlainMinLength + 1 || run.IndexOfAny(['っ', 'ッ', 'ー'], 1) < 0
+                || run[^1] is 'っ' or 'ッ')
+                continue;
+
+            string? plain;
+            if (HasNonNameCompoundLookup!(run))
+                plain = end > i && HasLongVowelShard(tokens, i, end) ? run : null;
+            else if (end == i ? tokens[i].DictionaryForm is { Length: > 0 } df && df != run : !MarkedTokensAreCries(tokens, i, end))
+                plain = null;
+            else
+                plain = FindPlainEmphaticSpelling(run);
+            if (plain == null || GetNonNameCompoundWordId!(plain) is not { } id) continue;
+
+            output().Add(new WordInfo(tokens[i])
+            {
+                Text = run, DictionaryForm = plain, NormalizedForm = plain,
+                Reading = string.Concat(tokens.Skip(i).Take(end - i + 1).Select(t => t.Reading)),
+                PartOfSpeech = plain[^1] == 'い' && HasVerbOrAdjectiveLookup?.Invoke(plain) == true
+                    ? PartOfSpeech.IAdjective : PartOfSpeech.Adverb,
+                EndOffset = tokens[end].EndOffset,
+                PreMatchedWordId = id, PinnedByRewriteRule = true
+            });
+            return end - i + 1;
+        }
+
+        return 0;
+    }
+
+    /// <summary>Repeated cries (わーい|わーい) are separate utterances, never one respelled word.</summary>
+    private static bool IsReduplication(List<WordInfo> tokens, int start, int end)
+    {
+        if (end == start) return false;
+        for (int k = start + 1; k <= end; k++)
+            if (tokens[k].Text != tokens[start].Text) return false;
+        return true;
+    }
+
+    /// <summary>Lookups already fold ー and っ, so a whole-run hit only proves a respelling when Sudachi cut a bare ー off (うっと|ー|しい, not からっ|すか).</summary>
+    private static bool HasLongVowelShard(List<WordInfo> tokens, int start, int end)
+    {
+        for (int k = start; k <= end; k++)
+            if (tokens[k].Text == "ー") return true;
+        return false;
+    }
+
+    /// <summary>Across tokens only an unknown cry carries the emphasis (ほ|んっとー|うに); a lemmatised or adverb shard (からっ|すか, ま|え|かった) is its own word.</summary>
+    private static bool MarkedTokensAreCries(List<WordInfo> tokens, int start, int end)
+    {
+        for (int k = start; k <= end; k++)
+        {
+            var t = tokens[k];
+            if (t.Text != "ー" && t.Text.IndexOfAny(['っ', 'ッ', 'ー']) >= 0 && t.PartOfSpeech != PartOfSpeech.Interjection)
+                return false;
+        }
+        return true;
+    }
+
+    /// <summary>A marked token that is a word on its own (うーん|そう, もっと|ねた) is a separate word, not part of a respelling.</summary>
+    private bool MarkedTokenIsWord(List<WordInfo> tokens, int start, int end)
+    {
+        for (int k = start; k <= end; k++)
+        {
+            var text = tokens[k].Text;
+            if (text != "ー" && text.IndexOfAny(['っ', 'ッ', 'ー']) >= 0 && HasNonNameCompoundLookup!(text))
+                return true;
+        }
+        return false;
+    }
+
+    private static bool IsEmphaticRunToken(WordInfo w) =>
+        w.PreMatchedWordId == null && w.Text.Length > 0
+        && (w.Text == "ー"
+            || (w.PartOfSpeech is PartOfSpeech.Adverb or PartOfSpeech.Interjection or PartOfSpeech.Noun
+                    or PartOfSpeech.CommonNoun or PartOfSpeech.IAdjective
+                && w.Text.All(c => c is (>= 'ぁ' and <= 'ゖ') or 'ー')));
+
+    /// <summary>Tries every drop of the inner っ and every ー as う, or dropped before a vowel it doubles (とーう); null unless exactly one spelling is a word.</summary>
+    private string? FindPlainEmphaticSpelling(string run)
+    {
+        var markers = new List<int>();
+        for (int k = 1; k < run.Length; k++)
+            if (run[k] is 'っ' or 'ッ' or 'ー') markers.Add(k);
+        if (markers.Count is 0 or > 3) return null;
+
+        string? found = null;
+        int choices = 1;
+        foreach (var m in markers) choices *= run[m] == 'ー' ? 3 : 2;
+        var sb = new System.Text.StringBuilder(run.Length);
+        for (int combo = 1; combo < choices; combo++)
+        {
+            sb.Clear();
+            int rest = combo, mi = 0;
+            bool valid = true;
+            for (int k = 0; k < run.Length; k++)
+            {
+                if (mi < markers.Count && markers[mi] == k)
+                {
+                    int options = run[k] == 'ー' ? 3 : 2;
+                    int pick = rest % options;
+                    rest /= options;
+                    mi++;
+                    if (pick == 0) sb.Append(run[k]);
+                    else if (pick == 2) sb.Append('う');
+                    else if (run[k] == 'ー' && (k + 1 >= run.Length || "あいうえお".IndexOf(run[k + 1]) < 0)) valid = false;
+                    continue;
+                }
+                sb.Append(run[k]);
+            }
+
+            if (!valid) continue;
+            var candidate = sb.ToString();
+            if (candidate.Length < EmphaticPlainMinLength || !HasNonNameCompoundLookup!(candidate)) continue;
+            if (found != null && found != candidate) return null;
+            found = candidate;
+        }
+
+        return found;
+    }
 
     /// <summary>Classical attributive き fused into the next noun (白|き尾 → 白き|尾).</summary>
     private List<WordInfo> RepairClassicalKiAdjective(List<WordInfo> wordInfos)

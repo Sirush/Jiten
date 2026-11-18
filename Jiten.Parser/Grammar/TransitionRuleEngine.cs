@@ -147,6 +147,7 @@ internal static class TransitionRuleEngine
                 // Plain predicate + よ/ね is valid only before a vocative (やべえよ母ちゃん), not run-on text (食べるよ明日).
                 MatchCondition.PrevIsSfpValidHost =>
                     w.Prev?.PartOfSpeech is PartOfSpeech.Auxiliary or PartOfSpeech.Particle
+                    || w.Prev is { HardPinned: true, PreMatchedWordId: not null }
                     || (w.Current.Text == "な"
                         && w.Prev is { PartOfSpeech: PartOfSpeech.Verb or PartOfSpeech.IAdjective }
                         && w.Prev.Text == w.Prev.DictionaryForm)
@@ -352,7 +353,7 @@ internal static class TransitionRuleEngine
             w.Candidate.Word.PartsOfSpeech.Exists(TransitionRuleSets.HonorificRegisterTags.Contains),
             w.Candidate.DeconjForm?.Process.Contains("volitional") == true,
             w.Candidate.DeconjForm?.Process is { Length: > 0 } process
-                && process[^1] is "(infinitive)" or "(unstressed infinitive)" or "imperative");
+                && process[0] is "(infinitive)" or "(unstressed infinitive)" or "imperative");
     }
 
     private static bool MatchesAll(in ConditionContext ctx, ScoringCondition[] conditions)

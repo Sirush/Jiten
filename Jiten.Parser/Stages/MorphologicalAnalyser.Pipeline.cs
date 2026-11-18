@@ -42,6 +42,7 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Repair, RepairNTokenisation),
         Stage(TokenStageGroup.Repair, RepairVowelElongation),
         Stage(TokenStageGroup.Repair, ApplyTokenRewriteRulesEarly),
+        Stage(TokenStageGroup.Repair, RepairTeOkuRequest),
         Stage(TokenStageGroup.Repair, ProcessSpecialCases),
         Stage(TokenStageGroup.Repair, RetokeniseOovBlobs, TokenFeatures.HiraganaOovBlob),
         Stage(TokenStageGroup.Repair, RepairColloquialNegativeNee, TokenFeatures.Interjection),
@@ -62,6 +63,8 @@ public partial class MorphologicalAnalyser
         Stage(TokenStageGroup.Repair, RepairSakkiMoraTheft, TokenFeatures.TextSakki),
         Stage(TokenStageGroup.Repair, CollapseReduplicatedMimetic, TokenFeatures.KanaRepetition),
         Stage(TokenStageGroup.Repair, RepairClippedAdjective, TokenFeatures.EndsWithTsu),
+        Stage(TokenStageGroup.Repair, RepairSplitMimeticAdverb),
+        Stage(TokenStageGroup.Repair, RepairEmphaticKanaSpelling),
         Stage(TokenStageGroup.Repair, RepairClassicalKiAdjective),
 
         Stage(TokenStageGroup.Combine, CombinePrefixes, TokenFeatures.Prefix),
