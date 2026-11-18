@@ -9,13 +9,17 @@
   const opts = computed(() => resolveOptions<CustomMeaningBlockOptions>(customMeaningDefaults, props.block.options));
 
   const { card, isPreview, sample } = useCardContext();
+  const srsStore = useSrsStore();
+  onBeforeUnmount(() => {
+    srsStore.isNoteEditorOpen = false;
+  });
 
   const sizeClass = computed(() => (opts.value.size === 'small' ? 'text-sm' : opts.value.size === 'large' ? 'text-lg' : ''));
 </script>
 
 <template>
   <CardBlockSpoiler :enabled="opts.spoiler">
-    <CustomMeaning v-if="!isPreview && card" :word-id="card.wordId" editable class="mt-3 mb-4" :class="sizeClass" />
+    <CustomMeaning v-if="!isPreview && card" :word-id="card.wordId" editable class="mt-3 mb-4" :class="sizeClass" @editing-change="srsStore.isNoteEditorOpen = $event" />
     <div v-else-if="isPreview && sample?.customMeaning" class="mt-3 mb-4 flex items-start gap-1.5 text-surface-700 dark:text-surface-300" :class="sizeClass">
       <i class="pi pi-pencil text-xs mt-1 text-surface-400 shrink-0" />
       <span>{{ sample.customMeaning }}</span>

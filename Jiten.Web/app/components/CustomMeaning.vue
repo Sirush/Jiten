@@ -11,6 +11,8 @@
     editable?: boolean;
   }>();
 
+  const emit = defineEmits<{ editingChange: [editing: boolean] }>();
+
   const MAX_LENGTH = 500;
 
   const { $api } = useNuxtApp();
@@ -24,6 +26,8 @@
   const saving = ref(false);
   const deleting = ref(false);
   const confirmingDelete = ref(false);
+
+  watch(editing, (value) => emit('editingChange', value));
 
   const canSave = computed(() => {
     const t = draft.value.trim();
@@ -139,7 +143,7 @@
         </div>
         <div v-if="draft.trim()" class="mb-3">
           <label class="text-xs text-surface-400 block mb-1">Preview</label>
-          <div class="border-l-4 border-primary-500 pl-3 py-2 bg-primary-50 dark:bg-primary-950/40 rounded-r text-sm break-words" v-html="draftPreview" />
+          <div class="border-l-4 border-primary-500 pl-3 py-2 bg-primary-50 dark:bg-primary-950/40 rounded-r text-sm break-words max-md:max-h-24 max-md:overflow-y-auto" v-html="draftPreview" />
         </div>
         <div class="flex gap-2 justify-end items-center">
           <template v-if="meaning != null">

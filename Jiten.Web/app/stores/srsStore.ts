@@ -163,6 +163,7 @@ export const useSrsStore = defineStore('srs', () => {
   const currentBatch = ref<StudyCardDto[]>([]);
   const currentCardIndex = ref(0);
   const isFlipped = ref(false);
+  const isNoteEditorOpen = ref(false);
   const isLoading = ref(false);
   const isSessionComplete = ref(false);
   watch(isSessionComplete, (complete) => {
@@ -1903,6 +1904,7 @@ export const useSrsStore = defineStore('srs', () => {
     currentBatch,
     currentCardIndex,
     isFlipped,
+    isNoteEditorOpen,
     cardShownAt,
     isLoading,
     isSessionComplete,
