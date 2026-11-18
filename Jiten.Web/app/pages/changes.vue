@@ -110,7 +110,7 @@
         class="list-none m-0 p-0 divide-y divide-surface-200 dark:divide-surface-700 sm:col-span-full sm:grid sm:grid-cols-subgrid"
         :class="{ 'opacity-60 transition-opacity': status === 'pending' }"
       >
-        <li v-for="item in items" :key="item.id" :class="[rowGrid, 'px-4 py-2.5 text-sm flex flex-col gap-1']">
+        <li v-for="item in items" :key="item.id" :class="[rowGrid, 'px-4 py-2.5 text-sm flex flex-col gap-1 row-hover']">
           <span class="text-xs sm:text-sm text-muted-color tabular-nums" :title="formatDateTime(item.createdAt)">{{ formatDayMonthTime(item.createdAt) }}</span>
           <NuxtLink
             v-if="item.deck"

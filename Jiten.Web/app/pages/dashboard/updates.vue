@@ -355,7 +355,7 @@
         <div v-if="loading" class="text-surface-500 dark:text-surface-400">Loading...</div>
         <div v-else-if="updates.length === 0" class="text-surface-500 dark:text-surface-400">No updates yet.</div>
         <div v-else class="flex flex-col divide-y divide-surface-200 dark:divide-surface-700">
-          <div v-for="update in updates" :key="update.id" class="py-3 flex flex-col md:flex-row md:items-center gap-2">
+          <div v-for="update in updates" :key="update.id" class="py-3 flex flex-col md:flex-row md:items-center gap-2 row-hover">
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2 flex-wrap">
                 <Tag v-if="update.publishedAt" value="Published" severity="success" />

@@ -885,7 +885,7 @@
             </div>
             <!-- Desktop: table -->
             <div class="hidden sm:block">
-              <DataTable :value="lists" class="p-datatable-sm" responsive-layout="scroll">
+              <DataTable :value="lists" class="p-datatable-sm" responsive-layout="scroll" row-hover>
                 <Column field="name" header="Name" />
                 <Column header="Status">
                   <template #body="{ data }">

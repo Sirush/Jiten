@@ -106,7 +106,7 @@
 
       <ul class="m-0 max-h-80 list-none overflow-y-auto p-0">
         <li v-for="row in visible" :key="row.deckId" class="border-b border-surface-100 last:border-b-0 dark:border-surface-800">
-          <label class="flex cursor-pointer items-center gap-3 px-3 py-2 hover:bg-surface-50 dark:hover:bg-surface-800">
+          <label class="flex cursor-pointer items-center gap-3 px-3 py-2 row-hover">
             <Checkbox
               :model-value="selected.has(row.deckId) || existingDeckIds.has(row.deckId)"
               :disabled="existingDeckIds.has(row.deckId)"

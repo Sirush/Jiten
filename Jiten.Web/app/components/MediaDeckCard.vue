@@ -711,7 +711,7 @@
                   >
                     <div v-for="(column, columnIndex) in statColumns" :key="columnIndex" class="min-w-0 @max-3xl:contents">
                       <template v-for="statId in column" :key="statId">
-                        <div v-if="statId === 'speechDuration'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-if="statId === 'speechDuration'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <Tooltip :content="'Total duration of speech, excluding silence.\nCharacter count: ' + formatNumber(deck.characterCount)">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                               <span class="@xl:hidden">Speech time</span><span class="hidden @xl:inline">Speech duration</span>
@@ -719,7 +719,7 @@
                           </Tooltip>
                           <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ formattedSpeechDuration }}</span>
                         </div>
-                        <div v-else-if="statId === 'characters'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'characters'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                             <span class="@xl:hidden">Characters</span><span class="hidden @xl:inline">Character count</span>
                           </span>
@@ -727,11 +727,11 @@
                             formatNumber(deck.characterCount)
                           }}</span>
                         </div>
-                        <div v-else-if="statId === 'wordCount'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'wordCount'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Word count</span>
                           <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ formatNumber(deck.wordCount) }}</span>
                         </div>
-                        <div v-else-if="statId === 'uniqueWords'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'uniqueWords'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <Tooltip :content="'Words appearing exactly once: ' + formatNumber(deck.uniqueWordUsedOnceCount)">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                               Unique words
@@ -744,7 +744,7 @@
                             formatNumber(deck.uniqueWordCount)
                           }}</span>
                         </div>
-                        <div v-else-if="statId === 'uniqueKanji'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'uniqueKanji'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <Tooltip :content="'Kanji appearing exactly once: ' + formatNumber(deck.uniqueKanjiUsedOnceCount)">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                               Unique kanji
@@ -757,7 +757,7 @@
                             formatNumber(deck.uniqueKanjiCount)
                           }}</span>
                         </div>
-                        <div v-else-if="statId === 'averageSentenceLength'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'averageSentenceLength'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap"
                             ><span class="@xl:hidden">Avg. sentence</span><span class="hidden @xl:inline">Average sentence length</span></span
                           >
@@ -765,7 +765,7 @@
                             deck.averageSentenceLength.toFixed(1)
                           }}</span>
                         </div>
-                        <div v-else-if="statId === 'speechSpeed'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'speechSpeed'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <Tooltip content="Average speed of speech in mora per minute.">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Speech speed</span>
                           </Tooltip>
@@ -774,7 +774,7 @@
                         <div
                           v-else-if="statId === 'difficulty'"
                           :data-stat="statId"
-                          class="stat-row cursor-help @max-3xl:col-span-full"
+                          class="stat-row row-hover cursor-help @max-3xl:col-span-full"
                           :class="{ '@max-3xl:order-first': !hasCustomStats }"
                         >
                           <Tooltip :content="difficultyRef?.tooltip ?? ''" block>
@@ -795,7 +795,7 @@
                             </div>
                           </Tooltip>
                         </div>
-                        <div v-else-if="statId === 'dialogue'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'dialogue'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Dialogue</span>
                           <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap"
                             >{{ deck.dialoguePercentage.toFixed(1) }}%</span
@@ -806,7 +806,7 @@
                             v-if="showChildrenLink"
                             :data-stat="statId"
                             :to="`/decks/media/${deck.deckId}/detail`"
-                            class="flex justify-between gap-2 stat-row group cursor-pointer no-underline"
+                            class="flex justify-between gap-2 stat-row row-hover group cursor-pointer no-underline"
                           >
                             <span class="text-primary-600 dark:text-primary-400 font-normal whitespace-nowrap underline-offset-2 group-hover:underline">{{
                               childrenLabel
@@ -816,14 +816,14 @@
                               <i class="pi pi-arrow-right text-xs ml-0.5 transition-transform group-hover:translate-x-0.5" />
                             </span>
                           </router-link>
-                          <div v-else :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                          <div v-else :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">{{ childrenLabel }}</span>
                             <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
                               formatNumber(deck.childrenDeckCount)
                             }}</span>
                           </div>
                         </template>
-                        <div v-else-if="statId === 'runtime'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'runtime'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <Tooltip :content="deck.parentDeckId ? 'Length of the video.' : 'Median length of a video on this channel.'">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                               <span v-if="deck.parentDeckId">Length</span
@@ -832,7 +832,7 @@
                           </Tooltip>
                           <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ runtimeLabel }}</span>
                         </div>
-                        <div v-else-if="statId === 'readingDuration'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'readingDuration'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <Tooltip
                             :content="
                               'Based on ' +
@@ -854,7 +854,7 @@
                             >{{ readingDuration > 0 ? readingDuration : '<1' }} h</span
                           >
                         </div>
-                        <div v-else-if="statId === 'externalRating'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'externalRating'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <Tooltip content="Score based on user ratings from 3rd party websites, such as AniList, TMDB, VNDB or IGDB.">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                               <span class="@xl:hidden">Rating</span><span class="hidden @xl:inline">External Rating</span>
@@ -862,7 +862,7 @@
                           </Tooltip>
                           <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.externalRating }} %</span>
                         </div>
-                        <div v-else-if="statId === 'appears'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'appears'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                             <span class="@xl:hidden">Appears</span><span class="hidden @xl:inline">Appears (times)</span>
                           </span>
@@ -1102,7 +1102,6 @@
     padding: 0.2rem;
     margin-inline: -0.2rem;
     border-radius: var(--radius-sm);
-    transition: background-color 0.2s;
   }
 
   .stat-row > span:last-child {
@@ -1117,14 +1116,6 @@
   :is(button, a):hover > .utility-icon,
   :is(button, a):focus-visible > .utility-icon {
     color: var(--p-primary-color);
-  }
-
-  .stat-row:hover {
-    background-color: rgba(183, 135, 243, 0.21);
-  }
-
-  :deep(.dark) .stat-row:hover {
-    background-color: rgba(255, 255, 255, 0.05);
   }
 
   .ignore-overlay {

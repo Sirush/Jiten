@@ -143,7 +143,7 @@
     <h2 id="home-stale-ongoing-heading" class="px-4 pt-3 text-sm font-semibold text-gray-800 dark:text-gray-100">{{ heading }}</h2>
 
     <ul class="divide-y divide-surface-100 dark:divide-surface-800">
-      <li v-for="deck in visible" :key="deck.deckId" class="flex items-start gap-3 px-4 py-3">
+      <li v-for="deck in visible" :key="deck.deckId" class="flex items-start gap-3 px-4 py-3 row-hover">
         <NuxtLink :to="`/decks/media/${deck.deckId}/detail`" class="shrink-0" tabindex="-1" aria-hidden="true">
           <img :src="rowCover(deck)" alt="" class="h-14 w-10 rounded-xs object-cover" loading="lazy" />
         </NuxtLink>

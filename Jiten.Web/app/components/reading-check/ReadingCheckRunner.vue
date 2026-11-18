@@ -305,7 +305,7 @@
               <tr
                 v-for="word in showAllStudy ? result.studyList : result.studyList.slice(0, 10)"
                 :key="`${word.wordId}-${word.readingIndex}`"
-                class="border-b border-gray-100 dark:border-neutral-800 last:border-0"
+                class="border-b border-gray-100 dark:border-neutral-800 last:border-0 row-hover"
               >
                 <td class="px-4 py-2">
                   <NuxtLink :to="`/vocabulary/${word.wordId}/${word.readingIndex}`" lang="ja" class="text-base whitespace-nowrap" target="_blank">{{

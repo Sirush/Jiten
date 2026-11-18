@@ -110,7 +110,7 @@
     </p>
   </li>
 
-  <li v-else :id="anchorId" class="flex scroll-mt-4 items-center gap-3 px-3 py-2 target:bg-purple-50 sm:px-4 dark:target:bg-purple-950/40">
+  <li v-else :id="anchorId" class="flex scroll-mt-4 items-center gap-3 px-3 py-2 target:bg-purple-50 sm:px-4 dark:target:bg-purple-950/40 row-hover">
     <a :href="`#${anchorId}`" :class="rankLinkClass" class="w-6 shrink-0 text-sm" :aria-label="`Link to #${item.position}`">{{ item.position }}</a>
     <img :src="coverUrl(deck.coverName, 'xs')" alt="" loading="lazy" class="h-[42px] w-[30px] shrink-0 rounded-sm object-cover" />
     <div class="flex min-w-0 flex-1 flex-col">

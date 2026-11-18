@@ -341,7 +341,7 @@
             <div
               v-for="row in rows"
               :key="row.key"
-              class="flex items-start gap-3 px-1 py-2.5 cursor-pointer transition-colors hover:bg-surface-50 dark:hover:bg-surface-800/60"
+              class="flex items-start gap-3 px-1 py-2.5 cursor-pointer row-hover"
               @click="toggle(row.key)"
             >
               <Checkbox

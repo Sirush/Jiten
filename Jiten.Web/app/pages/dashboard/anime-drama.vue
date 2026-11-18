@@ -519,7 +519,7 @@
       </div>
 
       <ul v-else class="rounded-lg border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 divide-y divide-surface-200 dark:divide-surface-700">
-        <li v-for="t in visibleTrackers" :key="t.deckId">
+        <li v-for="t in visibleTrackers" :key="t.deckId" class="first:rounded-t-lg last:rounded-b-lg row-hover">
           <div v-if="pendingRemoval.has(t.deckId)" class="flex items-center gap-3 px-3 py-3 text-sm">
             <span class="min-w-0 truncate">Tracking of {{ localiseTitle(t) }} will be removed.</span>
             <Button label="Undo" size="small" severity="secondary" class="ml-auto shrink-0" @click="undoRemoval(t.deckId)" />
@@ -614,7 +614,7 @@
               <div v-for="group in fileGroups" :key="group.status" class="mb-3 last:mb-0">
                 <h3 class="text-sm font-semibold mb-1">{{ groupTitles[group.status] }} ({{ group.items.length }})</h3>
                 <ul class="rounded border border-surface-200 dark:border-surface-700 bg-surface-0 dark:bg-surface-900 divide-y divide-surface-200 dark:divide-surface-700">
-                  <li v-for="file in group.items" :key="file.fileName" class="flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-1 px-3 py-2 text-sm">
+                  <li v-for="file in group.items" :key="file.fileName" class="flex flex-col sm:flex-row sm:items-center gap-x-3 gap-y-1 px-3 py-2 text-sm first:rounded-t last:rounded-b row-hover">
                     <span class="w-10 shrink-0 tabular-nums text-surface-600 dark:text-surface-300">{{ formatEpisode(file.episodeNumber) }}</span>
                     <div class="min-w-0 flex-1">
                       <div class="break-all">{{ file.fileName }}</div>

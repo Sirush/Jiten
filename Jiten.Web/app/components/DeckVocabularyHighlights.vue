@@ -26,7 +26,7 @@
       <li v-for="word in previewWords" :key="`${word.wordId}-${word.readingIndex}`">
         <NuxtLink
           :to="`/vocabulary/${word.wordId}/${word.readingIndex}`"
-          class="grid grid-cols-[minmax(6rem,auto)_1fr_auto] items-baseline gap-x-3 py-1 px-2 rounded-lg hover:bg-surface-100 dark:hover:bg-surface-800 transition-colors"
+          class="grid grid-cols-[minmax(6rem,auto)_1fr_auto] items-baseline gap-x-3 py-1 px-2 rounded-lg row-hover"
         >
           <span class="text-lg font-medium" lang="ja" v-html="convertToRuby(word.readingFurigana)" />
           <span v-if="word.mainDefinition" class="text-surface-600 dark:text-surface-400 text-sm truncate">

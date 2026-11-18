@@ -146,7 +146,7 @@
           <li
             v-for="batch in batches"
             :key="batch.batchId"
-            class="flex flex-wrap items-center gap-x-3 gap-y-2 px-1 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_7.5rem_6.5rem_7rem]"
+            class="flex flex-wrap items-center gap-x-3 gap-y-2 px-1 py-3 sm:grid sm:grid-cols-[minmax(0,1fr)_7.5rem_6.5rem_7rem] row-hover"
           >
             <div class="min-w-0 flex-1 basis-full sm:basis-auto">
               <div class="flex items-center gap-2 min-w-0">

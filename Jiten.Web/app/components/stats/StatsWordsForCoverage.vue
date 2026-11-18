@@ -79,7 +79,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="row in rows" :key="row.mediaType" class="border-t border-surface-200 dark:border-surface-700">
+          <tr v-for="row in rows" :key="row.mediaType" class="border-t border-surface-200 dark:border-surface-700 row-hover">
             <th scope="row" class="text-left font-normal py-1.5 pr-3 whitespace-nowrap">{{ row.name }}</th>
             <td v-for="(rank, i) in row.ranks" :key="i" class="text-right tabular-nums font-medium py-1.5 px-2" :class="shade(rank)">
               {{ rank === null ? '-' : formatNumber(roundToHundred(rank)) }}

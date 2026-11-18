@@ -339,7 +339,7 @@
                     </tr>
                   </thead>
                   <tbody>
-                    <tr v-for="row in limitRows" :key="row.label" class="border-t border-gray-100 dark:border-gray-800">
+                    <tr v-for="row in limitRows" :key="row.label" class="border-t border-gray-100 dark:border-gray-800 row-hover">
                       <td class="py-1.5 pr-3 text-gray-700 dark:text-gray-300">{{ row.label }}</td>
                       <td class="py-1.5 px-3 text-right tabular-nums text-gray-500 dark:text-gray-400">{{ row.free }}</td>
                       <td class="py-1.5 pl-3 text-right tabular-nums font-semibold text-primary-600 dark:text-primary-300">{{ row.plus }}</td>

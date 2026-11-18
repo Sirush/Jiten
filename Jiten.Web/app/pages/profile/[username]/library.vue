@@ -776,7 +776,7 @@
                     :is="editMode ? 'label' : 'div'"
                     v-for="deck in activeGroup.decks"
                     :key="deck.deckId"
-                    class="flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:flex-nowrap sm:gap-3 px-3 py-2 sm:py-2.5 transition-colors first:rounded-t-xl last:rounded-b-xl hover:bg-surface-50 dark:hover:bg-surface-800/50"
+                    class="flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:flex-nowrap sm:gap-3 px-3 py-2 sm:py-2.5 first:rounded-t-xl last:rounded-b-xl row-hover"
                     :class="[
                       editMode ? 'cursor-pointer select-none' : '',
                       { 'bg-primary-50 dark:bg-primary-900/20': editMode && selected.includes(deck.deckId) },

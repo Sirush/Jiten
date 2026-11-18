@@ -175,7 +175,7 @@
       <li
         v-for="item in items"
         :key="item.id"
-        class="grid grid-cols-[2rem_minmax(0,1fr)] sm:grid-cols-[2rem_minmax(0,1fr)_auto] gap-x-3 gap-y-2 px-4 py-3.5 items-start"
+        class="grid grid-cols-[2rem_minmax(0,1fr)] sm:grid-cols-[2rem_minmax(0,1fr)_auto] gap-x-3 gap-y-2 px-4 py-3.5 items-start first:rounded-t-lg last:rounded-b-lg row-hover"
       >
         <span
           class="w-8 h-8 rounded-full grid place-items-center text-sm font-bold"

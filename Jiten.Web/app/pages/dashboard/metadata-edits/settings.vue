@@ -333,7 +333,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="week in metrics.weeks" :key="week.weekStart" class="border-t border-surface-200 dark:border-surface-700">
+              <tr v-for="week in metrics.weeks" :key="week.weekStart" class="border-t border-surface-200 dark:border-surface-700 row-hover">
                 <td class="py-1">{{ formatDayMonth(week.weekStart) }}</td>
                 <td class="py-1 text-right">{{ formatNumber(week.submissions) }}</td>
                 <td class="py-1 text-right">{{ formatNumber(week.decisions) }}</td>

@@ -359,7 +359,7 @@
             </tr>
           </thead>
           <tbody>
-            <tr v-for="video in source.videos" :key="video.videoId" class="border-t border-surface-100 dark:border-surface-800">
+            <tr v-for="video in source.videos" :key="video.videoId" class="border-t border-surface-100 dark:border-surface-800 row-hover">
               <td class="px-3 py-1.5 max-w-[24rem]">
                 <a :href="`https://www.youtube.com/watch?v=${video.videoId}`" target="_blank" rel="noopener" class="hover:underline line-clamp-1">
                   {{ video.title }}
