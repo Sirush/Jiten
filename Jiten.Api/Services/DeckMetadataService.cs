@@ -173,9 +173,12 @@ public sealed class DeckMetadataService(JitenDbContext dbContext)
                            alias => new DeckTitle { DeckId = deck.DeckId, Title = alias, TitleType = DeckTitleType.Alias },
                            patch.Aliases, DeckMetadataExclusionKind.Alias, exclusions, userId, recordRemovals);
         if (patch.CharacterNames != null)
+        {
+            DeckNameDiscovery.Promote(deck, patch.CharacterNames);
             ApplyStringSet(deck, deck.DictionaryEntries, e => e.EntryType == DeckDictionaryEntryType.Name, e => e.Surface,
                            surface => new DeckDictionaryEntry { DeckId = deck.DeckId, Surface = surface, EntryType = DeckDictionaryEntryType.Name },
                            patch.CharacterNames, DeckMetadataExclusionKind.CharacterName, exclusions, userId, recordRemovals);
+        }
 
         deck.LastUpdate = DateTime.UtcNow;
         return null;

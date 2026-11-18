@@ -27,7 +27,7 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="word in words" :key="`${word.wordId}-${word.readingIndex}`" class="border-t border-surface-200 dark:border-surface-700 align-middle">
+          <tr v-for="word in words" :key="`${word.wordId}-${word.readingIndex}`" class="border-t border-surface-200 dark:border-surface-700 align-middle row-hover">
             <td class="py-2 pr-3">
               <NuxtLink :to="`/vocabulary/${word.wordId}/${word.readingIndex}`" target="_blank" class="text-xl font-medium" lang="ja" v-html="convertToRuby(word.readingFurigana)" />
               <span v-if="word.gloss" class="block text-xs text-gray-600 dark:text-gray-400 sm:hidden">{{ word.gloss }}</span>

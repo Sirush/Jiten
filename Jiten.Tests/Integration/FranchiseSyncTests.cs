@@ -112,6 +112,36 @@ public class FranchiseSyncTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task CrossoverFandisc_JoinsTheEarliestOriginal_WithoutMergingFranchises()
+    {
+        await SeedAsync([Deck(1, "Kimi One", 2001), Deck(2, "Kimi Two", 2002), Deck(3, "Muv One", 2003), Deck(4, "Muv Two", 2006),
+                         Deck(5, "Crossover FD", 2007), Deck(6, "Kimi FD", 2004)],
+                        [Rel(2, 1), Rel(4, 3), Rel(5, 2, DeckRelationshipType.Fandisc), Rel(5, 4, DeckRelationshipType.Fandisc),
+                         Rel(6, 1, DeckRelationshipType.Fandisc)]);
+
+        await SyncAsync();
+
+        var membership = await MembershipAsync();
+        membership[1].Should().NotBeNull().And.NotBe(membership[3]);
+        new[] { 2, 5, 6 }.Select(id => membership[id]).Should().AllBeEquivalentTo(membership[1]);
+        membership[4].Should().Be(membership[3]);
+    }
+
+    [Fact]
+    public async Task CrossoverFandisc_PlacedInASeries_StaysWithThatOriginal()
+    {
+        await SeedAsync([Deck(1, "Kimi", 2001), Deck(2, "Muv", 2003), Deck(3, "Crossover FD", 2007)],
+                        [Rel(3, 1, DeckRelationshipType.Fandisc), Rel(3, 2, DeckRelationshipType.Fandisc)],
+                        [Group(1, "Muv Saga", SeriesKind.Series, 2, 3)]);
+
+        await SyncAsync();
+
+        var membership = await MembershipAsync();
+        membership[3].Should().NotBeNull().And.Be(membership[2]);
+        membership[1].Should().BeNull();
+    }
+
+    [Fact]
     public async Task SecondRun_ChangesNothing()
     {
         await SeedAsync([Deck(1, "Alpha One"), Deck(2, "Alpha Two")], [Rel(1, 2)]);

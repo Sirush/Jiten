@@ -1846,12 +1846,12 @@
                   <GenreTagDisplay v-if="step.genres.length > 0" :genres="step.genres" label="Genres" class="mt-1.5" />
 
                   <!-- Difficulty — matches the deck card's stat row -->
-                  <div class="stat-row mt-1 flex items-center justify-between">
+                  <div class="stat-row row-hover mt-1 flex items-center justify-between">
                     <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">Difficulty</span>
                     <DifficultyDisplay :difficulty="step.adjustedDifficulty ?? step.difficulty" />
                   </div>
 
-                  <div v-if="stepHours(step) > 0" class="stat-row flex items-center justify-between">
+                  <div v-if="stepHours(step) > 0" class="stat-row row-hover flex items-center justify-between">
                     <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
                       Length
                       <Tooltip
@@ -1871,7 +1871,7 @@
                     </span>
                   </div>
 
-                  <div class="stat-row flex items-center justify-between">
+                  <div class="stat-row row-hover flex items-center justify-between">
                     <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
                       You know of this title
                       <Tooltip
@@ -1884,7 +1884,7 @@
                     <span class="tabular-nums font-semibold">{{ pct(step.coverage) }} of the words</span>
                   </div>
 
-                  <div class="stat-row flex items-center justify-between">
+                  <div class="stat-row row-hover flex items-center justify-between">
                     <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
                       Teaches
                       <Tooltip content="New words that appear often enough here to actually stick, assuming you've read the steps above first." placement="top">
@@ -1899,7 +1899,7 @@
                     </span>
                   </div>
 
-                  <div v-if="step.goalCoverageAfter != null" class="stat-row flex items-center justify-between">
+                  <div v-if="step.goalCoverageAfter != null" class="stat-row row-hover flex items-center justify-between">
                     <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
                       Then, of your goal
                       <Tooltip content="Your coverage of the title you're aiming for, after this step. This one only ever goes up." placement="top">
@@ -1950,7 +1950,7 @@
                           :href="`/vocabulary/${w.wordId}/${w.readingIndex}`"
                           target="_blank"
                           rel="noopener"
-                          class="flex items-baseline justify-between gap-3 border-b border-surface-100 px-3 py-1.5 text-sm last:border-0 hover:bg-surface-50 dark:border-surface-800 dark:hover:bg-surface-800/50"
+                          class="flex items-baseline justify-between gap-3 border-b border-surface-100 px-3 py-1.5 text-sm last:border-0 row-hover dark:border-surface-800"
                         >
                           <span>
                             {{ w.text }}
@@ -2046,12 +2046,12 @@
                     <span class="text-xs font-semibold uppercase tracking-wider text-amber-600 dark:text-amber-400"> Your goal </span>
                   </div>
 
-                  <div class="stat-row mt-1 flex items-center justify-between">
+                  <div class="stat-row row-hover mt-1 flex items-center justify-between">
                     <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">Difficulty</span>
                     <DifficultyDisplay :difficulty="activePayload.goal.difficulty" />
                   </div>
 
-                  <div class="stat-row flex items-center justify-between">
+                  <div class="stat-row row-hover flex items-center justify-between">
                     <span class="pr-2 font-normal text-gray-600 dark:text-gray-300">
                       {{ activePayload.goal.reached ? "By the end you'll understand" : "By the end you'll reach" }}
                     </span>
@@ -2198,15 +2198,6 @@
   .stat-row {
     padding: 0.2rem;
     border-radius: var(--radius-sm);
-    transition: background-color 0.2s;
-  }
-
-  .stat-row:hover {
-    background-color: rgba(183, 135, 243, 0.21);
-  }
-
-  :deep(.dark) .stat-row:hover {
-    background-color: rgba(255, 255, 255, 0.05);
   }
 
   /* InputNumber's inner <input> carries an intrinsic size that survives `fluid`, which pushes the

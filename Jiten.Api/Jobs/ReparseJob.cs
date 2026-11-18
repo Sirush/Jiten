@@ -1,6 +1,7 @@
 using Hangfire;
 using Jiten.Core;
 using Jiten.Core.Data;
+using Jiten.Core.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace Jiten.Api.Jobs;
@@ -41,12 +42,17 @@ public class ReparseJob(
                 ? await context.Set<DeckDictionaryEntry>().Where(e => e.DeckId == deck.ParentDeckId).ToListAsync()
                 : null;
 
+        bool isFullParse = deck.ParentDeckId == null;
+        var discoveredNames = isFullParse ? new HashSet<string>() : null;
+        if (isFullParse)
+            dictEntries = DeckNameDiscovery.CuratedOnly(dictEntries);
+
         var children = deck.Children.ToList();
 
         if (deck.Children.Count == 0)
         {
             Deck newDeck = await Parser.Parser.ParseTextToDeck(contextFactory, deck.RawText!.RawText, true, true, deck.MediaType,
-                dictionaryEntries: dictEntries, speechBoundaries: deck.RawText.SpeechBoundaries);
+                dictionaryEntries: dictEntries, speechBoundaries: deck.RawText.SpeechBoundaries, discoveredNames: discoveredNames);
             deck.CharacterCount = newDeck.CharacterCount;
             deck.WordCount = newDeck.WordCount;
             deck.UniqueWordCount = newDeck.UniqueWordCount;
@@ -81,7 +87,8 @@ public class ReparseJob(
                 predictDifficulty: true,
                 deck.MediaType,
                 dictionaryEntries: dictEntries,
-                speechBoundaries: children.Select(c => c.RawText!.SpeechBoundaries).ToList());
+                speechBoundaries: children.Select(c => c.RawText!.SpeechBoundaries).ToList(),
+                discoveredNames: discoveredNames);
 
             // Copy properties back to original deck objects
             for (int i = 0; i < children.Count; i++)
@@ -113,6 +120,8 @@ public class ReparseJob(
         deck.LastUpdate = DateTime.UtcNow;
 
         await JitenHelper.InsertDeck(contextFactory, deck, [], true);
+        if (discoveredNames != null)
+            await DeckNameDiscovery.ReplaceAsync(context, deck.DeckId, discoveredNames);
 
         QueueStatsComputationForDeckTree(deck);
         backgroundJobs.Enqueue<DifficultyComputationJob>(job => job.ComputeDeckDifficulty(deck.DeckId, false));

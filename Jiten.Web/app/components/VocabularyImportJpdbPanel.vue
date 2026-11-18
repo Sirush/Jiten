@@ -380,7 +380,7 @@
                   <ul
                     class="max-h-72 overflow-y-auto rounded border border-surface-200 dark:border-surface-700 divide-y divide-surface-200 dark:divide-surface-700"
                   >
-                    <li v-for="deck in jpdbDecks" :key="deck.id" class="flex items-center gap-3 px-3 py-1.5">
+                    <li v-for="deck in jpdbDecks" :key="deck.id" class="flex items-center gap-3 px-3 py-1.5 row-hover">
                       <Checkbox
                         :input-id="`jpdb-deck-${deck.id}`"
                         :model-value="isDeckTicked(deck)"

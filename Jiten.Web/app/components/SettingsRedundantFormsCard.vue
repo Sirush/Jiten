@@ -148,7 +148,7 @@
             <div
               v-for="form in forms"
               :key="form.key"
-              class="flex items-start gap-3 px-1 py-3 cursor-pointer transition-colors hover:bg-surface-50 dark:hover:bg-surface-800/60"
+              class="flex items-start gap-3 px-1 py-3 cursor-pointer row-hover"
               @click="toggle(form.key)"
             >
               <Checkbox

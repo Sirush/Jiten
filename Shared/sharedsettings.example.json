@@ -43,7 +43,8 @@
   "DictionaryPath": "path/to/system_full.dic",
   "Parser": {
     "SudachiBulkContexts": 4,
-    "SudachiInteractiveContexts": 1
+    "SudachiInteractiveContexts": 1,
+    "SudachiMaxChunksPerCall": 1
   },
   "Hangfire": {
     "ReparseWorkers": 2

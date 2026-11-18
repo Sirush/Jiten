@@ -104,7 +104,7 @@
           :key="notification.id"
           role="button"
           tabindex="0"
-          class="flex items-start gap-3 pl-3 pr-4 py-3 cursor-pointer border-l-4 hover:bg-surface-50 dark:hover:bg-surface-800 transition-colors border-b border-b-surface-100 dark:border-b-surface-700 last:border-b-0"
+          class="flex items-start gap-3 pl-3 pr-4 py-3 cursor-pointer border-l-4 row-hover border-b border-b-surface-100 dark:border-b-surface-700 last:border-b-0"
           :class="[
             pinned ? 'border-l-primary bg-primary-50 dark:bg-primary-950/40' : 'border-l-transparent',
             { 'bg-primary-50/60 dark:bg-primary-950/20': !pinned && !notification.isRead },

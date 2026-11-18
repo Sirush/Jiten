@@ -534,7 +534,7 @@ public sealed partial class MetadataEditService(
         MetadataField.Tags => "tags",
         MetadataField.Links => "external links",
         MetadataField.Relationships => "related decks",
-        MetadataField.CharacterNames => "character names",
+        MetadataField.CharacterNames => "names and terms",
         MetadataField.Franchise => "franchise",
         _ => field.ToString()
     };

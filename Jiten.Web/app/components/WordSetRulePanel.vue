@@ -296,7 +296,7 @@
           </p>
           <p v-if="list.rows.length === 0" class="text-sm text-gray-600 dark:text-gray-400">None</p>
           <ul v-else class="border rounded max-h-80 overflow-y-auto divide-y" tabindex="0" :aria-label="list.title">
-            <li v-for="row in list.rows" :key="`${row.wordId}-${row.readingIndex}`" class="flex items-baseline gap-2 px-3 py-1.5 text-sm">
+            <li v-for="row in list.rows" :key="`${row.wordId}-${row.readingIndex}`" class="flex items-baseline gap-2 px-3 py-1.5 text-sm row-hover">
               <NuxtLink
                 :to="`/vocabulary/${row.wordId}/${row.readingIndex}`"
                 target="_blank"

@@ -39,6 +39,90 @@ public class PipelineStagePropertyTests
     }
 
     [Fact]
+    public void Pipeline_ShouldMatchWholeDocumentRun_WhenSplitIntoBlocks()
+    {
+        var analyser = new MorphologicalAnalyser();
+        var random = new Random(2026);
+        var input = new List<WordInfo>();
+        string[] functionWords = ["って", "た", "て", "だ", "ん", "の", "は", "も", "です", "ます", "ない", "さ", "っ", "する", "いる", "たん", "らん", "お", "ご"];
+        string[] enders = ["。", "！", "？"];
+        var posPool = Enum.GetValues<PartOfSpeech>();
+        for (int sentence = 0; sentence < 20000; sentence++)
+        {
+            bool quoted = random.Next(3) == 0;
+            if (quoted)
+                input.Add(Token("「", PartOfSpeech.SupplementarySymbol));
+            int length = random.Next(1, 12);
+            for (int i = 0; i < length; i++)
+            {
+                var text = random.Next(3) == 0
+                    ? functionWords[random.Next(functionWords.Length)]
+                    : GenerateRandomSurface(random, random.Next(1, 4));
+                var pos = random.Next(4) == 0 ? posPool[random.Next(posPool.Length)] : RandomPosPool[random.Next(RandomPosPool.Length)];
+                input.Add(Token(text, pos));
+            }
+            input.Add(Token(enders[random.Next(enders.Length)], PartOfSpeech.SupplementarySymbol, section1: PartOfSpeechSection.FullStop));
+            if (quoted)
+                input.Add(Token("」", PartOfSpeech.SupplementarySymbol));
+        }
+
+        var blocked = analyser.RunPipelineForTesting(Clone(input));
+        var whole = analyser.RunPipelineForTesting(Clone(input), new ParserDiagnostics());
+
+        var blockedSentences = SplitAtEnders(blocked);
+        var wholeSentences = SplitAtEnders(whole);
+        var mismatches = new List<string>();
+        for (int i = 0; i < Math.Min(blockedSentences.Count, wholeSentences.Count) && mismatches.Count < 5; i++)
+        {
+            if (blockedSentences[i] != wholeSentences[i])
+                mismatches.Add($"blocked: {blockedSentences[i]} / whole: {wholeSentences[i]} / after: {(i > 0 ? wholeSentences[i - 1] : "")}");
+        }
+
+        mismatches.Should().BeEmpty();
+        blockedSentences.Should().HaveSameCount(wholeSentences);
+    }
+
+    [Theory]
+    [InlineData("。")]
+    [InlineData("！")]
+    [InlineData("、")]
+    [InlineData("」")]
+    public void Pipeline_ShouldNotMergeASuffixOntoPunctuation(string punctuation)
+    {
+        var analyser = new MorphologicalAnalyser();
+        var input = new List<WordInfo>
+        {
+            Token("今日", PartOfSpeech.Noun),
+            Token(punctuation, PartOfSpeech.SupplementarySymbol),
+            Token("さ", PartOfSpeech.Suffix),
+            Token("明日", PartOfSpeech.Noun)
+        };
+
+        var output = analyser.RunPipelineForTesting(input);
+
+        output.Select(t => t.Text).Should().Contain(punctuation);
+        output.Should().NotContain(t => t.Text.Length > 1 && t.Text.StartsWith(punctuation));
+    }
+
+    private static List<string> SplitAtEnders(List<WordInfo> tokens)
+    {
+        var sentences = new List<string>();
+        var current = new System.Text.StringBuilder();
+        foreach (var t in tokens)
+        {
+            current.Append(t.Text).Append('[').Append(t.PartOfSpeech).Append(' ').Append(t.DictionaryForm).Append("] ");
+            if (t.Text is "。" or "！" or "？")
+            {
+                sentences.Add(current.ToString());
+                current.Clear();
+            }
+        }
+
+        sentences.Add(current.ToString());
+        return sentences;
+    }
+
+    [Fact]
     public void Pipeline_ShouldRecordAllStages_InDiagnostics()
     {
         var analyser = new MorphologicalAnalyser();

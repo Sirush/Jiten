@@ -1092,6 +1092,86 @@ public class DiagnosticCommands(CliContext context)
         Console.WriteLine($"Wrote {tokenCount} tokens to {outPath}");
     }
 
+    public async Task DumpTokens(CliOptions options)
+    {
+        if (!Directory.Exists(options.DumpTokens))
+        {
+            Console.WriteLine("--dump-tokens requires an existing folder of .txt files");
+            return;
+        }
+
+        var files = Directory.GetFiles(options.DumpTokens, "*.txt").OrderBy(f => f, StringComparer.Ordinal).ToArray();
+        var outPath = string.IsNullOrEmpty(options.ParseTestOutput) ? "tokens.tsv" : options.ParseTestOutput;
+        var sw = Stopwatch.StartNew();
+        long tokenCount = 0;
+
+        var deckFolders = Directory.GetDirectories(options.DumpTokens).OrderBy(d => d, StringComparer.Ordinal).ToArray();
+        if (files.Length == 0 && deckFolders.Length > 0)
+        {
+            await DumpDeckTokens(deckFolders, outPath);
+            return;
+        }
+
+        await using var writer = new StreamWriter(outPath, false, new UTF8Encoding(false));
+        foreach (var file in files)
+        {
+            var lines = await File.ReadAllLinesAsync(file);
+            var parsed = new string?[lines.Length];
+            await Parallel.ForEachAsync(Enumerable.Range(0, lines.Length), async (n, _) =>
+            {
+                if (string.IsNullOrWhiteSpace(lines[n]))
+                    return;
+
+                var words = await Jiten.Parser.Parser.ParseText(context.ContextFactory, lines[n]);
+                parsed[n] = string.Join('\t', words.Select(w => $"{w.WordId}:{w.ReadingIndex}:{w.OriginalText}"));
+                Interlocked.Add(ref tokenCount, words.Count);
+            });
+
+            await writer.WriteLineAsync("## " + Path.GetFileName(file));
+            foreach (var line in parsed)
+                if (line != null)
+                    await writer.WriteLineAsync(line);
+        }
+
+        Console.WriteLine($"Wrote {tokenCount:N0} tokens from {files.Length} files to {outPath} in {sw.Elapsed.TotalSeconds:N0} s");
+    }
+
+    /// <summary>Deck-level rules (name discovery) only run here: each folder is parsed as one deck, one output line per file, discovered names in a .names.tsv beside it.</summary>
+    private async Task DumpDeckTokens(string[] deckFolders, string outPath)
+    {
+        Jiten.Parser.Parser.NameDiscoveryEnabled = Environment.GetEnvironmentVariable("JITEN_NO_NAME_DISCOVERY") == null;
+
+        var sw = Stopwatch.StartNew();
+        long tokenCount = 0;
+        await using var writer = new StreamWriter(outPath, false, new UTF8Encoding(false));
+        await using var nameWriter = new StreamWriter(outPath + ".names.tsv", false, new UTF8Encoding(false));
+        foreach (var folder in deckFolders)
+        {
+            var files = Directory.GetFiles(folder, "*.txt").OrderBy(f => f, StringComparer.Ordinal).ToArray();
+            if (files.Length == 0)
+                continue;
+
+            var texts = new List<string>(files.Length);
+            foreach (var file in files)
+                texts.Add(await File.ReadAllTextAsync(file));
+
+            var sink = new List<List<ParsedOccurrence>>();
+            var discoveredNames = new HashSet<string>();
+            await Jiten.Parser.Parser.ParseTextsToDeck(context.ContextFactory, texts, storeRawText: false, predictDifficulty: false,
+                                                       occurrenceSink: sink, discoveredNames: discoveredNames);
+            await nameWriter.WriteLineAsync($"{Path.GetFileName(folder)}	{string.Join('	', discoveredNames.Order(StringComparer.Ordinal))}");
+
+            for (int i = 0; i < files.Length && i < sink.Count; i++)
+            {
+                await writer.WriteLineAsync($"## {Path.GetFileName(folder)}/{Path.GetFileName(files[i])}");
+                await writer.WriteLineAsync(string.Join('\t', sink[i].Select(o => $"{o.WordId}:{o.ReadingIndex}:{o.Surface}")));
+                tokenCount += sink[i].Count;
+            }
+        }
+
+        Console.WriteLine($"Wrote {tokenCount:N0} tokens from {deckFolders.Length} decks to {outPath} in {sw.Elapsed.TotalSeconds:N0} s");
+    }
+
     public async Task WarmJmDictCache()
     {
         var sw = Stopwatch.StartNew();

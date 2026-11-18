@@ -50,7 +50,7 @@ From the header card you can:
 - **Details** — view the full details of a media and its subdecks, see similar media
 - **Download / Learn** — download an Anki deck, text list, or CSV of the vocabulary, download an occurence-based frequency dictionary or bulk-update your known words from the deck vocabulary. See [Generating & importing Anki decks](/guides/generating-anki-decks).
 - **Study** — learn the title's vocabulary in the built-in [SRS](/guides/using-the-srs).
-- **Set a status** — Planning, Ongoing, Completed, or Dropped, from the "more options" (…) menu. Completing a title lets you rate its difficulty and adds to your profile stats.
+- **Set a status** — Planning, Ongoing, Completed, or Dropped, from the **Set Status** button at the top right of the card. Completing a title lets you rate its difficulty and adds to your profile stats.
 - **Report an issue** — from the more options (…) menu, if you see any issue ranging from a wrong cover to a suspicious character count. Reports go straight to the editors to review.
 
 ## Related media, franchises, and subdecks

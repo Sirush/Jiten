@@ -253,7 +253,7 @@
       <div v-else-if="groups.length === 0" class="text-sm text-muted-color italic py-4 text-center">No derived words are available yet.</div>
 
       <div v-else class="rounded-md border border-surface-200 dark:border-surface-700 divide-y divide-surface-200 dark:divide-surface-700">
-        <div v-for="group in groups" :key="group.key" class="flex items-start gap-2 px-3 py-2">
+        <div v-for="group in groups" :key="group.key" class="flex items-start gap-2 px-3 py-2 first:rounded-t-md last:rounded-b-md row-hover">
           <Checkbox
             :model-value="enabledGroups[group.key]"
             :input-id="`deriv-${group.key}`"

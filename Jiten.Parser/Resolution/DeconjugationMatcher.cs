@@ -17,6 +17,10 @@ internal static class DeconjugationMatcher
         var matches = new List<DeconjMatch>();
         foreach (var (form, ids) in candidates)
         {
+            var lastTag = PosMapper.GetLastValidatableDeconjTag(form.Tags);
+            if (lastTag != null && !StemTextFitsTag(form.Text, lastTag, form.Process.Length))
+                continue;
+
             foreach (var id in ids)
             {
                 if (!wordCache.TryGetValue(id, out var word)) continue;
@@ -33,7 +37,6 @@ internal static class DeconjugationMatcher
                         continue;
                 }
 
-                var lastTag = PosMapper.GetValidatableDeconjTags(form.Tags).LastOrDefault();
                 if (lastTag != null && !PosMapper.IsDeconjTagCompatibleWithJmDict(lastTag, word.PartsOfSpeech))
                     continue;
 
@@ -41,5 +44,19 @@ internal static class DeconjugationMatcher
             }
         }
         return matches;
+    }
+
+    /// <summary>Stem tags validate against every verb, so a multi-step chain that lands on a dictionary-shaped stem (おくれている → おく) is a dead end; a one-step stem keeps Sudachi's fused verb + particle (あるで → ある).</summary>
+    private static bool StemTextFitsTag(string text, string tag, int steps)
+    {
+        if (text.Length == 0)
+            return true;
+
+        char last = text[^1];
+        if (tag.StartsWith("stem-te", StringComparison.Ordinal))
+            return last is 'て' or 'で';
+        if (tag.StartsWith("stem-ren", StringComparison.Ordinal) && steps > 1)
+            return last is not ('う' or 'く' or 'ぐ' or 'す' or 'つ' or 'ぬ' or 'ぶ' or 'む' or 'る');
+        return true;
     }
 }

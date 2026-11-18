@@ -16,13 +16,17 @@
     >
       <div
         v-if="visible"
+        :id="id"
         ref="floatingRef"
+        role="tooltip"
         :style="{
           position: strategy,
           top: `${y ?? 0}px`,
           left: `${x ?? 0}px`,
+          visibility: isPositioned ? undefined : 'hidden',
         }"
         class="z-[1200]"
+        :class="{ 'pointer-events-none': !openedByTouch }"
       >
         <div class="bg-gray-900 dark:bg-gray-800 text-white px-3 py-2 rounded-lg shadow-lg text-sm max-w-sm">
           <div class="whitespace-pre-wrap" v-html="formattedContent" />
@@ -51,19 +55,20 @@
   import { useFloating, autoUpdate, offset as offsetMiddleware, flip, shift, arrow } from '@floating-ui/vue';
 
   interface Props {
+    id: string;
     content: string;
     referenceEl: HTMLElement | null;
     placement?: 'top' | 'bottom' | 'left' | 'right';
     offset?: number;
     visible?: boolean;
-    isMobile?: boolean;
+    openedByTouch?: boolean;
   }
 
   const props = withDefaults(defineProps<Props>(), {
     placement: 'top',
     offset: 8,
     visible: false,
-    isMobile: false,
+    openedByTouch: false,
   });
 
   const emit = defineEmits<{ requestHide: [] }>();
@@ -83,7 +88,9 @@
     strategy,
     middlewareData,
     placement: computedPlacement,
+    isPositioned,
   } = useFloating(referenceEl, floatingRef, {
+    open: toRef(props, 'visible'),
     placement: props.placement,
     middleware: [offsetMiddleware(props.offset), flip(), shift({ padding: 8 }), arrow({ element: arrowRef })],
     whileElementsMounted: autoUpdate,
@@ -136,7 +143,7 @@
   watch(
     () => props.visible,
     (visible) => {
-      if (visible && props.isMobile) {
+      if (visible && props.openedByTouch) {
         document.addEventListener('pointerdown', handleClickOutside, true);
       } else {
         document.removeEventListener('pointerdown', handleClickOutside, true);

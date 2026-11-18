@@ -9,7 +9,7 @@
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { ordinal } from '~/utils/ordinal';
   import { getLinkLabel } from '~/utils/linkTypeMapper';
-  import { getDeckStatusColourClass, getDeckStatusText, isInProgressStatus } from '~/utils/deckStatusMapper';
+  import { getDeckStatusColourClass, getDeckStatusIcon, getDeckStatusText, isInProgressStatus } from '~/utils/deckStatusMapper';
   import { useJitenStore } from '~/stores/jitenStore';
   import { formatDateAsYyyyMmDd } from '~/utils/formatDateAsYyyyMmDd';
   import { useAuthStore } from '~/stores/authStore';
@@ -294,8 +294,14 @@
     {
       label: 'Suggest an edit',
       icon: 'pi pi-file-edit',
-      visible: !props.isCompact && props.titleTag !== 'h1',
+      visible: !props.isCompact,
       route: `/decks/media/${props.deck.deckId}/edit`,
+    },
+    {
+      label: 'View Edit History',
+      icon: 'pi pi-history',
+      visible: !props.isCompact,
+      route: `/decks/media/${props.deck.deckId}/history`,
     },
     {
       label: 'Report an issue',
@@ -311,7 +317,7 @@
     },
     {
       label: smartSourceState.value === 'pinned' ? 'Unpin from Smart Deck' : 'Pin in Smart Deck',
-      icon: 'pi pi-bookmark',
+      icon: 'pi pi-thumbtack',
       visible: smartMenuVisible.value,
       command: () => applySmartAction(smartSourceState.value === 'pinned' ? 'unpin' : 'pin'),
     },
@@ -373,7 +379,10 @@
   const statusRowClass =
     'flex items-center gap-3 px-3 py-1.5 rounded text-left text-sm hover:bg-gray-100 dark:hover:bg-gray-700 focus-visible:bg-gray-100 dark:focus-visible:bg-gray-700 transition-colors cursor-pointer';
 
-  const hideStatusPopover = () => statusPopover.value?.hide();
+  const utilityButtonClass =
+    'inline-flex items-center justify-center gap-1 h-7 min-w-7 px-1.5 rounded leading-none hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer';
+
+  const hideStatusPopover =() => statusPopover.value?.hide();
 
   const openHistory = () => {
     hideStatusPopover();
@@ -390,6 +399,8 @@
     const status = getDeckStatusText(currentStatus.value);
     return fact ? `${status}, ${fact.charAt(0).toLowerCase()}${fact.slice(1)}` : status;
   });
+
+  const showSetStatusLabel = computed(() => !props.isCompact && currentStatus.value === DeckStatus.None);
 
   const statusButtonLabel = computed(() => {
     if (currentStatus.value === DeckStatus.None) return 'Set status';
@@ -533,7 +544,7 @@
               <Tooltip v-if="authStore.isAuthenticated && !readOnlyList" :content="deck.isFavourite ? 'Remove from favourites' : 'Add to favourites'">
                 <button
                   type="button"
-                  class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                  :class="utilityButtonClass"
                   :aria-pressed="!!deck.isFavourite"
                   :aria-label="deck.isFavourite ? 'Remove from favourites' : 'Add to favourites'"
                   @click="toggleFavourite"
@@ -545,17 +556,18 @@
                 v-if="authStore.isAuthenticated && !readOnlyList"
                 ref="statusPillTooltip"
                 v-slot="{ hide }"
-                :content="statusPopoverOpen ? '' : statusTooltip"
+                :content="statusPopoverOpen || showSetStatusLabel ? '' : statusTooltip"
               >
                 <button
                   type="button"
-                  class="flex items-center gap-1 p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                  :class="utilityButtonClass"
                   aria-haspopup="true"
                   :aria-expanded="statusPopoverOpen"
                   :aria-label="statusButtonLabel"
                   @click="toggleStatusPopover($event, hide)"
                 >
-                  <i :class="['pi', currentStatus === DeckStatus.None ? 'pi-flag utility-icon' : `pi-flag-fill ${statusColor}`]" />
+                  <i :class="['pi', getDeckStatusIcon(currentStatus), currentStatus === DeckStatus.None ? 'utility-icon' : statusColor]" />
+                  <span v-if="showSetStatusLabel" class="text-sm font-semibold leading-none whitespace-nowrap text-gray-700 dark:text-gray-200">Set Status</span>
                   <span v-if="!isCompact && currentStatus !== DeckStatus.None" :class="['text-sm font-bold leading-none', statusColor]">
                     {{ getDeckStatusText(currentStatus) }}
                   </span>
@@ -570,7 +582,7 @@
               <Tooltip v-if="canEditInline" :content="isEditing ? 'Stop editing' : 'Edit metadata inline'">
                 <button
                   type="button"
-                  class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                  :class="utilityButtonClass"
                   :aria-pressed="isEditing"
                   @click="isEditing = !isEditing"
                 >
@@ -583,7 +595,7 @@
                   :to="`/decks/media/${deck.deckId}/detail#discussion`"
                   :rel="subdeckLinkRel(deck)"
                   :aria-label="discussionTooltip"
-                  class="flex items-center gap-1 p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer no-underline"
+                  :class="[utilityButtonClass, 'no-underline']"
                   @click="onDiscussionClick"
                 >
                   <i class="pi pi-comments utility-icon" />
@@ -595,31 +607,13 @@
               <Tooltip content="View stats">
                 <router-link
                   :to="`/decks/media/${deck.deckId}/stats`"
-                  class="inline-block p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
+                  :class="utilityButtonClass"
                 >
                   <i class="pi pi-chart-bar utility-icon" />
                 </router-link>
               </Tooltip>
-              <Tooltip v-if="!isCompact && titleTag === 'h1'" content="Suggest an edit">
-                <router-link
-                  :to="`/decks/media/${deck.deckId}/edit`"
-                  aria-label="Suggest an edit"
-                  class="inline-block p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
-                >
-                  <i class="pi pi-file-edit utility-icon" />
-                </router-link>
-              </Tooltip>
-              <Tooltip v-if="authStore.isAuthenticated && !isCompact && titleTag === 'h1'" content="Edit history">
-                <router-link
-                  :to="`/decks/media/${deck.deckId}/history`"
-                  aria-label="Edit history"
-                  class="inline-block p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
-                >
-                  <i class="pi pi-history utility-icon" />
-                </router-link>
-              </Tooltip>
               <Tooltip v-if="authStore.isAuthenticated" content="More options">
-                <button type="button" class="p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer" @click="toggleMenu">
+                <button type="button" :class="utilityButtonClass" @click="toggleMenu">
                   <i class="pi pi-ellipsis-v utility-icon" />
                 </button>
               </Tooltip>
@@ -720,7 +714,7 @@
                   >
                     <div v-for="(column, columnIndex) in statColumns" :key="columnIndex" class="min-w-0 @max-3xl:contents">
                       <template v-for="statId in column" :key="statId">
-                        <div v-if="statId === 'speechDuration'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-if="statId === 'speechDuration'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <Tooltip :content="'Total duration of speech, excluding silence.\nCharacter count: ' + formatNumber(deck.characterCount)">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                               <span class="@xl:hidden">Speech time</span><span class="hidden @xl:inline">Speech duration</span>
@@ -728,7 +722,7 @@
                           </Tooltip>
                           <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ formattedSpeechDuration }}</span>
                         </div>
-                        <div v-else-if="statId === 'characters'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'characters'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                             <span class="@xl:hidden">Characters</span><span class="hidden @xl:inline">Character count</span>
                           </span>
@@ -736,11 +730,11 @@
                             formatNumber(deck.characterCount)
                           }}</span>
                         </div>
-                        <div v-else-if="statId === 'wordCount'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'wordCount'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Word count</span>
                           <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ formatNumber(deck.wordCount) }}</span>
                         </div>
-                        <div v-else-if="statId === 'uniqueWords'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'uniqueWords'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <Tooltip :content="'Words appearing exactly once: ' + formatNumber(deck.uniqueWordUsedOnceCount)">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                               Unique words
@@ -753,7 +747,7 @@
                             formatNumber(deck.uniqueWordCount)
                           }}</span>
                         </div>
-                        <div v-else-if="statId === 'uniqueKanji'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'uniqueKanji'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <Tooltip :content="'Kanji appearing exactly once: ' + formatNumber(deck.uniqueKanjiUsedOnceCount)">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                               Unique kanji
@@ -766,7 +760,7 @@
                             formatNumber(deck.uniqueKanjiCount)
                           }}</span>
                         </div>
-                        <div v-else-if="statId === 'averageSentenceLength'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'averageSentenceLength'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap"
                             ><span class="@xl:hidden">Avg. sentence</span><span class="hidden @xl:inline">Average sentence length</span></span
                           >
@@ -774,7 +768,7 @@
                             deck.averageSentenceLength.toFixed(1)
                           }}</span>
                         </div>
-                        <div v-else-if="statId === 'speechSpeed'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'speechSpeed'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <Tooltip content="Average speed of speech in mora per minute.">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Speech speed</span>
                           </Tooltip>
@@ -783,7 +777,7 @@
                         <div
                           v-else-if="statId === 'difficulty'"
                           :data-stat="statId"
-                          class="stat-row cursor-help @max-3xl:col-span-full"
+                          class="stat-row row-hover cursor-help @max-3xl:col-span-full"
                           :class="{ '@max-3xl:order-first': !hasCustomStats }"
                         >
                           <Tooltip :content="difficultyRef?.tooltip ?? ''" block>
@@ -804,7 +798,7 @@
                             </div>
                           </Tooltip>
                         </div>
-                        <div v-else-if="statId === 'dialogue'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'dialogue'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">Dialogue</span>
                           <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap"
                             >{{ deck.dialoguePercentage.toFixed(1) }}%</span
@@ -815,7 +809,7 @@
                             v-if="showChildrenLink"
                             :data-stat="statId"
                             :to="`/decks/media/${deck.deckId}/detail`"
-                            class="flex justify-between gap-2 stat-row group cursor-pointer no-underline"
+                            class="flex justify-between gap-2 stat-row row-hover group cursor-pointer no-underline"
                           >
                             <span class="text-primary-600 dark:text-primary-400 font-normal whitespace-nowrap underline-offset-2 group-hover:underline">{{
                               childrenLabel
@@ -825,14 +819,14 @@
                               <i class="pi pi-arrow-right text-xs ml-0.5 transition-transform group-hover:translate-x-0.5" />
                             </span>
                           </router-link>
-                          <div v-else :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                          <div v-else :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">{{ childrenLabel }}</span>
                             <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{
                               formatNumber(deck.childrenDeckCount)
                             }}</span>
                           </div>
                         </template>
-                        <div v-else-if="statId === 'runtime'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'runtime'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <Tooltip :content="deck.parentDeckId ? 'Length of the video.' : 'Median length of a video on this channel.'">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                               <span v-if="deck.parentDeckId">Length</span
@@ -841,7 +835,7 @@
                           </Tooltip>
                           <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ runtimeLabel }}</span>
                         </div>
-                        <div v-else-if="statId === 'readingDuration'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'readingDuration'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <Tooltip
                             :content="
                               'Based on ' +
@@ -863,7 +857,7 @@
                             >{{ readingDuration > 0 ? readingDuration : '<1' }} h</span
                           >
                         </div>
-                        <div v-else-if="statId === 'externalRating'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'externalRating'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <Tooltip content="Score based on user ratings from 3rd party websites, such as AniList, TMDB, VNDB or IGDB.">
                             <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                               <span class="@xl:hidden">Rating</span><span class="hidden @xl:inline">External Rating</span>
@@ -871,7 +865,7 @@
                           </Tooltip>
                           <span class="tabular-nums font-bold text-gray-900 dark:text-gray-50 whitespace-nowrap">{{ deck.externalRating }} %</span>
                         </div>
-                        <div v-else-if="statId === 'appears'" :data-stat="statId" class="flex justify-between gap-2 stat-row">
+                        <div v-else-if="statId === 'appears'" :data-stat="statId" class="flex justify-between gap-2 stat-row row-hover">
                           <span class="text-gray-600 dark:text-gray-400 font-normal whitespace-nowrap">
                             <span class="@xl:hidden">Appears</span><span class="hidden @xl:inline">Appears (times)</span>
                           </span>
@@ -1066,7 +1060,10 @@
                 :disabled="statusFlow.busy.value"
                 @click="statusFlow.choose(option)"
               >
-                <span>{{ getDeckStatusText(option) }}</span>
+                <span class="flex items-center gap-2">
+                  <i :class="['pi text-xs', getDeckStatusIcon(option), getDeckStatusColourClass(option)]" aria-hidden="true" />
+                  {{ getDeckStatusText(option) }}
+                </span>
                 <i v-if="option === currentStatus" class="pi pi-check text-xs" />
               </button>
             </div>
@@ -1108,7 +1105,6 @@
     padding: 0.2rem;
     margin-inline: -0.2rem;
     border-radius: var(--radius-sm);
-    transition: background-color 0.2s;
   }
 
   .stat-row > span:last-child {
@@ -1123,14 +1119,6 @@
   :is(button, a):hover > .utility-icon,
   :is(button, a):focus-visible > .utility-icon {
     color: var(--p-primary-color);
-  }
-
-  .stat-row:hover {
-    background-color: rgba(183, 135, 243, 0.21);
-  }
-
-  :deep(.dark) .stat-row:hover {
-    background-color: rgba(255, 255, 255, 0.05);
   }
 
   .ignore-overlay {

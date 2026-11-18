@@ -585,7 +585,7 @@
       >
         <div v-for="card in paginatedCards" :key="cardKey(card)">
           <div
-            class="flex items-center gap-2 sm:gap-3 px-3 py-2 sm:py-2.5 hover:bg-surface-50 dark:hover:bg-surface-800/50 transition-colors cursor-pointer select-none"
+            class="flex items-center gap-2 sm:gap-3 px-3 py-2 sm:py-2.5 row-hover cursor-pointer select-none"
             :class="{
               'bg-primary-50 dark:bg-primary-900/20': selectedIds.has(cardKey(card)),
               'bg-surface-50 dark:bg-surface-800/30': expandedCards.has(cardKey(card)) && !selectedIds.has(cardKey(card)),

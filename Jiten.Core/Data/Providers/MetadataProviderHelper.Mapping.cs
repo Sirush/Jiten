@@ -104,10 +104,15 @@ public static partial class MetadataProviderHelper
             if (exclusions.ExcludesCharacterName(entry.Surface))
                 continue;
 
-            if (deck.DictionaryEntries.All(e => e.Surface != entry.Surface))
+            var existing = deck.DictionaryEntries.FirstOrDefault(e => e.Surface == entry.Surface);
+            if (existing == null)
             {
                 entry.DeckId = deck.DeckId;
                 deck.DictionaryEntries.Add(entry);
+            }
+            else if (existing.EntryType == DeckDictionaryEntryType.DiscoveredName)
+            {
+                existing.EntryType = entry.EntryType;
             }
         }
     }

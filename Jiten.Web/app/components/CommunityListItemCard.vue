@@ -4,7 +4,7 @@
   import type { CommunityListItem } from '~/types/types';
   import { communityListItemAnchor } from '~/composables/useCommunityLists';
   import { coverUrl } from '~/utils/coverImage';
-  import { getDeckStatusColourClass, getDeckStatusText } from '~/utils/deckStatusMapper';
+  import { getDeckStatusColourClass, getDeckStatusIcon, getDeckStatusText } from '~/utils/deckStatusMapper';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
 
   const props = withDefaults(defineProps<{ item: CommunityListItem; compact?: boolean; showViewerData?: boolean; planning?: boolean }>(), {
@@ -65,7 +65,7 @@
         <div v-if="showViewerData" class="hidden w-36 shrink-0 flex-col gap-2 pt-0.5 sm:flex">
           <DeckCoverageBars :deck="deck" dense />
           <span v-if="hasStatus" class="flex items-center gap-1.5 text-sm font-semibold" :class="getDeckStatusColourClass(deck.status)">
-            <i class="pi pi-flag-fill text-xs" aria-hidden="true" />{{ getDeckStatusText(deck.status) }}
+            <i class="pi text-xs" :class="getDeckStatusIcon(deck.status)" aria-hidden="true" />{{ getDeckStatusText(deck.status) }}
           </span>
           <Button
             v-else
@@ -110,7 +110,7 @@
     </p>
   </li>
 
-  <li v-else :id="anchorId" class="flex scroll-mt-4 items-center gap-3 px-3 py-2 target:bg-purple-50 sm:px-4 dark:target:bg-purple-950/40">
+  <li v-else :id="anchorId" class="flex scroll-mt-4 items-center gap-3 px-3 py-2 target:bg-purple-50 sm:px-4 dark:target:bg-purple-950/40 row-hover">
     <a :href="`#${anchorId}`" :class="rankLinkClass" class="w-6 shrink-0 text-sm" :aria-label="`Link to #${item.position}`">{{ item.position }}</a>
     <img :src="coverUrl(deck.coverName, 'xs')" alt="" loading="lazy" class="h-[42px] w-[30px] shrink-0 rounded-sm object-cover" />
     <div class="flex min-w-0 flex-1 flex-col">

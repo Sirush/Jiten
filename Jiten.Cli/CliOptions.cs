@@ -187,6 +187,12 @@ public class CliOptions
     [Option(longName: "parse-test-output", Required = false, HelpText = "Output file path for parse-test diagnostics. Defaults to stdout.")]
     public string? ParseTestOutput { get; set; }
 
+    [Option(longName: "tatoeba-benchmark", Required = false, HelpText = "Score the parser against Tatoeba's JMdict-linked sentence index. Takes the folder holding jpn_indices.csv and jpn_sentences.tsv; prints agreement rates and writes every disagreement to --parse-test-output.")]
+    public string? TatoebaBenchmark { get; set; }
+
+    [Option(longName: "tatoeba-limit", Required = false, Default = 0, HelpText = "Only score the first N indexed sentences of --tatoeba-benchmark (0 = all).")]
+    public int TatoebaLimit { get; set; }
+
     [Option(longName: "mine-margins", Required = false, HelpText = "Mine low-margin (uncertain segmentation) spans from a text file (or literal text). Uses Sudachi lattice margins; no DB needed. Files are streamed (multi-GB ok) with progress reports and incremental snapshots to --parse-test-output (default: <input>.margins.json).")]
     public string? MineMargins { get; set; }
 
@@ -330,6 +336,12 @@ public class CliOptions
     [Option(longName: "fsrs-eval-predictions", Required = false, HelpText = "With --fsrs-eval: directory to write every held-out prediction per model (<model>.bin: f32 p, u8 y, f32 elapsed days).")]
     public string? FsrsEvalPredictions { get; set; }
 
+    [Option(longName: "fsrs-eval-train-fraction", Required = false, HelpText = "With --fsrs-eval: share of each user's reviews, oldest first, used for training (default 0.8).")]
+    public double? FsrsEvalTrainFraction { get; set; }
+
+    [Option(longName: "fsrs-eval-interval-retention", Required = false, HelpText = "With --fsrs-eval-predictions: also write <model>.intervals.bin (f32 days until recall falls to this retention, taken after each held-out review) for the FSRS-7 models.")]
+    public double? FsrsEvalIntervalRetention { get; set; }
+
     [Option(longName: "scan-confidence", Required = false, HelpText = "Scan a corpus file for low-confidence token resolutions. Requires --input.")]
     public bool ScanConfidence { get; set; }
 
@@ -340,6 +352,10 @@ public class CliOptions
     [Option(longName: "snapshot-tokens", Required = false,
             HelpText = "Dump every token's (WordId,ReadingIndex,Conjugations) for a corpus to --parse-test-output, for before/after refactor diffing. Requires --input.")]
     public bool SnapshotTokens { get; set; }
+
+    [Option(longName: "dump-tokens", Required = false,
+            HelpText = "Parse every line of the .txt files in a folder and write one line per input line to --parse-test-output: wordId:readingIndex:surface per token, tab-separated, with a '## file' header per file. A folder of subfolders parses each subfolder as one deck instead, one line per file. For mining collocations and corpus diffs.")]
+    public string? DumpTokens { get; set; }
 
     [Option(longName: "concurrency-smoke", Required = false,
             HelpText = "Parse all .txt files in the given directory and dump per-file (WordId:ReadingIndex:Text) signatures to --parse-test-output. Parses in parallel by default (concurrent cross-document stress on the shared JmDict cache); add --smoke-sequential for a single-threaded pass. Run twice cold (flush Redis between, fresh process each) and diff the outputs to prove parallel==sequential.")]

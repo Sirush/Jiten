@@ -36,6 +36,9 @@ public class WordInfo
     public bool IsMergedInflection { get; set; }
     public int? ResolvedWordId { get; set; }
 
+    /// <summary>A piece of a longer unknown word (バルト in シュバルト), so its length says nothing about being a kana scrap.</summary>
+    public bool IsUnknownWordPiece { get; set; }
+
     /// <summary>Null for tokens that are not vocabulary; set once the misparse gates ran.</summary>
     public (int WordId, byte ReadingIndex)? KeptForm { get; set; }
 
@@ -80,6 +83,7 @@ public class WordInfo
         SuffixReading = other.SuffixReading;
         IsMergedInflection = other.IsMergedInflection;
         ResolvedWordId = other.ResolvedWordId;
+        IsUnknownWordPiece = other.IsUnknownWordPiece;
         KeptForm = other.KeptForm;
         SudachiBoundaryMargin = other.SudachiBoundaryMargin;
         IsKanaExclamation = other.IsKanaExclamation;
@@ -102,14 +106,15 @@ public class WordInfo
             span = span[..marginIdx];
         }
 
-        Span<int> tabPositions = stackalloc int[6];
+        Span<int> tabPositions = stackalloc int[5];
         int tabCount = 0;
-        for (int i = 0; i < span.Length && tabCount < 6; i++)
+        for (int searchFrom = 0; tabCount < tabPositions.Length; tabCount++)
         {
-            if (span[i] == (byte)'\t')
-            {
-                tabPositions[tabCount++] = i;
-            }
+            int tab = span[searchFrom..].IndexOf((byte)'\t');
+            if (tab < 0)
+                break;
+            tabPositions[tabCount] = searchFrom + tab;
+            searchFrom += tab + 1;
         }
 
         if (tabCount < 5)
@@ -118,7 +123,8 @@ public class WordInfo
             return;
         }
 
-        Text = strings.GetString(span[..tabPositions[0]]);
+        var textBytes = span[..tabPositions[0]];
+        Text = strings.GetString(textBytes);
 
         var posBytes = span[(tabPositions[0] + 1)..tabPositions[1]];
         Span<char> posChars = posBytes.Length <= 256 ? stackalloc char[posBytes.Length] : new char[posBytes.Length];
@@ -147,8 +153,12 @@ public class WordInfo
             ? posSpan[(commaPositions[2] + 1)..commaPositions[3]]
             : posSpan[(commaPositions[2] + 1)..]);
 
-        NormalizedForm = strings.GetString(span[(tabPositions[1] + 1)..tabPositions[2]]);
-        DictionaryForm = strings.GetString(span[(tabPositions[2] + 1)..tabPositions[3]]);
+        var normalizedBytes = span[(tabPositions[1] + 1)..tabPositions[2]];
+        var dictionaryBytes = span[(tabPositions[2] + 1)..tabPositions[3]];
+        NormalizedForm = normalizedBytes.SequenceEqual(textBytes) ? Text : strings.GetString(normalizedBytes);
+        DictionaryForm = dictionaryBytes.SequenceEqual(textBytes) ? Text
+            : dictionaryBytes.SequenceEqual(normalizedBytes) ? NormalizedForm
+            : strings.GetString(dictionaryBytes);
         Reading = strings.GetString(span[(tabPositions[3] + 1)..tabPositions[4]]);
 
         // 6th POS field is the conjugation form.

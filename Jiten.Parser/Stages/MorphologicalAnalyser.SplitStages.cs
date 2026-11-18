@@ -1,3 +1,4 @@
+using System.Buffers;
 using Jiten.Core;
 using Jiten.Core.Data;
 using WanaKanaShaapu;
@@ -369,6 +370,9 @@ public partial class MorphologicalAnalyser
         return result ?? wordInfos;
     }
 
+    /// <summary>Kana that can open a する conjugation; a suru split point is one of these at index 2 or later.</summary>
+    private static readonly SearchValues<char> SuruStemKana = SearchValues.Create("しさすせ");
+
     /// <summary>Splits unresolvable noun+する merges (大怪我して, no vs tag); vs nouns (密着した) stay merged.</summary>
     private List<WordInfo> SplitUnresolvableSuruCompounds(List<WordInfo> wordInfos)
     {
@@ -385,7 +389,8 @@ public partial class MorphologicalAnalyser
 
             if (word.PartOfSpeech is not (PartOfSpeech.Verb or PartOfSpeech.Noun) ||
                 text.Length < 3 ||
-                !text.Any(c => c is >= '一' and <= '鿿'))
+                text.AsSpan(2).IndexOfAny(SuruStemKana) < 0 ||
+                text.AsSpan().IndexOfAnyInRange('一', '鿿') < 0)
             {
                 result?.Add(word);
                 continue;
@@ -400,7 +405,7 @@ public partial class MorphologicalAnalyser
             int splitAt = -1;
             for (int p = text.Length - 1; p >= 2 && splitAt < 0; p--)
             {
-                if (text[p] is not ('し' or 'さ' or 'す' or 'せ')) continue;
+                if (!SuruStemKana.Contains(text[p])) continue;
 
                 var prefix = text[..p];
                 if (!HasNonNameCompoundLookup(prefix)) continue;
@@ -451,7 +456,7 @@ public partial class MorphologicalAnalyser
         return result ?? wordInfos;
     }
 
-    /// <summary>Re-cuts Sudachi's イッ + たん(suffix) + だ as イッた + ん + だ; ProcessSpecialCases then merges ん + だ.</summary>
+    /// <summary>Re-cuts Sudachi's イッ + たん(suffix) + だ as イッた + ん + だ; the verb must exist, or a name + たん (るみたん) reads as a past tense.</summary>
     private List<WordInfo> SplitTanSuffix(List<WordInfo> wordInfos)
     {
         if (wordInfos.Count < 2) return wordInfos;
@@ -483,7 +488,8 @@ public partial class MorphologicalAnalyser
             {
                 var candidateText = NormalizeToHiragana(prev.Text + "た");
                 var forms = deconj.Deconjugate(candidateText);
-                if (forms.Any(f => f.Tags.Any(t => t.StartsWith('v')) && f.Process.Any(p => p == "past")))
+                if (forms.Any(f => f.Tags.Any(t => t.StartsWith('v')) && f.Process.Any(p => p == "past")
+                                   && HasVerbOrAdjectiveLookup?.Invoke(f.Text) != false))
                     shouldSplit = true;
             }
 
@@ -1002,7 +1008,7 @@ public partial class MorphologicalAnalyser
         {
             var word = wordInfos[i];
 
-            if (!IsLikelyOovGarbage(word) || result.Count == 0)
+            if (!IsLikelyOovGarbage(word) || result.Count == 0 || IsNonWordToken(result[^1]))
             {
                 result.Add(word);
                 continue;

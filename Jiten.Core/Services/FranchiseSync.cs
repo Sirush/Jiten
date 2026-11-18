@@ -25,7 +25,7 @@ public static class FranchiseSync
 
         var links = await db.DeckRelationships.AsNoTracking()
                             .Where(DeckRelationship.IsStoryLink)
-                            .Select(r => new { r.SourceDeckId, r.TargetDeckId })
+                            .Select(r => new { r.SourceDeckId, r.TargetDeckId, r.RelationshipType })
                             .ToListAsync(ct);
         var series = await db.Series.AsNoTracking()
                              .Where(s => s.Kind == SeriesKind.Series)
@@ -40,7 +40,7 @@ public static class FranchiseSync
                                    .ToDictionaryAsync(m => m.DeckId, m => m.FranchiseId, ct);
 
         var uf = new UnionFind();
-        foreach (var link in links)
+        foreach (var link in links.Where(l => l.RelationshipType != DeckRelationshipType.Fandisc))
             uf.Union(link.SourceDeckId, link.TargetDeckId);
 
         var seriesByDeck = new Dictionary<int, HashSet<int>>();
@@ -62,6 +62,11 @@ public static class FranchiseSync
             foreach (var deckId in board)
                 uf.Union(first, deckId);
         }
+
+        var fandiscLinks = links.Where(l => l.RelationshipType == DeckRelationshipType.Fandisc)
+                                .Select(l => (Fandisc: l.SourceDeckId, Original: l.TargetDeckId))
+                                .ToList();
+        await AttachFandiscsAsync(db, uf, fandiscLinks, ct);
 
         var components = uf.Components()
                            .Where(c => c.Count >= 2)
@@ -234,6 +239,31 @@ public static class FranchiseSync
                 await repointStudyDecks(oldId, newId);
 
         return new FranchiseSyncSummary(created.Count, renamed, repoints.Count, deleted, unchanged, moves.Count);
+    }
+
+    /// <summary>A fandisc joins one original's franchise, the earliest released, so a crossover fandisc never merges two franchises; a board or series placing it beside one of its originals wins.</summary>
+    private static async Task AttachFandiscsAsync(JitenDbContext db, UnionFind uf, List<(int Fandisc, int Original)> links,
+                                                  CancellationToken ct)
+    {
+        if (links.Count == 0)
+            return;
+
+        var originalIds = links.Select(l => l.Original).Distinct().ToList();
+        var releases = await db.Decks.AsNoTracking()
+                               .Where(d => originalIds.Contains(d.DeckId))
+                               .Select(d => new { d.DeckId, d.ReleaseDate })
+                               .ToDictionaryAsync(d => d.DeckId, d => d.ReleaseDate, ct);
+
+        foreach (var fandisc in links.GroupBy(l => l.Fandisc, l => l.Original).OrderBy(g => g.Key))
+        {
+            var root = uf.Find(fandisc.Key);
+            var originals = fandisc.Where(releases.ContainsKey).Distinct().ToList();
+            if (originals.Count == 0 || originals.Any(id => uf.Find(id) == root))
+                continue;
+
+            var earliest = originals.OrderBy(id => FranchiseNaming.ReleaseOrder(releases[id])).ThenBy(id => id).First();
+            uf.Union(fandisc.Key, earliest);
+        }
     }
 
     /// <summary>As <see cref="RunAsync(JitenDbContext, Func{int, int, Task}?, CancellationToken)"/>, repointing study decks through a fresh user context each.</summary>

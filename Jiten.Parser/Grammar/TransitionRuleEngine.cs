@@ -1,3 +1,4 @@
+using System.Numerics;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Parser;
@@ -55,13 +56,13 @@ internal static class TransitionRuleEngine
     }
 
     // Empty ValidIf means never valid.
-    private static bool IsValidState(TokenWindow w, MatchCondition[] validIf)
+    private static bool IsValidState(in TokenWindow w, MatchCondition[] validIf)
     {
         if (validIf.Length == 0) return false;
         return MatchesAll(w, validIf);
     }
 
-    private static bool MatchesAll(TokenWindow w, MatchCondition[] conditions)
+    private static bool MatchesAll(in TokenWindow w, MatchCondition[] conditions)
     {
         foreach (var c in conditions)
         {
@@ -105,6 +106,9 @@ internal static class TransitionRuleEngine
                 MatchCondition.IsNotEmphaticSfp =>
                     w.Current.Text is not ("ぞ" or "ぜ"),
 
+                MatchCondition.IsStandardSfp =>
+                    IsStandardSfp(w.Current.Text),
+
                 MatchCondition.PrevExists =>
                     w.Prev != null,
 
@@ -143,6 +147,7 @@ internal static class TransitionRuleEngine
                 // Plain predicate + よ/ね is valid only before a vocative (やべえよ母ちゃん), not run-on text (食べるよ明日).
                 MatchCondition.PrevIsSfpValidHost =>
                     w.Prev?.PartOfSpeech is PartOfSpeech.Auxiliary or PartOfSpeech.Particle
+                    || w.Prev is { HardPinned: true, PreMatchedWordId: not null }
                     || (w.Current.Text == "な"
                         && w.Prev is { PartOfSpeech: PartOfSpeech.Verb or PartOfSpeech.IAdjective }
                         && w.Prev.Text == w.Prev.DictionaryForm)
@@ -162,6 +167,13 @@ internal static class TransitionRuleEngine
             if (!ok) return false;
         }
         return true;
+    }
+
+    private static bool IsStandardSfp(string text)
+    {
+        var core = KanaConverter.ToHiragana(text, convertLongVowelMark: false).AsSpan().TrimEnd("ーぁぃぅぇぉあいうえお");
+        return core.Length > 0
+               && TransitionRuleSets.StandardSentenceEndingParticles.GetAlternateLookup<ReadOnlySpan<char>>().Contains(core);
     }
 
     private static bool IsVocativeFollower(WordInfo? next)
@@ -188,6 +200,7 @@ internal static class TransitionRuleEngine
                 break;
 
             case ViolationAction.MergeWithPrevious:
+            case ViolationAction.MergeWithPreviousOrKeep:
                 if (i == 0)
                 {
                     words.RemoveAt(i);
@@ -221,7 +234,7 @@ internal static class TransitionRuleEngine
                     }, prevPos, prevLen + auxLen);
                     words.RemoveAt(i);
                 }
-                else
+                else if (rule.OnViolation == ViolationAction.MergeWithPrevious)
                 {
                     words.RemoveAt(i);
                 }
@@ -235,6 +248,36 @@ internal static class TransitionRuleEngine
 
     private static bool IsSingleKanji(string? text) =>
         text is { Length: 1 } && JapaneseTextHelper.IsKanji(text[0]);
+
+    private const uint NounSuffixBit = 1u << (int)PartOfSpeech.NounSuffix;
+
+    private const uint NounSuffixOnly = NounSuffixBit | (1u << (int)PartOfSpeech.Unknown);
+
+    private const uint NominalHost = PosMask.NounLike | PosMask.SuffixGroup | PosMask.NumericLike;
+
+    private const uint ClauseMaterial =
+        PosMask.Particle | PosMask.PredicateHost | PosMask.AdverbGroup | PosMask.Conjunction;
+
+    private const string MasuStemEndings = "いきぎしじちにびみりえけげせぜてでねべめれ";
+
+    /// <summary>A noun-suffix-only entry spelled as a kanji verb's 連用形 (探し, 捜し); plain suf entries attach to verbs (見|給え).</summary>
+    internal static bool IsDeverbalBoundSuffix(uint candidateMask, string text) =>
+        PosMask.Has(candidateMask, NounSuffixBit)
+        && (candidateMask & ~NounSuffixOnly) == 0
+        && text.Length >= 2
+        && JapaneseTextHelper.IsKanji(text[0])
+        && MasuStemEndings.Contains(text[^1]);
+
+    /// <summary>An unresolved previous token may be an unknown noun, so only a resolved non-nominal or a sentence start counts.</summary>
+    internal static bool IsNotNominalHost(uint prevMask, bool hasPrev, string? prevText) =>
+        hasPrev
+            ? PosMask.Has(prevMask, ClauseMaterial) && !PosMask.Has(prevMask, NominalHost)
+            : prevText == null;
+
+    internal static bool IsOrphanDeverbalSuffix(
+        List<PartOfSpeech> currentPOS, string currentText, List<PartOfSpeech>? prevPOS, string? prevText) =>
+        IsDeverbalBoundSuffix(PosMask.FromList(currentPOS), currentText)
+        && IsNotNominalHost(prevPOS != null ? PosMask.FromList(prevPOS) : 0, prevPOS != null, prevText);
 
     private static TokenWindow BuildWindow(List<(WordInfo word, int pos, int len)> words, int i)
     {
@@ -267,23 +310,25 @@ internal static class TransitionRuleEngine
         var ctx = ConditionContext.FromScoringWindow(window);
         var rules = TransitionRuleSets.SoftRules;
 
-        for (int r = 0; r < rules.Length; r++)
-        {
-            bool contextApplicable = r < MaskCapacity
-                ? (contextApplicableMask & (1UL << r)) != 0
-                : MatchesAll(ctx, rules[r].ContextMatch);
-            if (!contextApplicable) continue;
+        for (ulong pending = contextApplicableMask; pending != 0; pending &= pending - 1)
+            bonus += CandidateDelta(rules[BitOperations.TrailingZeroCount(pending)], in ctx, rulesMatched);
 
-            var rule = rules[r];
-            if (rule.RequiredCandidateMask != 0 && !PosMask.Has(ctx.CandidateMask, rule.RequiredCandidateMask))
-                continue;
-            if (!MatchesAll(ctx, rule.CandidateMatch)) continue;
-
-            bonus += rule.Delta;
-            rulesMatched?.Add(rule.Id);
-        }
+        for (int r = MaskCapacity; r < rules.Length; r++)
+            if (MatchesAll(in ctx, rules[r].ContextMatch))
+                bonus += CandidateDelta(rules[r], in ctx, rulesMatched);
 
         return bonus;
+    }
+
+    private static int CandidateDelta(ScoringRule rule, in ConditionContext ctx, List<string>? rulesMatched)
+    {
+        if (rule.RequiredCandidateMask != 0 && !PosMask.Has(ctx.CandidateMask, rule.RequiredCandidateMask))
+            return 0;
+        if (!MatchesAll(in ctx, rule.CandidateMatch))
+            return 0;
+
+        rulesMatched?.Add(rule.Id);
+        return rule.Delta;
     }
 
     internal static bool CouldAnySoftRuleApply(
@@ -299,7 +344,7 @@ internal static class TransitionRuleEngine
             nextPOS != null ? PosMask.FromList(nextPOS) : 0, nextPOS != null, nextText));
     }
 
-    private static bool AnySoftRuleMatches(ConditionContext ctx)
+    private static bool AnySoftRuleMatches(in ConditionContext ctx)
     {
         foreach (var rule in TransitionRuleSets.SoftRules)
         {
@@ -333,15 +378,15 @@ internal static class TransitionRuleEngine
             w.PrevMask, w.HasPrev, w.PrevText,
             w.NextMask, w.HasNext, w.NextText,
             w.Candidate.Word.IsSuruVerb,
-            TransitionRuleSets.HonorificSuffixes.Contains(w.Candidate.Form.Text) &&
             PosMask.Has(w.Candidate.Word.CachedPOSMask, PosMask.SuffixGroup) &&
+            TransitionRuleSets.HonorificSuffixes.Contains(w.Candidate.Form.Text) &&
             w.Candidate.Word.PartsOfSpeech.Exists(TransitionRuleSets.HonorificRegisterTags.Contains),
             w.Candidate.DeconjForm?.Process.Contains("volitional") == true,
             w.Candidate.DeconjForm?.Process is { Length: > 0 } process
-                && process[^1] is "(infinitive)" or "(unstressed infinitive)" or "imperative");
+                && process[0] is "(infinitive)" or "(unstressed infinitive)" or "imperative");
     }
 
-    private static bool MatchesAll(ConditionContext ctx, ScoringCondition[] conditions)
+    private static bool MatchesAll(in ConditionContext ctx, ScoringCondition[] conditions)
     {
         foreach (var c in conditions)
         {
@@ -540,6 +585,18 @@ internal static class TransitionRuleEngine
 
                 ScoringCondition.CandidateIsInfinitiveOrImperative =>
                     ctx.CandidateIsInfinitiveVal,
+
+                ScoringCondition.CandidateIsVoicedTeContraction =>
+                    TransitionRuleSets.VoicedTeContractions.Contains(ctx.CandidateText),
+
+                ScoringCondition.PrevLacksVoicingHost =>
+                    ctx.PrevText is not { Length: > 0 } prevText || prevText[^1] is not ('ん' or 'い'),
+
+                ScoringCondition.CandidateIsDeverbalBoundSuffix =>
+                    IsDeverbalBoundSuffix(ctx.CandidateMask, ctx.CandidateText),
+
+                ScoringCondition.PrevIsNotNominalHost =>
+                    IsNotNominalHost(ctx.PrevMask, ctx.HasPrev, ctx.PrevText),
 
                 _ => false
             };

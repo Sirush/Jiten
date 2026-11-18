@@ -1073,7 +1073,7 @@
               No changes yet. Optimising, editing or an automatic update will add an entry here.
             </p>
             <ul v-else class="divide-y divide-surface-200 dark:divide-surface-700 rounded border border-surface-200 dark:border-surface-700">
-              <li v-for="{ entry, details } in historyRows" :key="entry.id" class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2">
+              <li v-for="{ entry, details } in historyRows" :key="entry.id" class="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 px-3 py-2 first:rounded-t last:rounded-b row-hover">
                 <div class="min-w-0">
                   <div
                     class="flex flex-wrap items-baseline gap-x-2 text-sm"
@@ -1138,7 +1138,7 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="(desc, i) in parameterDescriptions" :key="i" class="border-t border-surface-100 dark:border-surface-700">
+                <tr v-for="(desc, i) in parameterDescriptions" :key="i" class="border-t border-surface-100 dark:border-surface-700 row-hover">
                   <td class="px-3 py-1.5 text-surface-500 dark:text-surface-400 tabular-nums">{{ i }}</td>
                   <td class="px-3 py-1.5 font-medium">
                     <span class="md:hidden">

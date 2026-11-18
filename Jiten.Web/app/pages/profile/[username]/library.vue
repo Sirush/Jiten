@@ -4,7 +4,7 @@
   import { createCookieState } from '~/stores/jitenStore';
   import { useDisplayStyleStore } from '~/stores/displayStyleStore';
   import { storeToRefs } from 'pinia';
-  import { getDeckStatusColourClass, getDeckStatusText, isInProgressStatus } from '~/utils/deckStatusMapper';
+  import { getDeckStatusColourClass, getDeckStatusIcon, getDeckStatusText, isInProgressStatus } from '~/utils/deckStatusMapper';
   import { getMediaTypePluralText, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { type DeckSortOption, deckSortMeta, deckSortOption, deckSortOrdering, sortDecks } from '~/utils/deckSorting';
   import { LazyHydrateMediaDeckCard, LazyHydrateMediaDeckCompactView, LazyHydrateMediaDeckTableView } from '~/utils/lazyHydratedComponents';
@@ -40,12 +40,12 @@
   const statusOrder: DeckStatus[] = [DeckStatus.Ongoing, DeckStatus.Paused, DeckStatus.Completed, DeckStatus.Planning, DeckStatus.Dropped];
 
   const STATUS_ACTIONS: { status: DeckStatus; icon: string; severity: string }[] = [
-    { status: DeckStatus.Planning, icon: 'pi pi-bookmark', severity: 'secondary' },
-    { status: DeckStatus.Ongoing, icon: 'pi pi-play', severity: 'warn' },
-    { status: DeckStatus.Paused, icon: 'pi pi-pause', severity: 'info' },
-    { status: DeckStatus.Completed, icon: 'pi pi-check-circle', severity: 'success' },
-    { status: DeckStatus.Dropped, icon: 'pi pi-times-circle', severity: 'danger' },
-  ];
+    { status: DeckStatus.Planning, severity: 'secondary' },
+    { status: DeckStatus.Ongoing, severity: 'warn' },
+    { status: DeckStatus.Paused, severity: 'info' },
+    { status: DeckStatus.Completed, severity: 'success' },
+    { status: DeckStatus.Dropped, severity: 'danger' },
+  ].map((action) => ({ ...action, icon: `pi ${getDeckStatusIcon(action.status)}` }));
   const statusSeverity = (status: DeckStatus) => STATUS_ACTIONS.find((a) => a.status === status)?.severity;
 
   /** Client-side, like title search and sorting; the full list is already loaded. */
@@ -776,7 +776,7 @@
                     :is="editMode ? 'label' : 'div'"
                     v-for="deck in activeGroup.decks"
                     :key="deck.deckId"
-                    class="flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:flex-nowrap sm:gap-3 px-3 py-2 sm:py-2.5 transition-colors first:rounded-t-xl last:rounded-b-xl hover:bg-surface-50 dark:hover:bg-surface-800/50"
+                    class="flex flex-wrap items-center gap-x-2 gap-y-1.5 sm:flex-nowrap sm:gap-3 px-3 py-2 sm:py-2.5 first:rounded-t-xl last:rounded-b-xl row-hover"
                     :class="[
                       editMode ? 'cursor-pointer select-none' : '',
                       { 'bg-primary-50 dark:bg-primary-900/20': editMode && selected.includes(deck.deckId) },

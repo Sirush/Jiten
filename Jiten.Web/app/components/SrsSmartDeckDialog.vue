@@ -469,7 +469,7 @@
                 Nothing yet. Mark a title Ongoing from its deck page, or include one below.
               </div>
               <ul v-else class="flex flex-col divide-y divide-surface-200 dark:divide-surface-700 rounded-lg border border-surface-200 dark:border-surface-700">
-                <li v-for="t in visibleDriving" :key="t.deckId" class="flex items-center gap-3 px-3 py-2">
+                <li v-for="t in visibleDriving" :key="t.deckId" class="flex items-center gap-3 px-3 py-2 first:rounded-t-lg last:rounded-b-lg row-hover">
                   <img :src="coverUrl(t.coverName, 'xs')" :alt="''" class="w-8 h-11 rounded object-cover bg-surface-100 dark:bg-surface-700 shrink-0" />
                   <div class="min-w-0 flex-1">
                     <div class="text-sm font-medium truncate">
@@ -502,7 +502,7 @@
                     <span v-if="t.planning" class="px-1.5 py-0.5 rounded bg-surface-100 dark:bg-surface-700 text-gray-600 dark:text-gray-300">Planning</span>
                     <Tooltip :content="isPinned(t.deckId) ? 'Unpin' : 'Pin to the top'" placement="top">
                       <Button
-                        :icon="isPinned(t.deckId) ? 'pi pi-bookmark-fill' : 'pi pi-bookmark'"
+                        icon="pi pi-thumbtack"
                         :severity="isPinned(t.deckId) ? 'primary' : 'secondary'"
                         text
                         size="small"

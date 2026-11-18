@@ -1,3 +1,4 @@
+using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Core.Utils;
 using WanaKanaShaapu;
@@ -86,6 +87,13 @@ public partial class MorphologicalAnalyser
                      HasCompoundLookup(currentWord.DictionaryForm[..^1] + "り付く")));
         });
 
+    /// <summary>A single kanji that compounds with the token before it (忘れ|物 → 忘れ物) belongs to that noun, not to a following する.</summary>
+    private bool KanjiCompoundsWithPrevious(List<WordInfo> wordInfos, int i) =>
+        i > 0
+        && wordInfos[i].Text.Length == 1 && JapaneseTextHelper.IsKanji(wordInfos[i].Text[0])
+        && wordInfos[i - 1].PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.Noun or PartOfSpeech.CommonNoun
+        && HasNonNameCompoundLookup?.Invoke(wordInfos[i - 1].Text + wordInfos[i].Text) == true;
+
     private List<WordInfo> CombineVerbDependantsSuru(List<WordInfo> wordInfos)
     {
         if (wordInfos.Count < 2)
@@ -105,7 +113,7 @@ public partial class MorphologicalAnalyser
                 bool isLiterarySuru = nextWord.DictionaryForm == "す" && nextWord.NormalizedForm == "為る";
                 bool isSuruNoun = currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleSuru) ||
                                   currentWord.HasPartOfSpeechSection(PartOfSpeechSection.PossibleVerbSuruNoun);
-                if (isSuruNoun && (isModernSuru || isLiterarySuru))
+                if (isSuruNoun && (isModernSuru || isLiterarySuru) && !KanjiCompoundsWithPrevious(wordInfos, i))
                 {
                     newList ??= CopyAccumulatorUpTo(wordInfos, i);
                     WordInfo combinedWord = new WordInfo(currentWord);
@@ -193,14 +201,10 @@ public partial class MorphologicalAnalyser
                         var forms = PipelineCachedDeconjugate(nextHiragana);
                         foreach (var f in forms)
                         {
-                            if (TeFormSubsidiaryVerbs.Contains(f.Text))
+                            bool bareSubsidiary = f.Tags.Length == 0 && TeFormSubsidiaryVerbs.Contains(f.Text);
+                            if (bareSubsidiary || ((TeFormSubsidiaryVerbs.Contains(f.Text) || TeFormAuxChainVerbs.Contains(f.Text))
+                                                   && EndsOnSubsidiaryVerbClass(f)))
                             { isKnownSubsidiary = true; break; }
-                            if (TeFormAuxChainVerbs.Contains(f.Text))
-                            {
-                                foreach (var t in f.Tags)
-                                    if (t.StartsWith('v')) { isKnownSubsidiary = true; break; }
-                                if (isKnownSubsidiary) break;
-                            }
                         }
                     }
 

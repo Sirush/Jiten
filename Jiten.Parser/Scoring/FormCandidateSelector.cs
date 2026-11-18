@@ -226,11 +226,11 @@ internal static class FormCandidateSelector
         return null;
     }
 
-    /// <summary>Sentence-final 来い is the interjection, not 来る's imperative; mixed entries (出来た exp/int) don't qualify.</summary>
+    /// <summary>A bare sentence-final 来い or やった is the interjection; after an argument it is the verb (チェスをやった). Mixed entries (出来た exp/int) don't qualify.</summary>
     public static FormCandidate? ApplySentenceFinalInterjection(
         FormCandidate best, List<FormCandidate> allCandidates, FormScoringContext context)
     {
-        if (!context.IsSentenceFinal)
+        if (!context.IsSentenceFinal || context.FollowsClauseArgument)
             return null;
         if (best.DeconjForm?.Process is not { Length: > 0 }
             || !KanaScoringHelpers.IsInflectableVerbOrAdj(best.Word.PartsOfSpeech))

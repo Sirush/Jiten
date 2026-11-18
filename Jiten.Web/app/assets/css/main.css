@@ -24,6 +24,20 @@
   }
 }
 
+@utility row-hover {
+  transition: background-color 0.15s;
+
+  @media (hover: hover) {
+    &:hover {
+      background-color: var(--p-surface-50);
+    }
+
+    &:hover:where(.dark-mode, .dark-mode *) {
+      background-color: color-mix(in oklab, var(--p-surface-800) 60%, transparent);
+    }
+  }
+}
+
 @theme {
   /* @fontsource-variable registers "Noto Sans JP Variable"; the unsuffixed name covers a switch back to
        Google Fonts or a system install. Japanese system fonts precede sans-serif because bare sans-serif

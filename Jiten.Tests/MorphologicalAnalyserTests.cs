@@ -953,10 +953,10 @@ public class MorphologicalAnalyserTests
         // チックショー: colloquial geminated form of ちくしょう — Sudachi splits into チック(suffix)+ショー
         // but user_dic overrides to produce a single 感動詞 token
         yield return ["チックショー", new[] { "チックショー" }];
-        // I-adjective stem resegmentation: Sudachi fuses adj-i stems in slang compounds
-        // ださ → ださ+い in lookups fallback enables the split; きも → きも matches 肝 directly
-        yield return ["ダサキモ", new[] { "ダサ", "キモ" }];
-        yield return ["百合豚ダサキモ眼鏡", new[] { "百合", "豚", "ダサ", "キモ", "眼鏡" }];
+        // A short piece of an unknown katakana word needs a common word that lists that katakana spelling (ルー|デウス fails);
+        // ダサ has none, so the slang compound stays whole and unresolved
+        yield return ["ダサキモ", Array.Empty<string>()];
+        yield return ["百合豚ダサキモ眼鏡", new[] { "百合", "豚", "眼鏡" }];
         // として/からして/クセして compound particle combination
         yield return ["護衛として彼女に付き従う", new[] { "護衛", "として", "彼女", "に", "付き従う" }];
         yield return ["憮然として言う", new[] { "憮然", "として", "言う" }];
@@ -977,7 +977,7 @@ public class MorphologicalAnalyserTests
         yield return ["俺はね同じ気持ちなのにそれを伝えないなんて", new[] { "俺", "は", "ね", "同じ", "気持ち", "なのに", "それ", "を", "伝えない", "なんて" }];
         yield return ["私はねここに存在していることが酷く恥ずかしい", new[] { "私", "は", "ね", "ここ", "に", "存在している", "こと", "が", "酷く", "恥ずかしい" }];
         yield return ["南アルプス市", new[] { "南アルプス", "市" }];
-        yield return ["よかったなラムシャーリー様までもうすぐだ", new[] { "よかった", "ラム", "シャーリー", "様", "まで", "もうすぐ", "だ" }];
+        yield return ["よかったなラムシャーリー様までもうすぐだ", new[] { "よかった", "な", "ラム", "シャーリー", "様", "まで", "もうすぐ", "だ" }];
         yield return ["それはたまたまで", new[] { "それ", "は", "たまたま", "で" }];
         yield return ["生年未公開", new[] { "生年", "未公開" }];
         yield return ["ポチろうとした瞬間に鼻血が出てな", new[] { "ポチろう", "と", "した", "瞬間", "に", "鼻血が出て", "な" }];
@@ -1152,7 +1152,17 @@ public class MorphologicalAnalyserTests
         yield return ["ふざっけんな！", new[] { "ふざっけんな" }];
 
         // === 早くー — original surface preserved ===
-        yield return ["ルーデウス早くー！", new[] { "ルー", "デウス", "早くー" }];
+        yield return ["ルーデウス早くー！", new[] { "早くー" }];
+
+        // === Unknown katakana words: short accidental pieces stay whole, long or common loanwords split off ===
+        yield return ["エリナリーゼが笑う", new[] { "が", "笑う" }];
+        yield return ["シュバルトやリンダのような連中", new[] { "や", "リンダ", "の", "ような", "連中" }];
+        yield return ["ブラックドラゴンが現れた", new[] { "ブラック", "ドラゴン", "が", "現れた" }];
+        yield return ["ボロアパートに来た", new[] { "アパート", "に", "来た" }];
+        yield return ["ハッピーバースデーリク", new[] { "ハッピー", "バースデー" }];
+
+        // === A single kanji next to an unknown kanji piece is its by-product ===
+        yield return ["腐死の解決策が見つかる", new[] { "の", "解決策", "が", "見つかる" }];
 
         // === Pending: need user_dic.xml entries (Sudachi splits these incorrectly) ===
         // からかう: Sudachi splits as から(particle) + かう(verb)
@@ -2483,6 +2493,72 @@ public class MorphologicalAnalyserTests
         // Kana words starting with あずま (東) stay whole instead of splitting off the noun
         yield return ["あずましくねえべさ", new[] { "あずましくねえ", "べ", "さ" }];
         yield return ["あずまや近くの一画。", new[] { "あずまや", "近く", "の", "一画" }];
+        yield return ["貴広さん！まってください", new[] { "貴広", "さん", "まってください" }];
+        yield return ["作業を続ける。もってきた鎌で雑草を刈る。", new[] { "作業", "を", "続ける", "もってきた", "鎌", "で", "雑草", "を", "刈る" }];
+        yield return ["「この日のために、とっておいたんだ」", new[] { "この", "日", "の", "ために", "とっておいた", "んだ" }];
+        yield return ["「今日の昼休み、めぐみ先生の手伝いってなんだったの？」", new[] { "今日", "の", "昼休み", "めぐみ", "先生", "の", "手伝い", "って", "なん", "だった", "の" }];
+        yield return ["むろん、ノッたんだけどな。", new[] { "むろん", "ノッた", "んだ", "けど", "な" }];
+        yield return ["ここにいるじゃん、るみたんだよ", new[] { "ここ", "に", "いる", "じゃん", "るみ", "たん", "だ", "よ" }];
+        yield return ["お母さんはさ 伝説のシーフなんでしょ？", new[] { "お母さん", "は", "さ", "伝説", "の", "シーフ", "なん", "でしょ" }];
+        yield return ["ゆうべは　ごめんなさいね。", new[] { "ゆうべ", "は", "ごめんなさい", "ね" }];
+        yield return ["「信用して」と彼は言った。", new[] { "信用して", "と", "彼", "は", "言った" }];
+        yield return ["僕は彼女を幸せにすると言った。", new[] { "僕", "は", "彼女", "を", "幸せにする", "と", "言った" }];
+        yield return ["彼は「みなさん、さよなら」と言って立ち上がった。", new[] { "彼", "は", "みなさん", "さよなら", "と", "言って", "立ち上がった" }];
+        yield return ["彼女は私に「買い物に行こう」といった。", new[] { "彼女", "は", "私", "に", "買い物", "に", "行こう", "と", "いった" }];
+        yield return ["「美しい」とか「醜い」といった言葉は相対的な用語である。", new[] { "美しい", "とか", "醜い", "といった", "言葉", "は", "相対的な", "用語", "である" }];
+        yield return ["彼女は電話を使ってよいか私に尋ねた。", new[] { "彼女", "は", "電話", "を", "使って", "よい", "か", "私", "に", "尋ねた" }];
+        yield return ["なんだよ俺は知らないぞ", new[] { "なん", "だ", "よ", "俺", "は", "知らない", "ぞ" }];
+        yield return ["この法律案が通らなかった場合において、おまえはどういう責任をとるのだ。", new[] { "この", "法律案", "が", "通らなかった", "場合", "において", "おまえ", "は", "どういう", "責任をとる", "の", "だ" }];
+        yield return ["中国語においては文脈によるものが多い。", new[] { "中国語", "において", "は", "文脈", "による", "もの", "が", "多い" }];
+        yield return ["彼女は編物を横において立ち上がった。", new[] { "彼女", "は", "編物", "を", "横", "に", "おいて", "立ち上がった" }];
+        yield return ["そのたこは、海に帰ったのであった。", new[] { "その", "たこ", "は", "海", "に", "帰った", "の", "であった" }];
+        yield return ["私は決して彼が嫌いなのではない。", new[] { "私", "は", "決して", "彼", "が", "嫌いな", "の", "ではない" }];
+        yield return ["約束を守る人が一番偉い人なのであります。", new[] { "約束を守る", "人", "が", "一番", "偉い人", "なのであります" }];
+        yield return ["雨が降ったので行かなかった。", new[] { "雨が降った", "ので", "行かなかった" }];
+        yield return ["溶剤は使用時に蒸発し大気に放出されている。", new[] { "溶剤", "は", "使用時", "に", "蒸発し", "大気", "に", "放出されている" }];
+        yield return ["彼は学生だし、まだ若い。", new[] { "彼", "は", "学生", "だ", "し", "まだ", "若い" }];
+        // Sudachi steals the negative ん into the interjection んっ (い|ませ|んっ|て)
+        yield return ["彼女なんていませんって", new[] { "彼女", "なんて", "いません", "って" }];
+        // A kanji noun after a prenominal modifier is the object of する, not a kanji+する verb (目する)
+        yield return ["「じゃあなんで、あんな不審な目してたのよ？」", new[] { "じゃあ", "なんで", "あんな", "不審な", "目", "してた", "の", "よ" }];
+        yield return ["彼女は綺麗な目してるね。", new[] { "彼女", "は", "綺麗な", "目", "してる", "ね" }];
+        // A verb stem that compounds with the kanji (忘れ物, 調べ物) keeps it; 物する is never the reading
+        yield return ["「もしかして俺、また忘れ物しちゃった？」", new[] { "もしかして", "俺", "また", "忘れ物", "しちゃった" }];
+        yield return ["図書館で調べ物してた。", new[] { "図書館", "で", "調べ物", "してた" }];
+        // Noun + かって before a quote verb is か + って, not かつて
+        yield return ["だから私は後者を選択し、女優かっていうぐらい一生懸命声を上げた。",
+            new[] { "だから", "私", "は", "後者", "を", "選択し", "女優", "か", "っていう", "ぐらい", "一生懸命", "声を上げた" }];
+        // A mimetic split from its と rejoins its adverb entry
+        yield return ["「何となく、フラっと。」", new[] { "何となく", "フラっと" }];
+        yield return ["父親はイラッとして母親に怒鳴る。", new[] { "父親", "は", "イラッと", "して", "母親", "に", "怒鳴る" }];
+        // Sudachi fuses ああやって and strands られん
+        yield return ["ああやってられん！！", new[] { "ああ", "やってられん" }];
+        // Sudachi reads 何|かきっかけ as 書きかけ
+        yield return ["必ず、何かきっかけがあるはずだ", new[] { "必ず", "何か", "きっかけ", "が", "ある", "はずだ" }];
+        // ちゃ|んっ|て after a name is ちゃん + って
+        yield return ["「椋ちゃんってそんなに強いの？」", new[] { "椋", "ちゃん", "って", "そんな", "に", "強い", "の" }];
+        // Separate words around an elongation never fuse into a respelling (うーん|そう is not 運送)
+        yield return ["うーんそうだね", new[] { "うーん", "そうだね" }];
+        // A usually-kana word cut off by 、 and restarted (いら、いられない) is a stutter, not 伊良
+        yield return ["「お、落ち着いてなんて、いら、いられないよっ」", new[] { "落ち着いて", "なんて", "いられない", "よ" }];
+        // A frequent word repeated after 、 is deliberate, not a stutter
+        yield return ["「ママのうた、うたって」", new[] { "ママ", "の", "うた", "うたって" }];
+        // Unknown katakana names drop out instead of resolving to fragments (ハン, ラ, ロン, パラ, レイ)
+        yield return ["この物語は、中年男性ハンバート・ハンバートの告白の形式をとっているの。",
+            new[] { "この", "物語", "は", "中年", "男性", "の", "告白", "の", "形式", "を", "とっている", "の" }];
+        yield return ["この組み合わせはムードラっていうんだけど、新しいカクテルは今までのヤツには当てはまらない。",
+            new[] { "この", "組み合わせ", "は", "っていう", "んだ", "けど", "新しい", "カクテル", "は", "今まで", "の", "ヤツ", "には", "当てはまらない" }];
+        yield return ["以前描いたポポロンのイラストをプロフィール写真にすることにした。",
+            new[] { "以前", "描いた", "の", "イラスト", "を", "プロフィール写真", "に", "する", "ことにした" }];
+        yield return ["イギリスの作家サッカレイが書いたの。", new[] { "イギリス", "の", "作家", "が", "書いた", "の" }];
+        yield return ["それからＰＣに向かい、腰を落ち着けてフレパラにログインした。",
+            new[] { "それ", "から", "ＰＣ", "に", "向かい", "腰を落ち着けて", "に", "ログインした" }];
+        // おくれ is never absorbed as the subsidiary おく; お呉れ and 遅れる stay their own tokens
+        yield return ["読んでおくれ。", new[] { "読んで", "おくれ" }];
+        yield return ["寝坊しておくれた。", new[] { "寝坊", "して", "おくれた" }];
+        yield return ["部屋に入って行く。", new[] { "部屋", "に", "入って", "行く" }];
+        yield return ["自分で弁当作ってくるって感じか？", new[] { "自分", "で", "弁当", "作って", "くる", "って", "感じ", "か" }];
+        yield return ["あわあわ、めぐみんったら一体、何やらかしたの？", new[] { "あわあわ", "ったら", "一体", "何", "やらかした", "の" }];
     }
 
     [Theory]

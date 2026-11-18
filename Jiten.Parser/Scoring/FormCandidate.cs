@@ -73,7 +73,8 @@ internal readonly record struct FormScoringContext(
     bool IsSentenceInitial = false,
     bool IsSentenceFinal = false,
     bool IsSudachiPossibleDependant = false,
-    bool IsSudachiNameGuess = false)
+    bool IsSudachiNameGuess = false,
+    bool FollowsClauseArgument = false)
 {
     public static FormScoringContext Create(
         string surface,
@@ -86,7 +87,8 @@ internal readonly record struct FormScoringContext(
         bool isSentenceFinal = false,
         PartOfSpeech sudachiPOS = PartOfSpeech.Unknown,
         bool isSudachiPossibleDependant = false,
-        bool isSudachiNameGuess = false)
+        bool isSudachiNameGuess = false,
+        bool followsClauseArgument = false)
     {
         var surfaceHiragana = KanaScoringHelpers.ToNormalizedHiragana(surface, convertLongVowelMark: false);
         var surfaceHiraganaLoose = KanaScoringHelpers.ToNormalizedHiragana(surface, convertLongVowelMark: true);
@@ -113,7 +115,8 @@ internal readonly record struct FormScoringContext(
             isSentenceInitial,
             isSentenceFinal,
             isSudachiPossibleDependant,
-            isSudachiNameGuess);
+            isSudachiNameGuess,
+            followsClauseArgument);
     }
 }
 

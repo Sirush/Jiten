@@ -41,3 +41,20 @@ export function getDeckStatusColourClass(status: DeckStatus | undefined): string
       return '';
   }
 }
+
+export function getDeckStatusIcon(status: DeckStatus | undefined): string {
+  switch (status) {
+    case DeckStatus.Planning:
+      return 'pi-bookmark-fill';
+    case DeckStatus.Ongoing:
+      return 'pi-play';
+    case DeckStatus.Paused:
+      return 'pi-pause';
+    case DeckStatus.Completed:
+      return 'pi-check-circle';
+    case DeckStatus.Dropped:
+      return 'pi-times-circle';
+    default:
+      return 'pi-bookmark';
+  }
+}

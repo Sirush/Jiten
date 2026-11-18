@@ -515,7 +515,7 @@ public sealed partial class MetadataEditService
         var edit = await db.MetadataEdits.AsNoTracking().FirstOrDefaultAsync(e => e.Id == editId, ct);
         var change = edit == null ? null : ParseChanges(edit.ChangesJson).FirstOrDefault(c => c.Field == MetadataField.CharacterNames);
         if (edit == null || change == null)
-            return ServiceResult<CharacterNamePreview>.Fail(404, "This edit doesn't change character names.");
+            return ServiceResult<CharacterNamePreview>.Fail(404, "This edit doesn't change names or terms.");
 
         var (_, added) = AddedNames(change);
         var key = $"metadata-edit:name-preview:{editId}";

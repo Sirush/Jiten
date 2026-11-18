@@ -1,3 +1,4 @@
+using System.Collections.Frozen;
 using Jiten.Core;
 using Jiten.Core.Data;
 using Jiten.Parser.Scoring;
@@ -25,7 +26,7 @@ public partial class MorphologicalAnalyser
     };
 
     // Duration readings for numeral+分/日/月 homographs, applied only before a temporal anchor.
-    private static readonly Dictionary<string, (int WordId, byte ReadingIndex)> TemporalDurationPins = new()
+    private static readonly FrozenDictionary<string, (int WordId, byte ReadingIndex)> TemporalDurationPins = new Dictionary<string, (int WordId, byte ReadingIndex)>
     {
         ["一分"] = (1166290, 1),
         ["１分"] = (1166290, 0),
@@ -46,7 +47,7 @@ public partial class MorphologicalAnalyser
         ["何分"] = (1189320, 0),
         ["三十日"] = (1300670, 1),
         ["一月"] = (1162130, 0),
-    };
+    }.ToFrozenDictionary(StringComparer.Ordinal);
 
     private static readonly HashSet<string> TemporalAnchorTexts =
         ["前", "後", "間", "ぐらい", "くらい", "ほど", "経つ", "経った", "経って", "待っ"];

@@ -44,6 +44,7 @@ public class BenchmarkCommands(CliContext context)
         if (options.BenchmarkWarmup)
         {
             Console.WriteLine("Running warmup parse...");
+            await Jiten.Parser.Parser.WarmupAsync(context.ContextFactory, Console.WriteLine);
             var warmupText = "これはテストです。日本語のテキストを解析しています。";
             await Jiten.Parser.Parser.ParseTextToDeck(context.ContextFactory, warmupText, false, false, deckType);
             Console.WriteLine("Warmup complete.");

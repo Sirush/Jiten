@@ -8,7 +8,6 @@ public static class ParserCounters
     public static long AdjTokens;
     public static long AdjHighConfidenceSkips;
     public static long AdjSoftRuleSkips;
-    public static long AdjFirstPassCandidates;
     public static long AdjRederived;
     public static long AdjCandidatesBuilt;
     public static long AdjTokensScored;
@@ -59,7 +58,6 @@ public static class ParserCounters
         Line("AdjTokens", AdjTokens);
         Line("AdjHighConfidenceSkips", AdjHighConfidenceSkips);
         Line("AdjSoftRuleSkips", AdjSoftRuleSkips);
-        Line("AdjFirstPassCandidates", AdjFirstPassCandidates);
         Line("AdjRederived", AdjRederived);
         Line("AdjCandidatesBuilt", AdjCandidatesBuilt);
         Line("AdjTokensScored", AdjTokensScored);
@@ -85,7 +83,7 @@ public static class ParserCounters
 
     public static void Reset()
     {
-        AdjTokens = AdjHighConfidenceSkips = AdjSoftRuleSkips = AdjFirstPassCandidates = AdjRederived =
+        AdjTokens = AdjHighConfidenceSkips = AdjSoftRuleSkips = AdjRederived =
             AdjCandidatesBuilt = AdjTokensScored = AdjCandidatesScored = AdjMemoHits = AdjTokensChanged = EnumerateFormsCalls =
                 JmDictInProcessHits = JmDictInProcessMisses = JmDictRedisMisses = JmDictDbRows =
                     DeckWordInProcessHits = DeckWordCacheHits = DeckWordCacheMisses = 0;

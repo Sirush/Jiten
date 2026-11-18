@@ -918,17 +918,17 @@
 
   const mediaTypeOptions = [
     { type: null, label: 'All' },
-    { type: MediaType.Anime, label: 'Anime' },
-    { type: MediaType.Audio, label: 'Audio' },
+    { type: MediaType.Anime, label: 'Anime', startsGroup: true },
     { type: MediaType.Drama, label: 'Dramas' },
-    { type: MediaType.Manga, label: 'Manga' },
     { type: MediaType.Movie, label: 'Movies' },
-    { type: MediaType.NonFiction, label: 'Non-Fiction' },
-    { type: MediaType.Novel, label: 'Novels' },
-    { type: MediaType.VideoGame, label: 'Video Games' },
-    { type: MediaType.VisualNovel, label: 'Visual Novels' },
-    { type: MediaType.WebNovel, label: 'Web Novels' },
     { type: MediaType.YouTube, label: 'YouTube' },
+    { type: MediaType.Novel, label: 'Novels', startsGroup: true },
+    { type: MediaType.WebNovel, label: 'Web Novels' },
+    { type: MediaType.NonFiction, label: 'Non-Fiction' },
+    { type: MediaType.Manga, label: 'Manga' },
+    { type: MediaType.VisualNovel, label: 'Visual Novels', startsGroup: true },
+    { type: MediaType.VideoGame, label: 'Video Games' },
+    { type: MediaType.Audio, label: 'Audio', startsGroup: true },
   ];
 
   const isActive = (type: MediaType | null) => {
@@ -943,9 +943,16 @@
       : 'border-surface-300 text-surface-700! dark:border-surface-700 dark:text-surface-200!',
   ];
 
+  const mediaTypeTabClass = (type: MediaType | null) => [
+    '-mb-px border-b-2 px-2 pt-1 pb-2.5 whitespace-nowrap no-underline! hover:no-underline!',
+    isActive(type)
+      ? 'border-primary-500 text-primary-600! dark:text-primary-300!'
+      : 'border-transparent text-surface-600! hover:border-surface-300 hover:text-surface-900! dark:text-surface-300! dark:hover:border-surface-600 dark:hover:text-surface-0!',
+  ];
+
   const mediaTypePopover = ref();
 
-  // Below md the media types are a single scrolling line, so the selected one has to be
+  // Below lg the media types are a single scrolling line, so the selected one has to be
   // brought into view or it reads as absent whenever it sits past the right edge.
   const mediaTypeStrip = ref<HTMLElement | null>(null);
   const stripCanScrollLeft = ref(false);
@@ -996,10 +1003,10 @@
 
 <template>
   <div class="flex flex-col gap-4 max-md:gap-2">
-    <!-- Below md the eleven labels wrap to three lines, so they scroll on one line instead.
+    <!-- Below lg the eleven labels do not fit on one line, so they scroll instead.
          The strip can hide most of the list, so the fades mark the overflow and the trailing
          button stays put as a way to reach every type without scrolling. -->
-    <div class="md:hidden flex items-center gap-2">
+    <div class="lg:hidden flex items-center gap-2">
       <div class="relative min-w-0 flex-1">
         <!-- `w-0 min-w-full` fills the parent while contributing nothing to intrinsic width, so
              the w-max row inside cannot stretch an ancestor that is sized by its content. -->
@@ -1035,7 +1042,7 @@
       </Button>
     </div>
 
-    <Popover ref="mediaTypePopover" class="md:hidden">
+    <Popover ref="mediaTypePopover" class="lg:hidden">
       <div class="grid w-60 grid-cols-2 gap-1.5">
         <NuxtLink
           v-for="option in mediaTypeOptions"
@@ -1049,23 +1056,17 @@
       </div>
     </Popover>
 
-    <!-- The wrapper carries the breakpoint: PrimeVue's runtime .p-card display rule outranks
-         a `hidden` utility placed on the component itself. -->
-    <div class="hidden md:block">
-      <Card>
-        <template #content>
-          <div class="flex flex-row flex-wrap justify-around gap-2">
-            <NuxtLink
-              v-for="option in mediaTypeOptions"
-              :key="option.label"
-              :to="{ query: option.type ? { ...route.query, mediaType: option.type, offset: 0 } : { ...route.query, mediaType: undefined, offset: 0 } }"
-              :class="{ 'font-bold !text-purple-500': isActive(option.type) }"
-            >
-              {{ option.label }}
-            </NuxtLink>
-          </div>
-        </template>
-      </Card>
+    <div class="hidden lg:flex justify-between border-b border-surface-300 text-sm xl:text-base dark:border-surface-700">
+      <template v-for="option in mediaTypeOptions" :key="option.label">
+        <span v-if="option.startsGroup" aria-hidden="true" class="mb-2 h-4 w-px self-center bg-surface-300 dark:bg-surface-600" />
+        <NuxtLink
+          :to="{ query: option.type ? { ...route.query, mediaType: option.type, offset: 0 } : { ...route.query, mediaType: undefined, offset: 0 } }"
+          :aria-current="isActive(option.type) ? 'page' : undefined"
+          :class="mediaTypeTabClass(option.type)"
+        >
+          {{ option.label }}
+        </NuxtLink>
+      </template>
     </div>
 
     <!-- Below md this is the only place the controls live, so it sticks; the page header is

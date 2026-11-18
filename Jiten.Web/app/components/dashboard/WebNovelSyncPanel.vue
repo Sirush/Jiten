@@ -188,7 +188,7 @@
         <div
           v-for="subdeck in source.subdecks"
           :key="subdeck.childDeckId"
-          class="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-surface-100 dark:border-surface-800 last:border-b-0"
+          class="flex flex-wrap items-center gap-2 px-3 py-2 border-b border-surface-100 dark:border-surface-800 last:border-b-0 row-hover"
         >
           <span class="font-medium text-sm">第{{ subdeck.startEpisode }}話〜第{{ subdeck.endEpisode }}話</span>
           <span class="text-xs text-surface-500 dark:text-surface-400 tabular-nums">

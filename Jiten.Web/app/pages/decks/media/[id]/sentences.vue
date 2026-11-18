@@ -254,7 +254,7 @@
         </template>
         <template #content>
           <div
-            class="grid grid-cols-[1.25rem_minmax(0,1fr)_3.25rem_3.25rem_4.5rem] sm:grid-cols-[2rem_minmax(0,1fr)_5rem_5rem_5rem] gap-x-3 pb-1 text-xs text-gray-500 dark:text-gray-400 border-b border-surface-200 dark:border-surface-700"
+            class="grid grid-cols-[1.25rem_minmax(0,1fr)_3.25rem_3.25rem_4.5rem] sm:grid-cols-[2rem_minmax(0,1fr)_5rem_5rem_5rem] gap-x-3 -mx-2 px-2 pb-1 text-xs text-gray-500 dark:text-gray-400 border-b border-surface-200 dark:border-surface-700"
           >
             <span />
             <span>Word</span>
@@ -266,7 +266,7 @@
             <li
               v-for="(step, index) in learnNext"
               :key="wordKey(step.word)"
-              class="grid grid-cols-[1.25rem_minmax(0,1fr)_3.25rem_3.25rem_4.5rem] sm:grid-cols-[2rem_minmax(0,1fr)_5rem_5rem_5rem] items-baseline gap-x-3 py-2 border-b border-surface-200 dark:border-surface-700 last:border-b-0"
+              class="grid grid-cols-[1.25rem_minmax(0,1fr)_3.25rem_3.25rem_4.5rem] sm:grid-cols-[2rem_minmax(0,1fr)_5rem_5rem_5rem] items-baseline gap-x-3 -mx-2 px-2 py-2 border-b border-surface-200 dark:border-surface-700 last:border-b-0 row-hover"
             >
               <span class="text-sm text-gray-500 dark:text-gray-400 tabular-nums">{{ index + 1 }}</span>
               <NuxtLink

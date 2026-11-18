@@ -1335,15 +1335,15 @@
             <!-- Dictionary Entries Section (Character Names) -->
             <div class="mt-6">
               <div class="flex justify-between items-center mb-2">
-                <h3 class="text-lg font-medium">Character Names</h3>
+                <h3 class="text-lg font-medium">Names & Terms</h3>
                 <Button @click="openAddDictEntryDialog">
                   <Icon name="material-symbols-light:add-circle-outline" size="1.5em" />
-                  Add Name
+                  Add Entry
                 </Button>
               </div>
 
               <div v-if="dictionaryEntries.length === 0" class="p-4 border rounded text-center text-gray-500 dark:text-gray-400">
-                No character names. Click "Add Name" to add one, or fetch metadata to populate automatically.
+                No names or terms. Click "Add Entry" to add one, or fetch metadata to fill in character names.
               </div>
 
               <div v-else class="mb-4">
@@ -1362,11 +1362,11 @@
                 </Button>
               </div>
 
-              <Dialog v-model:visible="showAddDictEntryDialog" header="Add Character Name" :modal="true" class="w-full md:w-1/2">
+              <Dialog v-model:visible="showAddDictEntryDialog" header="Add Name or Term" :modal="true" class="w-full md:w-1/2">
                 <div class="p-fluid">
                   <div class="mb-4">
-                    <label class="block text-sm font-medium mb-1">Name</label>
-                    <InputText v-model="newDictEntry" placeholder="Enter character name" class="w-full" />
+                    <label class="block text-sm font-medium mb-1">Name or term</label>
+                    <InputText v-model="newDictEntry" placeholder="e.g. 前原 圭一" class="w-full" />
                   </div>
                 </div>
                 <template #footer>

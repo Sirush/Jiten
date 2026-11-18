@@ -783,7 +783,10 @@
       <div
         ref="bottomBarRef"
         class="border-t border-surface-200 dark:border-surface-800 bg-surface-0 dark:bg-surface-900 fixed bottom-0 left-0 right-0 z-40 isolate"
-        :class="compactBar ? 'px-3 pt-1.5 pb-2' : 'px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]'"
+        :class="[
+          compactBar ? 'px-3 pt-1.5 pb-2' : 'px-4 pt-4 pb-[max(1rem,env(safe-area-inset-bottom))]',
+          { 'max-md:hidden': srsStore.isNoteEditorOpen },
+        ]"
       >
         <div class="w-full mx-auto" :class="cardWidthClass">
           <SrsWriteInInput

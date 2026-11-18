@@ -6,60 +6,6 @@ namespace Jiten.Core.Data;
 /// </summary>
 public static class PosMapper
 {
-    #region POS Category Sets
-
-    /// <summary>
-    /// POS values that can form the base of an inflection (verbs, adjectives).
-    /// Used in MorphologicalAnalyser for combining tokens.
-    /// </summary>
-    public static IReadOnlySet<PartOfSpeech> InflectableBasePOS { get; } = new HashSet<PartOfSpeech>
-    {
-        PartOfSpeech.Verb,
-        PartOfSpeech.IAdjective,
-        PartOfSpeech.NaAdjective
-    };
-
-    /// <summary>
-    /// POS values that can attach to an inflectable base (auxiliaries, suffixes, particles).
-    /// Used in MorphologicalAnalyser for combining tokens.
-    /// </summary>
-    public static IReadOnlySet<PartOfSpeech> InflectionPartPOS { get; } = new HashSet<PartOfSpeech>
-    {
-        PartOfSpeech.Auxiliary,
-        PartOfSpeech.Suffix,
-        PartOfSpeech.Particle
-    };
-
-    /// <summary>
-    /// POS values valid for compound expressions (verbs, adjectives, expressions).
-    /// Used in Parser for compound word validation.
-    /// </summary>
-    public static IReadOnlySet<PartOfSpeech> ValidCompoundPOS { get; } = new HashSet<PartOfSpeech>
-    {
-        PartOfSpeech.Expression,
-        PartOfSpeech.Verb,
-        PartOfSpeech.IAdjective,
-        PartOfSpeech.NaAdjective,
-        PartOfSpeech.Auxiliary,
-        PartOfSpeech.Conjunction
-    };
-
-    /// <summary>
-    /// POS values that can participate in noun compounding.
-    /// </summary>
-    public static IReadOnlySet<PartOfSpeech> NounCompoundPOS { get; } = new HashSet<PartOfSpeech>
-    {
-        PartOfSpeech.Noun,
-        PartOfSpeech.Name,
-        PartOfSpeech.CommonNoun,
-        PartOfSpeech.NaAdjective,
-        PartOfSpeech.Numeral,
-        PartOfSpeech.Prefix,
-        PartOfSpeech.Suffix
-    };
-
-    #endregion
-
     #region Deconjugator Tag Validation
 
     /// <summary>
@@ -439,7 +385,7 @@ public static class PosMapper
         var posTagsList = jmDictPosTags as IList<string> ?? jmDictPosTags.ToList();
 
         // Direct match
-        if (posTagsList.Contains(deconjTag, StringComparer.OrdinalIgnoreCase))
+        if (ContainsIgnoreCase(posTagsList, deconjTag))
             return true;
 
         // Check compatibility mappings
@@ -447,11 +393,19 @@ public static class PosMapper
         {
             foreach (var compatibleTag in compatibleTags)
             {
-                if (posTagsList.Contains(compatibleTag, StringComparer.OrdinalIgnoreCase))
+                if (ContainsIgnoreCase(posTagsList, compatibleTag))
                     return true;
             }
         }
 
+        return false;
+    }
+
+    private static bool ContainsIgnoreCase(IList<string> list, string value)
+    {
+        for (int i = 0; i < list.Count; i++)
+            if (string.Equals(list[i], value, StringComparison.OrdinalIgnoreCase))
+                return true;
         return false;
     }
 
@@ -466,12 +420,12 @@ public static class PosMapper
         return deconjTags.Any(tag => IsDeconjTagCompatibleWithJmDict(tag, jmDictList));
     }
 
-    /// <summary>
-    /// Filters deconjugation tags to only those that require POS validation.
-    /// </summary>
-    public static IEnumerable<string> GetValidatableDeconjTags(IEnumerable<string> tags)
+    public static string? GetLastValidatableDeconjTag(string[] tags)
     {
-        return tags.Where(t => DeconjTagsRequiringValidation.Contains(t));
+        for (int i = tags.Length - 1; i >= 0; i--)
+            if (DeconjTagsRequiringValidation.Contains(tags[i]))
+                return tags[i];
+        return null;
     }
 
     #endregion
@@ -481,22 +435,26 @@ public static class PosMapper
     /// <summary>
     /// Checks if a POS can be the base of an inflection (verb, i-adjective, na-adjective).
     /// </summary>
-    public static bool IsInflectableBase(PartOfSpeech pos) => InflectableBasePOS.Contains(pos);
+    public static bool IsInflectableBase(PartOfSpeech pos) => pos is PartOfSpeech.Verb or PartOfSpeech.IAdjective or PartOfSpeech.NaAdjective;
 
     /// <summary>
     /// Checks if a POS can attach to an inflectable base (auxiliary, suffix, particle).
     /// </summary>
-    public static bool IsInflectionPart(PartOfSpeech pos) => InflectionPartPOS.Contains(pos);
+    public static bool IsInflectionPart(PartOfSpeech pos) => pos is PartOfSpeech.Auxiliary or PartOfSpeech.Suffix or PartOfSpeech.Particle;
 
     /// <summary>
     /// Checks if a POS is valid for compound expressions.
     /// </summary>
-    public static bool IsValidCompoundPOS(PartOfSpeech pos) => ValidCompoundPOS.Contains(pos);
+    public static bool IsValidCompoundPOS(PartOfSpeech pos) =>
+        pos is PartOfSpeech.Expression or PartOfSpeech.Verb or PartOfSpeech.IAdjective
+            or PartOfSpeech.NaAdjective or PartOfSpeech.Auxiliary or PartOfSpeech.Conjunction;
 
     /// <summary>
     /// Checks if a POS can participate in noun compounding.
     /// </summary>
-    public static bool IsNounForCompounding(PartOfSpeech pos) => NounCompoundPOS.Contains(pos);
+    public static bool IsNounForCompounding(PartOfSpeech pos) =>
+        pos is PartOfSpeech.Noun or PartOfSpeech.Name or PartOfSpeech.CommonNoun or PartOfSpeech.NaAdjective
+            or PartOfSpeech.Numeral or PartOfSpeech.Prefix or PartOfSpeech.Suffix;
 
     #endregion
 

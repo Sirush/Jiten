@@ -2157,6 +2157,130 @@ public class FormSelectionTests
         // Hokkaido/Tohoku dialect あずましい (吾妻しい) and the arbour あずまや (東屋), not 東 + 敷く / や
         yield return ["あずましくねえべさ", "あずましくねえ", 2107400, (byte)1];
         yield return ["あずまや近くの一画。", "あずまや", 1447570, (byte)4];
+        yield return ["おや、まあ、あさってなの、まだまだ先のことかと思ってたけど", "あさって", 1584640, (byte)1];
+        yield return ["「信用して」と彼は言った。", "と", 1008490, (byte)0];
+        yield return ["僕たちは放課後よくチェスをやった。", "やった", 1012980, (byte)2];
+        yield return ["やった！2回続けて勝った。", "やった", 2016840, (byte)0];
+        yield return ["彼女はその仕事を完全にやった。", "やった", 1012980, (byte)2];
+        yield return ["こっちに来い！", "来い", 1547720, (byte)0];
+        yield return ["来い！", "来い", 2742070, (byte)0];
+        yield return ["あの赤い布は茶道具です。", "あの", 1000420, (byte)1];
+        yield return ["あの、私、残念ですが失礼します。", "あの", 1000430, (byte)0];
+        yield return ["何時ですか。", "何時", 1188770, (byte)0];
+        yield return ["明日は何時に起きますか。", "何時", 1188770, (byte)0];
+        yield return ["何時になったら帰れるの。", "何時", 1188760, (byte)0];
+        yield return ["彼は金を払った。", "金", 1242590, (byte)0];
+        yield return ["陸路ではそこへ行けない。", "行けない", 1578850, (byte)0];
+        yield return ["来年君は何歳になりますか。", "君", 1247250, (byte)0];
+        yield return ["田中君は上手にピアノを弾く。", "君", 1247260, (byte)0];
+        yield return ["列車が私たちの側を通り過ぎた。", "側", 1403830, (byte)0];
+        yield return ["反対側に渡った。", "反対側", 1480720, (byte)0];
+        yield return ["彼女はピアノをひいた。", "ひいた", 1419370, (byte)1];
+        yield return ["冗談はやめよう。", "やめよう", 1310680, (byte)3];
+        yield return ["電車が駅についた。", "ついた", 1422970, (byte)1];
+        yield return ["彼は要職についた。", "ついた", 1331530, (byte)2];
+        yield return ["指についた血を拭いた。", "ついた", 1495740, (byte)2];
+        yield return ["靴をはいて出かけた。", "はいて", 1607260, (byte)5];
+        yield return ["彼は疑問を抱いた。", "抱いた", 1584090, (byte)0];
+        yield return ["僕は彼女を幸せにすると言った。", "言った", 1587040, (byte)0];
+        yield return ["この法律案が通らなかった場合において、おまえはどういう責任をとるのだ。", "において", 1009550, (byte)2];
+        // A polite chain passes through the 連用形 but is not one, so the noun-adjacent infinitive penalty must not hand います to 忌む's short causative
+        yield return ["「顧問、いますよね？」", "います", 1577980, (byte)1];
+        // Colloquial いんだ is いいんだ, not the past of 忌む
+        yield return ["「まあ、いんだけどさ。」", "い", 2820690, (byte)0];
+        // と目する "regard as" stays the verb
+        yield return ["彼を天才と目している。", "目している", 2017960, (byte)0];
+        // ばっか after a predicate is colloquial ばかり, not 幕下
+        yield return ["買ったばっかのスカートが台無しだよ！", "ばっか", 2857403, (byte)0];
+        yield return ["ライブが終わったばっかで、気い抜けてるんかなあ。", "ばっか", 2857403, (byte)0];
+        // かってに is 勝手に, never かつて
+        yield return ["かってに入るな。", "かって", 1346190, (byte)1];
+        // Colloquial って for っと after a mimetic (キューってなる = キューっとなる)
+        yield return ["律くんを独占したくて悶々としたり、会えないと恋しくて胸がキューってなったり」", "キューって", 1003480, (byte)2];
+        // Emphatic っ/ー respellings resolve to the plain entry
+        yield return ["ぬっくぬくのコート!", "ぬっくぬく", 1599970, (byte)2];
+        yield return ["「あたしの名前、ほんっとーうに、忘れちゃった？」", "ほんっとーうに", 1611580, (byte)2];
+        yield return ["「昔っからうっとーしいヤツだったよなお前。", "うっとーしい", 1568430, (byte)1];
+        // Shredded or respelled ざまあみろ
+        yield return ["修行者B: 温家の屑め、ざまあみろってんだ!", "ざまあみろ", 2420000, (byte)2];
+        yield return ["正直『ざまーみろ』って思ってる。", "ざまーみろ", 2420000, (byte)6];
+        // Interjection やだ + ね, not 矢種
+        yield return ["やだね年をとると悪知恵が働くようになって", "やだ", 2710010, (byte)0];
+        // を + あされば is 漁る
+        yield return ["目を皿のようにして女性誌やネットの情報をあされば、『気持ちよければ自然に声が出る』という意見がある一方で", "あされば", 1232970, (byte)1];
+        // Noun + いなさそう is いる, not 去なす
+        yield return ["彼氏いなさそうでうれしくなっちゃうよね。", "いなさそう", 1577980, (byte)1];
+        // か|らっす is から + っす
+        yield return ["「それはやっぱり、このバンドが素晴らしいからっす」", "っす", 2269410, (byte)0];
+        // ハズい is はずい, not 筈
+        yield return ["「…って、こういう言い方するとハズいけど」", "ハズい", 2092890, (byte)3];
+        // Katakana honorifics after names and kinship words
+        yield return ["「ほら、悠人、叶子おばあタンにご挨拶しなさい」", "タン", 2201000, (byte)0];
+        yield return ["「おバアちゃん、ちいチャン自動車に乗りたいイ」", "チャン", 1007660, (byte)0];
+        // モロ before a content word is the adverb もろ
+        yield return ["「でも、妥協した瞬間にもうモロ好みの人が現れたってなると、悔しくない？」", "モロ", 2701220, (byte)1];
+        // であります is its own polite expression
+        yield return ["明日もまた、ことみにとって幸せな日でありますように", "であります", 2255600, (byte)0];
+        yield return ["まったくやってられないよ", "やってられない", 2831142, (byte)0];
+        // こった after an adjective is ことだ
+        yield return ["そいつは殊勝なこったな…", "こった", 2106260, (byte)0];
+        yield return ["ご苦労なこった。", "こった", 2106260, (byte)0];
+        // A te-iru negative after a noun subject is 付く, not the "unlucky" expression
+        yield return ["おまえ、上着に足跡ついてない", "ついてない", 1495740, (byte)2];
+        // 次第に not after a noun or verb stem is the adverb, not 次第 + に
+        yield return ["次第に暗くなってきた。", "次第に", 1316690, (byte)0];
+        yield return ["空は次第に暗くなった。", "次第に", 1316690, (byte)0];
+        yield return ["結果は準備次第にかかっている。", "次第", 1316680, (byte)0];
+        // 諦めて is 諦める, not 馬手 (めて)
+        yield return ["「間に合いそうになかったから、最初の授業諦めてゆっくり来た」", "諦めて", 1436730, (byte)0];
+        // Katakana スカスカ is the mimetic, not a スカ fragment
+        yield return ["妙にスカスカした気持ちになる。", "スカスカ", 2254740, (byte)0];
+        // おくれ after a te-form or を is the request お呉れ, not 遅れ
+        yield return ["待っておくれよ！", "おくれ", 2868242, (byte)1];
+        yield return ["メニューは、言わないでおくれよ。", "おくれ", 2868242, (byte)1];
+        yield return ["お兄ちゃんって言ってみておくれ。", "おくれ", 2868242, (byte)1];
+        yield return ["「中に入っておくれ。」", "おくれ", 2868242, (byte)1];
+        yield return ["読んでおくれ。", "おくれ", 2868242, (byte)1];
+        yield return ["何も知らずに　おぬしを送りだしてしまった　　おろかな　わしを許しておくれ。", "おくれ", 2868242, (byte)1];
+        yield return ["やめておくれ。", "おくれ", 2868242, (byte)1];
+        yield return ["「小刀をおくれ」", "おくれ", 2868242, (byte)1];
+        yield return ["水をおくれよ。", "おくれ", 2868242, (byte)1];
+        yield return ["あぁ、気にしないでおくれ。", "おくれ", 2868242, (byte)1];
+        yield return ["待っておくれってば。", "おくれ", 2868242, (byte)1];
+        yield return ["見ておくれやす。", "おくれやす", 2868242, (byte)1];
+        yield return ["さあさあ、急いでおくれ。", "おくれ", 2868242, (byte)1];
+        yield return ["「頑張っておくれ、キャピュレット嬢。」", "おくれ", 2868242, (byte)1];
+        yield return ["いわせておくれ。", "おくれ", 2868242, (byte)1];
+        // Kana おっ- of 居る is humble おる, never 置く
+        yield return ["そんなにもかがやいておった。", "おった", 1577985, (byte)1];
+        yield return ["エリザのそうしきにも出ずに閉じこもってしまいおった。", "おった", 1577985, (byte)1];
+        // te-form + くるって is 来る + quotative って, not 狂う
+        yield return ["自分で弁当作ってくるって感じか？", "くる", 1547720, (byte)2];
+        // まい after a v5r expression (ではある)
+        yield return ["泥棒にあったのではあるまいし。", "ではあるまい", 2098240, (byte)0];
+        // Fused verb + Kansai で keeps its verb
+        yield return ["そんなもん、ここにあるで。", "あるで", 1296400, (byte)2];
+        // あるく after a te-form is 歩く, not a subsidiary ある
+        yield return ["彼は町を出てあるく。", "あるく", 1514320, (byte)2];
+        // おくれ elsewhere stays 遅れ / 遅れる
+        yield return ["周回おくれ。", "おくれ", 1422020, (byte)2];
+        yield return ["それは流行おくれ。", "おくれ", 1422020, (byte)2];
+        yield return ["少しおくれを取った。", "おくれ", 1422020, (byte)2];
+        yield return ["寝坊しておくれた。", "おくれた", 1589040, (byte)2];
+        // Kana おくれる/おくる inflections never reach 置く through a dead-end stem
+        yield return ["仕事がおくれている。", "おくれている", 1589040, (byte)2];
+        yield return ["約束の時間におくれちゃうわ。", "おくれちゃう", 1589040, (byte)2];
+        yield return ["荷物をおくっている。", "おくっている", 1402730, (byte)1];
+        // 何やら|か|し is 何 + やらかす
+        yield return ["あわあわ、めぐみんったら一体、何やらかしたの？", "やらかした", 2009980, (byte)1];
+        yield return ["なにやらかしたの？", "やらかした", 2009980, (byte)1];
+        yield return ["お前、また何やらかしてんの？", "やらかしてん", 2009980, (byte)1];
+        // Kana でる with no nasal or g-row stem before it is 出る, not the contracted 〜でる
+        yield return ["扉を開けてでてきたのは彼だった", "でてきた", 1338240, (byte)1];
+        yield return ["よだれがでそうだ", "でそう", 1338240, (byte)1];
+        // 探し with no noun before it is the verb stem; after a noun it is the suffix
+        yield return ["急ぎの用事なら探しにいったらどうだい", "探し", 1593670, (byte)0];
+        yield return ["鈴羽の父親捜しは進展したのだろうか", "捜し", 2873300, (byte)1];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()
@@ -2167,6 +2291,11 @@ public class FormSelectionTests
         // Fragment-only kana forms: laughs (禹歩 うほ), the playful おっはよー (尾 お)
         yield return ["「うほー、肉うめー！」", "うほー"];
         yield return ["「おっはよー、雷火、國崎、マリアっち」", "お"];
+        // A hiragana compound tail before って is no mimetic (言いがかり, ですか), so カリッと/すかっと must not appear
+        yield return ["つまり言いがかりってことだ", "かりって"];
+        yield return ["千円 増えてるじゃないですかって突っ込むとこ", "すかって"];
+        // Lookups fold っ, so からっ|すか must not rejoin as カラス科
+        yield return ["窓からっすかっ", "からっすか"];
 
         // Kana surface ざと should not match kanji 里 — ざと is not a valid standalone reading
         yield return ["次第に周りからざわざと声が聞こえてくる。", "ざと"];
@@ -2250,5 +2379,32 @@ public class FormSelectionTests
                                     .Select(f => f.Text)
                                     .FirstOrDefaultAsync();
         formText.Should().Be(name, $"ReadingIndex {match!.ReadingIndex} of word {match.WordId} should be the '{name}' form");
+    }
+
+    [Fact]
+    public async Task DiscoveredNameIsCutTheSameWayInALaterPartialParse()
+    {
+        var contextFactory = GetContextFactory();
+        static bool IsPiece(DeckWord w) => w.OriginalText is "霞" or "空";
+
+        var discovered = new HashSet<string>();
+        var full = await Jiten.Parser.Parser.ParseTextToDeck(contextFactory, "霞空さんが来た。" + string.Concat(Enumerable.Repeat("霞空は笑った。", 5)),
+                                                             predictDifficulty: false, discoveredNames: discovered);
+        discovered.Should().Contain("霞空");
+        full.DeckWords.Any(IsPiece).Should().BeFalse("the name recurs enough to be discovered");
+
+        var withoutHonorific = new HashSet<string>();
+        await Jiten.Parser.Parser.ParseTextToDeck(contextFactory, string.Concat(Enumerable.Repeat("霞空は笑った。", 6)),
+                                                  predictDifficulty: false, discoveredNames: withoutHonorific);
+        withoutHonorific.Should().BeEmpty("a span never seen with an honorific may be a coined term");
+
+        const string newSubdeck = "霞空は笑った。";
+        var alone = await Jiten.Parser.Parser.ParseTextToDeck(contextFactory, newSubdeck, predictDifficulty: false);
+        alone.DeckWords.Any(IsPiece).Should().BeTrue("one occurrence is below the discovery threshold");
+
+        var entries = new List<DeckDictionaryEntry> { new() { Surface = "霞空", EntryType = DeckDictionaryEntryType.DiscoveredName } };
+        var withParentEntries = await Jiten.Parser.Parser.ParseTextToDeck(contextFactory, newSubdeck, predictDifficulty: false,
+                                                                          dictionaryEntries: entries);
+        withParentEntries.DeckWords.Any(IsPiece).Should().BeFalse("the parent deck already knows the name");
     }
 }

@@ -333,7 +333,7 @@
               </tr>
             </thead>
             <tbody>
-              <tr v-for="week in metrics.weeks" :key="week.weekStart" class="border-t border-surface-200 dark:border-surface-700">
+              <tr v-for="week in metrics.weeks" :key="week.weekStart" class="border-t border-surface-200 dark:border-surface-700 row-hover">
                 <td class="py-1">{{ formatDayMonth(week.weekStart) }}</td>
                 <td class="py-1 text-right">{{ formatNumber(week.submissions) }}</td>
                 <td class="py-1 text-right">{{ formatNumber(week.decisions) }}</td>
@@ -384,7 +384,7 @@
             </div>
             <p class="m-0 text-sm text-muted-color max-w-3xl">
               New accounts always wait for review; editors always go live. Low risk: dates, links, romaji and English titles, aliases. Medium risk: genres,
-              tags, related decks, character names. High risk: original title, media type, description.
+              tags, related decks, names and terms. High risk: original title, media type, description.
             </p>
           </div>
 

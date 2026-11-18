@@ -353,7 +353,7 @@
         <div
           v-for="registration in openRegistrations"
           :key="registration.id"
-          class="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2 border-b border-surface-100 dark:border-surface-800 last:border-b-0 text-sm"
+          class="flex flex-wrap items-center gap-x-4 gap-y-2 px-3 py-2 border-b border-surface-100 dark:border-surface-800 last:border-b-0 text-sm row-hover"
         >
           <div class="min-w-0 flex-1">
             <div class="font-medium truncate">{{ registration.originalTitle || registration.url }}</div>
@@ -372,7 +372,7 @@
           <div
             v-for="registration in completedRegistrations"
             :key="registration.id"
-            class="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 border-b border-surface-100 dark:border-surface-800 last:border-b-0 text-sm"
+            class="flex flex-wrap items-center gap-x-4 gap-y-1 px-3 py-2 border-b border-surface-100 dark:border-surface-800 last:border-b-0 text-sm row-hover"
           >
             <NuxtLink :to="`/dashboard/media/${registration.deckId}`" class="font-medium hover:underline truncate">
               {{ registration.originalTitle || registration.url }}

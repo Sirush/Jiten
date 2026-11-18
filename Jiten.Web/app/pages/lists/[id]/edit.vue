@@ -493,7 +493,7 @@
               <li
                 v-for="result in searchResults"
                 :key="result.deckId"
-                class="flex items-center gap-3 border-b border-surface-100 px-3 py-2 last:border-b-0 dark:border-surface-800"
+                class="flex items-center gap-3 border-b border-surface-100 px-3 py-2 last:border-b-0 dark:border-surface-800 row-hover"
               >
                 <img :src="coverUrl(result.coverName, 'xs')" alt="" class="h-[45px] w-8 shrink-0 rounded-sm object-cover" />
                 <span class="flex min-w-0 flex-1 flex-col">
