@@ -5985,8 +5985,12 @@ namespace Jiten.Parser
                     bool sentenceFinalVerb = i == sentenceWords.Count - 1
                         && currentResult.PartsOfSpeech.Contains(PartOfSpeech.Verb);
 
+                    // A bound suffix with no noun before it (用事なら|探し) wins pass 1 unopposed; only pass 2 sees the missing host.
+                    bool orphanDeverbalSuffix = TransitionRuleEngine.IsOrphanDeverbalSuffix(
+                        currentResult.PartsOfSpeech, currentInfo.Text, prevResult?.PartsOfSpeech, prevInfo?.Text);
+
                     if (!isArchaicPass1 && !nextIsCopula && !nextIsForwardAnchor && !prevNominalTarget && !prevNumericCounter && !hasHint && !infinitiveAfterNominal && !sentenceFinalVerb
-                        && !prevCollocationNoun
+                        && !prevCollocationNoun && !orphanDeverbalSuffix
                         && ScoringPolicy.IsHighConfidence(currentMargin))
                     {
                         Interlocked.Increment(ref ParserCounters.AdjHighConfidenceSkips);
@@ -5994,6 +5998,7 @@ namespace Jiten.Parser
                     }
 
                     bool forceRederive = hasHint || nextIsForwardAnchor || prevNominalTarget || prevNumericCounter || prevCollocationNoun
+                                         || orphanDeverbalSuffix
                                          || ScoringPolicy.IsLowConfidence(currentMargin);
 
                     // infinitiveAfterNominal bypasses the prefilter: its context may turn nominal only in pass 2.
@@ -6010,7 +6015,12 @@ namespace Jiten.Parser
                     var dedupKey = GetDedupKey(currentInfo);
 
                     RederivationHelper.RederiveState? state;
-                    if (!rederiveCache.TryGetValue(dedupKey, out state))
+                    if (orphanDeverbalSuffix)
+                    {
+                        state = RederivationHelper.CollectRederivationIds(currentInfo, _lookups, Deconjugator.Instance, asVerbStem: true);
+                        if (state != null) allWordIds.UnionWith(state.CandidateIds);
+                    }
+                    else if (!rederiveCache.TryGetValue(dedupKey, out state))
                     {
                         long t0 = timing ? Stopwatch.GetTimestamp() : 0;
                         state = RederivationHelper.CollectRederivationIds(currentInfo, _lookups, Deconjugator.Instance);

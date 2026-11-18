@@ -2275,6 +2275,12 @@ public class FormSelectionTests
         yield return ["あわあわ、めぐみんったら一体、何やらかしたの？", "やらかした", 2009980, (byte)1];
         yield return ["なにやらかしたの？", "やらかした", 2009980, (byte)1];
         yield return ["お前、また何やらかしてんの？", "やらかしてん", 2009980, (byte)1];
+        // Kana でる with no nasal or g-row stem before it is 出る, not the contracted 〜でる
+        yield return ["扉を開けてでてきたのは彼だった", "でてきた", 1338240, (byte)1];
+        yield return ["よだれがでそうだ", "でそう", 1338240, (byte)1];
+        // 探し with no noun before it is the verb stem; after a noun it is the suffix
+        yield return ["急ぎの用事なら探しにいったらどうだい", "探し", 1593670, (byte)0];
+        yield return ["鈴羽の父親捜しは進展したのだろうか", "捜し", 2873300, (byte)1];
     }
 
     public static IEnumerable<object[]> FormSelectionShouldNotMatchCases()

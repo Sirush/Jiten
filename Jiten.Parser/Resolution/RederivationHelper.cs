@@ -16,12 +16,15 @@ internal static class RederivationHelper
         public required List<int> CandidateIds;
         public List<(DeconjugationForm form, List<int> ids)>? DeconjMatches;
         public bool IsVerbPath;
+        public PartOfSpeech MatchPos;
     }
 
+    /// <param name="asVerbStem">Deconjugates a noun-tagged token so its verb reading can compete (探し as 探す).</param>
     public static RederiveState? CollectRederivationIds(
         WordInfo wordInfo,
         Dictionary<string, List<int>> lookups,
-        Deconjugator deconjugator)
+        Deconjugator deconjugator,
+        bool asVerbStem = false)
     {
         var text = wordInfo.Text;
         var textInHiragana = KanaConverter.ToHiragana(text, convertLongVowelMark: false);
@@ -40,7 +43,7 @@ internal static class RederivationHelper
 
         var candidateIds = LookupCandidateCollector.CollectIds(lookups, text);
 
-        if (wordInfo.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective or PartOfSpeech.Auxiliary
+        if (asVerbStem || wordInfo.PartOfSpeech is PartOfSpeech.Verb or PartOfSpeech.IAdjective or PartOfSpeech.Auxiliary
             or PartOfSpeech.NaAdjective or PartOfSpeech.Expression)
         {
             var normalizedText = KanaNormalizer.Normalize(KanaConverter.ToHiragana(text));
@@ -70,7 +73,8 @@ internal static class RederivationHelper
             {
                 WordInfo = wordInfo, Text = text, TextInHiragana = textInHiragana,
                 DirectIds = directIds, HiraganaIds = hiraganaIds,
-                CandidateIds = candidateIds, DeconjMatches = deconjMatches, IsVerbPath = true
+                CandidateIds = candidateIds, DeconjMatches = deconjMatches, IsVerbPath = true,
+                MatchPos = asVerbStem ? PartOfSpeech.Verb : wordInfo.PartOfSpeech
             };
         }
 
@@ -96,7 +100,7 @@ internal static class RederivationHelper
         if (state.IsVerbPath)
         {
             var matchedWordIds = new HashSet<int>();
-            foreach (var m in DeconjugationMatcher.FilterMatches(state.DeconjMatches!, wordCache, state.WordInfo.PartOfSpeech))
+            foreach (var m in DeconjugationMatcher.FilterMatches(state.DeconjMatches!, wordCache, state.MatchPos))
             {
                 var forms = FormCandidateFactory.EnumerateCandidateForms(m.Word, m.Form.Text,
                     allowLooseLvmMatch: true, deconjForm: m.Form, surface: state.Text);

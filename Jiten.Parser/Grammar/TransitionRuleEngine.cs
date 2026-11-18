@@ -249,6 +249,36 @@ internal static class TransitionRuleEngine
     private static bool IsSingleKanji(string? text) =>
         text is { Length: 1 } && JapaneseTextHelper.IsKanji(text[0]);
 
+    private const uint NounSuffixBit = 1u << (int)PartOfSpeech.NounSuffix;
+
+    private const uint NounSuffixOnly = NounSuffixBit | (1u << (int)PartOfSpeech.Unknown);
+
+    private const uint NominalHost = PosMask.NounLike | PosMask.SuffixGroup | PosMask.NumericLike;
+
+    private const uint ClauseMaterial =
+        PosMask.Particle | PosMask.PredicateHost | PosMask.AdverbGroup | PosMask.Conjunction;
+
+    private const string MasuStemEndings = "いきぎしじちにびみりえけげせぜてでねべめれ";
+
+    /// <summary>A noun-suffix-only entry spelled as a kanji verb's 連用形 (探し, 捜し); plain suf entries attach to verbs (見|給え).</summary>
+    internal static bool IsDeverbalBoundSuffix(uint candidateMask, string text) =>
+        PosMask.Has(candidateMask, NounSuffixBit)
+        && (candidateMask & ~NounSuffixOnly) == 0
+        && text.Length >= 2
+        && JapaneseTextHelper.IsKanji(text[0])
+        && MasuStemEndings.Contains(text[^1]);
+
+    /// <summary>An unresolved previous token may be an unknown noun, so only a resolved non-nominal or a sentence start counts.</summary>
+    internal static bool IsNotNominalHost(uint prevMask, bool hasPrev, string? prevText) =>
+        hasPrev
+            ? PosMask.Has(prevMask, ClauseMaterial) && !PosMask.Has(prevMask, NominalHost)
+            : prevText == null;
+
+    internal static bool IsOrphanDeverbalSuffix(
+        List<PartOfSpeech> currentPOS, string currentText, List<PartOfSpeech>? prevPOS, string? prevText) =>
+        IsDeverbalBoundSuffix(PosMask.FromList(currentPOS), currentText)
+        && IsNotNominalHost(prevPOS != null ? PosMask.FromList(prevPOS) : 0, prevPOS != null, prevText);
+
     private static TokenWindow BuildWindow(List<(WordInfo word, int pos, int len)> words, int i)
     {
         var prev = i > 0 ? words[i - 1].word : null;
@@ -555,6 +585,18 @@ internal static class TransitionRuleEngine
 
                 ScoringCondition.CandidateIsInfinitiveOrImperative =>
                     ctx.CandidateIsInfinitiveVal,
+
+                ScoringCondition.CandidateIsVoicedTeContraction =>
+                    TransitionRuleSets.VoicedTeContractions.Contains(ctx.CandidateText),
+
+                ScoringCondition.PrevLacksVoicingHost =>
+                    ctx.PrevText is not { Length: > 0 } prevText || prevText[^1] is not ('ん' or 'い'),
+
+                ScoringCondition.CandidateIsDeverbalBoundSuffix =>
+                    IsDeverbalBoundSuffix(ctx.CandidateMask, ctx.CandidateText),
+
+                ScoringCondition.PrevIsNotNominalHost =>
+                    IsNotNominalHost(ctx.PrevMask, ctx.HasPrev, ctx.PrevText),
 
                 _ => false
             };

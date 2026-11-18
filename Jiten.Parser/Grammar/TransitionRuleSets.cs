@@ -28,6 +28,9 @@ internal static class TransitionRuleSets
 
     internal static readonly HashSet<string> ConditionalParticles = ["と", "なら"];
 
+    /// <summary>Voiced allomorphs of the te-form contractions; they only attach to a nasal or g-row stem (読ん|でる, 泳い|じゃう).</summary>
+    internal static readonly HashSet<string> VoicedTeContractions = ["でる", "でく", "どく", "じゃう", "じまう"];
+
     internal static readonly HashSet<string> TeFormAuxiliaries =
     [
         "いる", "ある", "しまう", "おく", "みる", "くる", "いく",
@@ -393,6 +396,18 @@ internal static class TransitionRuleSets
             [ScoringCondition.CandidateIsVerb, ScoringCondition.CandidateHasVolitionalChain],
             [ScoringCondition.NextIsVolitionalToVerb],
             40),
+
+        // Must outweigh aux-copula-synergy plus the case-particle bonus (よだれが|でそう|だ is 出る).
+        new("voiced-te-contraction-without-host-penalty",
+            [ScoringCondition.CandidateIsAuxiliary, ScoringCondition.CandidateIsVoicedTeContraction],
+            [ScoringCondition.PrevLacksVoicingHost],
+            -150),
+
+        // Must outweigh the exact-surface lead of the suffix entry over the verb stem (用事なら|探し|に is 探す).
+        new("deverbal-suffix-without-host-penalty",
+            [ScoringCondition.CandidateIsDeverbalBoundSuffix],
+            [ScoringCondition.PrevIsNotNominalHost],
+            -300),
     ];
 
     internal static readonly TransitionRule[] HardRules =

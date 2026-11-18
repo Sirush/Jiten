@@ -115,6 +115,10 @@ internal enum ScoringCondition
     NextIsVolitionalToVerb,
     CandidateIsInfinitiveOrImperative,
     NextIsNiParticle,
+    CandidateIsVoicedTeContraction,
+    PrevLacksVoicingHost,
+    CandidateIsDeverbalBoundSuffix,
+    PrevIsNotNominalHost,
 }
 
 internal sealed record ScoringRule(
