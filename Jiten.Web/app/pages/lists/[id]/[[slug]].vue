@@ -18,7 +18,7 @@
   import { applyMediaListChange, onMediaListChange, useMediaListApi } from '~/composables/useMediaListSync';
   import { createCookieState } from '~/stores/jitenStore';
   import { apiErrorMessage } from '~/utils/apiErrorMessage';
-  import { DECK_STATUS_DISPLAY_ORDER as STATUS_ORDER, getDeckStatusColourClass, getDeckStatusText } from '~/utils/deckStatusMapper';
+  import { DECK_STATUS_DISPLAY_ORDER as STATUS_ORDER, getDeckStatusColourClass, getDeckStatusIcon, getDeckStatusText } from '~/utils/deckStatusMapper';
   import { getGenreText } from '~/utils/genreMapper';
   import { isMissingResource } from '~/utils/missingResource';
   import { formatDateLong } from '~/utils/dateFormat';
@@ -516,7 +516,7 @@
               class="flex items-center gap-1.5 text-sm font-semibold"
               :class="getDeckStatusColourClass(count.status)"
             >
-              <i class="pi pi-flag-fill text-xs" aria-hidden="true" />{{ getDeckStatusText(count.status) }} {{ count.count }}
+              <i class="pi text-xs" :class="getDeckStatusIcon(count.status)" aria-hidden="true" />{{ getDeckStatusText(count.status) }} {{ count.count }}
             </span>
           </div>
           <span v-else class="text-sm text-muted-color">None of these titles are on your list yet.</span>

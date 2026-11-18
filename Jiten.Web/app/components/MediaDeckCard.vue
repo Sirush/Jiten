@@ -9,7 +9,7 @@
   import { getChildrenCountText, getMediaTypeText } from '~/utils/mediaTypeMapper';
   import { ordinal } from '~/utils/ordinal';
   import { getLinkLabel } from '~/utils/linkTypeMapper';
-  import { getDeckStatusColourClass, getDeckStatusText, isInProgressStatus } from '~/utils/deckStatusMapper';
+  import { getDeckStatusColourClass, getDeckStatusIcon, getDeckStatusText, isInProgressStatus } from '~/utils/deckStatusMapper';
   import { useJitenStore } from '~/stores/jitenStore';
   import { formatDateAsYyyyMmDd } from '~/utils/formatDateAsYyyyMmDd';
   import { useAuthStore } from '~/stores/authStore';
@@ -294,8 +294,14 @@
     {
       label: 'Suggest an edit',
       icon: 'pi pi-file-edit',
-      visible: !props.isCompact && props.titleTag !== 'h1',
+      visible: !props.isCompact,
       route: `/decks/media/${props.deck.deckId}/edit`,
+    },
+    {
+      label: 'View Edit History',
+      icon: 'pi pi-history',
+      visible: !props.isCompact,
+      route: `/decks/media/${props.deck.deckId}/history`,
     },
     {
       label: 'Report an issue',
@@ -311,7 +317,7 @@
     },
     {
       label: smartSourceState.value === 'pinned' ? 'Unpin from Smart Deck' : 'Pin in Smart Deck',
-      icon: 'pi pi-bookmark',
+      icon: 'pi pi-thumbtack',
       visible: smartMenuVisible.value,
       command: () => applySmartAction(smartSourceState.value === 'pinned' ? 'unpin' : 'pin'),
     },
@@ -390,6 +396,8 @@
     const status = getDeckStatusText(currentStatus.value);
     return fact ? `${status}, ${fact.charAt(0).toLowerCase()}${fact.slice(1)}` : status;
   });
+
+  const showSetStatusLabel = computed(() => !props.isCompact && currentStatus.value === DeckStatus.None);
 
   const statusButtonLabel = computed(() => {
     if (currentStatus.value === DeckStatus.None) return 'Set status';
@@ -545,7 +553,7 @@
                 v-if="authStore.isAuthenticated && !readOnlyList"
                 ref="statusPillTooltip"
                 v-slot="{ hide }"
-                :content="statusPopoverOpen ? '' : statusTooltip"
+                :content="statusPopoverOpen || showSetStatusLabel ? '' : statusTooltip"
               >
                 <button
                   type="button"
@@ -555,7 +563,8 @@
                   :aria-label="statusButtonLabel"
                   @click="toggleStatusPopover($event, hide)"
                 >
-                  <i :class="['pi', currentStatus === DeckStatus.None ? 'pi-flag utility-icon' : `pi-flag-fill ${statusColor}`]" />
+                  <i :class="['pi', getDeckStatusIcon(currentStatus), currentStatus === DeckStatus.None ? 'utility-icon' : statusColor]" />
+                  <span v-if="showSetStatusLabel" class="text-sm font-semibold leading-none whitespace-nowrap text-gray-700 dark:text-gray-200">Set Status</span>
                   <span v-if="!isCompact && currentStatus !== DeckStatus.None" :class="['text-sm font-bold leading-none', statusColor]">
                     {{ getDeckStatusText(currentStatus) }}
                   </span>
@@ -598,24 +607,6 @@
                   class="inline-block p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
                 >
                   <i class="pi pi-chart-bar utility-icon" />
-                </router-link>
-              </Tooltip>
-              <Tooltip v-if="!isCompact && titleTag === 'h1'" content="Suggest an edit">
-                <router-link
-                  :to="`/decks/media/${deck.deckId}/edit`"
-                  aria-label="Suggest an edit"
-                  class="inline-block p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
-                >
-                  <i class="pi pi-file-edit utility-icon" />
-                </router-link>
-              </Tooltip>
-              <Tooltip v-if="authStore.isAuthenticated && !isCompact && titleTag === 'h1'" content="Edit history">
-                <router-link
-                  :to="`/decks/media/${deck.deckId}/history`"
-                  aria-label="Edit history"
-                  class="inline-block p-1.5 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors cursor-pointer"
-                >
-                  <i class="pi pi-history utility-icon" />
                 </router-link>
               </Tooltip>
               <Tooltip v-if="authStore.isAuthenticated" content="More options">
@@ -1066,7 +1057,10 @@
                 :disabled="statusFlow.busy.value"
                 @click="statusFlow.choose(option)"
               >
-                <span>{{ getDeckStatusText(option) }}</span>
+                <span class="flex items-center gap-2">
+                  <i :class="['pi text-xs', getDeckStatusIcon(option), getDeckStatusColourClass(option)]" aria-hidden="true" />
+                  {{ getDeckStatusText(option) }}
+                </span>
                 <i v-if="option === currentStatus" class="pi pi-check text-xs" />
               </button>
             </div>

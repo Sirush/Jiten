@@ -11,7 +11,7 @@ updated: 2026-07-28
 
 Every title's difficulty starts as an algorithmic score from a model trained on Japanese text. Your votes help adjust it. The number shown on a media page is that score plus the community adjustment, so votes can change where the title sit to reflect a learner experience more accurately if the algorithm got it wrong.
 
-By making an account and marking some titles as **Completed**, **Set status** in the **More options** (...) menu on a media card, you can start rating too.
+By making an account and marking some titles as **Completed**, with the **Set Status** button at the top right of a media card, you can start rating too.
 
 ## Comparing two titles
 

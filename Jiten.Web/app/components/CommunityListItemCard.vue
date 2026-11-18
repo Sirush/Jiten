@@ -4,7 +4,7 @@
   import type { CommunityListItem } from '~/types/types';
   import { communityListItemAnchor } from '~/composables/useCommunityLists';
   import { coverUrl } from '~/utils/coverImage';
-  import { getDeckStatusColourClass, getDeckStatusText } from '~/utils/deckStatusMapper';
+  import { getDeckStatusColourClass, getDeckStatusIcon, getDeckStatusText } from '~/utils/deckStatusMapper';
   import { getMediaTypeText } from '~/utils/mediaTypeMapper';
 
   const props = withDefaults(defineProps<{ item: CommunityListItem; compact?: boolean; showViewerData?: boolean; planning?: boolean }>(), {
@@ -65,7 +65,7 @@
         <div v-if="showViewerData" class="hidden w-36 shrink-0 flex-col gap-2 pt-0.5 sm:flex">
           <DeckCoverageBars :deck="deck" dense />
           <span v-if="hasStatus" class="flex items-center gap-1.5 text-sm font-semibold" :class="getDeckStatusColourClass(deck.status)">
-            <i class="pi pi-flag-fill text-xs" aria-hidden="true" />{{ getDeckStatusText(deck.status) }}
+            <i class="pi text-xs" :class="getDeckStatusIcon(deck.status)" aria-hidden="true" />{{ getDeckStatusText(deck.status) }}
           </span>
           <Button
             v-else

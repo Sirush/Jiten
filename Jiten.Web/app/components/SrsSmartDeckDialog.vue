@@ -502,7 +502,7 @@
                     <span v-if="t.planning" class="px-1.5 py-0.5 rounded bg-surface-100 dark:bg-surface-700 text-gray-600 dark:text-gray-300">Planning</span>
                     <Tooltip :content="isPinned(t.deckId) ? 'Unpin' : 'Pin to the top'" placement="top">
                       <Button
-                        :icon="isPinned(t.deckId) ? 'pi pi-bookmark-fill' : 'pi pi-bookmark'"
+                        icon="pi pi-thumbtack"
                         :severity="isPinned(t.deckId) ? 'primary' : 'secondary'"
                         text
                         size="small"
