@@ -5,13 +5,15 @@ namespace Jiten.Core.Data.JMDict;
 /// <summary>
 /// Builds the per-word redundancy graph used by <c>WordFormSiblingCache</c>.
 /// A directed edge (source -> target) means "if the form at <c>source</c> is known, the form at
-/// <c>target</c> is redundant". Two sources of edges:
+/// <c>target</c> is redundant". Three sources of edges:
 ///   1. Kana-degradation: a kanji form dominates any form obtained by replacing a subset of its kanji
 ///      with their readings while keeping every other character (kept kanji + okurigana) identical.
 ///      A kept kanji may also spell out the tail of its reading (田圃 -> 田んぼ).
-///      e.g. 落ち着ける -> 落ちつける, おちつける  (never 落ち付ける / 落着ける / 落付ける).
+///      e.g. 落ち着ける -> 落ちつける, おちつける  (never 落ち付ける / 落付ける).
 ///   2. Script permutation: forms whose hiragana-normalised text is identical (e.g. おちつける ↔
 ///      オチツケル) are mutually redundant.
+///   3. Okurigana variation: kanji forms with the same kanji in the same order and the same reading
+///      (分かる ↔ 分る, 落ち着ける ↔ 落着ける) are mutually redundant.
 /// </summary>
 public static class RedundancyGraphHelper
 {
@@ -66,8 +68,39 @@ public static class RedundancyGraphHelper
             }
         }
 
+        var byKanjiAndReading = new Dictionary<(string Kanji, string Reading), List<byte>>();
+        foreach (var form in forms)
+        {
+            if (form.FormType != JmDictFormType.KanjiForm) continue;
+            if (!form.RubyText.Contains('[')) continue;
+
+            var reading = RubyTextHelper.KanaFromRubyText(form.RubyText);
+            if (reading == null) continue;
+
+            var kanji = KanjiSequence(form.Text);
+            if (kanji.Length == 0) continue;
+
+            var key = (kanji, ToHiragana(reading));
+            if (!byKanjiAndReading.TryGetValue(key, out var list))
+                byKanjiAndReading[key] = list = new List<byte>();
+            if (!list.Contains((byte)form.ReadingIndex))
+                list.Add((byte)form.ReadingIndex);
+        }
+
+        foreach (var group in byKanjiAndReading.Values)
+        {
+            if (group.Count < 2) continue;
+            foreach (var a in group)
+                foreach (var b in group)
+                    if (a != b)
+                        edges.Add((a, b));
+        }
+
         return edges.ToList();
     }
+
+    private static string KanjiSequence(string text)
+        => string.Concat(text.Where(c => c is not (>= '぀' and <= 'ヿ')));
 
     private record Segment(string Text, string? Reading, bool IsKanji);
 
