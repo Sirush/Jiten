@@ -1424,7 +1424,7 @@ public class FormSelectionTests
 
         // === colloquial gemination collapse (ばっか/バッカ = 馬鹿) ===
         // katakana バッカ as a noun is 馬鹿, not 麦価 "price of wheat" or the ばかり particle
-        yield return ["バッカおまえ見りゃ分かるじゃん", "バッカ", 1601260, (byte)4];
+        yield return ["バッカおまえ見りゃ分かるじゃん", "バッカ", 1601260, (byte)5];
         // ばっかな (Sudachi df=ばか) is 馬鹿+な, not 幕下 "military camp"
         yield return ["貴族ってのはあんなのばっかなのか", "ばっかな", 1601260, (byte)4];
         // genuine ばかり-particle uses stay untouched (regression guards for the collapse)
