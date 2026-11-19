@@ -119,7 +119,7 @@
       <!-- Edit form -->
       <div
         v-if="editing"
-        class="rounded-xl border border-primary-300 dark:border-primary-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-3 w-full text-left"
+        class="flex flex-col rounded-xl border border-primary-300 dark:border-primary-700 bg-surface-0 dark:bg-surface-900 shadow-sm p-3 w-full text-left"
         @click.stop
         @pointerdown.stop
       >
@@ -132,20 +132,7 @@
           autofocus
           placeholder="A note or definition that will always be shown for this word"
         />
-        <div class="flex justify-between items-center mb-2">
-          <div class="text-xs text-surface-400">
-            Formatting:
-            <code class="bg-surface-100 dark:bg-surface-800 px-1 rounded">**bold**</code>
-            <code class="bg-surface-100 dark:bg-surface-800 px-1 rounded ml-1">*italic*</code>
-            <code class="bg-surface-100 dark:bg-surface-800 px-1 rounded ml-1">- list</code>
-          </div>
-          <div class="text-xs text-surface-400">{{ draft.length }}/{{ MAX_LENGTH }}</div>
-        </div>
-        <div v-if="draft.trim()" class="mb-3">
-          <label class="text-xs text-surface-400 block mb-1">Preview</label>
-          <div class="border-l-4 border-primary-500 pl-3 py-2 bg-primary-50 dark:bg-primary-950/40 rounded-r text-sm break-words max-md:max-h-24 max-md:overflow-y-auto" v-html="draftPreview" />
-        </div>
-        <div class="flex gap-2 justify-end items-center">
+        <div class="flex gap-2 justify-end items-center mt-2 md:order-last">
           <template v-if="meaning != null">
             <template v-if="confirmingDelete">
               <span class="text-xs text-surface-500 dark:text-surface-400 mr-auto">Delete this note?</span>
@@ -158,6 +145,19 @@
             <Button text size="small" label="Cancel" @click="editing = false" />
             <Button size="small" icon="pi pi-check" label="Save" :loading="saving" :disabled="!canSave" @click="save" />
           </template>
+        </div>
+        <div class="flex justify-between items-center mt-2 md:mt-1">
+          <div class="text-xs text-surface-400">
+            Formatting:
+            <code class="bg-surface-100 dark:bg-surface-800 px-1 rounded">**bold**</code>
+            <code class="bg-surface-100 dark:bg-surface-800 px-1 rounded ml-1">*italic*</code>
+            <code class="bg-surface-100 dark:bg-surface-800 px-1 rounded ml-1">- list</code>
+          </div>
+          <div class="text-xs text-surface-400">{{ draft.length }}/{{ MAX_LENGTH }}</div>
+        </div>
+        <div v-if="draft.trim()" class="mt-2 md:mb-1">
+          <label class="text-xs text-surface-400 block mb-1">Preview</label>
+          <div class="border-l-4 border-primary-500 pl-3 py-2 bg-primary-50 dark:bg-primary-950/40 rounded-r text-sm break-words max-md:max-h-24 max-md:overflow-y-auto" v-html="draftPreview" />
         </div>
       </div>
 
