@@ -6,8 +6,9 @@ namespace Jiten.Core;
 
 public static partial class MetadataProviderHelper
 {
+    /// <summary><paramref name="inferSplit"/> guesses a family/given split for names without a space or ・; wrong for terms and places, so only for sources that list characters.</summary>
     public static List<DeckDictionaryEntry> BuildDictionaryEntriesFromNames(
-        List<(string? native, string? firstHint, string? lastHint)> names)
+        List<(string? native, string? firstHint, string? lastHint)> names, bool inferSplit = true)
     {
         var seen = new HashSet<string>();
         var entries = new List<DeckDictionaryEntry>();
@@ -49,7 +50,7 @@ public static partial class MetadataProviderHelper
                         Add(cleaned);
                 }
             }
-            else
+            else if (inferSplit)
             {
                 // No explicit separator — fall back to heuristic splitting. The split is inferred,
                 // not given, so keep the default 2-char minimum and don't emit a lone kanji.

@@ -92,6 +92,15 @@ public class CharacterNameCheckServiceTests : IDisposable
     }
 
     [Fact]
+    public async Task Unspaced_input_is_never_split()
+    {
+        var result = await Check("前原圭一");
+
+        result.Error.Should().BeNull();
+        result.Surfaces.Select(s => s.Surface).Should().Equal("前原圭一");
+    }
+
+    [Fact]
     public async Task Name_pos_entries_are_not_flagged_even_with_a_priority_tag()
     {
         var result = await Check("前原 圭一");
