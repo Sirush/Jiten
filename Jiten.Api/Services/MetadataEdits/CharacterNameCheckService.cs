@@ -139,7 +139,7 @@ public sealed class CharacterNameCheckService(JitenDbContext db, IDbContextFacto
 
     private sealed record Candidate(string Input, string? Error, List<string> Surfaces);
 
-    /// <summary>Surfaces come from the same derivation the VNDB and AniList imports use, so a contributed name matches what an import would store.</summary>
+    /// <summary>Only a space or ・ splits a contributed name; terms and places share this form, so a guessed family/given split would add a bogus entry.</summary>
     private static Candidate Derive(string input)
     {
         var name = (input ?? "").Trim();
@@ -153,7 +153,7 @@ public sealed class CharacterNameCheckService(JitenDbContext db, IDbContextFacto
         if (EndsWithHonorific(name))
             return new Candidate(input ?? "", HonorificError, []);
 
-        var surfaces = MetadataProviderHelper.BuildDictionaryEntriesFromNames([(name, null, null)])
+        var surfaces = MetadataProviderHelper.BuildDictionaryEntriesFromNames([(name, null, null)], inferSplit: false)
                                              .Select(e => e.Surface)
                                              .ToList();
         return new Candidate(input ?? "", null, surfaces);

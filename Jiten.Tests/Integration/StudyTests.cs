@@ -825,8 +825,8 @@ public class StudyTests(JitenWebApplicationFactory factory)
         response.StatusCode.Should().Be(HttpStatusCode.OK);
 
         var body = await response.Content.ReadFromJsonAsync<JsonElement>();
-        // Exactly 落ちつける (着→つ) and おちつける (full kana) — NOT 落ち付ける / 落着ける / 落付ける.
-        body.GetProperty("redundantForms").GetInt32().Should().Be(2);
+        // Exactly 落ちつける (着→つ), おちつける (full kana) and 落着ける (okurigana variant), NOT 落ち付ける / 落付ける.
+        body.GetProperty("redundantForms").GetInt32().Should().Be(3);
     }
 
     [Fact]

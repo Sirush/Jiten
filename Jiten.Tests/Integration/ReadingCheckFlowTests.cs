@@ -147,6 +147,26 @@ public class ReadingCheckFlowTests(JitenWebApplicationFactory factory)
     }
 
     [Fact]
+    public async Task Count_ReportsWordsLeftOutBecauseTheyHaveACard()
+    {
+        const int carded = 1500;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var userDb = scope.ServiceProvider.GetRequiredService<UserDbContext>();
+            userDb.FsrsCards.AddRange(Enumerable.Range(FirstWordId, carded).Select(wordId => new FsrsCard(
+                                                                                       TestUsers.UserA, wordId, 0, state: FsrsState.Review, stability: 30,
+                                                                                       difficulty: 5, due: DateTime.UtcNow.AddDays(10),
+                                                                                       lastReview: DateTime.UtcNow.AddDays(-1))));
+            await userDb.SaveChangesAsync();
+        }
+
+        var count = await Post<ReadingCountDto>("/api/reading-check/count", new { deckIds = _deckIds });
+
+        count.Tracked.Should().Be(carded);
+        count.Candidates.Should().Be(Words - carded);
+    }
+
+    [Fact]
     public async Task Writer_MarksWordsAsMasteredUnderOneBatch()
     {
         using var scope = factory.Services.CreateScope();

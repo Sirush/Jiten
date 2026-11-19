@@ -23,6 +23,7 @@ export interface ReadingWork {
 export interface ReadingCount {
   units: number;
   candidates: number;
+  tracked: number;
 }
 
 export interface ReadingItem {
@@ -66,4 +67,4 @@ export interface ReadingResult {
 }
 
 export const READING_MIN_UNITS = 3;
-export const READING_MIN_CANDIDATES = 2000;
+export const READING_MIN_CANDIDATES = 1000;

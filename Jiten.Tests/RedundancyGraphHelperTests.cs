@@ -19,14 +19,35 @@ public class RedundancyGraphHelperTests
             Form(1, "落ちつける", JmDictFormType.KanjiForm),                       // 着 -> つ  => redundant
             Form(2, "おちつける", JmDictFormType.KanaForm),                         // full kana => redundant
             Form(3, "落ち付ける", JmDictFormType.KanjiForm),                       // 付 != 着  => NOT
-            Form(4, "落着ける", JmDictFormType.KanjiForm),                          // dropped ち => NOT
-            Form(5, "落付ける", JmDictFormType.KanjiForm),                          // 付 + dropped ち => NOT
+            Form(4, "落着ける", JmDictFormType.KanjiForm, "落着[おちつ]ける"),     // dropped ち => redundant
+            Form(5, "落付ける", JmDictFormType.KanjiForm, "落付[おちつ]ける"),     // 付 + dropped ち => NOT
         };
 
         var edges = RedundancyGraphHelper.BuildEdges(forms);
 
         var fromSource0 = edges.Where(e => e.Source == 0).Select(e => e.Target).OrderBy(x => x).ToArray();
-        fromSource0.Should().Equal((byte)1, (byte)2);
+        fromSource0.Should().Equal((byte)1, (byte)2, (byte)4);
+    }
+
+    [Fact]
+    public void OkuriganaVariants_AreMutuallyRedundant_ButNotDifferentKanjiOrReading()
+    {
+        var forms = new List<JmDictWordForm>
+        {
+            Form(0, "分かる", JmDictFormType.KanjiForm, "分[わ]かる"),
+            Form(1, "解る", JmDictFormType.KanjiForm, "解[わか]る"),
+            Form(2, "分る", JmDictFormType.KanjiForm, "分[わか]る"),
+            Form(3, "わかる", JmDictFormType.KanaForm),
+            Form(4, "分る", JmDictFormType.KanjiForm, "分[わけ]る"),
+        };
+
+        var edges = RedundancyGraphHelper.BuildEdges(forms);
+
+        edges.Should().Contain(((byte)0, (byte)2));
+        edges.Should().Contain(((byte)2, (byte)0));
+        edges.Should().NotContain(((byte)0, (byte)1));
+        edges.Should().NotContain(((byte)1, (byte)2));
+        edges.Should().NotContain(((byte)0, (byte)4));
     }
 
     [Fact]

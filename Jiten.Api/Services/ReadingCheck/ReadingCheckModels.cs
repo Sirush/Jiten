@@ -16,7 +16,8 @@ public sealed record ReadingWorkDto(
     bool FromMediaList,
     List<ReadingUnitDto> Units);
 
-public sealed record ReadingCountDto(int Units, int Candidates);
+/// <summary><paramref name="Tracked"/> counts words met often enough but left out because the user already has a card or a word set for them.</summary>
+public sealed record ReadingCountDto(int Units, int Candidates, int Tracked);
 
 public sealed record ReadingItemDto(int Id, string Text, string Reading, List<string> Meanings);
 

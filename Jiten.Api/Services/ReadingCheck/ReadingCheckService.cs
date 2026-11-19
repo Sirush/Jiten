@@ -31,9 +31,10 @@ public sealed class ReadingCheckService(
     public async Task<ReadingCountDto> CountAsync(string userId, IReadOnlyCollection<int> deckIds)
     {
         var leaves = await data.ResolveLeavesAsync(deckIds);
-        if (leaves.Count == 0) return new ReadingCountDto(0, 0);
-        var candidates = await data.GetCandidatesAsync(userId, leaves);
-        return new ReadingCountDto(leaves.Count, candidates.Count(c => c.Seedable));
+        if (leaves.Count == 0) return new ReadingCountDto(0, 0, 0);
+        var met = (await data.GetSelectionWordsAsync(leaves)).Count(c => c.Seedable);
+        var candidates = (await data.GetCandidatesAsync(userId, leaves)).Count(c => c.Seedable);
+        return new ReadingCountDto(leaves.Count, candidates, met - candidates);
     }
 
     public async Task<ReadingStepDto> StartAsync(string userId, IReadOnlyCollection<int> deckIds)

@@ -1994,6 +1994,23 @@ namespace Jiten.Parser
             return null;
         }
 
+        /// <summary>De-sokuon forms never match the surface, so form priority alone would pick ばか for バッカ; the surface's script decides.</summary>
+        private static FormCandidate PreferScriptExactDesokuonForm(
+            FormCandidate best, List<FormCandidate> allCandidates, string desokuonText)
+        {
+            if (best.Form.Text == desokuonText
+                || !KanaScoringHelpers.IsPureKanaScriptDifference(best.Form.Text, desokuonText))
+                return best;
+
+            foreach (var c in allCandidates)
+            {
+                if (c.Word.WordId == best.Word.WordId && c.Form.Text == desokuonText)
+                    return c;
+            }
+
+            return best;
+        }
+
         // A junk collision via emphatic sokuon (ばっかな → 幕下) retries without it; kana-appropriate hits (ばっか = ばかり) stay.
         private static async Task<(DeckWord word, int? margin)?> TryGeminationCollapseRetry(
             WordInfo wordInfo, DeckWord processedWord, string baseWord,
@@ -2376,6 +2393,9 @@ namespace Jiten.Parser
 
                 if (bestPair == null)
                     return (false, null, null);
+
+                if (desokuonText != null)
+                    bestPair = PreferScriptExactDesokuonForm(bestPair, allFormCandidates, desokuonText);
 
                 DeckWord deckWord = new()
                                     {
