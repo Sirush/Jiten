@@ -15,6 +15,7 @@ public interface IReadingCheckData
     Task<List<ReadingWorkDto>> GetWorksAsync(string userId);
     Task<ReadingWorkDto?> GetWorkAsync(string userId, int deckId);
     Task<List<int>> ResolveLeavesAsync(IReadOnlyCollection<int> deckIds);
+    Task<List<ReadingCandidate>> GetSelectionWordsAsync(IReadOnlyList<int> leafDeckIds);
     Task<List<ReadingCandidate>> GetCandidatesAsync(string userId, IReadOnlyList<int> leafDeckIds);
     Task<Dictionary<(int WordId, byte ReadingIndex), (string Text, string Reading, List<string> Meanings)>> DescribeAsync(
         IEnumerable<(int WordId, byte ReadingIndex)> keys);
@@ -192,7 +193,7 @@ public sealed class ReadingCheckData(
         return words.Where(c => !wordsWithCards.Contains(c.WordId) && !setWordIds.Contains(c.WordId)).ToList();
     }
 
-    private async Task<List<ReadingCandidate>> GetSelectionWordsAsync(IReadOnlyList<int> leafDeckIds)
+    public async Task<List<ReadingCandidate>> GetSelectionWordsAsync(IReadOnlyList<int> leafDeckIds)
     {
         var key = $"reading-check-words:{string.Join(',', leafDeckIds.Order())}";
         if (cache.TryGetValue(key, out List<ReadingCandidate>? cached) && cached != null) return cached;

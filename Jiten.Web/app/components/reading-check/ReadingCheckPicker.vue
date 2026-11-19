@@ -48,7 +48,7 @@
     const request = ++countRequest;
     countFailed.value = false;
     if (selectedDeckIds.value.length === 0) {
-      count.value = { units: 0, candidates: 0 };
+      count.value = { units: 0, candidates: 0, tracked: 0 };
       counting.value = false;
       return;
     }
@@ -77,8 +77,12 @@
   const startHint = computed(() => {
     if (counting.value || !count.value) return null;
     if (count.value.units < READING_MIN_UNITS) return `Add at least ${READING_MIN_UNITS} volumes or titles to start.`;
-    if (count.value.candidates < READING_MIN_CANDIDATES) return 'Add more volumes or titles for a reliable result.';
-    return null;
+    const { candidates, tracked } = count.value;
+    if (candidates >= READING_MIN_CANDIDATES) return null;
+    const progress = `${formatNumber(candidates)} of ${formatNumber(READING_MIN_CANDIDATES)} words met at least 5 times.`;
+    const next = 'Add more volumes or titles to start.';
+    if (candidates + tracked < READING_MIN_CANDIDATES) return `${progress} ${next}`;
+    return `${progress} ${formatNumber(tracked)} more ${tracked === 1 ? 'is' : 'are'} already in your vocabulary. ${next}`;
   });
 
   const canStart = computed(() => !!count.value && !counting.value && !startHint.value);

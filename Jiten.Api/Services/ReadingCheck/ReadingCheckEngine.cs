@@ -59,7 +59,7 @@ public static class ReadingCheckEngine
     public const int ReviewPageSize = 12;
     public const int UnrankedRank = 200_000;
     public const int MinUnits = 3;
-    public const int MinCandidates = 2000;
+    public const int MinCandidates = 1000;
 
     /// <summary>Lower bounds of the exposure bands; each round asks one word per band, so the answers show how much exposure matters to this reader.</summary>
     private static readonly int[] ExposureBands = [MinProbeOccurrences, MinOccurrences, 10, 20, 50, 100, 200];
