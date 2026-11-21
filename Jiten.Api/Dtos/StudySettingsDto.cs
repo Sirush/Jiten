@@ -59,7 +59,8 @@ public enum ExampleSentenceSorting
 public enum ExampleSentenceSource
 {
     StudyDecks,
-    Random
+    Random,
+    CompletedMedia
 }
 
 [JsonConverter(typeof(JsonStringEnumConverter<CardImageLayout>))]
