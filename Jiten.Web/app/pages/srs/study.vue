@@ -143,6 +143,19 @@
     localStorage.setItem('srs-compact-bar', compactBar.value ? '1' : '0');
   }
 
+  const progressAsPercent = ref(false);
+  onMounted(() => {
+    progressAsPercent.value = localStorage.getItem('srs-progress-percent') === '1';
+  });
+  function toggleProgressAsPercent() {
+    progressAsPercent.value = !progressAsPercent.value;
+    localStorage.setItem('srs-progress-percent', progressAsPercent.value ? '1' : '0');
+  }
+  const progressPercent = computed(() => {
+    const { current, total } = srsStore.progress;
+    return total > 0 ? Math.round((current / total) * 100) : 0;
+  });
+
   const bottomBarRef = ref<HTMLElement | null>(null);
   const bottomBarHeight = ref(0);
   let barObserver: ResizeObserver | null = null;
@@ -586,10 +599,18 @@
             </span>
           </div>
           <div class="text-center">
-            <span class="text-lg font-semibold tabular-nums text-surface-700 dark:text-surface-200">
-              {{ srsStore.progress.current }}
-              <span class="text-surface-400 dark:text-surface-400 font-normal">/ {{ srsStore.progress.total }}</span>
-            </span>
+            <button
+              type="button"
+              class="text-lg font-semibold tabular-nums text-surface-700 dark:text-surface-200 cursor-pointer"
+              :title="progressAsPercent ? 'Show card count' : 'Show percentage'"
+              @click="toggleProgressAsPercent"
+            >
+              <template v-if="progressAsPercent">{{ progressPercent }}%</template>
+              <template v-else>
+                {{ srsStore.progress.current }}
+                <span class="text-surface-400 dark:text-surface-400 font-normal">/ {{ srsStore.progress.total }}</span>
+              </template>
+            </button>
             <div v-if="srsStore.studySettings.showElapsedTime" class="text-[11px] tabular-nums text-surface-400 dark:text-surface-400 -mt-0.5">
               {{ elapsedDisplay }}
             </div>
