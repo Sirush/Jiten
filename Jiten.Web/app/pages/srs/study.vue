@@ -152,8 +152,8 @@
     localStorage.setItem('srs-progress-percent', progressAsPercent.value ? '1' : '0');
   }
   const progressPercent = computed(() => {
-    const { current, total } = srsStore.progress;
-    return total > 0 ? Math.round((current / total) * 100) : 0;
+    const { remaining, total } = srsStore.progress;
+    return total > 0 ? Math.round(((total - remaining) / total) * 100) : 0;
   });
 
   const bottomBarRef = ref<HTMLElement | null>(null);
